@@ -4,12 +4,12 @@
     {% if status.update_available %}
     <a class="app-footer-update" href="{{ status.release_url }}"
        target="_blank" rel="noopener"
+       aria-label="Update available: v{{ status.latest }}"
        title="Update available: v{{ status.latest }}">
         <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor"
-                  stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 18.5V6M6 11.5 12 5.5l6 6" fill="none" stroke="currentColor"
+                  stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Update
     </a>
     {% endif %}
     <span class="app-footer-sep" aria-hidden="true">·</span>

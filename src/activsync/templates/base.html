@@ -1761,11 +1761,19 @@
         .app-footer-update {
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            padding: 0;
+            border: 1.25px solid var(--st-amber);
+            border-radius: 50%;
+            background: color-mix(in srgb, var(--st-amber) 18%, var(--surface));
             color: var(--st-amber) !important;
-            font-weight: 700;
         }
-        .app-footer-update:hover { color: var(--st-amber) !important; }
+        .app-footer-update:hover {
+            background: color-mix(in srgb, var(--st-amber) 30%, var(--surface));
+            color: var(--st-amber) !important;
+        }
         .app-footer-update svg { width: 13px; height: 13px; }
     </style>
 </head>
