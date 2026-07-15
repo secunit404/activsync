@@ -2,9 +2,14 @@ name: activsync
 
 services:
   activsync:
-    build: .
+    image: ghcr.io/secunit404/activsync:latest
+    # To build locally instead of pulling, comment the `image:` line above and
+    # uncomment the next line:
+    # build: .
     ports:
       - "8381:8381"
     volumes:
       - ./data:/config
     restart: unless-stopped
+    environment:
+      - TZ=Europe/Stockholm
