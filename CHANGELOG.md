@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/secunit404/activsync/compare/v1.0.0...v1.1.0) (2026-07-15)
+
+
+### Features
+
+* show app version, update indicator, and GitHub link in a footer ([#14](https://github.com/secunit404/activsync/issues/14)) ([f52737c](https://github.com/secunit404/activsync/commit/f52737c8865c4a29e9366c784f178849bcdd0261))
+
 ## [1.0.0](https://github.com/secunit404/activsync/compare/activsync-v0.1.0...activsync-v1.0.0) (2026-07-15)
 
 
