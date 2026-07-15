@@ -137,3 +137,40 @@ def reset_cache() -> None:
     global _cache
     with _lock:
         _cache = None
+
+
+class UpdateChecker:
+    """Background daemon: refresh once on start, then every `interval_seconds`.
+
+    Mirrors Poller's start/stop shape. Not started in mock mode, so no network
+    call ever happens in dev/mock sessions.
+    """
+
+    def __init__(
+        self,
+        interval_seconds: float = CACHE_TTL_SECONDS,
+        fetcher: Callable[[], str] = _default_fetcher,
+    ):
+        self._interval = interval_seconds
+        self._fetcher = fetcher
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._loop, name="update-checker", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+    def _loop(self) -> None:
+        while not self._stop_event.is_set():
+            refresh(fetcher=self._fetcher)
+            self._stop_event.wait(self._interval)

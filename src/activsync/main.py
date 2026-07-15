@@ -11,6 +11,7 @@ from activsync.garmin_client import GarminClient, get_client as get_garmin_raw_c
 from activsync.poller import Poller
 from activsync.server import create_app
 from activsync.strava_client import StravaClient
+from activsync.update_check import UpdateChecker
 
 
 def _env_value(name: str, legacy_name: str) -> str | None:
@@ -66,17 +67,20 @@ def _strava_factory() -> StravaClient:
 
 
 _poller = Poller(_conn, garmin_factory=_garmin_factory, strava_factory=_strava_factory)
+_update_checker = UpdateChecker()
 
 
 @asynccontextmanager
 async def _lifespan(app):
     if not MOCK_MODE:
         _poller.start()
+        _update_checker.start()
     try:
         yield
     finally:
         if not MOCK_MODE:
             _poller.stop()
+            _update_checker.stop()
 
 
 app = create_app(_conn, lifespan=_lifespan)

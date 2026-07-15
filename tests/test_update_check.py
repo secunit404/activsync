@@ -1,9 +1,10 @@
+import threading
 from datetime import datetime, timezone
 
 import pytest
 
 from activsync import update_check
-from activsync.update_check import UpdateStatus
+from activsync.update_check import UpdateChecker, UpdateStatus
 
 
 @pytest.fixture(autouse=True)
@@ -85,3 +86,20 @@ def test_refresh_records_checked_at():
     now = datetime(2026, 7, 15, tzinfo=timezone.utc)
     status = update_check.refresh(fetcher=lambda: "1.0.0", current="1.0.0", now=now)
     assert status.checked_at == now
+
+
+def test_update_checker_refreshes_on_start_then_stops():
+    fetched = threading.Event()
+
+    def fetcher():
+        fetched.set()
+        return "v5.0.0"
+
+    checker = UpdateChecker(interval_seconds=3600, fetcher=fetcher)
+    checker.start()
+    try:
+        assert fetched.wait(timeout=2.0), "checker did not refresh on start"
+    finally:
+        checker.stop()
+
+    assert update_check.get_status().latest == "v5.0.0"
