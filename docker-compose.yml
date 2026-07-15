@@ -1,0 +1,10 @@
+name: activsync
+
+services:
+  activsync:
+    build: .
+    ports:
+      - "8381:8381"
+    volumes:
+      - ./data:/config
+    restart: unless-stopped

@@ -1,0 +1,29 @@
+{# Shared first-run checklist. Garmin and Strava are already connected by the
+   time the sync step renders, so both read as done; only the activity sync is
+   in progress. Pass sync_done=true once the initial sync has finished. #}
+{% macro setup_checklist(sync_done) %}
+<ul class="done-checklist">
+  <li class="done-item done-item-garmin" style="--step: 0">
+    <span class="done-check">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4 4L19 7" /></svg>
+    </span>
+    <span class="done-label">Garmin connected</span>
+  </li>
+  <li class="done-item done-item-strava" style="--step: 1">
+    <span class="done-check">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4 4L19 7" /></svg>
+    </span>
+    <span class="done-label">Strava connected</span>
+  </li>
+  <li class="done-item done-item-sync{% if not sync_done %} is-active{% endif %}" style="--step: 2">
+    <span class="done-check">
+      {% if sync_done %}
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4 4L19 7" /></svg>
+      {% else %}
+        <span class="button-spinner" aria-hidden="true"></span>
+      {% endif %}
+    </span>
+    <span class="done-label">{% if sync_done %}Activities synced{% else %}Syncing activities…{% endif %}</span>
+  </li>
+</ul>
+{% endmacro %}

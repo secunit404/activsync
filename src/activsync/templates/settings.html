@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}ActivSync — Settings{% endblock %}
+{% block content %}
+<header class="page-header">
+    <div>
+        <p class="page-kicker brand-lockup" aria-label="ActivSync"><span class="brand-activ">Activ</span><span class="brand-sync">Sync</span></p>
+        <h1>Settings</h1>
+    </div>
+    <div class="header-actions">
+    <button class="mobile-theme-toggle theme-toggle" type="button" aria-label="Toggle light or dark theme" aria-pressed="false" onclick="activsyncToggleTheme()">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+    <nav class="top-nav" aria-label="Primary navigation">
+        <input class="nav-toggle" type="checkbox" id="settings-nav-toggle">
+        <label class="nav-toggle-label" for="settings-nav-toggle" aria-label="Toggle navigation menu">
+            <span aria-hidden="true">☰</span><span>Menu</span>
+        </label>
+        <div class="nav-menu-items">
+            <a class="button-link" href="/">Activities</a>
+            <a class="button-link" href="/settings" aria-current="page">Settings</a>
+            <button class="theme-toggle" type="button" aria-label="Toggle light or dark theme" aria-pressed="false" onclick="activsyncToggleTheme()">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+            </button>
+        </div>
+    </nav>
+    </div>
+</header>
+
+<section class="panel">
+  <div class="panel-body stack">
+    <h2>Connections</h2>
+
+    <div class="conn-row" data-connected="{{ 'true' if connections.garmin.connected else 'false' }}">
+      <span class="conn-dot conn-dot-garmin"></span>
+      <span class="conn-identity">
+        <span class="conn-name">Garmin</span>
+        <span class="conn-meta">{{ connections.garmin.detail }}</span>
+      </span>
+      <button type="button" class="connection-manage-button" aria-haspopup="dialog" aria-controls="garmin-manage-dialog"
+              onclick="document.getElementById('garmin-manage-dialog').showModal()">
+        {{ 'Reconnect' if not connections.garmin.connected else 'Manage' }}
+      </button>
+    </div>
+
+    <dialog id="garmin-manage-dialog" class="activity-dialog settings-manage-dialog" aria-labelledby="garmin-manage-title"
+            onclick="if (event.target === this) this.close()">
+      <div class="activity-dialog-card">
+        <header class="activity-dialog-header">
+          <div>
+            <p class="dialog-kicker">Connection settings</p>
+            <h2 id="garmin-manage-title" class="activity-dialog-title">Manage Garmin</h2>
+          </div>
+          <button type="button" class="dialog-close" aria-label="Close Garmin settings"
+                  onclick="this.closest('dialog').close()">×</button>
+        </header>
+        {% if garmin_error %}<p class="error">{{ garmin_error }}</p>{% endif %}
+        {% if show_mfa %}
+          {% if mfa_error %}<p class="error">{{ mfa_error }}</p>{% endif %}
+          <p class="hint">Garmin sent a verification code. Enter it to finish reconnecting.</p>
+          <form class="form-grid" method="post" action="/settings/garmin/mfa" onsubmit="return activsyncSetLoading(this)">
+            <label>Verification code
+              <input type="text" name="mfa_code" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+            </label>
+            <button class="full-span settings-save garmin-action" type="submit">
+              <span class="button-label">Verify code</span>
+              <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Verifying…</span>
+            </button>
+          </form>
+        {% else %}
+          <p class="hint">Reconnect Garmin. Leave the password blank to keep the saved one.</p>
+          <form class="form-grid" method="post" action="/settings/garmin/reconnect" onsubmit="return activsyncSetLoading(this)">
+            <label>Garmin email
+              <input type="email" name="garmin_email" value="{{ garmin_email or '' }}" required>
+            </label>
+            <label>Garmin password
+              <input type="password" name="garmin_password" placeholder="Saved — leave blank to keep it">
+            </label>
+            <button class="full-span settings-save" type="submit">
+              <span class="button-label">Reconnect</span>
+              <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Connecting…</span>
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </dialog>
+    {% if garmin_dialog_open %}
+      <script>document.getElementById('garmin-manage-dialog').showModal();</script>
+    {% endif %}
+
+    <div class="conn-row" data-connected="{{ 'true' if connections.strava.connected else 'false' }}">
+      <span class="conn-dot conn-dot-strava"></span>
+      <span class="conn-identity">
+        <span class="conn-name">Strava</span>
+        <span class="conn-meta">{{ connections.strava.detail }}</span>
+      </span>
+      <button type="button" class="connection-manage-button" aria-haspopup="dialog" aria-controls="strava-manage-dialog"
+              onclick="document.getElementById('strava-manage-dialog').showModal()">
+        {{ 'Connect' if not connections.strava.connected else 'Manage' }}
+      </button>
+    </div>
+
+    <dialog id="strava-manage-dialog" class="activity-dialog settings-manage-dialog" aria-labelledby="strava-manage-title"
+            onclick="if (event.target === this) this.close()">
+      <div class="activity-dialog-card">
+        <header class="activity-dialog-header">
+          <div>
+            <p class="dialog-kicker">Connection settings</p>
+            <h2 id="strava-manage-title" class="activity-dialog-title">Manage Strava</h2>
+          </div>
+          <button type="button" class="dialog-close" aria-label="Close Strava settings"
+                  onclick="this.closest('dialog').close()">×</button>
+        </header>
+        {% if strava_error %}<p class="error">{{ strava_error }}</p>{% endif %}
+        <p class="hint">Saving changed credentials sends you to Strava to re-authorize. Leave the secret blank to keep the saved one.</p>
+        <form class="form-grid" method="post" action="/settings/strava-credentials">
+          <label>Strava client ID
+            <input type="text" name="strava_client_id" value="{{ strava_client_id or '' }}" autocomplete="off" required>
+          </label>
+          <label>Strava client secret
+            <input type="password" name="strava_client_secret" autocomplete="new-password" placeholder="Saved — leave blank to keep it">
+          </label>
+          <button class="full-span settings-save" type="submit">Save credentials</button>
+        </form>
+        <div class="button-row">
+          <form method="get" action="/strava/connect">
+            <button type="submit">{{ 'Connect' if not connections.strava.connected else 'Reconnect' }}</button>
+          </form>
+          {% if connections.strava.connected %}
+            <form method="post" action="/strava/disconnect"
+                  onsubmit="return confirm('Disconnect Strava? This revokes ActivSync on Strava’s side and pauses publishing. Your activity list is kept.')">
+              <button type="submit">Disconnect</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </dialog>
+    {% if strava_dialog_open %}
+      <script>document.getElementById('strava-manage-dialog').showModal();</script>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-body stack">
+    <h2>Autosync categories</h2>
+    {% if garmin_sync_error %}<p class="error">{{ garmin_sync_error }}</p>{% endif %}
+    <form class="stack autosync-picker" method="post" action="/settings/autosync" data-categories-expanded="false">
+        <div class="autosync-heading">
+            <div>
+                <button type="submit" class="secondary compact-settings-button"
+                        formaction="/settings/garmin-activity-types/refresh" formmethod="post">Refresh categories</button>
+                <p class="hint">Checked categories publish automatically. Unchecked categories are held for manual publish.</p>
+            </div>
+        </div>
+        {% if activity_types %}
+            <div class="category-controls">
+                <label class="category-search">Find a category
+                    <input type="search" placeholder="Search Garmin categories…" autocomplete="off"
+                           oninput="var p=this.closest('.autosync-picker');var q=this.value.toLowerCase().trim();var expanded=p.dataset.categoriesExpanded==='true';p.querySelectorAll('.autosync-option').forEach(function(card){var matches=!q||card.dataset.search.includes(q);var extra=card.classList.contains('category-option-extra');card.hidden=!matches||(!q&&!expanded&&extra)});p.querySelector('.category-visible-count').textContent=p.querySelectorAll('.autosync-option:not([hidden])').length;">
+                </label>
+                <div class="category-actions-row">
+                    <p class="category-summary" role="status" aria-live="polite">
+                        <strong class="autosync-enabled-count">{{ activity_types | rejectattr('type_key', 'in', cfg.held_activity_types) | list | length }}</strong> enabled ·
+                        <span class="category-visible-count">{{ activity_types[:18]|length }}</span> shown
+                    </p>
+                    <div class="category-actions" role="group" aria-label="Category selection actions">
+                        <button type="button" class="secondary compact-settings-button" aria-label="Select visible"
+                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-option:not([hidden]) .autosync-cat').forEach(function(cb){cb.checked=true});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                            Select visible
+                        </button>
+                        <button type="button" class="secondary compact-settings-button" aria-label="Clear visible"
+                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-option:not([hidden]) .autosync-cat').forEach(function(cb){cb.checked=false});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                            Clear visible
+                        </button>
+                        <button type="button" class="secondary compact-settings-button" aria-label="Select all"
+                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-cat').forEach(function(cb){cb.checked=true});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                            Select all
+                        </button>
+                        <button type="button" class="secondary compact-settings-button" aria-label="Clear all"
+                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-cat').forEach(function(cb){cb.checked=false});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                            Clear all
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="check-list">
+                {% for t in activity_types %}
+                    <label class="check-item autosync-option{% if loop.index > 18 %} category-option-extra{% endif %}" data-search="{{ (t.label ~ ' ' ~ t.type_key)|lower }}"{% if loop.index > 18 %} hidden{% endif %}>
+                        <input type="checkbox" class="autosync-cat" name="autosync_types" value="{{ t.type_key }}"
+                               onchange="var p=this.closest('.autosync-picker');p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;"
+                               {% if t.type_key not in cfg.held_activity_types %}checked{% endif %}>
+                        <span class="check-item-label">{{ t.label }}</span>
+                    </label>
+                {% endfor %}
+            </div>
+            {% if activity_types|length > 18 %}
+                <button type="button" class="secondary compact-settings-button category-show-all"
+                        aria-expanded="false"
+                        onclick="var p=this.closest('.autosync-picker');var expanded=p.dataset.categoriesExpanded==='true';expanded=!expanded;p.dataset.categoriesExpanded=String(expanded);var q=p.querySelector('.category-search input').value.toLowerCase().trim();p.querySelectorAll('.autosync-option').forEach(function(card){var matches=!q||card.dataset.search.includes(q);var extra=card.classList.contains('category-option-extra');card.hidden=!matches||(!q&&!expanded&&extra)});this.setAttribute('aria-expanded',String(expanded));this.textContent=expanded?'Show fewer categories':'Show all {{ activity_types|length }} categories';p.querySelector('.category-visible-count').textContent=p.querySelectorAll('.autosync-option:not([hidden])').length;">
+                    Show all {{ activity_types|length }} categories
+                </button>
+            {% endif %}
+            <button class="settings-save" type="submit">Save categories</button>
+        {% else %}
+            <p class="hint">Categories aren't loaded yet — use Refresh categories above.</p>
+        {% endif %}
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-body stack">
+    <h2>Preferences</h2>
+    {% if preferences_error %}<p class="error">{{ preferences_error }}</p>{% endif %}
+    <form class="stack" method="post" action="/settings/preferences">
+      <div class="form-grid">
+        <label><span class="field-title">Garmin sync interval (min) <span class="field-info" tabindex="0" role="img"
+            aria-label="How often the app checks Garmin. Recommended minimum: 10 minutes."
+            data-tooltip="How often the app checks Garmin. Recommended minimum: 10 minutes.">?</span></span>
+          <input type="number" name="garmin_poll_interval_minutes" value="{{ cfg.garmin_poll_interval_minutes }}">
+        </label>
+        <label><span class="field-title">Strava sync interval (min) <span class="field-info" tabindex="0" role="img"
+            aria-label="How often the app checks Strava. Recommended minimum: 2 minutes."
+            data-tooltip="How often the app checks Strava. Recommended minimum: 2 minutes.">?</span></span>
+          <input type="number" name="strava_poll_interval_minutes" value="{{ cfg.strava_poll_interval_minutes }}">
+        </label>
+        <label><span class="field-title">History window (days) <span class="field-info" tabindex="0" role="img"
+            aria-label="How far back Garmin sync searches for activities."
+            data-tooltip="How far back Garmin sync searches for activities.">?</span></span>
+          <input type="number" name="lookback_days" value="{{ cfg.lookback_days }}">
+        </label>
+        <label>Display timezone
+          <select name="display_timezone">
+            {% for tz in timezones %}
+              <option value="{{ tz }}" {% if tz == cfg.display_timezone %}selected{% endif %}>{{ tz }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="hevy-option" data-enabled="{{ 'true' if cfg.hevy2garmin_marker_enabled else 'false' }}">
+        <label class="hevy-toggle">
+          <input type="checkbox" name="hevy2garmin_marker_enabled" value="true"
+                 {% if cfg.hevy2garmin_marker_enabled %}checked{% endif %}
+                 onchange="this.closest('.hevy-option').dataset.enabled = this.checked;">
+          <span>Auto-publish Hevy imports held by category</span>
+        </label>
+        <p class="hint">hevy2garmin copies your Hevy strength workouts into Garmin and tags each description with a marker.
+          When on, those tagged activities publish automatically even if their activity type is unchecked above.
+          Leave off if you don't use hevy2garmin.</p>
+        <label class="hevy-marker-field">Marker text
+          <input type="text" name="hevy2garmin_marker" value="{{ cfg.hevy2garmin_marker }}">
+          <span class="hint">Must match the text hevy2garmin appends to each activity description.</span>
+        </label>
+      </div>
+      <button class="settings-save" type="submit">Save preferences</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% from "partials/_setup_checklist.html" import setup_checklist %}
+<h1 id="setup-title" hx-swap-oob="true">You're all set</h1>
+<div class="setup-done">
+  {{ setup_checklist(sync_done=True) }}
+  <a class="button-link setup-done-cta" href="/">Go to ActivSync</a>
+</div>

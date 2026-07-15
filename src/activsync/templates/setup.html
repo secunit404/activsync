@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Set up ActivSync{% endblock %}
+{% block content %}
+<section class="panel setup-panel-wrap">
+  <div class="panel-body stack">
+    <div class="setup-head">
+      <div>
+        <p class="page-kicker brand-lockup" aria-label="ActivSync first-run"><span class="brand-activ">Activ</span><span class="brand-sync">Sync</span><span class="brand-suffix"> · first-run</span></p>
+        <h1 id="setup-title">{% if step == 'garmin' %}Connect Garmin{% elif step == 'strava' %}Connect Strava{% else %}Almost there{% endif %}</h1>
+      </div>
+      <ol class="setup-progress" aria-label="Setup progress">
+        <li class="{% if step == 'garmin' %}is-active{% else %}is-done{% endif %} step-garmin"></li>
+        <li class="{% if step == 'strava' %}is-active{% elif step == 'syncing' %}is-done{% endif %} step-strava"></li>
+        <li class="{% if step == 'syncing' %}is-active{% endif %} step-sync"></li>
+      </ol>
+    </div>
+    {% if step == 'garmin' %}
+      {% include "partials/setup_garmin.html" %}
+    {% elif step == 'strava' %}
+      {% include "partials/setup_strava.html" %}
+    {% else %}
+      {% include "partials/setup_syncing.html" %}
+    {% endif %}
+  </div>
+</section>
+{% if show_mfa %}{% include "partials/garmin_mfa_modal.html" %}{% endif %}
+<script>
+  document.querySelectorAll("dialog[data-autoshow]").forEach(function (d) {
+    if (d.showModal && !d.open) d.showModal();
+  });
+</script>
+{% endblock %}

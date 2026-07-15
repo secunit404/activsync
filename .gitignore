@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Data & secrets — NEVER commit (real DB holds Garmin/Strava tokens)
+*.db
+*.db-shm
+*.db-wal
+data/
+.env
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# AI agents & planning docs — LOCAL ONLY
+docs/
+.claude/
+.codex/
+.superpowers/
+AGENTS.md
+CLAUDE.md
+.github/copilot-instructions.md

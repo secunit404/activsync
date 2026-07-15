@@ -1,0 +1,284 @@
+<div id="activity-table"
+     class="activity-panel"
+     hx-include="#activity-sort, #activity-status-filter, #activity-page-size"
+     hx-get="/api/activities/table" hx-trigger="sse:refresh" hx-swap="outerHTML"
+     hx-on::before-request="window._activsyncOpenDialogIds = Array.from(document.querySelectorAll('.activity-dialog[open]')).map(function(d){return d.dataset.gid})">
+    {% set ns = namespace(has_publishable=false) %}
+    {% for a in activities %}
+        {% if a.publish_status in ("held", "pending", "missing") %}
+            {% set ns.has_publishable = true %}
+        {% endif %}
+    {% endfor %}
+    {% if sync_error %}<p class="error">{{ sync_error }}</p>{% endif %}
+    <div class="activity-toolbar">
+        <div class="sync-actions">
+            <button hx-post="/api/sync/garmin" hx-target="#activity-table" hx-swap="outerHTML"
+                    hx-on::before-request="this.setAttribute('aria-busy','true')"
+                    {% if not connections.garmin.connected %}disabled title="Garmin is disconnected — reconnect to sync"{% endif %}>
+                <span class="button-label">Sync Garmin</span>
+                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing Garmin…</span>
+            </button>
+            <button hx-post="/api/sync/strava/status" hx-target="#activity-table" hx-swap="outerHTML"
+                    hx-on::before-request="this.setAttribute('aria-busy','true')"
+                    {% if not connections.strava.connected %}disabled title="Strava is disconnected — reconnect to check status"{% endif %}>
+                <span class="button-label">Check Strava</span>
+                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Checking Strava…</span>
+            </button>
+        </div>
+        <div class="activity-view-controls">
+            {% if ns.has_publishable %}
+            <button type="button" class="select-multiple-button" aria-expanded="false"
+                    onclick="var p=this.closest('.activity-panel');var active=p.classList.toggle('is-selecting');this.setAttribute('aria-expanded',active);this.textContent=active?'Done selecting':'Select multiple';if(!active){p.querySelectorAll('.activsync-select').forEach(function(cb){cb.checked=false});var all=p.querySelector('.select-all-input');if(all)all.checked=false;}">
+                Select multiple
+            </button>
+            {% endif %}
+            <label class="activity-sort-control">
+                <span>Sort</span>
+                <select id="activity-sort" name="sort" aria-label="Sort activities"
+                        hx-get="/api/activities/table" hx-target="#activity-table" hx-swap="outerHTML"
+                        hx-trigger="change">
+                    <option value="newest" {% if sort_order|default('newest') == 'newest' %}selected{% endif %}>Newest first</option>
+                    <option value="oldest" {% if sort_order|default('newest') == 'oldest' %}selected{% endif %}>Oldest first</option>
+                </select>
+            </label>
+            <label class="activity-sort-control">
+                <span>Filter</span>
+                <select id="activity-status-filter" name="status_filter" aria-label="Filter activities"
+                        hx-get="/api/activities/table" hx-target="#activity-table" hx-swap="outerHTML"
+                        hx-trigger="change">
+                    <option value="" {% if not status_filter|default('') %}selected{% endif %}>All statuses</option>
+                    <option value="pending" {% if status_filter|default('') == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="held" {% if status_filter|default('') == 'held' %}selected{% endif %}>Held</option>
+                    <option value="published" {% if status_filter|default('') == 'published' %}selected{% endif %}>Published</option>
+                    <option value="missing" {% if status_filter|default('') == 'missing' %}selected{% endif %}>Missing</option>
+                    <option value="excluded" {% if status_filter|default('') == 'excluded' %}selected{% endif %}>Excluded</option>
+                </select>
+            </label>
+        </div>
+    </div>
+    {% if edit_error %}
+    <div class="error">{{ edit_error }}</div>
+    {% endif %}
+    {% if activities %}
+    <div class="activity-list" aria-label="Activities">
+        {% if ns.has_publishable %}
+        <div class="multi-select-tools" role="group" aria-label="Multiple activity selection">
+            <label class="select-all-card">
+                <input class="select-all-input" type="checkbox" onclick="var c = this.checked; this.closest('.activity-panel').querySelectorAll('.activsync-select').forEach(function(cb){cb.checked = c})">
+                Select all
+            </label>
+            <button type="button" class="secondary cancel-selection-button"
+                    onclick="var p=this.closest('.activity-panel');var toggle=p.querySelector('.select-multiple-button');p.classList.remove('is-selecting');if(toggle){toggle.setAttribute('aria-expanded','false');toggle.textContent='Select multiple';}p.querySelectorAll('.activsync-select').forEach(function(cb){cb.checked=false});var all=p.querySelector('.select-all-input');if(all)all.checked=false;">
+                Cancel
+            </button>
+            <button class="primary-action publish-selected-button" hx-post="/api/sync/strava/publish" hx-target="#activity-table" hx-swap="outerHTML"
+                    hx-on::before-request="this.setAttribute('aria-busy','true')"
+                    hx-include="[name='activity_ids']:checked"
+                    {% if connections.broken %}disabled title="Reconnect to publish"{% endif %}>
+                <span class="button-label">Publish selected</span>
+                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
+            </button>
+        </div>
+        {% endif %}
+        {% set ns = namespace(previous_month_year="") %}
+        {% for activity in activities %}
+            {% set d = activity.detail %}
+            {% set local_date_parts = activity.start_time_display.split(' ')[0].split('-') %}
+            {% set short_month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] %}
+            {% set full_month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] %}
+            {% set fallback_date_display = local_date_parts[2]|int ~ " " ~ short_month_names[local_date_parts[1]|int - 1] %}
+            {% set has_metrics = d.distance or d.duration or d.calories or d.avg_hr or d.avg_power or d.total_sets %}
+            {% set edit_form_id = "activity-edit-form-" ~ activity.garmin_activity_id %}
+            {% set dialog_id = "activity-dialog-" ~ activity.garmin_activity_id %}
+            {% set month_year_display = activity.start_month_year_display|default(full_month_names[local_date_parts[1]|int - 1] ~ " " ~ local_date_parts[0], true) %}
+            {% if month_year_display != ns.previous_month_year %}
+            <div class="activity-month-header">
+                <h2>{{ month_year_display }}</h2>
+            </div>
+            {% set ns.previous_month_year = month_year_display %}
+            {% endif %}
+            <article class="activity-row" data-gid="{{ activity.garmin_activity_id }}">
+                <form id="{{ edit_form_id }}" class="metadata-form" hx-post="/api/activities/{{ activity.garmin_activity_id }}/edit" hx-target="#activity-table" hx-swap="outerHTML"
+                      hx-on::before-request="var d=document.getElementById('{{ dialog_id }}');if(d&&d.open)window._activsyncOpenDialogIds=[d.dataset.gid];if(d){d.classList.add('is-saving');var b=d.querySelector('.save-metadata-button');if(b){b.disabled=true;b.setAttribute('aria-busy','true')}var c=d.querySelector('.cancel-edit-button');if(c)c.disabled=true;var x=d.querySelector('.dialog-close');if(x)x.disabled=true}"
+                      hx-on::after-request="if(!event.detail.successful){var d=document.getElementById('{{ dialog_id }}');if(d){d.classList.remove('is-saving');var b=d.querySelector('.save-metadata-button');if(b){b.disabled=false;b.removeAttribute('aria-busy')}var c=d.querySelector('.cancel-edit-button');if(c)c.disabled=false;var x=d.querySelector('.dialog-close');if(x)x.disabled=false}}"></form>
+                <div class="activity-row-select">
+                    {% if activity.publish_status in ("held", "pending", "missing") %}
+                    <input type="checkbox" class="activsync-select" name="activity_ids" value="{{ activity.garmin_activity_id }}" title="Select {{ activity.title }}">
+                    {% endif %}
+                </div>
+                <div class="activity-row-date">
+                    <div class="activity-date-stack">
+                        <span class="activity-date-day">{{ activity.start_date_display|default(fallback_date_display, true) }}</span>
+                        <span class="activity-date-time">{{ activity.start_clock_display|default(activity.start_time_display.split(' ')[1], true) }}</span>
+                    </div>
+                </div>
+                <div class="activity-row-main">
+                    <h2 class="activity-title-read">{{ activity.title }}</h2>
+                    <div class="activity-subline">
+                        <span>{{ activity.activity_type }}</span>
+                    </div>
+                    <div class="activity-inline-links activity-links-row" aria-label="Activity links">
+                        <a class="activity-inline-link" href="{{ activity.garmin_url }}" target="_blank" rel="noopener">Garmin ↗</a>
+                        {% if activity.publish_status == "published" %}
+                        <a class="activity-inline-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank" rel="noopener">Strava ↗</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="activity-row-status">
+                    <span class="badge badge-{{ activity.publish_status }}">{{ activity.publish_status }}</span>
+                </div>
+                <div class="activity-row-actions">
+                    {% if activity.publish_status in ("held", "pending") %}
+                    <form class="inline" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
+                        <button type="submit" class="primary-action">Publish</button>
+                    </form>
+                    {% elif activity.publish_status == "missing" %}
+                    <form class="inline" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
+                        <button type="submit" class="primary-action">Republish</button>
+                    </form>
+                    {% elif activity.publish_status == "excluded" %}
+                    <form class="inline" hx-post="/api/activities/{{ activity.garmin_activity_id }}/unexclude" hx-target="#activity-table" hx-swap="outerHTML">
+                        <button type="submit" class="row-action-secondary">Un-exclude</button>
+                    </form>
+                    {% endif %}
+                    <button type="button" class="details-button" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" onclick="document.getElementById('{{ dialog_id }}').showModal()">Details</button>
+                </div>
+                <dialog id="{{ dialog_id }}" class="activity-dialog" data-gid="{{ activity.garmin_activity_id }}" aria-labelledby="{{ dialog_id }}-title" onclick="if (event.target === this) { this.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue}); this.classList.remove('is-editing'); this.close(); }" oncancel="this.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue}); this.classList.remove('is-editing');">
+                    <div class="activity-dialog-card">
+                        <header class="activity-dialog-header">
+                            <div>
+                                <div class="activity-dialog-meta">
+                                    <p class="dialog-kicker">{{ activity.activity_type }} · {{ activity.start_time_display }}</p>
+                                    <div class="activity-dialog-meta-actions">
+                                        <span class="badge badge-{{ activity.publish_status }}">{{ activity.publish_status }}</span>
+                                        <div class="activity-card-links" aria-label="External links">
+                                            <a class="link-pill" href="{{ activity.garmin_url }}" target="_blank">Garmin ↗</a>
+                                            {% if activity.publish_status == "published" %}
+                                                <a class="link-pill" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank">Strava ↗</a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <h2 id="{{ dialog_id }}-title" class="activity-dialog-title activity-title-read">{{ activity.title }}</h2>
+                                <label class="activity-title-field edit-only">
+                                    <span class="field-caption">Title</span>
+                                    <input class="activity-title-input" type="text" name="title" value="{{ activity.title }}" form="{{ edit_form_id }}" data-editable required>
+                                </label>
+                            </div>
+                            <button type="button" class="dialog-close" aria-label="Close details" onclick="var c=this.closest('dialog');c.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue});c.classList.remove('is-editing');c.close()">×</button>
+                        </header>
+                        <section class="detail-content" aria-label="Activity metrics">
+                            <h3>Activity details</h3>
+                            {% if has_metrics %}
+                            <div class="detail-metric-grid">
+                                {% if d.distance %}<div><span>Distance</span><strong>{{ d.distance }}</strong></div>{% endif %}
+                                {% if d.duration %}<div><span>Duration</span><strong>{{ d.duration }}</strong></div>{% endif %}
+                                {% if d.moving_time and d.moving_time != d.duration %}<div><span>Moving time</span><strong>{{ d.moving_time }}</strong></div>{% endif %}
+                                {% if d.pace %}<div><span>Pace</span><strong>{{ d.pace }}</strong></div>{% endif %}
+                                {% if d.speed %}<div><span>Speed</span><strong>{{ d.speed }}</strong></div>{% endif %}
+                                {% if d.elev_gain %}<div><span>Elevation gain</span><strong>+{{ d.elev_gain }}</strong></div>{% endif %}
+                                {% if d.elev_loss %}<div><span>Elevation loss</span><strong>-{{ d.elev_loss }}</strong></div>{% endif %}
+                                {% if d.calories %}<div><span>Calories</span><strong>{{ d.calories }}</strong></div>{% endif %}
+                                {% if d.avg_hr %}<div><span>Avg HR</span><strong>{{ d.avg_hr }}</strong></div>{% endif %}
+                                {% if d.max_hr %}<div><span>Max HR</span><strong>{{ d.max_hr }}</strong></div>{% endif %}
+                                {% if d.avg_power %}<div><span>Avg power</span><strong>{{ d.avg_power }}</strong></div>{% endif %}
+                                {% if d.max_power %}<div><span>Max power</span><strong>{{ d.max_power }}</strong></div>{% endif %}
+                                {% if d.norm_power %}<div><span>Normalized power</span><strong>{{ d.norm_power }}</strong></div>{% endif %}
+                                {% if d.aerobic_te %}<div><span>Aerobic TE</span><strong>{{ d.aerobic_te }}</strong></div>{% endif %}
+                                {% if d.anaerobic_te %}<div><span>Anaerobic TE</span><strong>{{ d.anaerobic_te }}</strong></div>{% endif %}
+                                {% if d.training_load %}<div><span>Training load</span><strong>{{ d.training_load }}</strong></div>{% endif %}
+                                {% if d.avg_cadence %}<div><span>Avg cadence</span><strong>{{ d.avg_cadence }}</strong></div>{% endif %}
+                                {% if d.max_cadence %}<div><span>Max cadence</span><strong>{{ d.max_cadence }}</strong></div>{% endif %}
+                                {% if d.total_sets %}<div><span>Sets</span><strong>{{ d.total_sets }}</strong></div>{% endif %}
+                                {% if d.total_reps %}<div><span>Reps</span><strong>{{ d.total_reps }}</strong></div>{% endif %}
+                                {% if d.total_volume %}<div><span>Volume</span><strong>{{ d.total_volume }}</strong></div>{% endif %}
+                            </div>
+                            {% else %}
+                            <p class="hint">No extra Garmin metrics are cached for this activity yet.</p>
+                            {% endif %}
+                        </section>
+                        <section class="activity-description-section">
+                            <div class="description-read">
+                                <span class="field-caption">Description</span>
+                                {% if activity.description %}
+                                <p>{{ activity.description }}</p>
+                                {% else %}
+                                <p class="hint">No description yet.</p>
+                                {% endif %}
+                            </div>
+                            <label class="description-field edit-only">
+                                <span class="field-caption">Description</span>
+                                <textarea class="activity-description-input" name="description" rows="4" placeholder="No description yet." form="{{ edit_form_id }}" data-editable>{{ activity.description }}</textarea>
+                            </label>
+                        </section>
+                        <footer class="drawer-actions">
+                            <button type="button" class="secondary edit-unlock-button" onclick="var c=this.closest('.activity-dialog');c.classList.add('is-editing');var t=c.querySelector('[name=title]');if(t)t.focus();">Edit</button>
+                            <button type="button" class="secondary cancel-edit-button" onclick="var c=this.closest('.activity-dialog');c.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue});c.classList.remove('is-editing');">Cancel</button>
+                            <button type="submit" class="save-metadata-button" form="{{ edit_form_id }}">
+                                <span class="button-label">Save changes</span>
+                                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Saving…</span>
+                            </button>
+                            {% if activity.publish_status in ("held", "pending", "missing") %}
+                                <form class="inline dialog-state-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
+                                <button type="submit" class="primary-action">{{ "Republish" if activity.publish_status == "missing" else "Publish now" }}</button>
+                            </form>
+                            {% endif %}
+                            {% if activity.publish_status in ("held", "pending", "missing") %}
+                                <form class="inline dialog-state-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/exclude" hx-target="#activity-table" hx-swap="outerHTML">
+                                <button type="submit" class="secondary">Exclude</button>
+                            </form>
+                            {% elif activity.publish_status == "excluded" %}
+                                <form class="inline dialog-state-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/unexclude" hx-target="#activity-table" hx-swap="outerHTML">
+                                <button type="submit" class="secondary">Un-exclude</button>
+                            </form>
+                            {% endif %}
+                        </footer>
+                    </div>
+                </dialog>
+            </article>
+        {% endfor %}
+    </div>
+    {% set pagination_params = "sort=" ~ sort_order ~ "&page_size=" ~ page_size %}
+    {% if status_filter %}{% set pagination_params = pagination_params ~ "&status_filter=" ~ status_filter %}{% endif %}
+    <nav class="activity-pagination" aria-label="Activity pages">
+        <div class="activity-pagination-summary-group">
+            <p class="activity-pagination-summary">Showing {{ first_item }}–{{ last_item }} of {{ total_count }}</p>
+            <label class="activity-page-size-control">
+                <span>Per page</span>
+                <select id="activity-page-size" name="page_size" aria-label="Activities per page"
+                        hx-get="/api/activities/table" hx-target="#activity-table" hx-swap="outerHTML"
+                        hx-trigger="change">
+                    {% for option in page_sizes|default([10, 20, 50, 100]) %}
+                    <option value="{{ option }}" {% if page_size|default(20) == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        {% if page_count > 1 %}
+        <div class="activity-pagination-links">
+            {% if page > 1 %}
+            <a class="button-link" href="/?page={{ page - 1 }}&{{ pagination_params }}"
+               hx-get="/api/activities/table?page={{ page - 1 }}&{{ pagination_params }}"
+               hx-target="#activity-table" hx-swap="outerHTML"
+               hx-push-url="/?page={{ page - 1 }}&{{ pagination_params }}">Previous</a>
+            {% endif %}
+            <span class="activity-pagination-current" aria-current="page">Page {{ page }} of {{ page_count }}</span>
+            {% if page < page_count %}
+            <a class="button-link" href="/?page={{ page + 1 }}&{{ pagination_params }}"
+               hx-get="/api/activities/table?page={{ page + 1 }}&{{ pagination_params }}"
+               hx-target="#activity-table" hx-swap="outerHTML"
+               hx-push-url="/?page={{ page + 1 }}&{{ pagination_params }}">Next</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </nav>
+    {% else %}
+    <div class="empty-state">
+        {% if status_filter|default('') %}
+        No activities match this status filter.
+        {% else %}
+        No activities yet. Sync from Garmin to fetch recent workouts.
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

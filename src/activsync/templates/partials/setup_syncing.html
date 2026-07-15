@@ -1,0 +1,8 @@
+{% from "partials/_setup_checklist.html" import setup_checklist %}
+<div class="setup-card setup-card-sync">
+  <div id="sync-status" hx-post="/setup/initial-sync" hx-trigger="load" hx-swap="innerHTML">
+    <div class="setup-done">
+      {{ setup_checklist(sync_done=False) }}
+    </div>
+  </div>
+</div>

@@ -1,0 +1,23 @@
+<div class="setup-card setup-card-strava">
+  <div class="setup-card-label"><span class="setup-num setup-num-strava">2</span><h2>Strava</h2></div>
+  {% if strava_error %}<p class="error">{{ strava_error }}</p>{% endif %}
+  <form class="stack" method="post" action="/setup/strava/connect" onsubmit="return activsyncSetLoading(this)">
+    <label>Strava client ID
+      <input type="text" name="strava_client_id" value="{{ strava_client_id or '' }}"
+             placeholder="12345" autocomplete="off" required>
+    </label>
+    <label>Strava client secret
+      <input type="password" name="strava_client_secret" autocomplete="new-password"
+             placeholder="{{ 'Saved — leave blank to keep it' if strava_credentials_saved else 'Strava client secret' }}"
+             {% if not strava_credentials_saved %}required{% endif %}>
+    </label>
+    <button class="primary-action" type="submit">
+      <span class="button-label">Connect Strava →</span>
+      <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Opening Strava…</span>
+    </button>
+  </form>
+  <p class="hint">You need a free Strava API application for the Client ID and Secret.
+    <a href="https://developers.strava.com/docs/getting-started/" target="_blank" rel="noopener">See Strava's setup guide</a>,
+    then find your keys at <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a>.
+    Connect saves the keys and opens Strava to authorize, then returns here.</p>
+</div>

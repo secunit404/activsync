@@ -1,0 +1,29 @@
+<div class="setup-card setup-card-garmin">
+  <div class="setup-card-label"><span class="setup-num setup-num-garmin">1</span><h2>Garmin</h2></div>
+  {% if garmin_error %}<p class="error">{{ garmin_error }}</p>{% endif %}
+  <form class="stack" method="post" action="/setup/garmin/connect" onsubmit="return activsyncSetLoading(this)">
+    <input type="hidden" name="detected_timezone" id="detected-tz">
+    <label>Garmin email
+      <input type="email" name="garmin_email" value="{{ garmin_email or '' }}"
+             placeholder="you@email.com" required>
+    </label>
+    <label>Garmin password
+      <input type="password" name="garmin_password"
+             placeholder="{{ 'Saved — leave blank to keep it' if garmin_credentials_saved else 'Garmin password' }}"
+             {% if not garmin_credentials_saved %}required{% endif %}>
+    </label>
+    <label class="setup-days">Days of history to import
+      <input type="number" name="lookback_days" min="1" value="{{ cfg.lookback_days }}">
+    </label>
+    <button class="primary-action garmin-action" type="submit">
+      <span class="button-label">Connect Garmin</span>
+      <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Connecting…</span>
+    </button>
+  </form>
+</div>
+<script>
+  (function () {
+    var tz = document.getElementById("detected-tz");
+    try { if (tz) tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+  })();
+</script>

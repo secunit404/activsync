@@ -1,0 +1,383 @@
+import time
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+
+import pytest
+import requests
+
+from activsync import db
+from activsync.strava_client import StravaAuthError, StravaClient, StravaUploadError
+
+
+@pytest.fixture
+def conn(tmp_path):
+    return db.connect(str(tmp_path / "test.db"))
+
+
+def test_is_connected_false_when_no_tokens(conn):
+    client = StravaClient(conn, "cid", "csecret")
+    assert client.is_connected() is False
+
+
+def test_is_connected_true_after_tokens_stored(conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "a", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    client = StravaClient(conn, "cid", "csecret")
+    assert client.is_connected() is True
+
+
+def test_authorize_url_includes_client_id_and_scope(conn):
+    client = StravaClient(conn, "cid123", "csecret")
+
+    url = client.authorize_url("http://localhost:8000/strava/callback")
+
+    assert "client_id=cid123" in url
+    assert "scope=activity:write,activity:read_all" in url
+    assert "redirect_uri=http://localhost:8000/strava/callback" in url
+
+
+@patch("activsync.strava_client.requests.post")
+def test_exchange_code_stores_tokens(mock_post, conn):
+    mock_post.return_value = MagicMock(
+        status_code=200,
+        json=lambda: {"access_token": "a1", "refresh_token": "r1", "expires_at": 12345},
+    )
+    mock_post.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+    client.exchange_code("authcode")
+
+    tokens = db.get_config_value(conn, "strava_tokens")
+    assert tokens == {"access_token": "a1", "refresh_token": "r1", "expires_at": 12345}
+
+
+@patch("activsync.strava_client.requests.post")
+def test_get_access_token_returns_cached_token_when_not_expired(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "still-valid", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    client = StravaClient(conn, "cid", "csecret")
+
+    token = client._get_access_token()
+
+    assert token == "still-valid"
+    mock_post.assert_not_called()
+
+
+@patch("activsync.strava_client.requests.post")
+def test_get_access_token_refreshes_when_expired(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "old", "refresh_token": "r", "expires_at": time.time() - 10,
+    })
+    mock_post.return_value = MagicMock(
+        status_code=200,
+        json=lambda: {"access_token": "fresh", "refresh_token": "r2", "expires_at": time.time() + 3600},
+    )
+    mock_post.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+    token = client._get_access_token()
+
+    assert token == "fresh"
+    assert db.get_config_value(conn, "strava_tokens")["refresh_token"] == "r2"
+
+
+@patch("activsync.strava_client.requests.post")
+def test_get_access_token_raises_auth_error_on_revoked_refresh_token(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "old", "refresh_token": "r", "expires_at": time.time() - 10,
+    })
+    mock_post.return_value = MagicMock(status_code=401)
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaAuthError):
+        client._get_access_token()
+
+
+def test_get_access_token_raises_auth_error_when_never_connected(conn):
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaAuthError):
+        client._get_access_token()
+
+
+@patch("activsync.strava_client.requests.get")
+@patch("activsync.strava_client.requests.post")
+def test_publish_uploads_and_returns_strava_activity_id(mock_post, mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: {"id": 555})
+    mock_post.return_value.raise_for_status = lambda: None
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {"activity_id": 9001, "error": None},
+    )
+    mock_get.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+    strava_id = client.publish(garmin_activity_id=42, fit_bytes=b"FIT-DATA")
+
+    assert strava_id == 9001
+    upload_kwargs = mock_post.call_args
+    assert upload_kwargs.kwargs["data"]["external_id"] == "garmin-42"
+    assert upload_kwargs.kwargs["data"]["data_type"] == "fit"
+    assert "name" not in upload_kwargs.kwargs["data"]
+
+
+@patch("activsync.strava_client.requests.get")
+@patch("activsync.strava_client.requests.post")
+def test_publish_sends_activity_title_as_strava_name(mock_post, mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: {"id": 555})
+    mock_post.return_value.raise_for_status = lambda: None
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {"activity_id": 9001, "error": None},
+    )
+    mock_get.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+    client.publish(garmin_activity_id=42, fit_bytes=b"FIT-DATA", name="🏃 Morning Run")
+
+    upload_kwargs = mock_post.call_args
+    assert upload_kwargs.kwargs["data"]["name"] == "🏃 Morning Run"
+
+
+@patch("activsync.strava_client.requests.get")
+@patch("activsync.strava_client.requests.post")
+def test_publish_polls_until_activity_id_present(mock_post, mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: {"id": 555})
+    mock_post.return_value.raise_for_status = lambda: None
+    mock_get.side_effect = [
+        MagicMock(status_code=200, json=lambda: {"activity_id": None, "error": None},
+                   raise_for_status=lambda: None),
+        MagicMock(status_code=200, json=lambda: {"activity_id": 9002, "error": None},
+                   raise_for_status=lambda: None),
+    ]
+
+    client = StravaClient(conn, "cid", "csecret")
+    strava_id = client.publish(garmin_activity_id=43, fit_bytes=b"FIT-DATA")
+
+    assert strava_id == 9002
+    assert mock_get.call_count == 2
+
+
+@patch("activsync.strava_client.requests.get")
+@patch("activsync.strava_client.requests.post")
+def test_publish_raises_upload_error_when_strava_reports_error(mock_post, mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: {"id": 555})
+    mock_post.return_value.raise_for_status = lambda: None
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {"activity_id": None, "error": "duplicate of activity 123"},
+        raise_for_status=lambda: None,
+    )
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaUploadError):
+        client.publish(garmin_activity_id=44, fit_bytes=b"FIT-DATA")
+
+
+@patch("activsync.strava_client.requests.get")
+def test_find_existing_activity_returns_id_of_matching_activity(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+        {"id": 7777, "start_date": "2026-07-09T09:00:30Z"},
+    ])
+    mock_get.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+    start_time = datetime(2026, 7, 9, 9, 0, 0, tzinfo=timezone.utc)
+
+    result = client.find_existing_activity(start_time)
+
+    assert result == 7777
+    call_kwargs = mock_get.call_args
+    assert "athlete/activities" in call_kwargs.args[0]
+    assert call_kwargs.kwargs["params"]["after"] < int(start_time.timestamp())
+    assert call_kwargs.kwargs["params"]["before"] > int(start_time.timestamp())
+
+
+@patch("activsync.strava_client.requests.get")
+def test_find_existing_activity_returns_none_when_no_activities(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
+    mock_get.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    result = client.find_existing_activity(datetime(2026, 7, 9, 9, 0, 0, tzinfo=timezone.utc))
+
+    assert result is None
+
+
+@patch("activsync.strava_client.requests.get")
+def test_find_existing_activity_returns_none_when_outside_tolerance(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    # Simulate the API returning something outside the requested window
+    # (defensive — shouldn't normally happen given after/before params).
+    mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+        {"id": 8888, "start_date": "2026-07-09T09:30:00Z"},
+    ])
+    mock_get.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    result = client.find_existing_activity(
+        datetime(2026, 7, 9, 9, 0, 0, tzinfo=timezone.utc), tolerance_minutes=5,
+    )
+
+    assert result is None
+
+
+@patch("activsync.strava_client.requests.get")
+def test_find_existing_activity_picks_closest_match(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+        {"id": 1111, "start_date": "2026-07-09T09:04:00Z"},
+        {"id": 2222, "start_date": "2026-07-09T09:00:10Z"},
+    ])
+    mock_get.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    result = client.find_existing_activity(datetime(2026, 7, 9, 9, 0, 0, tzinfo=timezone.utc))
+
+    assert result == 2222
+
+
+@patch("activsync.strava_client.requests.get")
+def test_find_existing_activity_raises_auth_error_on_401(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=401)
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaAuthError):
+        client.find_existing_activity(datetime(2026, 7, 9, 9, 0, 0, tzinfo=timezone.utc))
+
+
+@patch("activsync.strava_client.requests.post")
+def test_disconnect_revokes_token_and_clears_local_state(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=200)
+
+    client = StravaClient(conn, "cid", "csecret")
+    client.disconnect()
+
+    assert db.get_config_value(conn, "strava_tokens") is None
+    assert client.is_connected() is False
+    mock_post.assert_called_once()
+    call_kwargs = mock_post.call_args
+    assert call_kwargs.kwargs["data"]["token"] == "tok"
+
+
+def test_disconnect_is_a_no_op_when_not_connected(conn):
+    client = StravaClient(conn, "cid", "csecret")
+
+    client.disconnect()
+
+    assert client.is_connected() is False
+
+
+@patch("activsync.strava_client.requests.post")
+def test_disconnect_still_clears_local_state_when_revoke_request_fails(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.side_effect = requests.RequestException("network error")
+
+    client = StravaClient(conn, "cid", "csecret")
+    client.disconnect()
+
+    assert db.get_config_value(conn, "strava_tokens") is None
+
+
+@patch("activsync.strava_client.requests.get")
+def test_activity_exists_returns_true_when_found(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=200, json=lambda: {"id": 9001})
+    mock_get.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    assert client.activity_exists(9001) is True
+
+
+@patch("activsync.strava_client.requests.get")
+def test_activity_exists_returns_false_when_404(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=404)
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    assert client.activity_exists(9001) is False
+
+
+@patch("activsync.strava_client.requests.get")
+def test_activity_exists_raises_auth_error_on_401(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=401)
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaAuthError):
+        client.activity_exists(9001)
+
+
+@patch("activsync.strava_client.requests.put")
+def test_update_activity_metadata_puts_name_and_description(mock_put, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_put.return_value = MagicMock(status_code=200)
+    mock_put.return_value.raise_for_status = lambda: None
+
+    client = StravaClient(conn, "cid", "csecret")
+    client.update_activity_metadata(9001, "Morning Run", "Easy Z2")
+
+    mock_put.assert_called_once()
+    call_args = mock_put.call_args
+    assert call_args.args[0].endswith("/activities/9001")
+    assert call_args.kwargs["headers"]["Authorization"] == "Bearer tok"
+    assert call_args.kwargs["json"] == {"name": "Morning Run", "description": "Easy Z2"}
+
+
+@patch("activsync.strava_client.requests.put")
+def test_update_activity_metadata_raises_auth_error_on_401(mock_put, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_put.return_value = MagicMock(status_code=401)
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaAuthError):
+        client.update_activity_metadata(9001, "Morning Run", "Easy Z2")

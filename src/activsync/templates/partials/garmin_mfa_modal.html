@@ -1,0 +1,25 @@
+<dialog class="activity-dialog setup-mfa-dialog" data-autoshow>
+  <div class="activity-dialog-card">
+    <div class="activity-dialog-header">
+      <div>
+        <p class="dialog-kicker">Garmin verification</p>
+        <h2 class="activity-dialog-title">Enter your code</h2>
+      </div>
+      <form method="post" action="/setup/garmin/mfa/cancel">
+        <button type="submit" class="dialog-close" aria-label="Cancel Garmin verification">×</button>
+      </form>
+    </div>
+    <p class="hint">Garmin sent a verification code to your email or authenticator app.</p>
+    {% if mfa_error %}<p class="error">{{ mfa_error }}</p>{% endif %}
+    <form class="stack" method="post" action="/setup/garmin-mfa" onsubmit="return activsyncSetLoading(this)">
+      <label>Verification code
+        <input type="text" name="mfa_code" inputmode="numeric" autocomplete="one-time-code"
+               placeholder="123456" required autofocus>
+      </label>
+      <button class="primary-action garmin-action" type="submit">
+        <span class="button-label">Verify</span>
+        <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Verifying…</span>
+      </button>
+    </form>
+  </div>
+</dialog>
