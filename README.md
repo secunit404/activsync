@@ -1,70 +1,95 @@
 # ActivSync
 
-Activity synchronization and publishing control.
+**Sync your Garmin activities to Strava — with review and publishing control.**
 
-## Development
+[![CI](https://github.com/secunit404/activsync/actions/workflows/ci.yml/badge.svg)](https://github.com/secunit404/activsync/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/secunit404/activsync)](https://github.com/secunit404/activsync/releases)
+[![License: MIT](https://img.shields.io/github/license/secunit404/activsync)](LICENSE)
 
-Standard Python workflow — a local virtualenv, no Docker required.
+ActivSync polls your Garmin Connect account, then syncs activities to Strava on
+your terms. Instead of publishing everything automatically, activities can be
+**held for review** so you decide what goes public — useful for keeping private
+or duplicate activities off your Strava feed.
 
-```sh
-make install   # create .venv and install the app with dev extras
-make dev       # run the dev server on http://localhost:8382
-make test      # run the test suite
+## Features
+
+- Automatic Garmin → Strava synchronization on a configurable poll interval.
+- **Held-for-review** publishing: approve activities before they reach Strava.
+- First-run setup wizard for Garmin (incl. MFA) and Strava OAuth.
+- Per-activity-type rules and a configurable display timezone.
+- Single self-contained container; state persisted to a mounted volume.
+
+## Quick start (Docker)
+
+Run the published image with Docker Compose:
+
+```yaml
+# docker-compose.yml
+name: activsync
+services:
+  activsync:
+    image: ghcr.io/secunit404/activsync:latest
+    ports:
+      - "8381:8381"
+    volumes:
+      - ./data:/config
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Stockholm
 ```
-
-`make dev` runs with auto-reload and **mock data**: it seeds an isolated
-`data/activsync-dev.db` (36 sample activities plus 16 Garmin categories),
-requires no password, and never contacts Garmin or Strava. Your real
-`data/activsync.db` is never touched. Changes under `src/` reload automatically.
-
-To reset the sample data, stop the server, delete `data/activsync-dev.db`, and
-start it again.
-
-### Testing the first-run setup wizard
-
-To walk the whole onboarding flow (Garmin login → MFA → Strava → initial sync)
-from a clean slate:
-
-```sh
-make dev-fresh   # wipes data/activsync-dev.db, then starts the dev server
-```
-
-In mock mode the wizard is fully faked — no real accounts or network calls:
-
-- **Garmin:** any email/password connects. Use the password `mfa` to trigger the
-  MFA modal; then any code works except `000000`, which is rejected so you can
-  test the error state.
-- **Strava:** enter any client ID/secret; the OAuth step loops straight back and
-  connects without leaving the app.
-- **Initial sync:** completes against the seeded sample data and lands you on the
-  dashboard.
-
-Prefer not to use `make`? The equivalent commands are:
-
-```sh
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-ACTIVSYNC_DEV_MOCK_DATA=1 ACTIVSYNC_DB_PATH=data/activsync-dev.db \
-  .venv/bin/uvicorn activsync.main:app --reload --reload-dir src --port 8382
-```
-
-### Logs
-
-The app logs to stdout (captured by `docker logs` in production). Lines are
-timestamped in the timezone you pick under **Settings → Preferences**
-(`display_timezone`), updated live — no restart needed. Set
-`ACTIVSYNC_LOG_LEVEL=DEBUG` for verbose output; the default is `INFO`. If no
-in-app timezone is set, the `TZ` environment variable is used, falling back to
-`Europe/Stockholm`.
-
-## Running in production (Docker)
-
-For deployment, run the app in Docker with the real database:
 
 ```sh
 docker compose up -d
 ```
 
-This serves the real-data ActivSync app on <http://localhost:8381>, persisting
-state to `./data` (mounted at `/config` in the container). It starts the
-Garmin/Strava poller and uses `data/activsync.db`.
+Then open <http://localhost:8381> and follow the setup wizard. State (database
+and Garmin tokens) is persisted under `./data` (mounted at `/config`).
+
+> The container runs as a non-root user (UID 1000). On Linux, ensure `./data`
+> is writable by UID 1000 (e.g. `chown -R 1000:1000 data`), or add
+> `user: "${UID}:${GID}"` to the service. On Docker Desktop (macOS/Windows)
+> this is handled automatically.
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TZ` | `Europe/Stockholm` | Timezone for logs when no in-app timezone is set |
+| `ACTIVSYNC_LOG_LEVEL` | `INFO` | Log verbosity (`DEBUG` for verbose) |
+| `ACTIVSYNC_DB_PATH` | `/config/activsync.db` | SQLite database path |
+| `ACTIVSYNC_GARMIN_TOKEN_DIR` | `/config/.garminconnect` | Garmin token storage |
+| `ACTIVSYNC_DEV_MOCK_DATA` | _(unset)_ | Dev only: seed fake data, no network |
+
+The in-app **Settings → Preferences → display timezone** overrides `TZ` for log
+timestamps (applied live, no restart needed).
+
+## Development
+
+Standard Python workflow — a local virtualenv, no Docker required:
+
+```sh
+make install   # create .venv and install with dev extras
+make dev       # dev server on http://localhost:8382 (mock data, isolated DB)
+make test      # run the test suite
+```
+
+`make dev` runs with auto-reload and **mock data**: it seeds an isolated
+`data/activsync-dev.db`, requires no password, and never contacts Garmin or
+Strava — your real `data/activsync.db` is never touched. To walk the first-run
+wizard from a clean slate, use `make dev-fresh`.
+
+In mock mode the wizard is fully faked: any Garmin email/password connects (use
+password `mfa` to trigger the MFA modal; any code except `000000` is accepted);
+any Strava client ID/secret connects via a looped-back OAuth step.
+
+## Releases
+
+Versioning and changelogs are automated with
+[release-please](https://github.com/googleapis/release-please): merging its
+Release PR tags the version, updates [`CHANGELOG.md`](CHANGELOG.md), and
+publishes a multi-arch image to
+[`ghcr.io/secunit404/activsync`](https://github.com/secunit404/activsync/pkgs/container/activsync).
+
+## License
+
+[MIT](LICENSE)
