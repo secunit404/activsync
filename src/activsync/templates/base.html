@@ -1741,6 +1741,32 @@
             border-bottom-color: #2e1065;
             background: #7c3aed;
         }
+
+        .app-footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            margin-top: 36px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 0.74rem;
+        }
+        .app-footer a { color: var(--muted); font-weight: 600; }
+        .app-footer a:hover { color: var(--ink); }
+        .app-footer-sep { opacity: 0.55; }
+        .app-footer-update {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--st-amber) !important;
+            font-weight: 700;
+        }
+        .app-footer-update:hover { color: var(--st-amber) !important; }
+        .app-footer-update svg { width: 13px; height: 13px; }
     </style>
 </head>
 <body hx-ext="sse" sse-connect="/api/events">
@@ -1752,6 +1778,7 @@
 {% endif %}
 <main class="app-shell">
 {% block content %}{% endblock %}
+{% include "partials/_footer.html" %}
 </main>
 <script>
   document.body.addEventListener('htmx:beforeSwap', function (e) {
