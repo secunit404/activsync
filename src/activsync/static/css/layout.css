@@ -33,6 +33,17 @@
     text-transform: none;
 }
 
+/* The wordmark links home. Inherit rather than take the `a` defaults, which
+   would drop the lockup to font-weight 650 and underline it on hover. */
+.brand-link {
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-decoration: none;
+}
+
+.brand-link:hover { text-decoration: none; }
+
 .brand-activ { color: var(--garmin); }
 
 .brand-sync { color: var(--brand-sync); }

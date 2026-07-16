@@ -288,6 +288,35 @@ def test_dashboard_detail_actions_are_ordered_edit_exclude_publish(tmp_path):
     assert footer.index(">Edit<") < footer.index(">Exclude<") < footer.index(">Publish<")
 
 
+def test_unexcluding_lives_in_the_details_dialog_not_the_row(tmp_path):
+    """Exclude is only offered in the dialog, so its inverse belongs there too
+    rather than on the row."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 4, "walking", "Evening Walk", "", "2026-07-09 09:00:00", "h4", "excluded", now)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    row = response.text.split('<div class="activity-row-actions">')[1].split("</div>")[0]
+    assert "Un-exclude" not in row
+    assert ">Details<" in row
+
+    footer = response.text.split('<footer class="drawer-actions">')[1].split("</footer>")[0]
+    assert ">Un-exclude<" in footer
+    assert "/api/activities/4/unexclude" in footer
+
+
+def test_the_wordmark_links_to_the_activities_page(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+
+    for path in ("/", "/settings"):
+        page = client.get(path)
+        assert page.status_code == 200
+        lockup = page.text.split('class="page-kicker brand-lockup"')[1].split("</p>")[0]
+        assert '<a class="brand-link" href="/"' in lockup, f"wordmark is not a link on {path}"
+
+
 def test_dashboard_banner_names_the_broken_connection(tmp_path):
     conn, client = _logged_in_client(tmp_path)
     _setup_done(conn)

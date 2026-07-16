@@ -136,10 +136,6 @@
                     <form class="inline" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
                         <button type="submit" class="primary-action">Republish</button>
                     </form>
-                    {% elif activity.publish_status == "excluded" %}
-                    <form class="inline" hx-post="/api/activities/{{ activity.garmin_activity_id }}/unexclude" hx-target="#activity-table" hx-swap="outerHTML">
-                        <button type="submit" class="row-action-secondary">Un-exclude</button>
-                    </form>
                     {% endif %}
                     <button type="button" class="details-button" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" onclick="document.getElementById('{{ dialog_id }}').showModal()">Details</button>
                 </div>
