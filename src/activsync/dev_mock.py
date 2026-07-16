@@ -100,11 +100,13 @@ class FakeStravaClient:
         tokens = db.get_config_value(self._conn, "strava_tokens") or {}
         return bool(tokens.get("refresh_token"))
 
-    def authorize_url(self, redirect_uri: str) -> str:
+    def authorize_url(self, redirect_uri: str, state: str) -> str:
         # Skip Strava entirely: bounce straight to our own callback with a
-        # placeholder code that exchange_code accepts unconditionally.
+        # placeholder code that exchange_code accepts unconditionally. The
+        # state is echoed back exactly as the real Strava would, so the
+        # callback's state check exercises the same path in mock mode.
         separator = "&" if "?" in redirect_uri else "?"
-        return f"{redirect_uri}{separator}code=dev-mock-code"
+        return f"{redirect_uri}{separator}code=dev-mock-code&state={state}"
 
     def exchange_code(self, code: str) -> None:
         db.set_config_value(self._conn, "strava_tokens", {

@@ -49,6 +49,13 @@ def _setup_done(conn):
     db.set_config_value(conn, "initial_sync_done", True)
 
 
+def _pending_oauth_state(conn, state="test-oauth-state"):
+    """Put the app in the state /strava/connect leaves behind: an in-flight
+    OAuth handshake whose state the callback expects to see echoed back."""
+    db.set_config_value(conn, "strava_oauth_state", state)
+    return state
+
+
 def test_settings_redirects_to_setup_when_incomplete(tmp_path):
     conn, client = _logged_in_client(tmp_path)
     response = client.get("/settings", follow_redirects=False)
@@ -936,11 +943,14 @@ def test_saving_changed_strava_credentials_goes_straight_to_oauth(tmp_path):
 def test_strava_callback_exchanges_code_and_redirects_to_settings(tmp_path, monkeypatch):
     conn, client = _logged_in_client(tmp_path)
     db.set_config_value(conn, "initial_sync_done", True)
+    state = _pending_oauth_state(conn)
 
     fake_strava = MagicMock()
     monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
 
-    response = client.get("/strava/callback?code=authcode123", follow_redirects=False)
+    response = client.get(
+        f"/strava/callback?code=authcode123&state={state}", follow_redirects=False
+    )
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings"
@@ -951,10 +961,11 @@ def test_strava_callback_returns_to_setup_during_first_run(tmp_path, monkeypatch
     conn, client = _logged_in_client(tmp_path)
     _mark_garmin_connected(conn)
     db.set_config_value(conn, "strava_credentials", {"client_id": "cid", "client_secret": "csecret"})
+    state = _pending_oauth_state(conn)
     fake_strava = MagicMock()
     monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
 
-    response = client.get("/strava/callback?code=abc", follow_redirects=False)
+    response = client.get(f"/strava/callback?code=abc&state={state}", follow_redirects=False)
 
     assert response.status_code == 303
     assert response.headers["location"] == "/setup"
@@ -964,9 +975,10 @@ def test_strava_callback_returns_to_setup_during_first_run(tmp_path, monkeypatch
 def test_strava_callback_returns_to_settings_after_setup(tmp_path, monkeypatch):
     conn, client = _logged_in_client(tmp_path)
     db.set_config_value(conn, "initial_sync_done", True)
+    state = _pending_oauth_state(conn)
     monkeypatch.setattr(server_module, "_build_strava_client", lambda c: MagicMock())
 
-    response = client.get("/strava/callback?code=abc", follow_redirects=False)
+    response = client.get(f"/strava/callback?code=abc&state={state}", follow_redirects=False)
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings"
@@ -975,16 +987,137 @@ def test_strava_callback_returns_to_settings_after_setup(tmp_path, monkeypatch):
 def test_strava_callback_catches_up_after_reconnect(tmp_path, monkeypatch):
     conn, client = _logged_in_client(tmp_path)
     _setup_done(conn)
+    state = _pending_oauth_state(conn)
     monkeypatch.setattr(server_module.StravaClient, "exchange_code", MagicMock())
     monkeypatch.setattr(server_module, "_build_garmin_client", MagicMock())
     catch_up = MagicMock(return_value=_empty_catch_up_stats())
     monkeypatch.setattr(server_module.sync, "catch_up_sync", catch_up)
 
-    response = client.get("/strava/callback?code=abc", follow_redirects=False)
+    response = client.get(f"/strava/callback?code=abc&state={state}", follow_redirects=False)
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings"
     catch_up.assert_called_once()
+
+
+def test_strava_connect_stores_state_and_sends_it_to_strava(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    db.set_config_value(conn, "strava_credentials", {"client_id": "cid", "client_secret": "csecret"})
+
+    response = client.get("/strava/connect", follow_redirects=False)
+
+    state = db.get_config_value(conn, "strava_oauth_state")
+    assert state
+    assert f"state={state}" in response.headers["location"]
+
+
+def test_strava_callback_reports_access_denied_instead_of_a_raw_422(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    _pending_oauth_state(conn)
+
+    # Exactly what Strava sends when the authorization does not complete —
+    # no `code` at all, which used to fail FastAPI validation and dump a raw
+    # JSON 422 in the user's face.
+    response = client.get("/strava/callback?state=&error=access_denied", follow_redirects=False)
+
+    assert response.status_code == 400
+    assert "access_denied" not in response.text
+    assert "did not complete" in response.text
+    assert "strava-manage-dialog').showModal()" in response.text
+
+
+def test_strava_callback_without_code_reports_an_error(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    _pending_oauth_state(conn)
+
+    response = client.get("/strava/callback", follow_redirects=False)
+
+    assert response.status_code == 400
+    assert "did not complete" in response.text
+
+
+def test_strava_callback_during_setup_reports_errors_on_the_setup_page(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn)
+    db.set_config_value(conn, "strava_credentials", {"client_id": "cid", "client_secret": "csecret"})
+    _pending_oauth_state(conn)
+
+    response = client.get("/strava/callback?error=access_denied", follow_redirects=False)
+
+    assert response.status_code == 400
+    assert "did not complete" in response.text
+    # Mid-setup there is no settings page to fall back to: the user lands back
+    # on wizard step 2 with what they already typed still there, so fixing the
+    # callback domain on Strava's side doesn't cost them a re-entry.
+    assert 'action="/setup/strava/connect"' in response.text
+    assert 'value="cid"' in response.text
+    assert "Saved — leave blank to keep it" in response.text
+
+
+def test_strava_callback_rejects_a_state_it_did_not_issue(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    _pending_oauth_state(conn, "the-real-state")
+    fake_strava = MagicMock()
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+
+    response = client.get(
+        "/strava/callback?code=abc&state=forged-state", follow_redirects=False
+    )
+
+    assert response.status_code == 400
+    fake_strava.exchange_code.assert_not_called()
+
+
+def test_strava_callback_rejects_a_code_with_no_handshake_in_flight(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    # No strava_oauth_state stored: nobody started an authorization here.
+    fake_strava = MagicMock()
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+
+    response = client.get("/strava/callback?code=abc&state=whatever", follow_redirects=False)
+
+    assert response.status_code == 400
+    fake_strava.exchange_code.assert_not_called()
+
+
+def test_strava_callback_state_cannot_be_replayed(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    state = _pending_oauth_state(conn)
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: MagicMock())
+    monkeypatch.setattr(server_module, "_build_garmin_client", MagicMock())
+    monkeypatch.setattr(
+        server_module.sync, "catch_up_sync", MagicMock(return_value=_empty_catch_up_stats())
+    )
+
+    first = client.get(f"/strava/callback?code=abc&state={state}", follow_redirects=False)
+    replayed = client.get(f"/strava/callback?code=abc&state={state}", follow_redirects=False)
+
+    assert first.status_code == 303
+    assert replayed.status_code == 400
+    assert db.get_config_value(conn, "strava_oauth_state") is None
+
+
+def test_strava_callback_reports_a_rejected_code_exchange(tmp_path, monkeypatch):
+    import requests
+
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    state = _pending_oauth_state(conn)
+    fake_strava = MagicMock()
+    fake_strava.exchange_code.side_effect = requests.HTTPError("400 Bad Request")
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+
+    response = client.get(f"/strava/callback?code=abc&state={state}", follow_redirects=False)
+
+    assert response.status_code == 400
+    assert "Could not complete the Strava connection" in response.text
+    # A failed exchange must not leave the used state around for a retry.
+    assert db.get_config_value(conn, "strava_oauth_state") is None
 
 
 def test_strava_disconnect_returns_to_setup(tmp_path, monkeypatch):

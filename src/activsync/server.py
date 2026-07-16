@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +24,7 @@ from activsync.garmin_client import (
     complete_login as garmin_complete_login,
     get_client as get_garmin_raw_client,
 )
-from activsync.strava_client import StravaClient
+from activsync.strava_client import StravaAuthError, StravaClient
 
 logger = logging.getLogger("activsync.server")
 
@@ -838,12 +840,76 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             )
         strava = _build_strava_client(conn)
         redirect_uri = str(request.url_for("strava_callback"))
-        return RedirectResponse(strava.authorize_url(redirect_uri))
+        state = secrets.token_urlsafe(32)
+        db.set_config_value(conn, "strava_oauth_state", state)
+        return RedirectResponse(strava.authorize_url(redirect_uri, state))
+
+    def _strava_callback_error(request: Request, message: str):
+        """Render an OAuth failure on whichever page the user came from.
+
+        The callback is a landing page the user arrives at from Strava, so a
+        raised error would surface as a bare framework response. Mid-setup
+        there is no /settings to fall back to, hence the two templates.
+        """
+        if _settings_context()["initial_sync_done"]:
+            return templates.TemplateResponse(
+                request, "settings.html",
+                _settings_context(strava_dialog_open=True, strava_error=message),
+                status_code=400,
+            )
+        return templates.TemplateResponse(
+            request, "setup.html",
+            _settings_context(step="strava", strava_error=message),
+            status_code=400,
+        )
 
     @app.get("/strava/callback")
-    def strava_callback(request: Request, code: str):
+    def strava_callback(
+        request: Request,
+        code: str | None = None,
+        state: str | None = None,
+        error: str | None = None,
+    ):
+        # Every parameter is optional: Strava omits `code` entirely when the
+        # authorization doesn't complete (denied, or a redirect_uri that
+        # doesn't match the one registered on the API application). Declaring
+        # `code` required made FastAPI reject those callbacks before this
+        # handler ran, so the user got a raw JSON 422 instead of an
+        # explanation.
+        expected_state = db.get_config_value(conn, "strava_oauth_state")
+        # One state per handshake, consumed on arrival: a replayed callback
+        # finds nothing to match against.
+        db.set_config_value(conn, "strava_oauth_state", None)
+
+        if error or not code:
+            return _strava_callback_error(
+                request,
+                "The Strava connection did not complete. This usually means the "
+                "Authorization Callback Domain on your Strava API application "
+                "doesn't match the address you're using to reach ActivSync. "
+                "Check it on strava.com/settings/api and try again.",
+            )
+
+        if not expected_state or not state or not secrets.compare_digest(state, expected_state):
+            return _strava_callback_error(
+                request,
+                "That Strava response didn't match the connection request that "
+                "started it, so it was ignored. Start the connection again from "
+                "this page.",
+            )
+
         strava = _build_strava_client(conn)
-        strava.exchange_code(code)
+        try:
+            strava.exchange_code(code)
+        except (requests.RequestException, StravaAuthError) as e:
+            logger.warning("strava code exchange failed: %s", e)
+            return _strava_callback_error(
+                request,
+                "Could not complete the Strava connection — Strava rejected the "
+                "authorization. Check your client ID and client secret, then "
+                "try again.",
+            )
+
         if not _settings_context()["initial_sync_done"]:
             return RedirectResponse("/setup", status_code=303)
         _run_catch_up()
