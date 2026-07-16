@@ -44,7 +44,6 @@ def _fake_strava(strava_activity_id=1001, existing_activity_id=None, window=None
     strava = MagicMock()
     strava.publish.return_value = strava_activity_id
     strava.find_existing_activity.return_value = existing_activity_id
-    strava.activity_exists.return_value = True
     # check_strava_status reads the whole lookback window in one call rather
     # than asking Strava about each activity; default to an empty athlete.
     strava.list_activities_between.return_value = list(window or [])
@@ -877,7 +876,7 @@ def test_check_strava_status_fetches_the_window_once_regardless_of_activity_coun
     """The rate-limit fix: cost is one request per poll, not one per activity.
 
     Previously each pending/held row cost a find_existing_activity call and each
-    published row cost an activity_exists call, so a busy week blew through
+    published row cost a per-id existence check, so a busy week blew through
     Strava's 100-per-15-minutes quota within the hour.
     """
     for gid in (310, 311, 312):
@@ -903,7 +902,6 @@ def test_check_strava_status_fetches_the_window_once_regardless_of_activity_coun
 
     assert strava.list_activities_between.call_count == 1
     strava.find_existing_activity.assert_not_called()
-    strava.activity_exists.assert_not_called()
 
 
 def test_check_strava_status_requests_the_full_lookback_window(conn, cfg):
