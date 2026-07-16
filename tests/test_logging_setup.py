@@ -64,3 +64,78 @@ def test_configure_logging_emits_info_to_stdout(capsys):
     assert "publish complete" in out
     assert "INFO" in out
     assert "sync" in out
+
+
+def _access_record(path: str, status: int) -> logging.LogRecord:
+    """An access line exactly as uvicorn emits it."""
+    return logging.LogRecord(
+        "uvicorn.access", logging.INFO, "path", 1,
+        '%s - "%s %s HTTP/%s" %d', ("127.0.0.1:49924", "GET", path, "1.1", status), None,
+    )
+
+
+def test_uvicorn_lifecycle_logs_are_not_labelled_error():
+    """uvicorn's lifecycle logger is named 'uvicorn.error' but carries ordinary
+    startup messages, so the last-dotted-segment rule made a clean boot read as
+    four errors: 'INFO    error    Started server process'."""
+    fmt = logging_setup.LocalTimeFormatter("%(levelname)s %(component)s %(message)s")
+    record = logging.LogRecord(
+        "uvicorn.error", logging.INFO, "path", 1, "Started server process [1]", None, None,
+    )
+
+    assert fmt.format(record) == "INFO uvicorn Started server process [1]"
+
+
+def test_app_component_names_are_unchanged():
+    fmt = logging_setup.LocalTimeFormatter("%(component)s")
+    for name, expected in [
+        ("activsync", "activsync"),
+        ("activsync.poller", "poller"),
+        ("activsync.server", "server"),
+        ("uvicorn.access", "access"),
+    ]:
+        record = logging.LogRecord(name, logging.INFO, "path", 1, "m", None, None)
+        assert fmt.format(record) == expected
+
+
+def test_successful_health_probes_are_not_logged():
+    """Docker probes /health every 30s — 2880 lines a day that say nothing."""
+    log_filter = logging_setup.HealthCheckFilter()
+
+    assert log_filter.filter(_access_record("/health", 200)) is False
+
+
+def test_failing_health_probes_are_still_logged():
+    """A failing probe is the whole point of having one."""
+    log_filter = logging_setup.HealthCheckFilter()
+
+    assert log_filter.filter(_access_record("/health", 500)) is True
+    assert log_filter.filter(_access_record("/health", 404)) is True
+
+
+def test_other_requests_are_still_logged():
+    log_filter = logging_setup.HealthCheckFilter()
+
+    assert log_filter.filter(_access_record("/", 200)) is True
+    assert log_filter.filter(_access_record("/healthz", 200)) is True
+    assert log_filter.filter(_access_record("/static/css/base.css", 200)) is True
+
+
+def test_health_filter_tolerates_records_it_does_not_understand():
+    """The filter must never drop a line it failed to parse."""
+    log_filter = logging_setup.HealthCheckFilter()
+    plain = logging.LogRecord("uvicorn.error", logging.INFO, "p", 1, "Startup complete", None, None)
+
+    assert log_filter.filter(plain) is True
+
+
+def test_configure_logging_silences_health_probes_end_to_end(capsys):
+    logging_setup.configure_logging(level="INFO", tz_name="UTC")
+    access = logging.getLogger("uvicorn.access")
+
+    access.handle(_access_record("/health", 200))
+    access.handle(_access_record("/", 200))
+
+    out = capsys.readouterr().out
+    assert "/health" not in out
+    assert '"GET / HTTP/1.1" 200' in out
