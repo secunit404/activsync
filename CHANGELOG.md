@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/secunit404/activsync/compare/v1.2.0...v1.2.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* stop exhausting Strava's rate limit on every poll cycle ([#23](https://github.com/secunit404/activsync/issues/23)) ([116ed37](https://github.com/secunit404/activsync/commit/116ed37a7e7845c70b471b855793c253c4341964))
+
 ## [1.2.0](https://github.com/secunit404/activsync/compare/v1.1.2...v1.2.0) (2026-07-16)
 
 
