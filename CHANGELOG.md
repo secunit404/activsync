@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.2](https://github.com/secunit404/activsync/compare/v1.2.1...v1.2.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* end the Strava rate-limit pause at the quota reset, not before it ([#25](https://github.com/secunit404/activsync/issues/25)) ([17372eb](https://github.com/secunit404/activsync/commit/17372eb7f2c45e0c2abe33f5bbfdf68f466d7f07))
+* quieten routine log noise (uvicorn "error" label, health probes, static assets) ([#26](https://github.com/secunit404/activsync/issues/26)) ([4d5ea68](https://github.com/secunit404/activsync/commit/4d5ea683df7fa98998b3090d4806986e6296926f))
+* restore dev mock parity with the batched Strava fetch ([#27](https://github.com/secunit404/activsync/issues/27)) ([986768f](https://github.com/secunit404/activsync/commit/986768f1fcf489f611a6e18c3e88cd230e21f5fa))
+* serve /favicon.ico so browsers stop 404ing on every visit ([#28](https://github.com/secunit404/activsync/issues/28)) ([20e99de](https://github.com/secunit404/activsync/commit/20e99debc948d4e18a3aadf8a17cc51300a7111b))
+
 ## [1.2.1](https://github.com/secunit404/activsync/compare/v1.2.0...v1.2.1) (2026-07-16)
 
 
