@@ -59,9 +59,23 @@ and Garmin tokens) is persisted under `./data` (mounted at `/config`).
 | `ACTIVSYNC_DB_PATH` | `/config/activsync.db` | SQLite database path |
 | `ACTIVSYNC_GARMIN_TOKEN_DIR` | `/config/.garminconnect` | Garmin token storage |
 | `ACTIVSYNC_DEV_MOCK_DATA` | _(unset)_ | Dev only: seed fake data, no network |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Proxy IPs trusted to set `X-Forwarded-Proto` (see below) |
 
 The in-app **Settings → Preferences → display timezone** overrides `TZ` for log
 timestamps (applied live, no restart needed).
+
+### Strava's Authorization Callback Domain
+
+The setup wizard shows the exact value to enter. Two things it can't tell you:
+
+- **Reachable at more than one address?** (say a public domain *and* a LAN IP)
+  Only one can be registered, and subdomains of it are fine but an unrelated
+  address is not. Always start **Connect Strava** from the address you
+  registered — everything else works on either.
+- **Behind an HTTPS proxy?** Set `FORWARDED_ALLOW_IPS` to the proxy's address,
+  or `*` if the container is only reachable through it, so the callback URL is
+  built as `https://`. `*` trusts `X-Forwarded-Proto` from any client, so don't
+  use it on a directly reachable container.
 
 ## Development
 

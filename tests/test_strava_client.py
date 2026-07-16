@@ -30,11 +30,19 @@ def test_is_connected_true_after_tokens_stored(conn):
 def test_authorize_url_includes_client_id_and_scope(conn):
     client = StravaClient(conn, "cid123", "csecret")
 
-    url = client.authorize_url("http://localhost:8000/strava/callback")
+    url = client.authorize_url("http://localhost:8000/strava/callback", "s3cr3t-state")
 
     assert "client_id=cid123" in url
     assert "scope=activity:write,activity:read_all" in url
     assert "redirect_uri=http://localhost:8000/strava/callback" in url
+
+
+def test_authorize_url_includes_the_csrf_state(conn):
+    client = StravaClient(conn, "cid123", "csecret")
+
+    url = client.authorize_url("http://localhost:8000/strava/callback", "s3cr3t-state")
+
+    assert "state=s3cr3t-state" in url
 
 
 @patch("activsync.strava_client.requests.post")

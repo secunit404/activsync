@@ -66,7 +66,10 @@ def test_full_wizard_completes_end_to_end(mock_env, seeded_conn):
     # Fake authorize_url loops straight back to our own callback.
     assert "/strava/callback?code=dev-mock-code" in resp.headers["location"]
 
-    resp = client.get("/strava/callback", params={"code": "dev-mock-code"})
+    # Follow the fake's redirect verbatim rather than rebuilding it, so the
+    # OAuth state issued by /strava/connect round-trips the way it would
+    # through Strava.
+    resp = client.get(resp.headers["location"])
     assert resp.status_code == 303
     assert view.connection_status(conn)["strava"]["connected"] is True
 
