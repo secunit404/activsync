@@ -1,6 +1,6 @@
 [project]
 name = "activsync"
-version = "1.1.0"
+version = "1.1.1"
 description = "Activity synchronization and publishing control"
 requires-python = ">=3.10"
 dependencies = [
