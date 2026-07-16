@@ -57,6 +57,34 @@ def test_dashboard_redirects_to_setup_before_setup(tmp_path):
     assert "Connect Garmin" in setup.text
 
 
+def test_setup_strava_step_shows_the_callback_domain_to_register(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    client = TestClient(create_app(conn), base_url="http://192.168.1.16:8381")
+
+    step2 = client.get("/setup")
+
+    assert "Authorization Callback Domain" in step2.text
+    # Bare host: Strava's field takes a domain, not a URL — no scheme, no port.
+    assert "<code>192.168.1.16</code>" in step2.text
+    assert "192.168.1.16:8381" not in step2.text
+
+
+def test_setup_callback_domain_follows_the_host_the_user_arrived_on(tmp_path):
+    """Behind a reverse proxy the registered domain is the public one, so the
+    hint has to reflect the request rather than a hardcoded address — it must
+    match the redirect_uri /strava/connect builds from the same request."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    app = create_app(conn)
+
+    lan = TestClient(app, base_url="http://192.168.1.16:8381").get("/setup")
+    proxied = TestClient(app, base_url="https://activsync.example.com").get("/setup")
+
+    assert "<code>192.168.1.16</code>" in lan.text
+    assert "<code>activsync.example.com</code>" in proxied.text
+
+
 def test_setup_advances_through_states(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     client = TestClient(create_app(conn))

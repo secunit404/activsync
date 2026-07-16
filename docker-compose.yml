@@ -13,3 +13,7 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Europe/Stockholm
+      # Behind an HTTPS reverse proxy, trust it to set X-Forwarded-Proto so the
+      # Strava callback URL is built as https:// — see the README. Only enable
+      # this when the container is reachable solely through the proxy.
+      # - FORWARDED_ALLOW_IPS=*
