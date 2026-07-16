@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
@@ -56,19 +57,26 @@ def test_dashboard_redirects_to_setup_before_setup(tmp_path):
     assert "Connect Garmin" in setup.text
 
 
-def test_pages_link_a_stylesheet_that_is_actually_served(tmp_path):
+def test_pages_link_stylesheets_that_are_actually_served(tmp_path):
     """The CSS lives in static/, so a page can look fine in tests while the
-    real deploy ships no stylesheet at all: fetch it, don't just link it."""
+    real deploy ships no stylesheet at all: fetch each one, don't just link it."""
     conn = db.connect(str(tmp_path / "test.db"))
     client = TestClient(create_app(conn))
 
     page = client.get("/setup")
-    assert '<link rel="stylesheet" href="/static/css/app.css?v=' in page.text
+    hrefs = re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)
+    assert hrefs, "no stylesheets linked"
+    for href in hrefs:
+        assert "?v=" in href, f"{href} is not cache-busted"
+        served = client.get(href.split("?")[0])
+        assert served.status_code == 200, f"{href} is linked but not served"
 
-    stylesheet = client.get("/static/css/app.css")
-    assert stylesheet.status_code == 200
-    assert ".brand-activ { color: var(--garmin); }" in stylesheet.text
-    assert "garmin2strava" not in stylesheet.text
+    # Order is load-bearing: tokens define the vars every later file consumes.
+    assert hrefs[0].startswith("/static/css/tokens.css")
+
+    layout = client.get("/static/css/layout.css")
+    assert ".brand-activ { color: var(--garmin); }" in layout.text
+    assert "garmin2strava" not in layout.text
 
 
 def test_setup_strava_step_shows_the_callback_domain_to_register(tmp_path):

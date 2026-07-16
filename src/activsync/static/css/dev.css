@@ -1,0 +1,20 @@
+/* Development-mode banner: a deliberately off-brand violet (not the
+   app's green/blue/amber status colors) so a mock-data session is
+   never mistaken for the real app. Not sticky, to avoid fighting the
+   sticky .activity-toolbar. */
+.dev-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border-bottom: 1px solid #4c1d95;
+    background: #6d28d9;
+    color: #f5f3ff;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    text-align: center;
+}

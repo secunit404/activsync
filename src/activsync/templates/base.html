@@ -69,7 +69,14 @@
     <script src="https://unpkg.com/htmx.org@2.0.4"
             integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
             crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}">
+    {# Order is load-bearing: later files override earlier ones at equal
+       specificity. Keep tokens first and dev last. #}
+    {% for sheet in [
+        "tokens", "base", "layout", "buttons", "nav", "forms",
+        "settings", "activities", "activity-dialog", "setup", "dev",
+    ] %}
+    <link rel="stylesheet" href="/static/css/{{ sheet }}.css?v={{ app_version }}">
+    {%- endfor %}
 </head>
 <body hx-ext="sse" sse-connect="/api/events">
 {% if dev_mode %}

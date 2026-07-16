@@ -1,0 +1,134 @@
+/* Labels, inputs, and the settings form scaffolding. */
+
+.settings-strava-panel .primary-action {
+    align-self: flex-start;
+    justify-self: start;
+    width: auto;
+}
+
+label {
+    display: grid;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 650;
+}
+
+.field-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.field-info {
+    position: relative;
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    color: var(--muted);
+    cursor: help;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    font-weight: 750;
+    line-height: 1;
+}
+
+.field-info::after {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 5;
+    width: min(270px, calc(100vw - 40px));
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-3);
+    box-shadow: var(--shadow-modal);
+    color: var(--ink);
+    content: attr(data-tooltip);
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.35;
+    opacity: 0;
+    padding: 8px 10px;
+    pointer-events: none;
+    transform: translateY(-3px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.field-info:hover::after, .field-info:focus-visible::after {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+input:not([type="checkbox"]), select, textarea {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid var(--field-border);
+    border-radius: var(--radius-sm);
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+    padding: 10px 12px;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+}
+
+input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    accent-color: var(--accent);
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.full-span { grid-column: 1 / -1; }
+
+.settings-save {
+    justify-self: start;
+    min-width: 0;
+    width: auto;
+}
+
+.settings-section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.settings-section-heading h2 { margin: 0; }
+
+.settings-locked-message {
+    display: grid;
+    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--muted);
+    padding: 14px;
+}
+
+.settings-locked-message strong { color: var(--ink); }
+
+.settings-locked-message p { margin: 0; }
+
+.settings-narrow-field, .settings-status {
+    width: calc((100% - 12px) / 2);
+    max-width: none;
+}
+
+@media (max-width: 740px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .settings-save, .settings-narrow-field, .settings-status { width: 100%; max-width: none; }
+}

@@ -1,0 +1,138 @@
+/* Buttons and button-shaped links, plus the busy/spinner states. */
+
+.button-row, .sync-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+form.inline { display: inline-flex; margin: 0; }
+
+button, .button-link {
+    display: inline-flex;
+    min-height: 44px;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--ink);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 650;
+    padding: 10px 14px;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+button:hover, .button-link:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+    text-decoration: none;
+}
+
+button:active, .button-link:active { background: var(--surface-3); }
+
+button:disabled, button:disabled:hover {
+    border-color: var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.primary-action {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.primary-action:hover {
+    border-color: var(--accent-ink);
+    background: var(--accent-ink);
+    color: #fff;
+}
+
+.primary-action.garmin-action {
+    border-color: var(--garmin);
+    background: var(--garmin);
+    color: var(--garmin-action-ink);
+}
+
+.primary-action.garmin-action:hover {
+    border-color: color-mix(in srgb, var(--garmin) 82%, #000);
+    background: color-mix(in srgb, var(--garmin) 82%, #000);
+    color: var(--garmin-action-ink);
+}
+
+/* Sync controls follow their platform colors: Garmin = blue, Strava = orange */
+.sync-actions button {
+    background: transparent;
+    border-color: var(--border-strong);
+    color: var(--ink);
+}
+
+.sync-actions button:nth-child(1) {
+    border-color: var(--garmin);
+    color: var(--garmin);
+}
+
+.sync-actions button:nth-child(1):hover {
+    border-color: var(--garmin);
+    background: color-mix(in srgb, var(--garmin) 13%, transparent);
+    color: var(--garmin);
+}
+
+.sync-actions button:nth-child(2) {
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+.sync-actions button:nth-child(2):hover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    color: var(--accent-ink);
+}
+
+.ghost-button {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+}
+
+button:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--focus-ring) 55%, transparent);
+    outline-offset: 2px;
+}
+
+.sync-actions button[disabled], .primary-action[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.button-loading { display: none; align-items: center; gap: 8px; }
+
+button.htmx-request, button[aria-busy="true"] { cursor: wait; }
+
+button.htmx-request .button-label, button[aria-busy="true"] .button-label { display: none; }
+
+button.htmx-request .button-loading, button[aria-busy="true"] .button-loading { display: inline-flex; }
+
+.button-spinner {
+    width: 1em;
+    height: 1em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: activsync-spin 0.7s linear infinite;
+}
+
+@keyframes activsync-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 740px) {
+    .sync-actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .sync-actions button { width: 100%; }
+}
