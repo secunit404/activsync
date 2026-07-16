@@ -1016,14 +1016,15 @@ def test_strava_callback_reports_access_denied_instead_of_a_raw_422(tmp_path):
     _setup_done(conn)
     _pending_oauth_state(conn)
 
-    # Exactly what Strava sends when the authorization does not complete —
-    # no `code` at all, which used to fail FastAPI validation and dump a raw
-    # JSON 422 in the user's face.
+    # Exactly what Strava sends when the athlete declines — no `code` at all,
+    # which used to fail FastAPI validation and dump a raw JSON 422 in the
+    # user's face.
     response = client.get("/strava/callback?state=&error=access_denied", follow_redirects=False)
 
     assert response.status_code == 400
+    # Strava's raw error code is for the log, not the page.
     assert "access_denied" not in response.text
-    assert "did not complete" in response.text
+    assert "authorization was declined" in response.text
     assert "strava-manage-dialog').showModal()" in response.text
 
 
@@ -1035,7 +1036,7 @@ def test_strava_callback_without_code_reports_an_error(tmp_path):
     response = client.get("/strava/callback", follow_redirects=False)
 
     assert response.status_code == 400
-    assert "did not complete" in response.text
+    assert "did not send an authorization back" in response.text
 
 
 def test_strava_callback_during_setup_reports_errors_on_the_setup_page(tmp_path):
@@ -1047,7 +1048,7 @@ def test_strava_callback_during_setup_reports_errors_on_the_setup_page(tmp_path)
     response = client.get("/strava/callback?error=access_denied", follow_redirects=False)
 
     assert response.status_code == 400
-    assert "did not complete" in response.text
+    assert "authorization was declined" in response.text
     # Mid-setup there is no settings page to fall back to: the user lands back
     # on wizard step 2 with what they already typed still there, so fixing the
     # callback domain on Strava's side doesn't cost them a re-entry.

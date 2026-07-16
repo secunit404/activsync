@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from activsync import db
 from activsync import server as server_module
 from activsync.server import create_app
+from activsync.strava_client import StravaAuthError, StravaUploadError
 
 
 def _logged_in_client(tmp_path):
@@ -307,6 +308,83 @@ def test_publish_to_strava_route_with_no_selection_publishes_nothing(tmp_path, m
     assert response.status_code == 200
     assert db.get_activity(conn, 3)["publish_status"] == "pending"
     fake_strava.publish.assert_not_called()
+
+
+def test_publish_route_reports_failed_uploads(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 1, "running", "Run A", "", "2026-07-09 09:00:00", "h1", "pending", now)
+
+    fake_garmin = MagicMock()
+    fake_garmin.download_fit.return_value = b"FIT"
+    fake_strava = MagicMock()
+    fake_strava.find_existing_activity.return_value = None
+    # Strava refuses the upload — publish_pending swallows this per row and
+    # counts it, so the route is the only place that can tell the user.
+    fake_strava.publish.side_effect = StravaUploadError("upload rejected")
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda c: fake_garmin)
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+
+    response = client.post("/api/sync/strava/publish", data={"activity_ids": ["1"]})
+
+    assert response.status_code == 200
+    assert "1 activity could not be published" in response.text
+    assert db.get_activity(conn, 1)["publish_status"] == "pending"
+
+
+def test_publish_route_says_nothing_when_every_upload_succeeds(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 1, "running", "Run A", "", "2026-07-09 09:00:00", "h1", "pending", now)
+    fake_garmin = MagicMock()
+    fake_garmin.download_fit.return_value = b"FIT"
+    fake_strava = MagicMock()
+    fake_strava.find_existing_activity.return_value = None
+    fake_strava.publish.return_value = 9001
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda c: fake_garmin)
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+
+    response = client.post("/api/sync/strava/publish", data={"activity_ids": ["1"]})
+
+    assert "could not be published" not in response.text
+
+
+def test_status_route_reports_a_rejected_token_instead_of_a_500(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    fake_strava = MagicMock()
+    # What a revoked token or a missing activity:read_all scope raises.
+    fake_strava.activity_exists.side_effect = StravaAuthError("Strava access token rejected")
+    fake_strava.find_existing_activity.side_effect = StravaAuthError("Strava access token rejected")
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+    monkeypatch.setattr(
+        server_module.sync, "check_strava_status",
+        MagicMock(side_effect=StravaAuthError("Strava access token rejected")),
+    )
+
+    response = client.post("/api/sync/strava/status")
+
+    # 409 matches the sibling "Strava is disconnected" error and is opted into
+    # swapping by the htmx:beforeSwap handler in base.html, so the message
+    # actually lands in the table instead of being discarded as an error.
+    assert response.status_code == 409
+    assert "Strava access token rejected" in response.text
+
+
+def test_publish_route_reports_a_rejected_token_instead_of_a_500(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 1, "running", "Run A", "", "2026-07-09 09:00:00", "h1", "pending", now)
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda c: MagicMock())
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: MagicMock())
+    monkeypatch.setattr(
+        server_module.sync, "publish_pending",
+        MagicMock(side_effect=StravaAuthError("Strava refresh token was revoked")),
+    )
+
+    response = client.post("/api/sync/strava/publish", data={"activity_ids": ["1"]})
+
+    assert response.status_code == 409
+    assert "Strava refresh token was revoked" in response.text
 
 
 def test_sync_strava_status_route_flags_missing_activity(tmp_path, monkeypatch):

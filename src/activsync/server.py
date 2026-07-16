@@ -75,6 +75,17 @@ def _complete_garmin_login(pending_auth, mfa_code: str):
     return garmin_complete_login(pending_auth, mfa_code)
 
 
+def _publish_failure_message(stats: "sync.PublishStats") -> str:
+    """Wording for uploads that failed inside a batch that otherwise succeeded."""
+    if not stats.failed:
+        return ""
+    noun = "activity" if stats.failed == 1 else "activities"
+    return (
+        f"{stats.failed} {noun} could not be published to Strava and stayed pending — "
+        "check the logs for the reason, then try again."
+    )
+
+
 def _build_strava_client(conn: sqlite3.Connection):
     if _mock_mode():
         return dev_mock.FakeStravaClient(conn)
@@ -426,14 +437,28 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
                 ),
                 status_code=409,
             )
+        stats = sync.PublishStats()
         if activity_ids:
             garmin = _build_garmin_client(conn)
             strava = _build_strava_client(conn)
-            sync.publish_pending(
-                conn, garmin, strava, datetime.now(timezone.utc), garmin_activity_ids=set(activity_ids),
-            )
+            try:
+                stats = sync.publish_pending(
+                    conn, garmin, strava, datetime.now(timezone.utc), garmin_activity_ids=set(activity_ids),
+                )
+            except StravaAuthError as e:
+                return templates.TemplateResponse(
+                    request, "partials/activity_table.html",
+                    _activity_context(sort_order, status_filter, sync_error=str(e)),
+                    status_code=409,
+                )
         events.bus.publish("refresh")
-        return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
+        # publish_pending swallows per-activity failures so one bad upload can't
+        # abort the batch — which leaves this as the only place that can tell the
+        # user any of it failed. The rows stay pending and are safe to retry.
+        return templates.TemplateResponse(
+            request, "partials/activity_table.html",
+            _activity_context(sort_order, status_filter, sync_error=_publish_failure_message(stats)),
+        )
 
     @app.post("/api/sync/strava/status", response_class=HTMLResponse)
     def sync_strava_status_route(
@@ -451,7 +476,17 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
                 status_code=409,
             )
         strava = _build_strava_client(conn)
-        sync.check_strava_status(conn, strava, config.load_config(conn), datetime.now(timezone.utc))
+        try:
+            sync.check_strava_status(conn, strava, config.load_config(conn), datetime.now(timezone.utc))
+        except StravaAuthError as e:
+            # A revoked token or an app missing activity:read_all surfaces here
+            # rather than as a 500, since this is the button a user reaches for
+            # precisely when the connection has gone bad.
+            return templates.TemplateResponse(
+                request, "partials/activity_table.html",
+                _activity_context(sort_order, status_filter, sync_error=str(e)),
+                status_code=409,
+            )
         events.bus.publish("refresh")
         return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
 
@@ -881,13 +916,27 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         # finds nothing to match against.
         db.set_config_value(conn, "strava_oauth_state", None)
 
-        if error or not code:
+        if error == "access_denied":
+            # Strava documents access_denied as the athlete rejecting the
+            # authorization. A mismatched callback domain never reaches us at
+            # all — Strava won't redirect to a URI it hasn't been told to
+            # trust — so don't blame the configuration for this one.
             return _strava_callback_error(
                 request,
-                "The Strava connection did not complete. This usually means the "
-                "Authorization Callback Domain on your Strava API application "
-                "doesn't match the address you're using to reach ActivSync. "
-                "Check it on strava.com/settings/api and try again.",
+                "The Strava authorization was declined, so nothing was connected. "
+                "Press Connect and choose Authorize on Strava's page to continue.",
+            )
+
+        if error or not code:
+            # `error` is attacker-controllable, so it goes to the log rather than
+            # into the page — Strava's codes mean nothing to the user anyway.
+            logger.warning("strava authorization did not complete: error=%s", error)
+            return _strava_callback_error(
+                request,
+                "Strava did not send an authorization back, so nothing was "
+                "connected. Press Connect to try again — if it keeps happening, "
+                "check that your Strava API application's Authorization Callback "
+                "Domain matches the address you use to reach ActivSync.",
             )
 
         if not expected_state or not state or not secrets.compare_digest(state, expected_state):
