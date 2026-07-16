@@ -231,8 +231,10 @@ def test_dashboard_detail_actions_are_ordered_edit_exclude_publish(tmp_path):
     response = client.get("/")
 
     assert response.status_code == 200
-    body = response.text
-    assert body.index(">Edit<") < body.index(">Exclude<") < body.index(">Publish now<")
+    # Scope to the dialog footer: the activity row has its own Publish button
+    # earlier in the page, so searching the whole body finds the wrong one.
+    footer = response.text.split('<footer class="drawer-actions">')[1].split("</footer>")[0]
+    assert footer.index(">Edit<") < footer.index(">Exclude<") < footer.index(">Publish<")
 
 
 def test_dashboard_banner_names_the_broken_connection(tmp_path):

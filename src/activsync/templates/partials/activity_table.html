@@ -229,7 +229,7 @@
                             {% endif %}
                             {% if activity.publish_status in ("held", "pending", "missing") %}
                                 <form class="inline dialog-state-action publish-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
-                                <button type="submit" class="primary-action">{{ "Republish" if activity.publish_status == "missing" else "Publish now" }}</button>
+                                <button type="submit" class="primary-action">{{ "Republish" if activity.publish_status == "missing" else "Publish" }}</button>
                             </form>
                             {% endif %}
                         </footer>
