@@ -1,0 +1,319 @@
+/* The activity detail dialog and its edit mode. */
+
+.activity-dialog form.inline {
+    display: inline-flex;
+    margin: 0;
+}
+
+/* Details and row secondary actions use the neutral button style. */
+.activity-dialog {
+    width: min(680px, calc(100vw - 32px));
+    max-width: 680px;
+    max-height: min(820px, calc(100dvh - 48px));
+    margin: auto;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--ink);
+    padding: 0;
+    overflow: visible;
+}
+
+.activity-dialog::backdrop {
+    background: var(--scrim);
+    backdrop-filter: blur(3px);
+}
+
+.activity-dialog-card {
+    display: grid;
+    gap: 16px;
+    max-height: min(820px, calc(100dvh - 48px));
+    overflow-y: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow-modal);
+    padding: 20px;
+}
+
+.activity-dialog-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.activity-dialog-header > div:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.activity-dialog-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    margin-bottom: 6px;
+}
+
+.dialog-kicker {
+    min-width: 0;
+    margin-bottom: 0;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    overflow-wrap: anywhere;
+}
+
+.activity-dialog-meta-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+}
+
+/* Match the link pills so badge and pills share one centre line. */
+.activity-dialog-meta-actions .badge { min-height: 30px; }
+
+.activity-dialog-title {
+    font-size: clamp(1.3rem, 4vw, 1.7rem);
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.dialog-close {
+    flex: 0 0 auto;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 999px;
+    padding: 4px;
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.activity-card-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.link-pill {
+    display: inline-flex;
+    min-height: 30px;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--garmin);
+    font-family: var(--mono);
+    padding: 4px 9px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.link-pill[href*="strava"] { color: var(--accent-ink); }
+
+.metadata-form { display: none; }
+
+.description-read {
+    display: grid;
+    gap: 5px;
+}
+
+.description-read p {
+    white-space: pre-wrap;
+}
+
+.description-field {
+    display: grid;
+    gap: 5px;
+}
+
+.field-caption {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.activity-description-input {
+    width: 100%;
+    border: 1px solid var(--field-border);
+    border-radius: var(--radius-sm);
+    background: var(--field);
+    color: var(--ink);
+}
+
+.activity-description-input {
+    min-height: 92px;
+    padding: 10px 11px;
+    resize: vertical;
+    white-space: pre-wrap;
+}
+
+.activity-dialog .activity-title-field, .activity-dialog .description-field { display: none; }
+
+.activity-dialog.is-editing .activity-title-field, .activity-dialog.is-editing .description-field { display: grid; }
+
+.activity-dialog.is-editing .activity-dialog-title, .activity-dialog.is-editing .description-read { display: none; }
+
+.activity-title-input {
+    width: 100%;
+    min-height: 46px;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    resize: none;
+}
+
+.activity-description-input {
+    min-height: 92px;
+    resize: vertical;
+    white-space: pre-wrap;
+}
+
+.detail-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.detail-metric-grid > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    padding: 9px;
+}
+
+.detail-metric-grid span {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.detail-metric-grid strong {
+    overflow-wrap: anywhere;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.98rem;
+    font-weight: 600;
+}
+
+.drawer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.save-metadata-button, .cancel-edit-button {
+    display: none;
+}
+
+.activity-dialog.is-saving .dialog-close, .activity-dialog.is-saving .cancel-edit-button {
+    opacity: 0.5;
+}
+
+.activity-dialog.is-editing .save-metadata-button, .activity-dialog.is-editing .cancel-edit-button {
+    display: inline-flex;
+}
+
+.activity-dialog.is-editing .edit-unlock-button {
+    display: none;
+}
+
+.activity-dialog.is-editing .dialog-state-action {
+    display: none;
+}
+
+.activity-dialog.is-editing .drawer-actions {
+    position: sticky;
+    bottom: -20px;
+    z-index: 2;
+    margin: 0 -20px -20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 12px 20px 20px;
+}
+
+.detail-content {
+    display: grid;
+    gap: 8px;
+    font-size: 0.94rem;
+}
+
+.detail-metrics { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.detail-metrics span {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--muted);
+    font-family: var(--mono);
+    padding: 5px 9px;
+    white-space: nowrap;
+}
+
+@media (max-width: 740px) {
+    /* Too narrow to sit beside the badge and pills without wrapping the
+       kicker mid-text, so give each its own row. */
+    .activity-dialog-meta {
+        align-items: center;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+    .dialog-kicker {
+        flex: 1 1 100%;
+    }
+    .activity-dialog-meta-actions {
+        justify-content: flex-start;
+        flex-basis: 100%;
+    }
+    .activity-dialog {
+        width: 100%;
+        max-width: none;
+        max-height: calc(100dvh - 12px);
+        margin: auto 0 0;
+        border-radius: 10px 10px 0 0;
+    }
+    .activity-dialog-card {
+        max-height: calc(100dvh - 12px);
+        border-radius: 10px 10px 0 0;
+        padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+    }
+    .detail-metric-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .detail-metric-grid > div { padding: 7px; }
+    .detail-metric-grid strong { font-size: 0.9rem; }
+    .drawer-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        position: sticky;
+        bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
+        z-index: 2;
+        margin: 0 -16px calc(-1 * max(20px, env(safe-area-inset-bottom)));
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        padding: 12px 16px max(20px, env(safe-area-inset-bottom));
+    }
+    .drawer-actions form, .drawer-actions button { width: 100%; }
+    .drawer-actions .publish-action { grid-column: 1 / -1; }
+}

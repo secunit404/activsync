@@ -1,0 +1,520 @@
+/* Activity list: toolbar, rows, status badges, pagination. */
+
+.activity-panel { display: grid; gap: 12px; }
+
+.activity-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin: 0 -16px;
+    padding: 10px 16px;
+    background: var(--bg);
+}
+
+.activity-sort-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.activity-view-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-left: auto;
+}
+
+.activity-sort-control select {
+    width: auto;
+    min-height: 40px;
+    padding: 7px 32px 7px 10px;
+    font-family: var(--sans);
+    font-size: 0.86rem;
+}
+
+.activity-list {
+    display: grid;
+    gap: 6px;
+}
+
+.activity-month-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 4px 4px;
+    color: var(--muted);
+}
+
+.activity-month-header::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+.activity-month-header:first-child {
+    margin-top: 0;
+}
+
+.activity-month-header h2 {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.select-all-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 0.92rem;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.multi-select-tools {
+    display: none;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: -4px;
+}
+
+.multi-select-tools button, .multi-select-tools .select-all-card {
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+}
+
+.multi-select-tools .select-all-card {
+    gap: 8px;
+}
+
+.multi-select-tools .select-all-input {
+    width: 1rem;
+    height: 1rem;
+}
+
+.activity-panel.is-selecting .multi-select-tools {
+    display: flex;
+}
+
+.select-multiple-button {
+    min-height: 36px;
+    padding: 7px 10px;
+    border-color: var(--border-strong);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.select-multiple-button:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    color: var(--ink);
+}
+
+.activity-panel.is-selecting .select-multiple-button {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent-ink);
+}
+
+.activity-row {
+    display: grid;
+    grid-template-columns: 68px minmax(260px, 1.6fr) auto minmax(180px, auto);
+    column-gap: 12px;
+    row-gap: 8px;
+    align-items: center;
+}
+
+.activity-panel.is-selecting .activity-row {
+    grid-template-columns: 28px 68px minmax(260px, 1.6fr) auto minmax(180px, auto);
+}
+
+.activity-row-select {
+    display: none;
+}
+
+.activity-panel.is-selecting .activity-row-select {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.activity-row {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 12px 16px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.activity-row-date {
+    display: flex;
+    align-self: center;
+    justify-content: flex-start;
+    justify-self: start;
+    width: 52px;
+    padding-left: 0;
+}
+
+.activity-date-stack {
+    display: grid;
+    justify-items: end;
+    gap: 1px;
+    text-align: right;
+    width: 100%;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.activity-date-day {
+    font-size: 0.98rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.activity-date-year {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.activity-date-time {
+    color: var(--muted);
+    font-size: 0.76rem;
+    line-height: 1.2;
+}
+
+.activity-row-main {
+    min-width: 0;
+}
+
+.activity-title-read {
+    overflow-wrap: anywhere;
+    font-size: 0.98rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.activity-subline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px 12px;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.activity-time {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.activity-inline-links {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+
+.activity-links-row {
+    margin-top: 4px;
+}
+
+.activity-inline-link {
+    color: var(--garmin);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.activity-inline-link[href*="strava"] { color: var(--accent-ink); }
+
+.activity-row-status {
+    justify-self: start;
+}
+
+.activity-row-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.activity-row-actions form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.details-button, .row-action-secondary, .activity-row-actions .primary-action {
+    min-height: 36px;
+    padding: 7px 11px;
+    font-size: 0.84rem;
+}
+
+.activity-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin-top: 4px;
+    padding: 4px 4px 0;
+}
+
+.activity-pagination-summary-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+}
+
+.activity-pagination-summary, .activity-pagination-current {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.activity-pagination-links {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.activity-pagination .button-link {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.activity-pagination .activity-page-size-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    margin: 0;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.activity-pagination .activity-page-size-control select {
+    width: auto;
+    min-height: 30px;
+    padding: 4px 24px 4px 8px;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.activity-description-section {
+    display: grid;
+    gap: 8px;
+}
+
+/* Status readout: colored indicator dot + monospace label */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.badge::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--dot, var(--st-gray));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot, var(--st-gray)) 22%, transparent);
+}
+
+.badge-published { --dot: var(--st-green); }
+
+.badge-pending { --dot: var(--st-blue); }
+
+.badge-held { --dot: var(--st-amber); }
+
+.badge-excluded { --dot: var(--st-gray); color: var(--muted); }
+
+.badge-missing { --dot: var(--st-red); }
+
+@media (hover: hover) {
+    .activity-row:hover {
+        border-color: var(--border-strong);
+        background: var(--surface-2);
+    }
+}
+
+@media (max-width: 740px) {
+    .activity-toolbar { margin-inline: -12px; padding-inline: 12px; }
+    .activity-view-controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 10px;
+        width: 100%;
+        margin-left: 0;
+    }
+    .select-multiple-button {
+        grid-column: 1 / -1;
+        justify-self: start;
+    }
+    .activity-sort-control {
+        display: grid;
+        gap: 4px;
+        width: 100%;
+        margin-left: 0;
+    }
+    .activity-sort-control select { width: 100%; }
+    /* Narrow enough that a date column costs more than it earns: it took a
+       third of the row and left the title half of it, while the actions sat on
+       their own line with the other half blank. Stack instead — date reads as a
+       kicker over the title (as in the detail dialog) and the actions sit
+       beside the links, in the space that was empty anyway.
+           [ 5 Jul · 09:56 ]        [ PENDING ]
+           [ Morning run #1                   ]
+           [ running                          ]
+           [ GARMIN ↗      ] [ Publish ][ Details ]
+       .activity-row-main is flattened so its children land on the row's grid;
+       on desktop it stays a normal block and the date keeps its own column. */
+    .activity-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        /* Tight row-gap: the kicker/title/type read as one block. The gap
+           before the action line is added on those items instead. */
+        gap: 2px 10px;
+        align-items: start;
+        padding: 12px;
+    }
+    .activity-row-main {
+        display: contents;
+    }
+    .activity-panel.is-selecting .activity-row {
+        grid-template-columns: 24px minmax(0, 1fr) auto;
+    }
+    .activity-row-select {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: center;
+        padding-top: 0;
+    }
+    .activity-panel.is-selecting .activity-row-select {
+        display: flex;
+    }
+    .activity-row-date {
+        grid-column: 1;
+        grid-row: 1;
+        width: auto;
+        align-self: center;
+    }
+    .activity-date-stack {
+        grid-auto-flow: column;
+        justify-content: start;
+        justify-items: start;
+        gap: 7px;
+        width: auto;
+        text-align: left;
+    }
+    .activity-date-day, .activity-date-time {
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        line-height: 1.4;
+    }
+    .activity-date-time::before {
+        content: "·";
+        margin-right: 7px;
+    }
+    .activity-row-status {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+        align-self: center;
+    }
+    .activity-title-read {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+    .activity-subline {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        display: flex;
+        gap: 3px 10px;
+        margin-top: 0;
+    }
+    .activity-inline-links {
+        grid-column: 1;
+        grid-row: 4;
+        align-self: center;
+        margin-top: 8px;
+    }
+    .activity-row-actions {
+        grid-column: 2;
+        grid-row: 4;
+        justify-content: flex-end;
+        margin-top: 8px;
+    }
+    .activity-row-actions button, .activity-row-actions form, .activity-row-actions form button { flex: 0 0 auto; }
+    .activity-panel.is-selecting .activity-row-date,
+    .activity-panel.is-selecting .activity-inline-links {
+        grid-column: 2;
+    }
+    .activity-panel.is-selecting .activity-title-read,
+    .activity-panel.is-selecting .activity-subline {
+        grid-column: 2 / -1;
+    }
+    .activity-panel.is-selecting .activity-row-status,
+    .activity-panel.is-selecting .activity-row-actions {
+        grid-column: 3;
+    }
+    .activity-pagination {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .activity-pagination-summary-group {
+        justify-content: flex-start;
+    }
+    .activity-pagination-links {
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+}
