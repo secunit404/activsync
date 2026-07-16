@@ -63,6 +63,7 @@ _LOG_FORMAT = "%(asctime)s  %(levelname)-7s %(component)-8s %(message)s"
 _UVICORN_LOGGERS = ("uvicorn", "uvicorn.access", "uvicorn.error")
 
 _HEALTH_PATH = "/health"
+_STATIC_PREFIX = "/static/"
 
 # uvicorn's access records carry the request as args rather than a formatted
 # string: (client_addr, method, path_with_query, http_version, status_code).
@@ -70,15 +71,34 @@ _ACCESS_PATH_ARG = 2
 _ACCESS_STATUS_ARG = 4
 
 
-class HealthCheckFilter(logging.Filter):
-    """Drops access lines for successful container health probes.
+def _is_routine_path(path: str) -> bool:
+    """Paths whose successful requests carry no information.
 
-    The Docker HEALTHCHECK hits /health every 30s, which is ~2,880 identical
-    lines a day drowning the events that matter. A *failing* probe still logs —
-    that's the only time the endpoint has anything to say.
+    The health probe fires every 30s regardless of what the app is doing, and
+    static assets come a dozen at a time with each page load — which the page's
+    own access line already reported.
+    """
+    return path == _HEALTH_PATH or path.startswith(_STATIC_PREFIX)
+
+
+class AccessNoiseFilter(logging.Filter):
+    """Drops access lines for routine, successful requests.
+
+    Health probes and static assets together bury the handful of lines that
+    say something. Only *successful* ones are dropped: a failing probe is the
+    only time /health has anything to report, and a 404 on a stylesheet is a
+    broken deploy. Pass verbose=True (ACTIVSYNC_LOG_LEVEL=DEBUG) to keep
+    everything, so the noise is recoverable when it's what you're debugging.
     """
 
+    def __init__(self, verbose: bool = False):
+        super().__init__()
+        self._verbose = verbose
+
     def filter(self, record: logging.LogRecord) -> bool:
+        if self._verbose:
+            return True
+
         args = record.args
         if not isinstance(args, tuple) or len(args) <= _ACCESS_STATUS_ARG:
             return True  # not an access record; never drop what we can't parse
@@ -86,7 +106,7 @@ class HealthCheckFilter(logging.Filter):
         path, status = args[_ACCESS_PATH_ARG], args[_ACCESS_STATUS_ARG]
         if not isinstance(path, str) or not isinstance(status, int):
             return True
-        return not (path.split("?")[0] == _HEALTH_PATH and status < 400)
+        return not (_is_routine_path(path.split("?")[0]) and status < 400)
 
 
 def _resolve_level(level: str | int) -> int:
@@ -105,15 +125,16 @@ def configure_logging(*, level: str | int = "INFO", tz_name: str = _DEFAULT_TZ) 
     """Attach a single readable, timezone-aware stdout handler to the app's
     loggers. Idempotent: safe to call more than once."""
     set_log_timezone(tz_name)
+    resolved_level = _resolve_level(level)
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(LocalTimeFormatter(_LOG_FORMAT))
-    handler.addFilter(HealthCheckFilter())
+    handler.addFilter(AccessNoiseFilter(verbose=resolved_level <= logging.DEBUG))
 
     app_logger = logging.getLogger("activsync")
     _reset_handlers(app_logger)
     app_logger.addHandler(handler)
-    app_logger.setLevel(_resolve_level(level))
+    app_logger.setLevel(resolved_level)
     app_logger.propagate = False
 
     for name in _UVICORN_LOGGERS:
