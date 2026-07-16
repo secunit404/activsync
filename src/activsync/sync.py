@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from activsync import db
 from activsync.garmin_client import ActivityRecord, GarminClient
-from activsync.strava_client import StravaClient
+from activsync.strava_client import StravaClient, match_closest_activity
 
 logger = logging.getLogger("activsync")
 
@@ -31,6 +31,28 @@ HOLD_BACKLOG = "backlog"
 # Distinguishes "caller passed no override" from "caller passed None", which is
 # itself meaningful (None = Garmin has never synced successfully).
 LAST_SYNC_UNSET = "__unset__"
+
+# Widens the Strava window fetch beyond the lookback cutoff so an activity whose
+# Strava start_date sits fractionally outside it still turns up — otherwise a
+# boundary activity would look deleted and get flagged missing.
+_WINDOW_PADDING = timedelta(minutes=30)
+
+
+def _parse_start_time(row: dict) -> datetime:
+    return datetime.strptime(row["start_time"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def _rows_within(
+    conn: sqlite3.Connection, statuses: tuple[str, ...], cutoff: datetime
+) -> list[tuple[str, dict, datetime]]:
+    """Rows in the given statuses that start at or after the cutoff, with their
+    parsed start times."""
+    return [
+        (status, row, start_time)
+        for status in statuses
+        for row in db.list_activities(conn, status=status)
+        if (start_time := _parse_start_time(row)) >= cutoff
+    ]
 
 
 @dataclass
@@ -276,25 +298,41 @@ def check_strava_status(
     lookback = cfg["lookback_days"] if lookback_days is None else lookback_days
     cutoff = now - timedelta(days=lookback)
 
-    # Scan pending and held activities — they may already be on Strava through
-    # Garmin Connect's native Strava connection or another upload path.
-    for status in ("pending", "held"):
-        for row in db.list_activities(conn, status=status):
-            start_time = datetime.strptime(row["start_time"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-            if start_time < cutoff:
-                continue
-            existing_id = strava.find_existing_activity(start_time)
-            if existing_id is not None:
-                db.set_published(conn, row["garmin_activity_id"], existing_id, now)
-                stats.linked_existing += 1
-                logger.debug("linked %s activity %s to existing Strava %s", status, row["garmin_activity_id"], existing_id)
+    to_link = _rows_within(conn, ("pending", "held"), cutoff)
+    to_verify = _rows_within(conn, ("published",), cutoff)
+    if not to_link and not to_verify:
+        return stats
 
-    # Check published activities — flag any deleted on Strava's side.
-    for row in db.list_activities(conn, status="published"):
-        start_time = datetime.strptime(row["start_time"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-        if start_time < cutoff:
+    # One window fetch answers both questions below. Asking Strava per activity
+    # instead — a search per pending row, an existence check per published row —
+    # burns the short-term quota within the hour on any busy week, after which
+    # every call 429s and no reconciliation happens at all.
+    on_strava = strava.list_activities_between(
+        cutoff - _WINDOW_PADDING, now + _WINDOW_PADDING
+    )
+
+    # Pending/held activities may already be on Strava via Garmin Connect's
+    # native connection or another upload path.
+    unclaimed = list(on_strava)
+    for status, row, start_time in to_link:
+        existing_id = match_closest_activity(unclaimed, start_time)
+        if existing_id is None:
             continue
-        if not strava.activity_exists(row["strava_activity_id"]):
+        # Each Strava entry can only be the twin of one Garmin activity;
+        # without this, two activities minutes apart would both claim it and
+        # the real second one would never get published.
+        unclaimed = [a for a in unclaimed if a["id"] != existing_id]
+        db.set_published(conn, row["garmin_activity_id"], existing_id, now)
+        stats.linked_existing += 1
+        logger.debug(
+            "linked %s activity %s to existing Strava %s",
+            status, row["garmin_activity_id"], existing_id,
+        )
+
+    # Published activities absent from the window were deleted on Strava's side.
+    live_ids = {a["id"] for a in on_strava}
+    for _status, row, _start_time in to_verify:
+        if row["strava_activity_id"] not in live_ids:
             db.set_publish_status(conn, row["garmin_activity_id"], "missing")
             stats.flagged_missing += 1
 

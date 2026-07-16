@@ -6,7 +6,13 @@ import pytest
 import requests
 
 from activsync import db
-from activsync.strava_client import StravaAuthError, StravaClient, StravaUploadError
+from activsync.strava_client import (
+    StravaAuthError,
+    StravaClient,
+    StravaRateLimitError,
+    StravaUploadError,
+    StravaWindowIncompleteError,
+)
 
 
 @pytest.fixture
@@ -389,3 +395,216 @@ def test_update_activity_metadata_raises_auth_error_on_401(mock_put, conn):
 
     with pytest.raises(StravaAuthError):
         client.update_activity_metadata(9001, "Morning Run", "Easy Z2")
+
+
+def _page(activities, status_code=200):
+    response = MagicMock(status_code=status_code, json=lambda: activities, headers={})
+    response.raise_for_status = lambda: None
+    return response
+
+
+@patch("activsync.strava_client.requests.get")
+def test_list_activities_between_returns_normalized_activities(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = _page([
+        {"id": 7777, "start_date": "2026-07-09T09:00:30Z"},
+    ])
+
+    client = StravaClient(conn, "cid", "csecret")
+    result = client.list_activities_between(
+        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
+    )
+
+    assert result == [
+        {"id": 7777, "start_date": datetime(2026, 7, 9, 9, 0, 30, tzinfo=timezone.utc)},
+    ]
+    params = mock_get.call_args.kwargs["params"]
+    assert params["after"] == int(datetime(2026, 7, 2, tzinfo=timezone.utc).timestamp())
+    assert params["before"] == int(datetime(2026, 7, 9, 12, tzinfo=timezone.utc).timestamp())
+
+
+@patch("activsync.strava_client.requests.get")
+def test_list_activities_between_uses_one_request_for_a_single_short_page(mock_get, conn):
+    """The whole point of the batch fetch: N activities cost ONE request, not N."""
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = _page([
+        {"id": i, "start_date": "2026-07-09T09:00:30Z"} for i in range(1, 26)
+    ])
+
+    client = StravaClient(conn, "cid", "csecret")
+    result = client.list_activities_between(
+        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 25
+    assert mock_get.call_count == 1
+
+
+@patch("activsync.strava_client.requests.get")
+def test_list_activities_between_paginates_until_a_short_page(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    full = [{"id": i, "start_date": "2026-07-09T09:00:30Z"} for i in range(200)]
+    tail = [{"id": 999, "start_date": "2026-07-09T10:00:00Z"}]
+    mock_get.side_effect = [_page(full), _page(tail)]
+
+    client = StravaClient(conn, "cid", "csecret")
+    result = client.list_activities_between(
+        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 201
+    assert mock_get.call_count == 2
+    assert mock_get.call_args_list[0].kwargs["params"]["page"] == 1
+    assert mock_get.call_args_list[1].kwargs["params"]["page"] == 2
+
+
+@patch("activsync.strava_client.requests.get")
+def test_list_activities_between_stops_on_an_empty_page(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    full = [{"id": i, "start_date": "2026-07-09T09:00:30Z"} for i in range(200)]
+    mock_get.side_effect = [_page(full), _page([])]
+
+    client = StravaClient(conn, "cid", "csecret")
+    result = client.list_activities_between(
+        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 200
+    assert mock_get.call_count == 2
+
+
+@patch("activsync.strava_client.requests.get")
+def test_list_activities_between_raises_auth_error_on_401(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=401, headers={})
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaAuthError):
+        client.list_activities_between(
+            datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, tzinfo=timezone.utc),
+        )
+
+
+@patch("activsync.strava_client.requests.get")
+def test_list_activities_between_raises_rate_limit_error_on_429(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=429, headers={"Retry-After": "300"})
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaRateLimitError) as excinfo:
+        client.list_activities_between(
+            datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, tzinfo=timezone.utc),
+        )
+
+    assert excinfo.value.retry_after_seconds == 300
+
+
+@patch("activsync.strava_client.requests.get")
+def test_find_existing_activity_raises_rate_limit_error_on_429(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=429, headers={"Retry-After": "42"})
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaRateLimitError) as excinfo:
+        client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc))
+
+    assert excinfo.value.retry_after_seconds == 42
+
+
+@patch("activsync.strava_client.requests.get")
+def test_activity_exists_raises_rate_limit_error_on_429(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=429, headers={"Retry-After": "17"})
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaRateLimitError) as excinfo:
+        client.activity_exists(9001)
+
+    assert excinfo.value.retry_after_seconds == 17
+
+
+@patch("activsync.strava_client.requests.post")
+def test_publish_raises_rate_limit_error_on_429(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=429, headers={"Retry-After": "60"})
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaRateLimitError):
+        client.publish(garmin_activity_id=44, fit_bytes=b"FIT-DATA")
+
+
+@patch("activsync.strava_client.requests.get")
+def test_rate_limit_error_falls_back_to_the_next_quarter_hour_when_no_retry_after(mock_get, conn):
+    """Strava's short-term quota resets on 15-minute boundaries, and 429s often
+    arrive without a Retry-After header — so the wait must be derived, not zero."""
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=429, headers={})
+
+    client = StravaClient(conn, "cid", "csecret")
+    now = datetime(2026, 7, 9, 12, 7, 30, tzinfo=timezone.utc)
+
+    with pytest.raises(StravaRateLimitError) as excinfo:
+        client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
+
+    # 12:07:30 -> next reset at 12:15:00 is 450 seconds away.
+    assert excinfo.value.retry_after_seconds == 450
+
+
+@patch("activsync.strava_client.requests.get")
+def test_rate_limit_error_ignores_an_unparseable_retry_after(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=429, headers={"Retry-After": "Wed, 21 Oct"})
+
+    client = StravaClient(conn, "cid", "csecret")
+    now = datetime(2026, 7, 9, 12, 7, 30, tzinfo=timezone.utc)
+
+    with pytest.raises(StravaRateLimitError) as excinfo:
+        client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
+
+    assert excinfo.value.retry_after_seconds == 450
+
+
+@patch("activsync.strava_client.requests.get")
+def test_list_activities_between_raises_rather_than_returning_a_partial_window(mock_get, conn):
+    """Callers treat absence from the window as 'deleted on Strava'. A truncated
+    window would therefore flag live activities as missing, so an unfinishable
+    fetch must fail loudly instead of returning what it managed to get."""
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    full = [{"id": i, "start_date": "2026-07-09T09:00:30Z"} for i in range(200)]
+    mock_get.return_value = _page(full)  # every page is full: never terminates
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaWindowIncompleteError):
+        client.list_activities_between(
+            datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
+        )

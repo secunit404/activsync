@@ -6,12 +6,12 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from activsync import config, db, events, sync
 from activsync.garmin_client import GarminClient
-from activsync.strava_client import StravaClient
+from activsync.strava_client import StravaClient, StravaRateLimitError
 
 logger = logging.getLogger("activsync.poller")
 
@@ -38,6 +38,7 @@ class Poller:
         self._thread: threading.Thread | None = None
         self._last_garmin_run: datetime | None = None
         self._last_strava_run: datetime | None = None
+        self._strava_backoff_until: datetime | None = None
 
     def run_garmin_once(self, now: datetime | None = None) -> sync.GarminSyncStats:
         cfg = config.load_config(self._conn)
@@ -76,6 +77,35 @@ class Poller:
         tokens = db.get_config_value(self._conn, "strava_tokens") or {}
         return bool(tokens.get("refresh_token"))
 
+    def _strava_rate_limited(self, now: datetime) -> bool:
+        return self._strava_backoff_until is not None and now < self._strava_backoff_until
+
+    def _run_strava_guarded(self, now: datetime, failure_message: str) -> bool:
+        """Run one Strava pass, absorbing failures. Returns whether anything changed.
+
+        A 429 is not a crash — it means the quota is already spent, so the only
+        useful response is to stop calling until Strava says the window has
+        reset. Retrying every tick is what keeps the quota exhausted.
+        """
+        try:
+            pub, status = self.run_strava_once(now)
+        except StravaRateLimitError as exc:
+            self._strava_backoff_until = now + timedelta(seconds=exc.retry_after_seconds)
+            logger.warning(
+                "strava rate limit reached; pausing strava sync for %ds (until %s)",
+                int(exc.retry_after_seconds),
+                self._strava_backoff_until.isoformat(timespec="seconds"),
+            )
+            return False
+        except Exception:
+            logger.exception(failure_message)
+            return False
+
+        self._strava_backoff_until = None
+        return bool(
+            pub.published or pub.failed or status.flagged_missing or status.linked_existing
+        )
+
     def _ready_for_polling(self) -> bool:
         """The poller stays out of the way until first-run setup has finished —
         the wizard's initial sync runs a blocking sync on this same sqlite
@@ -103,15 +133,13 @@ class Poller:
                 )
                 if garmin_changed:
                     changed = True
-                    if self._strava_ready():
-                        try:
-                            pub, status = self.run_strava_once(now)
-                            if pub.published or pub.failed or status.flagged_missing or status.linked_existing:
-                                changed = True
-                            self._last_strava_run = now
-                            strava_ran_this_tick = True
-                        except Exception:
-                            logger.exception("strava status check after garmin sync failed")
+                    if self._strava_ready() and not self._strava_rate_limited(now):
+                        if self._run_strava_guarded(
+                            now, "strava status check after garmin sync failed"
+                        ):
+                            changed = True
+                        self._last_strava_run = now
+                        strava_ran_this_tick = True
             except Exception:
                 logger.exception("garmin sync failed")
             self._last_garmin_run = now
@@ -119,14 +147,11 @@ class Poller:
         if (
             self._garmin_ready() and self._strava_ready()
             and not strava_ran_this_tick
+            and not self._strava_rate_limited(now)
             and self._due(self._last_strava_run, now, self._strava_interval_seconds())
         ):
-            try:
-                pub, status = self.run_strava_once(now)
-                if pub.published or pub.failed or status.flagged_missing or status.linked_existing:
-                    changed = True
-            except Exception:
-                logger.exception("strava sync failed")
+            if self._run_strava_guarded(now, "strava sync failed"):
+                changed = True
             self._last_strava_run = now
 
         if changed:
