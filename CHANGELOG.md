@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1](https://github.com/secunit404/activsync/compare/v1.1.0...v1.1.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* report Strava OAuth and runtime failures instead of 500s and silence ([#16](https://github.com/secunit404/activsync/issues/16)) ([54c03b1](https://github.com/secunit404/activsync/commit/54c03b11247c0cd039461b02acae3bfb2e8444f9))
+
+
+### Documentation
+
+* trim the callback domain section to what the wizard can't say ([#18](https://github.com/secunit404/activsync/issues/18)) ([6b82d61](https://github.com/secunit404/activsync/commit/6b82d610376f45530a634bf7efe3f58ee73508ec))
+
 ## [1.1.0](https://github.com/secunit404/activsync/compare/v1.0.0...v1.1.0) (2026-07-15)
 
 
