@@ -446,7 +446,6 @@ def test_status_route_reports_a_rejected_token_instead_of_a_500(tmp_path, monkey
     conn, client = _logged_in_client(tmp_path)
     fake_strava = MagicMock()
     # What a revoked token or a missing activity:read_all scope raises.
-    fake_strava.activity_exists.side_effect = StravaAuthError("Strava access token rejected")
     fake_strava.find_existing_activity.side_effect = StravaAuthError("Strava access token rejected")
     monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
     monkeypatch.setattr(
