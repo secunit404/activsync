@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
@@ -52,9 +53,30 @@ def test_dashboard_redirects_to_setup_before_setup(tmp_path):
     assert setup.status_code == 200
     assert "ActivSync" in setup.text
     assert 'class="brand-activ">Activ</span><span class="brand-sync">Sync</span>' in setup.text
-    assert ".brand-activ { color: var(--garmin); }" in setup.text
     assert "garmin2strava" not in setup.text
     assert "Connect Garmin" in setup.text
+
+
+def test_pages_link_stylesheets_that_are_actually_served(tmp_path):
+    """The CSS lives in static/, so a page can look fine in tests while the
+    real deploy ships no stylesheet at all: fetch each one, don't just link it."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    page = client.get("/setup")
+    hrefs = re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)
+    assert hrefs, "no stylesheets linked"
+    for href in hrefs:
+        assert "?v=" in href, f"{href} is not cache-busted"
+        served = client.get(href.split("?")[0])
+        assert served.status_code == 200, f"{href} is linked but not served"
+
+    # Order is load-bearing: tokens define the vars every later file consumes.
+    assert hrefs[0].startswith("/static/css/tokens.css")
+
+    layout = client.get("/static/css/layout.css")
+    assert ".brand-activ { color: var(--garmin); }" in layout.text
+    assert "garmin2strava" not in layout.text
 
 
 def test_setup_strava_step_shows_the_callback_domain_to_register(tmp_path):
@@ -264,6 +286,35 @@ def test_dashboard_detail_actions_are_ordered_edit_exclude_publish(tmp_path):
     # earlier in the page, so searching the whole body finds the wrong one.
     footer = response.text.split('<footer class="drawer-actions">')[1].split("</footer>")[0]
     assert footer.index(">Edit<") < footer.index(">Exclude<") < footer.index(">Publish<")
+
+
+def test_unexcluding_lives_in_the_details_dialog_not_the_row(tmp_path):
+    """Exclude is only offered in the dialog, so its inverse belongs there too
+    rather than on the row."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 4, "walking", "Evening Walk", "", "2026-07-09 09:00:00", "h4", "excluded", now)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    row = response.text.split('<div class="activity-row-actions">')[1].split("</div>")[0]
+    assert "Un-exclude" not in row
+    assert ">Details<" in row
+
+    footer = response.text.split('<footer class="drawer-actions">')[1].split("</footer>")[0]
+    assert ">Un-exclude<" in footer
+    assert "/api/activities/4/unexclude" in footer
+
+
+def test_the_wordmark_links_to_the_activities_page(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+
+    for path in ("/", "/settings"):
+        page = client.get(path)
+        assert page.status_code == 200
+        lockup = page.text.split('class="page-kicker brand-lockup"')[1].split("</p>")[0]
+        assert '<a class="brand-link" href="/"' in lockup, f"wordmark is not a link on {path}"
 
 
 def test_dashboard_banner_names_the_broken_connection(tmp_path):

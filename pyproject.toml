@@ -1,6 +1,6 @@
 [project]
 name = "activsync"
-version = "1.1.2"
+version = "1.2.0"
 description = "Activity synchronization and publishing control"
 requires-python = ">=3.10"
 dependencies = [
@@ -28,4 +28,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-activsync = ["templates/*.html", "templates/partials/*.html", "static/*"]
+activsync = ["templates/*.html", "templates/partials/*.html", "static/*", "static/css/*.css"]
