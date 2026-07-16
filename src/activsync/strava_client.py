@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -20,6 +20,17 @@ STRAVA_ACTIVITIES_URL = "https://www.strava.com/api/v3/athlete/activities"
 STRAVA_ACTIVITY_URL = "https://www.strava.com/api/v3/activities"
 STRAVA_REVOKE_URL = "https://www.strava.com/oauth/revoke"
 
+# Strava enforces a short-term quota (100 requests by default) that resets on
+# 15-minute wall-clock boundaries, not 15 minutes after the first request.
+RATE_LIMIT_WINDOW_MINUTES = 15
+
+# Strava's maximum accepted per_page. A 7-day lookback fits in one page for any
+# realistic athlete; the page cap only bounds a pathological window.
+ACTIVITIES_PER_PAGE = 200
+MAX_ACTIVITY_PAGES = 10
+
+DEFAULT_MATCH_TOLERANCE_MINUTES = 5
+
 
 class StravaAuthError(Exception):
     """Raised when Strava rejects our credentials or refresh token."""
@@ -27,6 +38,84 @@ class StravaAuthError(Exception):
 
 class StravaUploadError(Exception):
     """Raised when a Strava upload fails or Strava rejects the activity."""
+
+
+class StravaWindowIncompleteError(Exception):
+    """Raised when a window fetch could not be read to the end.
+
+    Callers read absence from a window as "deleted on Strava", so a truncated
+    window must never be handed back as if it were the whole picture.
+    """
+
+
+class StravaRateLimitError(Exception):
+    """Raised when Strava returns 429.
+
+    Carries how long the caller should wait so the poller can sit the window
+    out rather than spending every tick re-hitting an exhausted quota.
+    """
+
+    def __init__(self, message: str, retry_after_seconds: float):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+def _seconds_until_quota_reset(now: datetime) -> float:
+    """Time until Strava's next 15-minute boundary."""
+    minutes_into_window = now.minute % RATE_LIMIT_WINDOW_MINUTES
+    return (RATE_LIMIT_WINDOW_MINUTES - minutes_into_window) * 60 - now.second
+
+
+def _raise_if_rate_limited(response, now: datetime | None = None) -> None:
+    """Turn a 429 into a StravaRateLimitError carrying a usable wait.
+
+    Strava often omits Retry-After on 429, so fall back to its published
+    reset schedule instead of guessing zero and retrying straight into
+    another 429.
+    """
+    if response.status_code != 429:
+        return
+
+    now = now or datetime.now(timezone.utc)
+    header = response.headers.get("Retry-After")
+    retry_after: float | None = None
+    if header:
+        try:
+            retry_after = max(0.0, float(header))
+        except (TypeError, ValueError):
+            retry_after = None
+    if retry_after is None:
+        retry_after = _seconds_until_quota_reset(now)
+
+    raise StravaRateLimitError(
+        f"Strava rate limit reached; retry in {int(retry_after)}s", retry_after
+    )
+
+
+def _parse_start_date(raw: str) -> datetime:
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+
+def match_closest_activity(
+    activities: list[dict],
+    start_time: datetime,
+    tolerance_minutes: int = DEFAULT_MATCH_TOLERANCE_MINUTES,
+) -> int | None:
+    """Pick the activity starting closest to start_time, within tolerance.
+
+    Shared by the per-activity lookup and the batch window scan so both agree
+    on what counts as "the same activity".
+    """
+    tolerance_seconds = timedelta(minutes=tolerance_minutes).total_seconds()
+    best_id: int | None = None
+    best_delta: float | None = None
+    for activity in activities:
+        delta = abs((activity["start_date"] - start_time).total_seconds())
+        if delta > tolerance_seconds:
+            continue
+        if best_delta is None or delta < best_delta:
+            best_id, best_delta = int(activity["id"]), delta
+    return best_id
 
 
 class StravaClient:
@@ -135,6 +224,7 @@ class StravaClient:
             return False
         if response.status_code == 401:
             raise StravaAuthError("Strava access token rejected")
+        _raise_if_rate_limited(response)
         response.raise_for_status()
         return True
 
@@ -149,10 +239,73 @@ class StravaClient:
         )
         if response.status_code == 401:
             raise StravaAuthError("Strava access token rejected")
+        _raise_if_rate_limited(response)
         response.raise_for_status()
 
+    def _fetch_activities_page(
+        self,
+        headers: dict,
+        after: datetime,
+        before: datetime,
+        per_page: int,
+        page: int,
+        now: datetime | None = None,
+    ) -> list[dict]:
+        response = requests.get(
+            STRAVA_ACTIVITIES_URL,
+            headers=headers,
+            params={
+                "after": int(after.timestamp()),
+                "before": int(before.timestamp()),
+                "per_page": per_page,
+                "page": page,
+            },
+            timeout=30,
+        )
+        if response.status_code == 401:
+            raise StravaAuthError(
+                "Strava rejected the read request — the connected app may be "
+                "missing the activity:read_all scope. Reconnect Strava in Settings."
+            )
+        _raise_if_rate_limited(response, now)
+        response.raise_for_status()
+        return [
+            {"id": int(a["id"]), "start_date": _parse_start_date(a["start_date"])}
+            for a in response.json()
+        ]
+
+    def list_activities_between(
+        self, after: datetime, before: datetime, now: datetime | None = None
+    ) -> list[dict]:
+        """Fetch every athlete activity in a time window, paginating as needed.
+
+        One window fetch replaces a per-activity lookup: reconciling N
+        activities costs one or two requests instead of N, which is what keeps
+        the poller inside Strava's short-term quota. Returns dicts of
+        {"id": int, "start_date": datetime}.
+        """
+        access_token = self._get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        activities: list[dict] = []
+        for page in range(1, MAX_ACTIVITY_PAGES + 1):
+            batch = self._fetch_activities_page(
+                headers, after, before, ACTIVITIES_PER_PAGE, page, now
+            )
+            activities.extend(batch)
+            if len(batch) < ACTIVITIES_PER_PAGE:
+                return activities
+
+        raise StravaWindowIncompleteError(
+            f"more than {MAX_ACTIVITY_PAGES * ACTIVITIES_PER_PAGE} Strava activities "
+            f"in the window {after.isoformat()}..{before.isoformat()}"
+        )
+
     def find_existing_activity(
-        self, start_time: datetime, tolerance_minutes: int = 5
+        self,
+        start_time: datetime,
+        tolerance_minutes: int = DEFAULT_MATCH_TOLERANCE_MINUTES,
+        now: datetime | None = None,
     ) -> int | None:
         """Look for a Strava activity already near this start time.
 
@@ -162,39 +315,24 @@ class StravaClient:
         upload-level dedup can't catch them and we'd otherwise create a
         duplicate. Matches purely on start_date proximity since that's the
         only field guaranteed to line up regardless of upload source.
+
+        This is the single-activity path used right before an upload. Bulk
+        reconciliation uses list_activities_between instead — one request for
+        the whole window rather than one per activity.
         """
         access_token = self._get_access_token()
         headers = {"Authorization": f"Bearer {access_token}"}
         window = timedelta(minutes=tolerance_minutes)
 
-        response = requests.get(
-            STRAVA_ACTIVITIES_URL,
-            headers=headers,
-            params={
-                "after": int((start_time - window).timestamp()),
-                "before": int((start_time + window).timestamp()),
-                "per_page": 30,
-            },
-            timeout=30,
+        activities = self._fetch_activities_page(
+            headers,
+            after=start_time - window,
+            before=start_time + window,
+            per_page=30,
+            page=1,
+            now=now,
         )
-        if response.status_code == 401:
-            raise StravaAuthError(
-                "Strava rejected the read request — the connected app may be "
-                "missing the activity:read_all scope. Reconnect Strava in Settings."
-            )
-        response.raise_for_status()
-
-        best_id: int | None = None
-        best_delta: float | None = None
-        for activity in response.json():
-            activity_start = datetime.fromisoformat(activity["start_date"].replace("Z", "+00:00"))
-            delta = abs((activity_start - start_time).total_seconds())
-            if delta > window.total_seconds():
-                continue
-            if best_delta is None or delta < best_delta:
-                best_id, best_delta = int(activity["id"]), delta
-
-        return best_id
+        return match_closest_activity(activities, start_time, tolerance_minutes)
 
     def publish(self, garmin_activity_id: int, fit_bytes: bytes, name: str | None = None, description: str | None = None) -> int:
         access_token = self._get_access_token()
@@ -214,6 +352,7 @@ class StravaClient:
         )
         if response.status_code == 401:
             raise StravaAuthError("Strava access token rejected")
+        _raise_if_rate_limited(response)
         response.raise_for_status()
 
         upload_id = response.json()["id"]
@@ -227,6 +366,7 @@ class StravaClient:
             response = requests.get(
                 f"{STRAVA_UPLOAD_URL}/{upload_id}", headers=headers, timeout=30
             )
+            _raise_if_rate_limited(response)
             response.raise_for_status()
             payload = response.json()
 

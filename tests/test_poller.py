@@ -1,6 +1,7 @@
+import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -8,6 +9,7 @@ import pytest
 
 from activsync import config, db
 from activsync.poller import Poller
+from activsync.strava_client import StravaRateLimitError
 
 
 @pytest.fixture
@@ -71,9 +73,12 @@ def test_loop_runs_garmin_and_strava_independently_at_different_intervals(conn, 
     )
     monkeypatch.setattr(
         "activsync.poller.sync.publish_pending",
-        lambda c, garmin, strava, now, garmin_activity_ids=None: strava_calls.update(n=strava_calls["n"] + 1) or object(),
+        lambda c, garmin, strava, now, garmin_activity_ids=None: strava_calls.update(n=strava_calls["n"] + 1) or SimpleNamespace(published=0, failed=0),
     )
-    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda c, strava, cfg, now: object())
+    monkeypatch.setattr(
+        "activsync.poller.sync.check_strava_status",
+        lambda c, strava, cfg, now: SimpleNamespace(flagged_missing=0, linked_existing=0),
+    )
 
     poller = Poller(
         conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
@@ -136,8 +141,14 @@ def test_stop_halts_the_loop(conn, monkeypatch):
         return object()
 
     monkeypatch.setattr("activsync.poller.sync.sync_garmin", fake_sync_garmin)
-    monkeypatch.setattr("activsync.poller.sync.publish_pending", lambda *a, **k: object())
-    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: object())
+    monkeypatch.setattr(
+        "activsync.poller.sync.publish_pending",
+        lambda *a, **k: SimpleNamespace(published=0, failed=0),
+    )
+    monkeypatch.setattr(
+        "activsync.poller.sync.check_strava_status",
+        lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0),
+    )
 
     poller = Poller(
         conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
@@ -179,3 +190,123 @@ def test_poller_does_nothing_before_the_initial_sync(conn):
     poller._loop_once(datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc))
 
     assert garmin.fetch_recent_activities.call_count == 0
+
+
+def _strava_ready(conn):
+    db.set_config_value(conn, "initial_sync_done", True)
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    db.set_config_value(conn, "strava_tokens", {"refresh_token": "refresh"})
+
+
+def test_poller_stops_calling_strava_while_rate_limited(conn, monkeypatch):
+    """A 429 means the quota is already gone; retrying every tick just keeps it
+    gone. The poller must sit out the window Strava asked for."""
+    _strava_ready(conn)
+    calls = {"n": 0}
+
+    def rate_limited(*args, **kwargs):
+        calls["n"] += 1
+        raise StravaRateLimitError("rate limited", retry_after_seconds=600)
+
+    monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
+    monkeypatch.setattr("activsync.poller.sync.publish_pending", rate_limited)
+    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
+
+    poller = Poller(
+        conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=100000,
+        strava_interval_seconds_override=0,
+    )
+
+    start = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    poller._loop_once(start)
+    assert calls["n"] == 1
+
+    # Ticks inside the backoff window must not touch Strava again.
+    poller._loop_once(start + timedelta(minutes=1))
+    poller._loop_once(start + timedelta(minutes=5))
+    assert calls["n"] == 1, "poller kept hammering Strava while rate limited"
+
+
+def test_poller_resumes_strava_after_the_backoff_expires(conn, monkeypatch):
+    _strava_ready(conn)
+    calls = {"n": 0}
+
+    def rate_limited_once(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise StravaRateLimitError("rate limited", retry_after_seconds=600)
+        return SimpleNamespace(published=0, failed=0)
+
+    monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
+    monkeypatch.setattr("activsync.poller.sync.publish_pending", rate_limited_once)
+    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
+
+    poller = Poller(
+        conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=100000,
+        strava_interval_seconds_override=0,
+    )
+
+    start = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    poller._loop_once(start)
+    poller._loop_once(start + timedelta(minutes=5))
+    assert calls["n"] == 1
+
+    poller._loop_once(start + timedelta(minutes=11))
+    assert calls["n"] == 2, "poller never resumed after the backoff window passed"
+
+
+def test_poller_rate_limit_does_not_block_garmin_sync(conn, monkeypatch):
+    """Strava's quota is Strava's problem — Garmin polling must keep running."""
+    _strava_ready(conn)
+    garmin_calls = {"n": 0}
+
+    monkeypatch.setattr(
+        "activsync.poller.sync.sync_garmin",
+        lambda *a, **k: garmin_calls.update(n=garmin_calls["n"] + 1) or SimpleNamespace(new=0, updated=0, removed=0),
+    )
+    monkeypatch.setattr(
+        "activsync.poller.sync.publish_pending",
+        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_after_seconds=600)),
+    )
+    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
+
+    poller = Poller(
+        conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=0,
+        strava_interval_seconds_override=0,
+    )
+
+    start = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    poller._loop_once(start)
+    poller._loop_once(start + timedelta(minutes=1))
+
+    assert garmin_calls["n"] == 2
+
+
+def test_poller_logs_rate_limit_as_a_warning_without_a_traceback(conn, monkeypatch, caplog):
+    """A hit quota is an expected condition, not a crash — it should not spam
+    ERROR tracebacks into the log every tick."""
+    _strava_ready(conn)
+
+    monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
+    monkeypatch.setattr(
+        "activsync.poller.sync.publish_pending",
+        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_after_seconds=600)),
+    )
+    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
+
+    poller = Poller(
+        conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=100000,
+        strava_interval_seconds_override=0,
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="activsync.poller"):
+        poller._loop_once(datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc))
+
+    records = [r for r in caplog.records if r.name == "activsync.poller"]
+    assert records, "rate limiting was not logged at all"
+    assert all(r.levelno <= logging.WARNING for r in records)
+    assert all(r.exc_info is None for r in records)

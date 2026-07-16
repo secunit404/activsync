@@ -438,7 +438,9 @@ def test_sync_strava_status_route_flags_missing_activity(tmp_path, monkeypatch):
     db.insert_activity(conn, 4, "running", "Run D", "", "2026-07-09 09:00:00", "h4", "published", now)
     db.set_published(conn, 4, strava_activity_id=8001, now=now)
     fake_strava = MagicMock()
-    fake_strava.activity_exists.return_value = False
+    # Strava's window comes back without 8001 in it — the activity was deleted
+    # on Strava's side.
+    fake_strava.list_activities_between.return_value = []
     monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
 
     response = client.post("/api/sync/strava/status")

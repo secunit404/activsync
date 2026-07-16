@@ -40,12 +40,23 @@ def _garmin_connected(conn):
     db.set_config_value(conn, "garmin_credentials_verified", True)
 
 
-def _fake_strava(strava_activity_id=1001, existing_activity_id=None):
+def _fake_strava(strava_activity_id=1001, existing_activity_id=None, window=None):
     strava = MagicMock()
     strava.publish.return_value = strava_activity_id
     strava.find_existing_activity.return_value = existing_activity_id
     strava.activity_exists.return_value = True
+    # check_strava_status reads the whole lookback window in one call rather
+    # than asking Strava about each activity; default to an empty athlete.
+    strava.list_activities_between.return_value = list(window or [])
     return strava
+
+
+def _on_strava(strava_activity_id, start_time="2026-07-09 09:00:00"):
+    """One entry as list_activities_between returns it."""
+    return {
+        "id": strava_activity_id,
+        "start_date": datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc),
+    }
 
 
 def test_publish_now_force_publishes_a_held_activity(conn, cfg):
@@ -397,8 +408,7 @@ def test_check_strava_status_flags_missing_activity(conn, cfg):
         publish_status="published", now=NOW - timedelta(hours=1),
     )
     db.set_published(conn, 301, strava_activity_id=9101, now=NOW - timedelta(hours=1))
-    strava = _fake_strava()
-    strava.activity_exists.return_value = False
+    strava = _fake_strava(window=[])  # 9101 is gone from Strava
 
     stats = sync.check_strava_status(conn, strava, cfg, NOW)
 
@@ -413,8 +423,7 @@ def test_check_strava_status_leaves_existing_activity_published(conn, cfg):
         publish_status="published", now=NOW - timedelta(hours=1),
     )
     db.set_published(conn, 302, strava_activity_id=9102, now=NOW - timedelta(hours=1))
-    strava = _fake_strava()
-    strava.activity_exists.return_value = True
+    strava = _fake_strava(window=[_on_strava(9102)])
 
     stats = sync.check_strava_status(conn, strava, cfg, NOW)
 
@@ -430,14 +439,15 @@ def test_check_strava_status_skips_activities_older_than_lookback(conn, cfg):
         publish_status="published", now=NOW - timedelta(days=10),
     )
     db.set_published(conn, 303, strava_activity_id=9103, now=NOW - timedelta(days=10))
-    strava = _fake_strava()
-    strava.activity_exists.return_value = False
+    strava = _fake_strava(window=[])
 
     stats = sync.check_strava_status(conn, strava, cfg, NOW)
 
     assert db.get_activity(conn, 303)["publish_status"] == "published"
     assert stats.flagged_missing == 0
-    strava.activity_exists.assert_not_called()
+    # Nothing inside the window to reconcile, so Strava is not called at all —
+    # an idle instance must not spend quota.
+    strava.list_activities_between.assert_not_called()
 
 
 def test_check_strava_status_links_held_activity_already_on_strava(conn, cfg):
@@ -446,7 +456,7 @@ def test_check_strava_status_links_held_activity_already_on_strava(conn, cfg):
         description="", start_time="2026-07-09 09:00:00", content_hash="h",
         publish_status="held", now=NOW - timedelta(hours=1),
     )
-    strava = _fake_strava(existing_activity_id=9201)
+    strava = _fake_strava(window=[_on_strava(9201, "2026-07-09 09:00:30")])
 
     stats = sync.check_strava_status(conn, strava, cfg, NOW)
 
@@ -462,7 +472,7 @@ def test_check_strava_status_links_pending_activity_to_existing_strava(conn, cfg
         description="", start_time="2026-07-09 09:00:00", content_hash="h",
         publish_status="pending", now=NOW - timedelta(hours=1),
     )
-    strava = _fake_strava(existing_activity_id=9202)
+    strava = _fake_strava(window=[_on_strava(9202, "2026-07-09 09:00:30")])
 
     stats = sync.check_strava_status(conn, strava, cfg, NOW)
 
@@ -777,7 +787,7 @@ def test_catch_up_links_out_of_window_held_activity_to_existing_strava(conn, cfg
     garmin = _fake_garmin([
         _record(501, "strength_training", title="Leg Day", description="", start_time=held_start),
     ])
-    strava = _fake_strava(existing_activity_id=555)
+    strava = _fake_strava(window=[_on_strava(555, held_start)])
 
     stats = sync.catch_up_sync(conn, garmin, strava, cfg, NOW)
 
@@ -803,7 +813,7 @@ def test_catch_up_status_checks_stale_pending_rows_after_a_strava_only_outage(co
         "pending", NOW - timedelta(days=18),
     )
     garmin = _fake_garmin([_record(601, "running", title="Stale Run", start_time=stale_start)])
-    strava = _fake_strava(existing_activity_id=888)
+    strava = _fake_strava(window=[_on_strava(888, stale_start)])
 
     stats = sync.catch_up_sync(conn, garmin, strava, cfg, NOW)
 
@@ -837,7 +847,7 @@ def test_catch_up_skips_the_garmin_half_when_garmin_is_not_connected(conn, cfg):
     )
     garmin = MagicMock()
     garmin.fetch_recent_activities.side_effect = RuntimeError("garmin still broken")
-    strava = _fake_strava(existing_activity_id=999)
+    strava = _fake_strava(window=[_on_strava(999, "2026-07-08 09:00:00")])
 
     stats = sync.catch_up_sync(conn, garmin, strava, cfg, NOW)
 
@@ -861,3 +871,108 @@ def test_garmin_last_sync_ok_at_advances_only_on_success(conn, cfg):
     # The failed attempt advances last_sync_at but must not touch last_sync_ok_at.
     assert db.get_config_value(conn, "garmin_last_sync_at") == later.isoformat()
     assert db.get_config_value(conn, "garmin_last_sync_ok_at") == NOW.isoformat()
+
+
+def test_check_strava_status_fetches_the_window_once_regardless_of_activity_count(conn, cfg):
+    """The rate-limit fix: cost is one request per poll, not one per activity.
+
+    Previously each pending/held row cost a find_existing_activity call and each
+    published row cost an activity_exists call, so a busy week blew through
+    Strava's 100-per-15-minutes quota within the hour.
+    """
+    for gid in (310, 311, 312):
+        db.insert_activity(
+            conn, garmin_activity_id=gid, activity_type="running", title=f"Run {gid}",
+            description="", start_time=f"2026-07-09 0{gid - 309}:00:00", content_hash="h",
+            publish_status="pending", now=NOW - timedelta(hours=1),
+        )
+    for gid in (320, 321):
+        db.insert_activity(
+            conn, garmin_activity_id=gid, activity_type="running", title=f"Run {gid}",
+            description="", start_time=f"2026-07-09 0{gid - 315}:00:00", content_hash="h",
+            publish_status="published", now=NOW - timedelta(hours=1),
+        )
+        db.set_published(conn, gid, strava_activity_id=gid + 1000, now=NOW - timedelta(hours=1))
+
+    strava = _fake_strava(window=[
+        _on_strava(1320, "2026-07-09 05:00:00"),
+        _on_strava(1321, "2026-07-09 06:00:00"),
+    ])
+
+    sync.check_strava_status(conn, strava, cfg, NOW)
+
+    assert strava.list_activities_between.call_count == 1
+    strava.find_existing_activity.assert_not_called()
+    strava.activity_exists.assert_not_called()
+
+
+def test_check_strava_status_requests_the_full_lookback_window(conn, cfg):
+    db.insert_activity(
+        conn, garmin_activity_id=330, activity_type="running", title="Run",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="pending", now=NOW - timedelta(hours=1),
+    )
+    strava = _fake_strava(window=[])
+
+    sync.check_strava_status(conn, strava, cfg, NOW)
+
+    after, before = strava.list_activities_between.call_args.args
+    assert after <= NOW - timedelta(days=cfg["lookback_days"])
+    assert before >= NOW
+
+
+def test_check_strava_status_does_not_link_an_activity_outside_the_match_tolerance(conn, cfg):
+    """The window fetch returns everything in the lookback range, so proximity
+    matching must still be enforced locally — otherwise an unrelated activity
+    from the same week would be linked."""
+    db.insert_activity(
+        conn, garmin_activity_id=340, activity_type="running", title="Morning Run",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="pending", now=NOW - timedelta(hours=1),
+    )
+    strava = _fake_strava(window=[_on_strava(9400, "2026-07-09 11:00:00")])
+
+    stats = sync.check_strava_status(conn, strava, cfg, NOW)
+
+    assert db.get_activity(conn, 340)["publish_status"] == "pending"
+    assert stats.linked_existing == 0
+
+
+def test_check_strava_status_links_the_closest_match_within_tolerance(conn, cfg):
+    db.insert_activity(
+        conn, garmin_activity_id=341, activity_type="running", title="Morning Run",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="pending", now=NOW - timedelta(hours=1),
+    )
+    strava = _fake_strava(window=[
+        _on_strava(9401, "2026-07-09 09:04:00"),
+        _on_strava(9402, "2026-07-09 09:00:10"),
+    ])
+
+    sync.check_strava_status(conn, strava, cfg, NOW)
+
+    assert db.get_activity(conn, 341)["strava_activity_id"] == 9402
+
+
+def test_check_strava_status_does_not_link_two_activities_to_the_same_strava_entry(conn, cfg):
+    """Two Garmin activities minutes apart must not both claim one Strava entry —
+    that would leave a real duplicate silently unpublished."""
+    db.insert_activity(
+        conn, garmin_activity_id=350, activity_type="running", title="Run A",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="pending", now=NOW - timedelta(hours=1),
+    )
+    db.insert_activity(
+        conn, garmin_activity_id=351, activity_type="running", title="Run B",
+        description="", start_time="2026-07-09 09:02:00", content_hash="h2",
+        publish_status="pending", now=NOW - timedelta(hours=1),
+    )
+    strava = _fake_strava(window=[_on_strava(9500, "2026-07-09 09:00:30")])
+
+    stats = sync.check_strava_status(conn, strava, cfg, NOW)
+
+    linked = [
+        db.get_activity(conn, gid)["strava_activity_id"] for gid in (350, 351)
+    ]
+    assert linked.count(9500) == 1
+    assert stats.linked_existing == 1
