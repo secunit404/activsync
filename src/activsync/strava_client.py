@@ -216,7 +216,7 @@ class StravaClient:
         db.set_config_value(self._conn, "strava_tokens", None)
         logger.info("strava disconnected")
 
-    def activity_exists(self, strava_activity_id: int, now: datetime | None = None) -> bool:
+    def activity_exists(self, strava_activity_id: int) -> bool:
         """Check whether a previously-published activity is still on Strava.
 
         Used to detect activities deleted on Strava's side so they can be
@@ -232,7 +232,7 @@ class StravaClient:
             return False
         if response.status_code == 401:
             raise StravaAuthError("Strava access token rejected")
-        _raise_if_rate_limited(response, now)
+        _raise_if_rate_limited(response)
         response.raise_for_status()
         return True
 

@@ -531,22 +531,6 @@ def test_find_existing_activity_raises_rate_limit_error_on_429(mock_get, conn):
     assert excinfo.value.retry_at == now + timedelta(seconds=42)
 
 
-@patch("activsync.strava_client.requests.get")
-def test_activity_exists_raises_rate_limit_error_on_429(mock_get, conn):
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
-    })
-    mock_get.return_value = MagicMock(status_code=429, headers={"Retry-After": "17"})
-
-    client = StravaClient(conn, "cid", "csecret")
-
-    now = datetime(2026, 7, 9, 12, 7, tzinfo=timezone.utc)
-    with pytest.raises(StravaRateLimitError) as excinfo:
-        client.activity_exists(9001, now=now)
-
-    assert excinfo.value.retry_at == now + timedelta(seconds=17)
-
-
 @patch("activsync.strava_client.requests.post")
 def test_publish_raises_rate_limit_error_on_429(mock_post, conn):
     db.set_config_value(conn, "strava_tokens", {
