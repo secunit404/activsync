@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from activsync import config, db
+from activsync import config, db, logging_setup
 from activsync.poller import Poller
 from activsync.strava_client import StravaRateLimitError
 
@@ -338,3 +338,31 @@ def test_poller_honours_the_deadline_verbatim_rather_than_deriving_one(conn, mon
     poller._loop_once(datetime(2026, 7, 14, 12, 13, 30, tzinfo=timezone.utc))
 
     assert poller._strava_backoff_until == deadline
+
+
+def test_poller_logs_the_backoff_deadline_in_local_time(conn, monkeypatch, caplog):
+    """Regression: the deadline was logged as a raw UTC instant while every
+    other log line renders in the display timezone, so a pause until 22:15 CEST
+    printed as '20:14:57+00:00' — reading as two hours in the past."""
+    _strava_ready(conn)
+    logging_setup.set_log_timezone("Europe/Stockholm")
+    deadline = datetime(2026, 7, 16, 20, 15, tzinfo=timezone.utc)  # 22:15 CEST
+
+    monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
+    monkeypatch.setattr(
+        "activsync.poller.sync.publish_pending",
+        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_at=deadline)),
+    )
+    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
+
+    poller = Poller(
+        conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=100000,
+        strava_interval_seconds_override=0,
+    )
+    with caplog.at_level(logging.WARNING, logger="activsync.poller"):
+        poller._loop_once(datetime(2026, 7, 16, 20, 13, 30, tzinfo=timezone.utc))
+
+    message = caplog.records[0].getMessage()
+    assert "22:15:00 CEST" in message
+    assert "+00:00" not in message, "raw UTC offset leaked into a local-time log"
