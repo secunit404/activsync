@@ -12,7 +12,7 @@ from pathlib import Path
 
 import requests
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -334,6 +334,14 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        # Browsers request /favicon.ico from the root on every visit no matter
+        # what the page links, so without this each one logs a 404. Served
+        # rather than redirected: browsers accept a PNG here regardless of the
+        # .ico extension, and it saves a round trip.
+        return FileResponse(STATIC_DIR / "favicon.png", media_type="image/png")
 
     @app.get("/login")
     @app.post("/login")

@@ -675,3 +675,26 @@ def test_dismissing_the_catch_up_report_clears_it(tmp_path):
 
     assert response.status_code == 303
     assert db.get_config_value(conn, "catch_up_report") is None
+
+
+def test_favicon_ico_is_served_at_the_root(tmp_path):
+    """Browsers probe /favicon.ico at the root regardless of what the page
+    links, so without this every visit logs a 404."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_favicon_ico_is_the_same_image_the_pages_link(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    root = client.get("/favicon.ico")
+    linked = client.get("/static/favicon.png")
+
+    assert root.content == linked.content
