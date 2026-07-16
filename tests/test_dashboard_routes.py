@@ -252,6 +252,20 @@ def test_dashboard_shows_edit_form_for_activity_metadata(tmp_path):
     assert 'name="description"' in response.text
 
 
+def test_dashboard_detail_actions_are_ordered_edit_exclude_publish(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 9, "running", "Morning Run", "Easy Z2", "2026-07-09 09:00:00", "h9", "held", now)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    # Scope to the dialog footer: the activity row has its own Publish button
+    # earlier in the page, so searching the whole body finds the wrong one.
+    footer = response.text.split('<footer class="drawer-actions">')[1].split("</footer>")[0]
+    assert footer.index(">Edit<") < footer.index(">Exclude<") < footer.index(">Publish<")
+
+
 def test_dashboard_banner_names_the_broken_connection(tmp_path):
     conn, client = _logged_in_client(tmp_path)
     _setup_done(conn)

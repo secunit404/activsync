@@ -219,17 +219,17 @@
                                 <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Saving…</span>
                             </button>
                             {% if activity.publish_status in ("held", "pending", "missing") %}
-                                <form class="inline dialog-state-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
-                                <button type="submit" class="primary-action">{{ "Republish" if activity.publish_status == "missing" else "Publish now" }}</button>
-                            </form>
-                            {% endif %}
-                            {% if activity.publish_status in ("held", "pending", "missing") %}
                                 <form class="inline dialog-state-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/exclude" hx-target="#activity-table" hx-swap="outerHTML">
                                 <button type="submit" class="secondary">Exclude</button>
                             </form>
                             {% elif activity.publish_status == "excluded" %}
                                 <form class="inline dialog-state-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/unexclude" hx-target="#activity-table" hx-swap="outerHTML">
                                 <button type="submit" class="secondary">Un-exclude</button>
+                            </form>
+                            {% endif %}
+                            {% if activity.publish_status in ("held", "pending", "missing") %}
+                                <form class="inline dialog-state-action publish-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
+                                <button type="submit" class="primary-action">{{ "Republish" if activity.publish_status == "missing" else "Publish" }}</button>
                             </form>
                             {% endif %}
                         </footer>
