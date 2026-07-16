@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +24,7 @@ from activsync.garmin_client import (
     complete_login as garmin_complete_login,
     get_client as get_garmin_raw_client,
 )
-from activsync.strava_client import StravaClient
+from activsync.strava_client import StravaAuthError, StravaClient
 
 logger = logging.getLogger("activsync.server")
 
@@ -71,6 +73,17 @@ def _complete_garmin_login(pending_auth, mfa_code: str):
     if _mock_mode():
         return dev_mock.complete_login(pending_auth, mfa_code)
     return garmin_complete_login(pending_auth, mfa_code)
+
+
+def _publish_failure_message(stats: "sync.PublishStats") -> str:
+    """Wording for uploads that failed inside a batch that otherwise succeeded."""
+    if not stats.failed:
+        return ""
+    noun = "activity" if stats.failed == 1 else "activities"
+    return (
+        f"{stats.failed} {noun} could not be published to Strava and stayed pending — "
+        "check the logs for the reason, then try again."
+    )
 
 
 def _build_strava_client(conn: sqlite3.Connection):
@@ -426,14 +439,28 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
                 ),
                 status_code=409,
             )
+        stats = sync.PublishStats()
         if activity_ids:
             garmin = _build_garmin_client(conn)
             strava = _build_strava_client(conn)
-            sync.publish_pending(
-                conn, garmin, strava, datetime.now(timezone.utc), garmin_activity_ids=set(activity_ids),
-            )
+            try:
+                stats = sync.publish_pending(
+                    conn, garmin, strava, datetime.now(timezone.utc), garmin_activity_ids=set(activity_ids),
+                )
+            except StravaAuthError as e:
+                return templates.TemplateResponse(
+                    request, "partials/activity_table.html",
+                    _activity_context(sort_order, status_filter, sync_error=str(e)),
+                    status_code=409,
+                )
         events.bus.publish("refresh")
-        return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
+        # publish_pending swallows per-activity failures so one bad upload can't
+        # abort the batch — which leaves this as the only place that can tell the
+        # user any of it failed. The rows stay pending and are safe to retry.
+        return templates.TemplateResponse(
+            request, "partials/activity_table.html",
+            _activity_context(sort_order, status_filter, sync_error=_publish_failure_message(stats)),
+        )
 
     @app.post("/api/sync/strava/status", response_class=HTMLResponse)
     def sync_strava_status_route(
@@ -451,7 +478,17 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
                 status_code=409,
             )
         strava = _build_strava_client(conn)
-        sync.check_strava_status(conn, strava, config.load_config(conn), datetime.now(timezone.utc))
+        try:
+            sync.check_strava_status(conn, strava, config.load_config(conn), datetime.now(timezone.utc))
+        except StravaAuthError as e:
+            # A revoked token or an app missing activity:read_all surfaces here
+            # rather than as a 500, since this is the button a user reaches for
+            # precisely when the connection has gone bad.
+            return templates.TemplateResponse(
+                request, "partials/activity_table.html",
+                _activity_context(sort_order, status_filter, sync_error=str(e)),
+                status_code=409,
+            )
         events.bus.publish("refresh")
         return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
 
@@ -840,12 +877,90 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             )
         strava = _build_strava_client(conn)
         redirect_uri = str(request.url_for("strava_callback"))
-        return RedirectResponse(strava.authorize_url(redirect_uri))
+        state = secrets.token_urlsafe(32)
+        db.set_config_value(conn, "strava_oauth_state", state)
+        return RedirectResponse(strava.authorize_url(redirect_uri, state))
+
+    def _strava_callback_error(request: Request, message: str):
+        """Render an OAuth failure on whichever page the user came from.
+
+        The callback is a landing page the user arrives at from Strava, so a
+        raised error would surface as a bare framework response. Mid-setup
+        there is no /settings to fall back to, hence the two templates.
+        """
+        if _settings_context()["initial_sync_done"]:
+            return templates.TemplateResponse(
+                request, "settings.html",
+                _settings_context(strava_dialog_open=True, strava_error=message),
+                status_code=400,
+            )
+        return templates.TemplateResponse(
+            request, "setup.html",
+            _settings_context(step="strava", strava_error=message),
+            status_code=400,
+        )
 
     @app.get("/strava/callback")
-    def strava_callback(request: Request, code: str):
+    def strava_callback(
+        request: Request,
+        code: str | None = None,
+        state: str | None = None,
+        error: str | None = None,
+    ):
+        # Every parameter is optional: Strava omits `code` entirely when the
+        # authorization doesn't complete (denied, or a redirect_uri that
+        # doesn't match the one registered on the API application). Declaring
+        # `code` required made FastAPI reject those callbacks before this
+        # handler ran, so the user got a raw JSON 422 instead of an
+        # explanation.
+        expected_state = db.get_config_value(conn, "strava_oauth_state")
+        # One state per handshake, consumed on arrival: a replayed callback
+        # finds nothing to match against.
+        db.set_config_value(conn, "strava_oauth_state", None)
+
+        if error == "access_denied":
+            # Strava documents access_denied as the athlete rejecting the
+            # authorization. A mismatched callback domain never reaches us at
+            # all — Strava won't redirect to a URI it hasn't been told to
+            # trust — so don't blame the configuration for this one.
+            return _strava_callback_error(
+                request,
+                "The Strava authorization was declined, so nothing was connected. "
+                "Press Connect and choose Authorize on Strava's page to continue.",
+            )
+
+        if error or not code:
+            # `error` is attacker-controllable, so it goes to the log rather than
+            # into the page — Strava's codes mean nothing to the user anyway.
+            logger.warning("strava authorization did not complete: error=%s", error)
+            return _strava_callback_error(
+                request,
+                "Strava did not send an authorization back, so nothing was "
+                "connected. Press Connect to try again — if it keeps happening, "
+                "check that your Strava API application's Authorization Callback "
+                "Domain matches the address you use to reach ActivSync.",
+            )
+
+        if not expected_state or not state or not secrets.compare_digest(state, expected_state):
+            return _strava_callback_error(
+                request,
+                "That Strava response didn't match the connection request that "
+                "started it, so it was ignored. Start the connection again from "
+                "this page.",
+            )
+
         strava = _build_strava_client(conn)
-        strava.exchange_code(code)
+        try:
+            strava.exchange_code(code)
+        except (requests.RequestException, StravaAuthError) as e:
+            logger.warning("strava code exchange failed: %s", e)
+            return _strava_callback_error(
+                request,
+                "Could not complete the Strava connection — Strava rejected the "
+                "authorization. Check your client ID and client secret, then "
+                "try again.",
+            )
+
         if not _settings_context()["initial_sync_done"]:
             return RedirectResponse("/setup", status_code=303)
         _run_catch_up()

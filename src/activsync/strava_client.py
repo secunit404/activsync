@@ -39,14 +39,17 @@ class StravaClient:
         tokens = db.get_config_value(self._conn, "strava_tokens")
         return bool(tokens and tokens.get("refresh_token"))
 
-    def authorize_url(self, redirect_uri: str) -> str:
+    def authorize_url(self, redirect_uri: str, state: str) -> str:
         # activity:read_all (not just activity:read) so duplicate-detection
         # also sees activities the athlete has marked private — otherwise a
         # private duplicate wouldn't be found and we'd re-upload it anyway.
+        # `state` is echoed back to the callback unchanged; the caller keeps
+        # the issued value and rejects any callback that doesn't match.
         return (
             f"{STRAVA_AUTHORIZE_URL}?client_id={self._client_id}"
             f"&redirect_uri={redirect_uri}&response_type=code"
             f"&approval_prompt=auto&scope=activity:write,activity:read_all"
+            f"&state={state}"
         )
 
     def exchange_code(self, code: str) -> None:

@@ -59,9 +59,50 @@ and Garmin tokens) is persisted under `./data` (mounted at `/config`).
 | `ACTIVSYNC_DB_PATH` | `/config/activsync.db` | SQLite database path |
 | `ACTIVSYNC_GARMIN_TOKEN_DIR` | `/config/.garminconnect` | Garmin token storage |
 | `ACTIVSYNC_DEV_MOCK_DATA` | _(unset)_ | Dev only: seed fake data, no network |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Proxy IPs trusted to set `X-Forwarded-Proto` (see below) |
 
 The in-app **Settings → Preferences → display timezone** overrides `TZ` for log
 timestamps (applied live, no restart needed).
+
+### Strava's Authorization Callback Domain
+
+Your Strava API application has one **Authorization Callback Domain**, and
+getting it wrong is the most common setup failure — Strava refuses the
+authorization on its own site and never returns you to ActivSync, so the app
+cannot show you an error.
+
+Strava never connects to ActivSync. The callback is a redirect sent to your
+*browser*, so the domain to register is simply **the host in your browser's
+address bar when you press Connect** — a bare domain, with no scheme, port or
+path:
+
+| How you reach ActivSync | Address bar | Callback domain |
+|---|---|---|
+| Reverse proxy / tunnel | `https://activsync.example.com` | `activsync.example.com` (or `example.com`) |
+| LAN | `http://192.168.1.16:8381` | `192.168.1.16` |
+| Local development | `http://localhost:8382` | `localhost` |
+
+A private address like `192.168.1.16` works even though Strava cannot reach it,
+because your browser can — the same reason `localhost` works. The setup wizard
+shows the exact value to enter, derived from the address you are using.
+
+**If you can reach ActivSync at more than one address** (say a public domain
+*and* a LAN IP), only one can be registered. Redirects must fall within the
+registered domain, so subdomains of it are fine, but an unrelated LAN IP is not.
+Pick the address you want to authorize from and always start **Connect Strava**
+there; the other address keeps working normally for everything else.
+
+**Behind an HTTPS reverse proxy**, set `FORWARDED_ALLOW_IPS` to your proxy's
+address (or `*` if the container is only reachable through the proxy) so the
+callback URL is built as `https://` rather than `http://`:
+
+```yaml
+environment:
+  - FORWARDED_ALLOW_IPS=*
+```
+
+Left unset, only `127.0.0.1` is trusted. `*` trusts `X-Forwarded-Proto` from any
+client, so do not use it on a container that is directly reachable.
 
 ## Development
 

@@ -19,5 +19,7 @@
   <p class="hint">You need a free Strava API application for the Client ID and Secret.
     <a href="https://developers.strava.com/docs/getting-started/" target="_blank" rel="noopener">See Strava's setup guide</a>,
     then find your keys at <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a>.
+    Set its <strong>Authorization Callback Domain</strong> to <code>{{ url_for('strava_callback').hostname }}</code> —
+    the address you are reaching ActivSync on right now.
     Connect saves the keys and opens Strava to authorize, then returns here.</p>
 </div>
