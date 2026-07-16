@@ -328,42 +328,10 @@ def test_disconnect_still_clears_local_state_when_revoke_request_fails(mock_post
     assert db.get_config_value(conn, "strava_tokens") is None
 
 
-@patch("activsync.strava_client.requests.get")
-def test_activity_exists_returns_true_when_found(mock_get, conn):
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
-    })
-    mock_get.return_value = MagicMock(status_code=200, json=lambda: {"id": 9001})
-    mock_get.return_value.raise_for_status = lambda: None
-
-    client = StravaClient(conn, "cid", "csecret")
-
-    assert client.activity_exists(9001) is True
 
 
-@patch("activsync.strava_client.requests.get")
-def test_activity_exists_returns_false_when_404(mock_get, conn):
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
-    })
-    mock_get.return_value = MagicMock(status_code=404)
-
-    client = StravaClient(conn, "cid", "csecret")
-
-    assert client.activity_exists(9001) is False
 
 
-@patch("activsync.strava_client.requests.get")
-def test_activity_exists_raises_auth_error_on_401(mock_get, conn):
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
-    })
-    mock_get.return_value = MagicMock(status_code=401)
-
-    client = StravaClient(conn, "cid", "csecret")
-
-    with pytest.raises(StravaAuthError):
-        client.activity_exists(9001)
 
 
 @patch("activsync.strava_client.requests.put")
@@ -528,19 +496,6 @@ def test_find_existing_activity_raises_rate_limit_error_on_429(mock_get, conn):
     assert excinfo.value.retry_after_seconds == 42
 
 
-@patch("activsync.strava_client.requests.get")
-def test_activity_exists_raises_rate_limit_error_on_429(mock_get, conn):
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
-    })
-    mock_get.return_value = MagicMock(status_code=429, headers={"Retry-After": "17"})
-
-    client = StravaClient(conn, "cid", "csecret")
-
-    with pytest.raises(StravaRateLimitError) as excinfo:
-        client.activity_exists(9001)
-
-    assert excinfo.value.retry_after_seconds == 17
 
 
 @patch("activsync.strava_client.requests.post")

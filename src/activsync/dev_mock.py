@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from activsync import db
 from activsync.garmin_client import MfaRequired
@@ -118,12 +118,28 @@ class FakeStravaClient:
     def disconnect(self) -> None:
         db.set_config_value(self._conn, "strava_tokens", None)
 
-    def activity_exists(self, strava_activity_id: int) -> bool:
-        # Nothing published through the mock is ever "missing" on Strava's side.
-        return True
+    def list_activities_between(
+        self, after: datetime, before: datetime, now: datetime | None = None
+    ) -> list[dict]:
+        # Report back exactly what the mock itself "published" and nothing more.
+        # The caller reads absence from this window as "deleted on Strava", so
+        # returning an empty list would flag every published row as missing;
+        # returning anything extra would link a pending row to a duplicate that
+        # doesn't exist. Neither is true in dev.
+        window = []
+        for row in db.list_activities(self._conn, status="published"):
+            strava_activity_id = row.get("strava_activity_id")
+            if strava_activity_id is None:
+                continue
+            start = datetime.strptime(
+                row["start_time"], "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone.utc)
+            if after <= start <= before:
+                window.append({"id": int(strava_activity_id), "start_date": start})
+        return window
 
     def find_existing_activity(
-        self, start_time: datetime, tolerance_minutes: int = 5
+        self, start_time: datetime, tolerance_minutes: int = 5, now: datetime | None = None
     ) -> int | None:
         # No pre-existing Strava duplicates to link against in dev.
         return None
