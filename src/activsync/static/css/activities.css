@@ -405,14 +405,16 @@
             margin-left: 0;
         }
     .activity-sort-control select { width: 100%; }
+    /* Date column sizes to .activity-row-date rather than a floor of its own:
+       a 76px floor against a 64px box just wasted 12px before the title. */
     .activity-row {
-            grid-template-columns: minmax(76px, auto) minmax(0, 1fr) auto;
+            grid-template-columns: auto minmax(0, 1fr) auto;
             gap: 10px;
             align-items: start;
             padding: 12px;
         }
     .activity-panel.is-selecting .activity-row {
-            grid-template-columns: 24px minmax(76px, auto) minmax(0, 1fr) auto;
+            grid-template-columns: 24px auto minmax(0, 1fr) auto;
         }
     .activity-row-select {
             grid-column: 1;
@@ -422,10 +424,12 @@
     .activity-panel.is-selecting .activity-row-select {
             display: flex;
         }
+    /* Fits the widest date ("21 Jun" = 56.6px); a fixed width is what keeps
+       dates aligned across rows, since every row is its own grid. */
     .activity-row-date {
             grid-column: 1;
             grid-row: 1;
-            width: 64px;
+            width: 58px;
         }
     .activity-panel.is-selecting .activity-row-date {
             grid-column: 2;
