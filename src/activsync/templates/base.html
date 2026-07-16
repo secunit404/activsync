@@ -32,8 +32,11 @@
             try { localStorage.setItem("activsync-theme", next); } catch (e) {}
             activsyncSyncToggles();
         }
-        function activsyncSetLoading(form) {
-            var button = form.querySelector('button[type="submit"]');
+        // `event` is optional, but pass it on any form with more than one submit
+        // button: the submitter is the one the reader actually pressed, and only
+        // that one should show the busy state.
+        function activsyncSetLoading(form, event) {
+            var button = (event && event.submitter) || form.querySelector('button[type="submit"]');
             if (!button) return true;
             if (form.dataset.loading === "true") return false;
             form.dataset.loading = "true";

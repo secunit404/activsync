@@ -132,6 +132,56 @@ button.htmx-request .button-loading, button[aria-busy="true"] .button-loading { 
 
 @keyframes activsync-spin { to { transform: rotate(360deg); } }
 
+/* A button that swaps its resting label for another state — busy, or saved —
+   stacks every state in one grid cell and swaps them by visibility. The button
+   then keeps the width of its widest state instead of resizing under the
+   reader's cursor mid-press. The repeated display:inline-flex is load-bearing:
+   it beats the display:none swap above, which collapses the button instead. */
+.button-swap {
+    display: inline-grid;
+    grid-template-areas: "button-state";
+    align-items: center;
+    justify-items: center;
+}
+
+.button-swap > .button-label,
+.button-swap > .button-loading,
+.button-swap > .button-saved {
+    grid-area: button-state;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.button-swap > .button-loading,
+.button-swap > .button-saved { visibility: hidden; }
+
+.button-swap[aria-busy="true"] > .button-label,
+.button-swap.htmx-request > .button-label,
+.button-swap.is-saved > .button-label { display: inline-flex; visibility: hidden; }
+
+.button-swap[aria-busy="true"] > .button-loading,
+.button-swap.htmx-request > .button-loading { display: inline-flex; visibility: visible; }
+
+.button-swap.is-saved > .button-saved { display: inline-flex; visibility: visible; }
+
+/* Confirmed state: the save landed. Held for a couple of seconds, then
+   cleared back to the resting label. */
+.button-check {
+    width: 1em;
+    height: 1em;
+    animation: activsync-check-pop 0.28s ease-out;
+}
+
+@keyframes activsync-check-pop {
+    from { transform: scale(0.4); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .button-check { animation: none; }
+}
+
 @media (max-width: 740px) {
     .sync-actions { display: grid; grid-template-columns: 1fr 1fr; }
     .sync-actions button { width: 100%; }
