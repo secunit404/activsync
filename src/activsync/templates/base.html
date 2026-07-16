@@ -595,7 +595,9 @@
         .conn-dot { align-self: center; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent); }
         .conn-dot-garmin { background: var(--garmin); color: var(--garmin); }
         .conn-dot-strava { background: var(--accent); color: var(--accent); }
-        .conn-identity { display: flex; align-items: baseline; flex: 1 1 auto; min-width: 0; gap: 10px; }
+        /* flex-basis 0 keeps the long status text from forcing a wrap: flex line
+           breaking uses the basis, not the shrunk width. */
+        .conn-identity { display: flex; align-items: baseline; flex-wrap: wrap; flex: 1 1 0; min-width: 0; gap: 2px 10px; }
         .conn-name { font-weight: 750; }
         .conn-meta { min-width: 0; color: var(--muted); font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 
@@ -951,9 +953,11 @@
             padding: 12px 16px;
             transition: border-color 0.15s ease, background 0.15s ease;
         }
-        .activity-row:hover {
-            border-color: var(--border-strong);
-            background: var(--surface-2);
+        @media (hover: hover) {
+            .activity-row:hover {
+                border-color: var(--border-strong);
+                background: var(--surface-2);
+            }
         }
         .activity-row-date {
             display: flex;
@@ -1166,6 +1170,8 @@
             flex-wrap: wrap;
             gap: 6px 10px;
         }
+        /* Match the link pills so badge and pills share one centre line. */
+        .activity-dialog-meta-actions .badge { min-height: 30px; }
         .activity-dialog-title {
             font-size: clamp(1.3rem, 4vw, 1.7rem);
             font-weight: 700;
@@ -1603,11 +1609,19 @@
                 justify-content: space-between;
                 flex-wrap: wrap;
             }
+            /* Too narrow to sit beside the badge and pills without wrapping the
+               kicker mid-text, so give each its own row. */
             .activity-dialog-meta {
-                align-items: flex-start;
+                align-items: center;
+                flex-wrap: wrap;
+                row-gap: 8px;
+            }
+            .dialog-kicker {
+                flex: 1 1 100%;
             }
             .activity-dialog-meta-actions {
-                justify-content: flex-end;
+                justify-content: flex-start;
+                flex-basis: 100%;
             }
             .activity-dialog {
                 width: 100%;
@@ -1624,18 +1638,23 @@
             .detail-metric-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
-            .activity-dialog.is-editing .drawer-actions {
-                bottom: -20px;
-                margin: 0 -16px -20px;
-                padding: 12px 16px max(20px, env(safe-area-inset-bottom));
-            }
+            .detail-metric-grid > div { padding: 7px; }
+            .detail-metric-grid strong { font-size: 0.9rem; }
             .drawer-actions {
                 display: grid;
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr 1fr;
                 gap: 6px;
+                position: sticky;
+                bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
+                z-index: 2;
+                margin: 0 -16px calc(-1 * max(20px, env(safe-area-inset-bottom)));
+                border-top: 1px solid var(--border);
+                background: var(--surface);
+                padding: 12px 16px max(20px, env(safe-area-inset-bottom));
             }
             .drawer-actions form,
             .drawer-actions button { width: 100%; }
+            .drawer-actions .publish-action { grid-column: 1 / -1; }
             .check-list { grid-template-columns: 1fr; }
             .auth-card { margin-top: 10vh; }
         }
