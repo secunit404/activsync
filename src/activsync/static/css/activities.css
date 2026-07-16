@@ -405,56 +405,107 @@
         margin-left: 0;
     }
     .activity-sort-control select { width: 100%; }
-    /* Date column sizes to .activity-row-date rather than a floor of its own:
-       a 76px floor against a 64px box just wasted 12px before the title. */
+    /* Narrow enough that a date column costs more than it earns: it took a
+       third of the row and left the title half of it, while the actions sat on
+       their own line with the other half blank. Stack instead — date reads as a
+       kicker over the title (as in the detail dialog) and the actions sit
+       beside the links, in the space that was empty anyway.
+           [ 5 Jul · 09:56 ]        [ PENDING ]
+           [ Morning run #1                   ]
+           [ running                          ]
+           [ GARMIN ↗      ] [ Publish ][ Details ]
+       .activity-row-main is flattened so its children land on the row's grid;
+       on desktop it stays a normal block and the date keeps its own column. */
     .activity-row {
-        grid-template-columns: auto minmax(0, 1fr) auto;
-        gap: 10px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        /* Tight row-gap: the kicker/title/type read as one block. The gap
+           before the action line is added on those items instead. */
+        gap: 2px 10px;
         align-items: start;
         padding: 12px;
     }
+    .activity-row-main {
+        display: contents;
+    }
     .activity-panel.is-selecting .activity-row {
-        grid-template-columns: 24px auto minmax(0, 1fr) auto;
+        grid-template-columns: 24px minmax(0, 1fr) auto;
     }
     .activity-row-select {
         grid-column: 1;
         grid-row: 1;
-        padding-top: 2px;
+        align-self: center;
+        padding-top: 0;
     }
     .activity-panel.is-selecting .activity-row-select {
         display: flex;
     }
-    /* Fits the widest date ("21 Jun" = 56.6px); a fixed width is what keeps
-       dates aligned across rows, since every row is its own grid. */
     .activity-row-date {
         grid-column: 1;
         grid-row: 1;
-        width: 58px;
+        width: auto;
+        align-self: center;
     }
-    .activity-panel.is-selecting .activity-row-date {
-        grid-column: 2;
+    .activity-date-stack {
+        grid-auto-flow: column;
+        justify-content: start;
+        justify-items: start;
+        gap: 7px;
+        width: auto;
+        text-align: left;
     }
-    .activity-row-main {
-        grid-column: 2;
-        grid-row: 1;
+    .activity-date-day, .activity-date-time {
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        line-height: 1.4;
     }
-    .activity-panel.is-selecting .activity-row-main {
-        grid-column: 3;
+    .activity-date-time::before {
+        content: "·";
+        margin-right: 7px;
     }
     .activity-row-status {
-        grid-column: 3;
+        grid-column: 2;
         grid-row: 1;
+        justify-self: end;
+        align-self: center;
     }
-    .activity-panel.is-selecting .activity-row-status {
-        grid-column: 4;
-    }
-    .activity-row-actions {
+    .activity-title-read {
         grid-column: 1 / -1;
         grid-row: 2;
+    }
+    .activity-subline {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        display: flex;
+        gap: 3px 10px;
+        margin-top: 0;
+    }
+    .activity-inline-links {
+        grid-column: 1;
+        grid-row: 4;
+        align-self: center;
+        margin-top: 8px;
+    }
+    .activity-row-actions {
+        grid-column: 2;
+        grid-row: 4;
         justify-content: flex-end;
+        margin-top: 8px;
     }
     .activity-row-actions button, .activity-row-actions form, .activity-row-actions form button { flex: 0 0 auto; }
-    .activity-subline { display: flex; gap: 3px 10px; }
+    .activity-panel.is-selecting .activity-row-date,
+    .activity-panel.is-selecting .activity-inline-links {
+        grid-column: 2;
+    }
+    .activity-panel.is-selecting .activity-title-read,
+    .activity-panel.is-selecting .activity-subline {
+        grid-column: 2 / -1;
+    }
+    .activity-panel.is-selecting .activity-row-status,
+    .activity-panel.is-selecting .activity-row-actions {
+        grid-column: 3;
+    }
     .activity-pagination {
         align-items: stretch;
         flex-direction: column;
