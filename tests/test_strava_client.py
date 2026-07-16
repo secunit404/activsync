@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -505,12 +505,14 @@ def test_list_activities_between_raises_rate_limit_error_on_429(mock_get, conn):
 
     client = StravaClient(conn, "cid", "csecret")
 
+    now = datetime(2026, 7, 9, 12, 7, tzinfo=timezone.utc)
     with pytest.raises(StravaRateLimitError) as excinfo:
         client.list_activities_between(
             datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, tzinfo=timezone.utc),
+            now=now,
         )
 
-    assert excinfo.value.retry_after_seconds == 300
+    assert excinfo.value.retry_at == now + timedelta(seconds=300)
 
 
 @patch("activsync.strava_client.requests.get")
@@ -522,10 +524,11 @@ def test_find_existing_activity_raises_rate_limit_error_on_429(mock_get, conn):
 
     client = StravaClient(conn, "cid", "csecret")
 
+    now = datetime(2026, 7, 9, 12, 7, tzinfo=timezone.utc)
     with pytest.raises(StravaRateLimitError) as excinfo:
-        client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc))
+        client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
 
-    assert excinfo.value.retry_after_seconds == 42
+    assert excinfo.value.retry_at == now + timedelta(seconds=42)
 
 
 @patch("activsync.strava_client.requests.get")
@@ -537,10 +540,11 @@ def test_activity_exists_raises_rate_limit_error_on_429(mock_get, conn):
 
     client = StravaClient(conn, "cid", "csecret")
 
+    now = datetime(2026, 7, 9, 12, 7, tzinfo=timezone.utc)
     with pytest.raises(StravaRateLimitError) as excinfo:
-        client.activity_exists(9001)
+        client.activity_exists(9001, now=now)
 
-    assert excinfo.value.retry_after_seconds == 17
+    assert excinfo.value.retry_at == now + timedelta(seconds=17)
 
 
 @patch("activsync.strava_client.requests.post")
@@ -571,8 +575,8 @@ def test_rate_limit_error_falls_back_to_the_next_quarter_hour_when_no_retry_afte
     with pytest.raises(StravaRateLimitError) as excinfo:
         client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
 
-    # 12:07:30 -> next reset at 12:15:00 is 450 seconds away.
-    assert excinfo.value.retry_after_seconds == 450
+    # 12:07:30 -> the next reset boundary is 12:15:00.
+    assert excinfo.value.retry_at == datetime(2026, 7, 9, 12, 15, tzinfo=timezone.utc)
 
 
 @patch("activsync.strava_client.requests.get")
@@ -588,7 +592,7 @@ def test_rate_limit_error_ignores_an_unparseable_retry_after(mock_get, conn):
     with pytest.raises(StravaRateLimitError) as excinfo:
         client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
 
-    assert excinfo.value.retry_after_seconds == 450
+    assert excinfo.value.retry_at == datetime(2026, 7, 9, 12, 15, tzinfo=timezone.utc)
 
 
 @patch("activsync.strava_client.requests.get")
@@ -608,3 +612,46 @@ def test_list_activities_between_raises_rather_than_returning_a_partial_window(m
         client.list_activities_between(
             datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
         )
+
+
+@patch("activsync.strava_client.requests.get")
+def test_rate_limit_deadline_is_absolute_and_lands_on_the_quota_reset(mock_get, conn):
+    """The deadline must be an instant, not a duration.
+
+    A duration is only meaningful against the clock that produced it: the
+    fallback is computed when the 429 lands, but the poller applies it against
+    its (older) tick clock, so the pause used to end early — right before the
+    quota reset, guaranteeing another 429.
+    """
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=429, headers={})
+
+    client = StravaClient(conn, "cid", "csecret")
+    reset = datetime(2026, 7, 9, 12, 15, tzinfo=timezone.utc)
+
+    # However stale the clock reading, the deadline is the same instant.
+    for seconds_late in (0, 3, 59):
+        observed_at = datetime(2026, 7, 9, 12, 7, 0, tzinfo=timezone.utc) + timedelta(seconds=seconds_late)
+        with pytest.raises(StravaRateLimitError) as excinfo:
+            client.find_existing_activity(
+                datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=observed_at,
+            )
+        assert excinfo.value.retry_at == reset
+
+
+@patch("activsync.strava_client.requests.get")
+def test_rate_limit_deadline_honours_the_retry_after_header(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = MagicMock(status_code=429, headers={"Retry-After": "300"})
+
+    client = StravaClient(conn, "cid", "csecret")
+    now = datetime(2026, 7, 9, 12, 7, 0, tzinfo=timezone.utc)
+
+    with pytest.raises(StravaRateLimitError) as excinfo:
+        client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
+
+    assert excinfo.value.retry_at == now + timedelta(seconds=300)

@@ -90,11 +90,13 @@ class Poller:
         try:
             pub, status = self.run_strava_once(now)
         except StravaRateLimitError as exc:
-            self._strava_backoff_until = now + timedelta(seconds=exc.retry_after_seconds)
+            # Trust the deadline the client computed when the 429 actually
+            # landed; deriving one from `now` here would resume early, since
+            # `now` is the tick's clock and predates the request.
+            self._strava_backoff_until = exc.retry_at
             logger.warning(
-                "strava rate limit reached; pausing strava sync for %ds (until %s)",
-                int(exc.retry_after_seconds),
-                self._strava_backoff_until.isoformat(timespec="seconds"),
+                "strava rate limit reached; pausing strava sync until %s",
+                exc.retry_at.isoformat(timespec="seconds"),
             )
             return False
         except Exception:

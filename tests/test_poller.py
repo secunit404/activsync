@@ -11,6 +11,9 @@ from activsync import config, db
 from activsync.poller import Poller
 from activsync.strava_client import StravaRateLimitError
 
+# Every rate-limit test ticks forward from this instant.
+RATE_LIMIT_START = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+
 
 @pytest.fixture
 def conn(tmp_path):
@@ -206,7 +209,7 @@ def test_poller_stops_calling_strava_while_rate_limited(conn, monkeypatch):
 
     def rate_limited(*args, **kwargs):
         calls["n"] += 1
-        raise StravaRateLimitError("rate limited", retry_after_seconds=600)
+        raise StravaRateLimitError("rate limited", retry_at=RATE_LIMIT_START + timedelta(minutes=10))
 
     monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
     monkeypatch.setattr("activsync.poller.sync.publish_pending", rate_limited)
@@ -218,7 +221,7 @@ def test_poller_stops_calling_strava_while_rate_limited(conn, monkeypatch):
         strava_interval_seconds_override=0,
     )
 
-    start = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    start = RATE_LIMIT_START
     poller._loop_once(start)
     assert calls["n"] == 1
 
@@ -235,7 +238,7 @@ def test_poller_resumes_strava_after_the_backoff_expires(conn, monkeypatch):
     def rate_limited_once(*args, **kwargs):
         calls["n"] += 1
         if calls["n"] == 1:
-            raise StravaRateLimitError("rate limited", retry_after_seconds=600)
+            raise StravaRateLimitError("rate limited", retry_at=RATE_LIMIT_START + timedelta(minutes=10))
         return SimpleNamespace(published=0, failed=0)
 
     monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
@@ -248,7 +251,7 @@ def test_poller_resumes_strava_after_the_backoff_expires(conn, monkeypatch):
         strava_interval_seconds_override=0,
     )
 
-    start = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    start = RATE_LIMIT_START
     poller._loop_once(start)
     poller._loop_once(start + timedelta(minutes=5))
     assert calls["n"] == 1
@@ -268,7 +271,7 @@ def test_poller_rate_limit_does_not_block_garmin_sync(conn, monkeypatch):
     )
     monkeypatch.setattr(
         "activsync.poller.sync.publish_pending",
-        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_after_seconds=600)),
+        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_at=RATE_LIMIT_START + timedelta(minutes=10))),
     )
     monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
 
@@ -278,7 +281,7 @@ def test_poller_rate_limit_does_not_block_garmin_sync(conn, monkeypatch):
         strava_interval_seconds_override=0,
     )
 
-    start = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    start = RATE_LIMIT_START
     poller._loop_once(start)
     poller._loop_once(start + timedelta(minutes=1))
 
@@ -293,7 +296,7 @@ def test_poller_logs_rate_limit_as_a_warning_without_a_traceback(conn, monkeypat
     monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
     monkeypatch.setattr(
         "activsync.poller.sync.publish_pending",
-        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_after_seconds=600)),
+        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_at=RATE_LIMIT_START + timedelta(minutes=10))),
     )
     monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
 
@@ -310,3 +313,28 @@ def test_poller_logs_rate_limit_as_a_warning_without_a_traceback(conn, monkeypat
     assert records, "rate limiting was not logged at all"
     assert all(r.levelno <= logging.WARNING for r in records)
     assert all(r.exc_info is None for r in records)
+
+
+def test_poller_honours_the_deadline_verbatim_rather_than_deriving_one(conn, monkeypatch):
+    """Regression: the pause must end when the client said, not at
+    tick-now + duration. The tick clock predates the request that got the 429,
+    so deriving a deadline here ended the pause early — seconds before the
+    quota reset, which just earned another 429."""
+    _strava_ready(conn)
+    deadline = datetime(2026, 7, 14, 12, 15, tzinfo=timezone.utc)
+
+    monkeypatch.setattr("activsync.poller.sync.sync_garmin", lambda *a, **k: SimpleNamespace(new=0, updated=0, removed=0))
+    monkeypatch.setattr(
+        "activsync.poller.sync.publish_pending",
+        MagicMock(side_effect=StravaRateLimitError("rate limited", retry_at=deadline)),
+    )
+    monkeypatch.setattr("activsync.poller.sync.check_strava_status", lambda *a, **k: SimpleNamespace(flagged_missing=0, linked_existing=0))
+
+    poller = Poller(
+        conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=100000,
+        strava_interval_seconds_override=0,
+    )
+    poller._loop_once(datetime(2026, 7, 14, 12, 13, 30, tzinfo=timezone.utc))
+
+    assert poller._strava_backoff_until == deadline
