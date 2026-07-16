@@ -9,7 +9,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from activsync import config, db, events, sync
+from activsync import config, db, events, logging_setup, sync
 from activsync.garmin_client import GarminClient
 from activsync.strava_client import StravaClient, StravaRateLimitError
 
@@ -90,11 +90,13 @@ class Poller:
         try:
             pub, status = self.run_strava_once(now)
         except StravaRateLimitError as exc:
-            self._strava_backoff_until = now + timedelta(seconds=exc.retry_after_seconds)
+            # Trust the deadline the client computed when the 429 actually
+            # landed; deriving one from `now` here would resume early, since
+            # `now` is the tick's clock and predates the request.
+            self._strava_backoff_until = exc.retry_at
             logger.warning(
-                "strava rate limit reached; pausing strava sync for %ds (until %s)",
-                int(exc.retry_after_seconds),
-                self._strava_backoff_until.isoformat(timespec="seconds"),
+                "strava rate limit reached; pausing strava sync until %s",
+                logging_setup.format_log_time(exc.retry_at),
             )
             return False
         except Exception:

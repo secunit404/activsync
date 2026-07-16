@@ -201,3 +201,24 @@ def test_configure_logging_silences_static_assets_end_to_end(capsys):
     out = capsys.readouterr().out
     assert "/static/css/base.css" not in out
     assert '"GET / HTTP/1.1" 200' in out
+
+
+def test_format_log_time_matches_the_timestamp_prefix_timezone():
+    """Times embedded in a message must read in the same zone as the line's own
+    timestamp — a UTC instant next to a CEST prefix looks like the past."""
+    logging_setup.set_log_timezone("Europe/Stockholm")
+    instant = datetime(2026, 7, 16, 20, 15, tzinfo=timezone.utc)
+
+    assert logging_setup.format_log_time(instant) == "2026-07-16 22:15:00 CEST"
+
+
+def test_format_log_time_follows_the_configured_timezone():
+    instant = datetime(2026, 7, 16, 20, 15, tzinfo=timezone.utc)
+
+    logging_setup.set_log_timezone("UTC")
+    assert logging_setup.format_log_time(instant).startswith("2026-07-16 20:15:00")
+
+    logging_setup.set_log_timezone("Asia/Tokyo")
+    assert logging_setup.format_log_time(instant).startswith("2026-07-17 05:15:00")
+
+    logging_setup.set_log_timezone("Europe/Stockholm")

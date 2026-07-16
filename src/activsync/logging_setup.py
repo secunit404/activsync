@@ -36,6 +36,18 @@ def _current_tz() -> ZoneInfo:
         return _log_tz
 
 
+_TIME_FORMAT = "%Y-%m-%d %H:%M:%S %Z"
+
+
+def format_log_time(dt: datetime) -> str:
+    """Render an instant the way this module renders a line's own timestamp.
+
+    Use this for any time embedded in a message: a raw UTC instant sitting next
+    to a local-time prefix reads as the wrong time entirely.
+    """
+    return dt.astimezone(_current_tz()).strftime(_TIME_FORMAT)
+
+
 # uvicorn's lifecycle logger is named "uvicorn.error" but carries ordinary
 # startup and shutdown messages, so the last-segment rule below would label a
 # clean boot "error". It can't be "server" — activsync.server owns that.
@@ -56,7 +68,7 @@ class LocalTimeFormatter(logging.Formatter):
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         dt = datetime.fromtimestamp(record.created, tz=_current_tz())
-        return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S %Z")
+        return dt.strftime(datefmt or _TIME_FORMAT)
 
 
 _LOG_FORMAT = "%(asctime)s  %(levelname)-7s %(component)-8s %(message)s"

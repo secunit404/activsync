@@ -51,13 +51,19 @@ class StravaWindowIncompleteError(Exception):
 class StravaRateLimitError(Exception):
     """Raised when Strava returns 429.
 
-    Carries how long the caller should wait so the poller can sit the window
+    Carries the instant the caller may retry, so the poller can sit the window
     out rather than spending every tick re-hitting an exhausted quota.
+
+    Deliberately an absolute instant rather than a duration: a duration is only
+    meaningful against the clock that produced it. This is raised when the 429
+    lands, but the poller applies it against its older tick clock, so passing
+    seconds across that gap ends the pause early — right before the quota
+    resets, which just earns another 429.
     """
 
-    def __init__(self, message: str, retry_after_seconds: float):
+    def __init__(self, message: str, retry_at: datetime):
         super().__init__(message)
-        self.retry_after_seconds = retry_after_seconds
+        self.retry_at = retry_at
 
 
 def _seconds_until_quota_reset(now: datetime) -> float:
@@ -87,8 +93,10 @@ def _raise_if_rate_limited(response, now: datetime | None = None) -> None:
     if retry_after is None:
         retry_after = _seconds_until_quota_reset(now)
 
+    retry_at = now + timedelta(seconds=retry_after)
     raise StravaRateLimitError(
-        f"Strava rate limit reached; retry in {int(retry_after)}s", retry_after
+        f"Strava rate limit reached; retry at {retry_at.isoformat(timespec='seconds')}",
+        retry_at,
     )
 
 
