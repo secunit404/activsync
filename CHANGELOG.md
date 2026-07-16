@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/secunit404/activsync/compare/v1.1.2...v1.2.0) (2026-07-16)
+
+
+### Features
+
+* rework the mobile activity row and move the stylesheet into static/css ([#21](https://github.com/secunit404/activsync/issues/21)) ([f1276b8](https://github.com/secunit404/activsync/commit/f1276b839ea6a504aff7f69d849cbc3e87517172))
+
 ## [1.1.2](https://github.com/secunit404/activsync/compare/v1.1.1...v1.1.2) (2026-07-16)
 
 
