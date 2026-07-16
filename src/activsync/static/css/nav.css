@@ -76,87 +76,87 @@
 
 @media (max-width: 740px) {
     .top-nav {
-            position: relative;
-            flex: 0 0 auto;
-            justify-content: flex-end;
-        }
+        position: relative;
+        flex: 0 0 auto;
+        justify-content: flex-end;
+    }
     .header-actions {
-            align-items: flex-start;
-            gap: 6px;
-        }
+        align-items: flex-start;
+        gap: 6px;
+    }
     .mobile-theme-toggle {
-            display: inline-flex;
-            flex: 0 0 auto;
-        }
+        display: inline-flex;
+        flex: 0 0 auto;
+    }
     .nav-menu-items .theme-toggle {
-            display: none;
-        }
+        display: none;
+    }
     .nav-toggle-label {
-            display: inline-flex;
-            min-height: 44px;
-            min-width: 44px;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            background: var(--surface);
-            color: var(--ink);
-            cursor: pointer;
-            font-weight: 650;
-            padding: 10px 12px;
-            user-select: none;
-        }
+        display: inline-flex;
+        min-height: 44px;
+        min-width: 44px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 650;
+        padding: 10px 12px;
+        user-select: none;
+    }
     .nav-toggle-label:hover {
-            border-color: var(--border-strong);
-            background: var(--surface-2);
-        }
+        border-color: var(--border-strong);
+        background: var(--surface-2);
+    }
     .nav-menu-items {
-            display: none;
-            position: absolute;
-            top: calc(100% + 8px);
-            right: 0;
-            z-index: 10;
-            width: min(240px, calc(100vw - 24px));
-            border: 1px solid var(--border-strong);
-            border-radius: var(--radius);
-            background: var(--surface);
-            box-shadow: var(--shadow-modal);
-            padding: 6px;
-        }
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 10;
+        width: min(240px, calc(100vw - 24px));
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow-modal);
+        padding: 6px;
+    }
     .nav-toggle:checked ~ .nav-menu-items {
-            display: grid;
-            grid-template-columns: 1fr;
-            justify-items: stretch;
-            gap: 2px;
-        }
+        display: grid;
+        grid-template-columns: 1fr;
+        justify-items: stretch;
+        gap: 2px;
+    }
     .nav-menu-items .button-link, .nav-menu-items form, .nav-menu-items button { width: 100%; }
     .nav-menu-items .button-link, .nav-menu-items button {
-            justify-content: flex-start;
-            min-height: 42px;
-            border-color: transparent;
-            background: transparent;
-            color: var(--ink);
-            font-weight: 600;
-        }
+        justify-content: flex-start;
+        min-height: 42px;
+        border-color: transparent;
+        background: transparent;
+        color: var(--ink);
+        font-weight: 600;
+    }
     .nav-menu-items .button-link:hover, .nav-menu-items button:hover {
-            border-color: transparent;
-            background: var(--surface-2);
-        }
+        border-color: transparent;
+        background: var(--surface-2);
+    }
     .nav-menu-items .button-link, .nav-menu-items .button-link:hover {
-            border-color: transparent;
-            background: transparent;
-        }
+        border-color: transparent;
+        background: transparent;
+    }
     .nav-menu-items .theme-toggle, .nav-menu-items .theme-toggle:hover {
-            justify-content: center;
-            border-color: transparent;
-            background: transparent;
-            color: var(--muted);
-        }
+        justify-content: center;
+        border-color: transparent;
+        background: transparent;
+        color: var(--muted);
+    }
     .nav-menu-items form {
-            margin-top: 2px;
-            padding-top: 4px;
-            border-top: 1px solid var(--border);
-        }
+        margin-top: 2px;
+        padding-top: 4px;
+        border-top: 1px solid var(--border);
+    }
     .nav-menu-items form button { color: var(--muted); }
 }

@@ -129,10 +129,10 @@
 @media (max-width: 740px) {
     .app-shell { padding-inline: 12px; }
     .page-header {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-        }
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    }
     .panel-body { padding: 14px; }
     .auth-card { margin-top: 10vh; }
 }

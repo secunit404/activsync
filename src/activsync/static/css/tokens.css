@@ -87,38 +87,38 @@
 
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-            color-scheme: dark;
-            --bg: #151a21;
-            --surface: #1c232b;
-            --surface-2: #252e38;
-            --surface-3: #2e3945;
-            --field: #11161c;
-            --field-border: #3e4b59;
-            --ink: #f3f6f8;
-            --muted: #a7b2bd;
-            --border: #303b47;
-            --border-strong: #465462;
-            --accent: #f06432;
-            --accent-ink: #ff9a72;
-            --garmin: #63b8ee;
-            --garmin-action-ink: #15212b;
-            --green-action-ink: #15212b;
-            --focus-ring: #73818d;
-            --brand-sync: #f26b38;
-            --st-green: #58d395;
-            --st-blue: #75aafa;
-            --st-amber: #e5b04c;
-            --st-gray: #9ca8b3;
-            --st-red: #ff806d;
-            --green-bg: #193a2a; --green-ink: #7bdfa7;
-            --blue-bg: #1c3150; --blue-ink: #98c0ff;
-            --yellow-bg: #3c3018; --yellow-ink: #f0c767;
-            --red-bg: #40231f; --red-ink: #ffa391;
-            --gray-bg: #232c35;
-            --scrim: rgba(0, 0, 0, 0.55);
-            --shadow: 0 1px 0 rgba(0, 0, 0, 0.32);
-            --shadow-modal: 0 28px 70px rgba(0, 0, 0, 0.48);
-        }
+        color-scheme: dark;
+        --bg: #151a21;
+        --surface: #1c232b;
+        --surface-2: #252e38;
+        --surface-3: #2e3945;
+        --field: #11161c;
+        --field-border: #3e4b59;
+        --ink: #f3f6f8;
+        --muted: #a7b2bd;
+        --border: #303b47;
+        --border-strong: #465462;
+        --accent: #f06432;
+        --accent-ink: #ff9a72;
+        --garmin: #63b8ee;
+        --garmin-action-ink: #15212b;
+        --green-action-ink: #15212b;
+        --focus-ring: #73818d;
+        --brand-sync: #f26b38;
+        --st-green: #58d395;
+        --st-blue: #75aafa;
+        --st-amber: #e5b04c;
+        --st-gray: #9ca8b3;
+        --st-red: #ff806d;
+        --green-bg: #193a2a; --green-ink: #7bdfa7;
+        --blue-bg: #1c3150; --blue-ink: #98c0ff;
+        --yellow-bg: #3c3018; --yellow-ink: #f0c767;
+        --red-bg: #40231f; --red-ink: #ffa391;
+        --gray-bg: #232c35;
+        --scrim: rgba(0, 0, 0, 0.55);
+        --shadow: 0 1px 0 rgba(0, 0, 0, 0.32);
+        --shadow-modal: 0 28px 70px rgba(0, 0, 0, 0.48);
+    }
     :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
     :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
 }

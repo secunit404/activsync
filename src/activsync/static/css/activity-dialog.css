@@ -274,46 +274,46 @@
     /* Too narrow to sit beside the badge and pills without wrapping the
        kicker mid-text, so give each its own row. */
     .activity-dialog-meta {
-            align-items: center;
-            flex-wrap: wrap;
-            row-gap: 8px;
-        }
+        align-items: center;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
     .dialog-kicker {
-            flex: 1 1 100%;
-        }
+        flex: 1 1 100%;
+    }
     .activity-dialog-meta-actions {
-            justify-content: flex-start;
-            flex-basis: 100%;
-        }
+        justify-content: flex-start;
+        flex-basis: 100%;
+    }
     .activity-dialog {
-            width: 100%;
-            max-width: none;
-            max-height: calc(100dvh - 12px);
-            margin: auto 0 0;
-            border-radius: 10px 10px 0 0;
-        }
+        width: 100%;
+        max-width: none;
+        max-height: calc(100dvh - 12px);
+        margin: auto 0 0;
+        border-radius: 10px 10px 0 0;
+    }
     .activity-dialog-card {
-            max-height: calc(100dvh - 12px);
-            border-radius: 10px 10px 0 0;
-            padding: 20px 16px max(20px, env(safe-area-inset-bottom));
-        }
+        max-height: calc(100dvh - 12px);
+        border-radius: 10px 10px 0 0;
+        padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+    }
     .detail-metric-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
     .detail-metric-grid > div { padding: 7px; }
     .detail-metric-grid strong { font-size: 0.9rem; }
     .drawer-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-            position: sticky;
-            bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
-            z-index: 2;
-            margin: 0 -16px calc(-1 * max(20px, env(safe-area-inset-bottom)));
-            border-top: 1px solid var(--border);
-            background: var(--surface);
-            padding: 12px 16px max(20px, env(safe-area-inset-bottom));
-        }
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        position: sticky;
+        bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
+        z-index: 2;
+        margin: 0 -16px calc(-1 * max(20px, env(safe-area-inset-bottom)));
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        padding: 12px 16px max(20px, env(safe-area-inset-bottom));
+    }
     .drawer-actions form, .drawer-actions button { width: 100%; }
     .drawer-actions .publish-action { grid-column: 1 / -1; }
 }

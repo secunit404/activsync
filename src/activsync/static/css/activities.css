@@ -380,90 +380,90 @@
 
 @media (hover: hover) {
     .activity-row:hover {
-            border-color: var(--border-strong);
-            background: var(--surface-2);
-        }
+        border-color: var(--border-strong);
+        background: var(--surface-2);
+    }
 }
 
 @media (max-width: 740px) {
     .activity-toolbar { margin-inline: -12px; padding-inline: 12px; }
     .activity-view-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px 10px;
-            width: 100%;
-            margin-left: 0;
-        }
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 10px;
+        width: 100%;
+        margin-left: 0;
+    }
     .select-multiple-button {
-            grid-column: 1 / -1;
-            justify-self: start;
-        }
+        grid-column: 1 / -1;
+        justify-self: start;
+    }
     .activity-sort-control {
-            display: grid;
-            gap: 4px;
-            width: 100%;
-            margin-left: 0;
-        }
+        display: grid;
+        gap: 4px;
+        width: 100%;
+        margin-left: 0;
+    }
     .activity-sort-control select { width: 100%; }
     /* Date column sizes to .activity-row-date rather than a floor of its own:
        a 76px floor against a 64px box just wasted 12px before the title. */
     .activity-row {
-            grid-template-columns: auto minmax(0, 1fr) auto;
-            gap: 10px;
-            align-items: start;
-            padding: 12px;
-        }
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: start;
+        padding: 12px;
+    }
     .activity-panel.is-selecting .activity-row {
-            grid-template-columns: 24px auto minmax(0, 1fr) auto;
-        }
+        grid-template-columns: 24px auto minmax(0, 1fr) auto;
+    }
     .activity-row-select {
-            grid-column: 1;
-            grid-row: 1;
-            padding-top: 2px;
-        }
+        grid-column: 1;
+        grid-row: 1;
+        padding-top: 2px;
+    }
     .activity-panel.is-selecting .activity-row-select {
-            display: flex;
-        }
+        display: flex;
+    }
     /* Fits the widest date ("21 Jun" = 56.6px); a fixed width is what keeps
        dates aligned across rows, since every row is its own grid. */
     .activity-row-date {
-            grid-column: 1;
-            grid-row: 1;
-            width: 58px;
-        }
+        grid-column: 1;
+        grid-row: 1;
+        width: 58px;
+    }
     .activity-panel.is-selecting .activity-row-date {
-            grid-column: 2;
-        }
+        grid-column: 2;
+    }
     .activity-row-main {
-            grid-column: 2;
-            grid-row: 1;
-        }
+        grid-column: 2;
+        grid-row: 1;
+    }
     .activity-panel.is-selecting .activity-row-main {
-            grid-column: 3;
-        }
+        grid-column: 3;
+    }
     .activity-row-status {
-            grid-column: 3;
-            grid-row: 1;
-        }
+        grid-column: 3;
+        grid-row: 1;
+    }
     .activity-panel.is-selecting .activity-row-status {
-            grid-column: 4;
-        }
+        grid-column: 4;
+    }
     .activity-row-actions {
-            grid-column: 1 / -1;
-            grid-row: 2;
-            justify-content: flex-end;
-        }
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-content: flex-end;
+    }
     .activity-row-actions button, .activity-row-actions form, .activity-row-actions form button { flex: 0 0 auto; }
     .activity-subline { display: flex; gap: 3px 10px; }
     .activity-pagination {
-            align-items: stretch;
-            flex-direction: column;
-        }
+        align-items: stretch;
+        flex-direction: column;
+    }
     .activity-pagination-summary-group {
-            justify-content: flex-start;
-        }
+        justify-content: flex-start;
+    }
     .activity-pagination-links {
-            justify-content: space-between;
-            flex-wrap: wrap;
-        }
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
 }
