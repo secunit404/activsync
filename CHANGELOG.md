@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/secunit404/activsync/compare/v1.1.1...v1.1.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* correct mobile layout issues in settings and activity detail ([#19](https://github.com/secunit404/activsync/issues/19)) ([4dbda62](https://github.com/secunit404/activsync/commit/4dbda62a679badc1c47dfd1bfa1c1e464b8a15d2))
+
 ## [1.1.1](https://github.com/secunit404/activsync/compare/v1.1.0...v1.1.1) (2026-07-16)
 
 
