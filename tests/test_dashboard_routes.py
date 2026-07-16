@@ -52,9 +52,23 @@ def test_dashboard_redirects_to_setup_before_setup(tmp_path):
     assert setup.status_code == 200
     assert "ActivSync" in setup.text
     assert 'class="brand-activ">Activ</span><span class="brand-sync">Sync</span>' in setup.text
-    assert ".brand-activ { color: var(--garmin); }" in setup.text
     assert "garmin2strava" not in setup.text
     assert "Connect Garmin" in setup.text
+
+
+def test_pages_link_a_stylesheet_that_is_actually_served(tmp_path):
+    """The CSS lives in static/, so a page can look fine in tests while the
+    real deploy ships no stylesheet at all: fetch it, don't just link it."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    page = client.get("/setup")
+    assert '<link rel="stylesheet" href="/static/css/app.css?v=' in page.text
+
+    stylesheet = client.get("/static/css/app.css")
+    assert stylesheet.status_code == 200
+    assert ".brand-activ { color: var(--garmin); }" in stylesheet.text
+    assert "garmin2strava" not in stylesheet.text
 
 
 def test_setup_strava_step_shows_the_callback_domain_to_register(tmp_path):
