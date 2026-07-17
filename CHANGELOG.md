@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.3](https://github.com/secunit404/activsync/compare/v1.2.2...v1.2.3) (2026-07-17)
+
+
+### Bug Fixes
+
+* improve settings feedback and activity dialog UI ([#30](https://github.com/secunit404/activsync/issues/30)) ([e4fccb8](https://github.com/secunit404/activsync/commit/e4fccb8dd9f46f04fa3bf13da81fdb3c964a5f81))
+
+
+### Code Refactoring
+
+* activities UI refresh — selection, manual sync, connections ([#32](https://github.com/secunit404/activsync/issues/32)) ([88026bd](https://github.com/secunit404/activsync/commit/88026bddf8700756082ecebf8722041a08e65a3b))
+
 ## [1.2.2](https://github.com/secunit404/activsync/compare/v1.2.1...v1.2.2) (2026-07-16)
 
 
