@@ -254,6 +254,17 @@
     text-transform: uppercase;
 }
 
+/* Matches .dialog-link: no underline on hover, fade instead. The colour is the
+   affordance; base.css's a:hover underline just adds noise under a mono token. */
+.activity-inline-link:hover {
+    text-decoration: none;
+    opacity: 0.7;
+}
+
+.activity-inline-link {
+    transition: opacity 0.15s ease;
+}
+
 .activity-inline-link[href*="strava"] { color: var(--accent-ink); }
 
 .activity-row-status {

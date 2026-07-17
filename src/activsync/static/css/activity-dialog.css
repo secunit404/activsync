@@ -65,7 +65,7 @@
 /* One line, always. The timestamp leads because it is fixed-width, so the line
    starts in the same column on every activity; the activity type has no bound,
    so it takes what is left and truncates rather than wrapping. Wrapping here
-   grew the row and pushed the badge and pills down with it, which is the whole
+   grew the row and pushed the badge and links down with it, which is the whole
    reason this is nowrap — the full text stays available via the title attr. */
 .dialog-kicker {
     min-width: 0;
@@ -89,7 +89,9 @@
     gap: 6px 10px;
 }
 
-/* Match the link pills so badge and pills share one centre line. */
+/* The badge is the tallest thing on this row now that the links are plain
+   text, so it sets the row's height. Pin it: the row then measures the same on
+   every activity instead of tracking whatever is in it. */
 .activity-dialog-meta-actions .badge { min-height: 30px; }
 
 .activity-dialog-title {
@@ -116,36 +118,32 @@
     font-size: 0.92rem;
 }
 
-.link-pill {
+/* A text link, not a button: no box. It carries the service's colour, which is
+   the affordance — a border and fill around it only competed with the badge
+   next to it for the same attention. */
+.dialog-link {
     display: inline-flex;
-    min-height: 30px;
     align-items: center;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
     color: var(--garmin);
     font-family: var(--mono);
-    padding: 4px 9px;
     font-size: 0.76rem;
     font-weight: 600;
     letter-spacing: 0.03em;
     line-height: 1.2;
     white-space: nowrap;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition: opacity 0.15s ease;
 }
 
-/* This is a button-shaped link, so it hovers like a button — border and
-   background, same as buttons.css does. It had no hover rule at all, which
-   left it with the global a:hover underline from base.css: the right
-   affordance for a text link (the ones in the activity rows), the wrong one
-   for a bordered pill. Colour stays put so Garmin/Strava keep their identity. */
-.link-pill:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-2);
+/* base.css underlines links on hover. Fade these instead: an underline under a
+   mono, brand-coloured token reads as noise, and the colour is already doing
+   the work. Kept in step with .activity-inline-link, which is the same idea in
+   the activity rows. */
+.dialog-link:hover {
     text-decoration: none;
+    opacity: 0.7;
 }
 
-.link-pill[href*="strava"] { color: var(--accent-ink); }
+.dialog-link[href*="strava"] { color: var(--accent-ink); }
 
 .metadata-form { display: none; }
 
@@ -295,7 +293,7 @@
 }
 
 @media (max-width: 740px) {
-    /* Too narrow to sit beside the badge and pills, so give each its own row.
+    /* Too narrow to sit beside the badge and links, so give each its own row.
        The kicker keeps the base nowrap/ellipsis: letting it wrap here would
        drop the activity type onto a line of its own, away from the timestamp
        it belongs with, which is exactly what the one-line rule is for. */
@@ -311,7 +309,7 @@
         justify-content: flex-start;
         flex-basis: 100%;
     }
-    /* The badge trails the pills on desktop so it lands on the row's right
+    /* The badge trails the links on desktop so it lands on the row's right
        edge, a fixed point the eye can return to. This row is left-aligned, so
        there is no such edge to hold — trailing would just leave the status
        adrift after the links. Lead with it instead. */

@@ -41,8 +41,8 @@ def seed(conn: sqlite3.Connection) -> None:
         # The taxonomy's longest type key. Every other sample here is short
         # enough to flatter the layout; the detail dialog only shows what it
         # does with a long category if something actually has one.
-        # Published, so both link pills render: the longest key and the widest
-        # actions row are the same worst case the header has to survive.
+        # Published, so both service links render: the longest key and the
+        # widest actions row are the same worst case the header has to survive.
         ("backcountry_skiing_snowboarding_ws", "Backcountry day", "Skinned up, rode down.",
          5 * 3600 + 20 * 60, 9_400, "published"),
     ]
