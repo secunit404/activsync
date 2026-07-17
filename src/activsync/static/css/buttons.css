@@ -101,6 +101,14 @@ button.htmx-request .button-loading, button[aria-busy="true"] .button-loading { 
     animation: activsync-spin 0.7s linear infinite;
 }
 
+/* Publishing keeps the compact resting width of its button. The busy label
+   is deliberately smaller so the spinner and status still fit that width. */
+.publish-selected-button .button-loading,
+.publish-action .button-loading {
+    gap: 4px;
+    font-size: 0.65rem;
+}
+
 @keyframes activsync-spin { to { transform: rotate(360deg); } }
 
 /* A button that swaps its resting label for another state — busy, or saved —
@@ -152,4 +160,3 @@ button.htmx-request .button-loading, button[aria-busy="true"] .button-loading { 
 @media (prefers-reduced-motion: reduce) {
     .button-check { animation: none; }
 }
-

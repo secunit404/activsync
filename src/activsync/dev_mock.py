@@ -32,6 +32,9 @@ from activsync.garmin_client import MfaRequired
 
 MFA_TRIGGER_PASSWORD = "mfa"
 MFA_REJECT_CODE = "000000"
+# Keep the local publish request on screen long enough to exercise the button's
+# busy state. This fake is only wired in when mock mode is enabled.
+DEV_PUBLISH_DELAY_SECONDS = 1.0
 
 # Garmin's activity-type taxonomy, taken from a real account. Dev used to show
 # a hand-picked 16, which is a size at which the picker lies to you: the search
@@ -320,6 +323,7 @@ class FakeStravaClient:
         name: str | None = None,
         description: str | None = None,
     ) -> int:
+        time.sleep(DEV_PUBLISH_DELAY_SECONDS)
         return 9_000_000 + int(garmin_activity_id)
 
     def update_activity_metadata(

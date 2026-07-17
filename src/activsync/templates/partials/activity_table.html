@@ -27,6 +27,7 @@
             <button class="primary-action publish-selected-button" hx-post="/api/sync/strava/publish"
                     hx-target="#activity-table" hx-swap="outerHTML"
                     hx-include="[name='activity_ids']:checked"
+                    hx-disabled-elt="this"
                     hx-on::before-request="this.setAttribute('aria-busy','true')"
                     data-connections-broken="{{ 'true' if connections.broken else 'false' }}"
                     disabled
@@ -118,12 +119,22 @@
                 </div>
                 <div class="activity-row-actions">
                     {% if activity.publish_status in ("held", "pending") %}
-                    <form class="inline" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
-                        <button type="submit" class="primary-action">Publish</button>
+                    <form class="inline publish-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML"
+                          hx-on::before-request="var b=this.querySelector('button');if(b){b.disabled=true;b.setAttribute('aria-busy','true')}"
+                          hx-on::after-request="if(!event.detail.successful){var b=this.querySelector('button');if(b){b.disabled=false;b.removeAttribute('aria-busy')}}">
+                        <button type="submit" class="primary-action">
+                            <span class="button-label">Publish</span>
+                            <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
+                        </button>
                     </form>
                     {% elif activity.publish_status == "missing" %}
-                    <form class="inline" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
-                        <button type="submit" class="primary-action">Republish</button>
+                    <form class="inline publish-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML"
+                          hx-on::before-request="var b=this.querySelector('button');if(b){b.disabled=true;b.setAttribute('aria-busy','true')}"
+                          hx-on::after-request="if(!event.detail.successful){var b=this.querySelector('button');if(b){b.disabled=false;b.removeAttribute('aria-busy')}}">
+                        <button type="submit" class="primary-action">
+                            <span class="button-label">Republish</span>
+                            <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
+                        </button>
                     </form>
                     {% endif %}
                     <button type="button" class="details-button" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" onclick="document.getElementById('{{ dialog_id }}').showModal()">Details</button>
@@ -227,8 +238,13 @@
                             </form>
                             {% endif %}
                             {% if activity.publish_status in ("held", "pending", "missing") %}
-                                <form class="inline dialog-state-action publish-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML">
-                                <button type="submit" class="primary-action">{{ "Republish" if activity.publish_status == "missing" else "Publish" }}</button>
+                                <form class="inline dialog-state-action publish-action" hx-post="/api/activities/{{ activity.garmin_activity_id }}/publish" hx-target="#activity-table" hx-swap="outerHTML"
+                                      hx-on::before-request="var b=this.querySelector('button');if(b){b.disabled=true;b.setAttribute('aria-busy','true')}"
+                                      hx-on::after-request="if(!event.detail.successful){var b=this.querySelector('button');if(b){b.disabled=false;b.removeAttribute('aria-busy')}}">
+                                <button type="submit" class="primary-action">
+                                    <span class="button-label">{{ "Republish" if activity.publish_status == "missing" else "Publish" }}</span>
+                                    <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
+                                </button>
                             </form>
                             {% endif %}
                         </footer>

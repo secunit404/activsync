@@ -98,6 +98,15 @@ def test_publish_pending_runs_end_to_end_against_the_fakes(conn):
     assert db.get_activity(conn, 5)["publish_status"] == "published"
 
 
+def test_fake_publish_keeps_the_dev_request_visible(monkeypatch, conn):
+    sleep = MagicMock()
+    monkeypatch.setattr(dev_mock.time, "sleep", sleep)
+
+    dev_mock.FakeStravaClient(conn).publish(5, b"")
+
+    sleep.assert_called_once_with(dev_mock.DEV_PUBLISH_DELAY_SECONDS)
+
+
 def test_fake_garmin_derives_activity_types_exactly_as_the_real_client_does(conn):
     """The fake ships keys and derives labels; the real client derives them from
     what Garmin sends. Run the real derivation over the same keys: if the two
