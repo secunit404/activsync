@@ -299,6 +299,13 @@
         justify-content: flex-start;
         flex-basis: 100%;
     }
+    /* The badge trails the pills on desktop so it lands on the row's right
+       edge, a fixed point the eye can return to. This row is left-aligned, so
+       there is no such edge to hold — trailing would just leave the status
+       adrift after the links. Lead with it instead. */
+    .activity-dialog-meta-actions .badge {
+        order: -1;
+    }
     .activity-dialog {
         width: 100%;
         max-width: none;

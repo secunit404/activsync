@@ -728,3 +728,26 @@ def test_activity_dialog_kicker_keeps_its_full_text_reachable(tmp_path):
 
     assert ('<p class="dialog-kicker" '
             'title="2026-07-09 11:00 · backcountry_skiing_snowboarding_ws">') in response.text
+
+
+def test_activity_dialog_puts_the_status_badge_after_the_links(tmp_path):
+    """Desktop right-aligns this row, so the last item lands on the row's right
+    edge. The badge goes there because it is what gets scanned for, and it holds
+    that edge whether or not the Strava pill is present — the links vary, the
+    anchor should not."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 13, "running", "Morning Run", "", "2026-07-09 09:00:00", "h13",
+                       "published", now)
+
+    response = client.get("/")
+
+    actions = re.search(
+        r'<div class="activity-dialog-meta-actions">(.*?)</div>\s*</div>',
+        response.text, re.S,
+    )
+    assert actions, "activity dialog is missing its meta actions row"
+    body = actions.group(1)
+    assert body.index("activity-card-links") < body.index("badge-published"), (
+        "the badge must come last so it lands on the right edge"
+    )
