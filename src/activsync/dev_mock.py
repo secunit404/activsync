@@ -33,11 +33,179 @@ from activsync.garmin_client import MfaRequired
 MFA_TRIGGER_PASSWORD = "mfa"
 MFA_REJECT_CODE = "000000"
 
-_FALLBACK_ACTIVITY_TYPES = [
-    {"type_key": "running", "label": "Running"},
-    {"type_key": "cycling", "label": "Cycling"},
-    {"type_key": "walking", "label": "Walking"},
-]
+# Garmin's activity-type taxonomy, taken from a real account. Dev used to show
+# a hand-picked 16, which is a size at which the picker lies to you: the search
+# box, the "Show all" collapse and the bulk select/clear actions all only earn
+# their keep against the ~150 categories production actually renders.
+#
+# Keys only — GarminClient.fetch_activity_types derives every label from the key
+# and sorts by it, and garmin_activity_types below derives them the same way. A dev
+# list of pre-written labels could drift from what production renders; a list of
+# keys run through the same derivation cannot.
+GARMIN_ACTIVITY_TYPE_KEYS = (
+    "american_football",
+    "apnea_diving",
+    "apnea_hunting",
+    "archery",
+    "assistance",
+    "atv_v2",
+    "auto_racing",
+    "backcountry_skiing",
+    "backcountry_skiing_snowboarding_ws",
+    "backcountry_snowboarding",
+    "badminton",
+    "baseball",
+    "basketball",
+    "biketoruntransition_v2",
+    "bmx",
+    "boating_v2",
+    "bouldering",
+    "boxing",
+    "breathwork",
+    "casual_walking",
+    "ccr_diving",
+    "cricket",
+    "cross_country_indoor_skiing",
+    "cross_country_skiing_ws",
+    "cycling",
+    "cyclocross",
+    "dance",
+    "disc_golf",
+    "diving",
+    "downhill_biking",
+    "driving_general",
+    "e_bike_fitness",
+    "e_bike_mountain",
+    "e_enduro_mtb",
+    "e_sport",
+    "elliptical",
+    "enduro_mtb",
+    "field_hockey",
+    "fishing_v2",
+    "fitness_equipment",
+    "floor_climbing",
+    "flying",
+    "gauge_diving",
+    "golf",
+    "gravel_cycling",
+    "hand_cycling",
+    "hang_gliding",
+    "hiit",
+    "hiking",
+    "horseback_riding",
+    "hunting",
+    "hunting_fishing",
+    "ice_hockey",
+    "incident_detected",
+    "indoor_cardio",
+    "indoor_climbing",
+    "indoor_cycling",
+    "indoor_hand_cycling",
+    "indoor_rowing",
+    "indoor_running",
+    "inline_skating",
+    "jump_rope",
+    "kayaking_v2",
+    "kiteboarding_v2",
+    "lacrosse",
+    "lap_swimming",
+    "meditation",
+    "mixed_martial_arts",
+    "mobility",
+    "motocross_v2",
+    "motorcycling_v2",
+    "mountain_biking",
+    "mountaineering",
+    "multi_gas_diving",
+    "multi_sport",
+    "obstacle_run",
+    "offshore_grinding_v2",
+    "onshore_grinding_v2",
+    "open_water_swimming",
+    "other",
+    "overland",
+    "paddelball",
+    "paddling_v2",
+    "para_sports",
+    "pickleball",
+    "pilates",
+    "platform_tennis",
+    "pool_apnea",
+    "racket_sports",
+    "racquetball",
+    "rc_drone",
+    "recumbent_cycling",
+    "resort_skiing",
+    "resort_skiing_snowboarding_ws",
+    "resort_snowboarding",
+    "road_biking",
+    "rock_climbing",
+    "rowing_v2",
+    "rucking",
+    "rugby",
+    "running",
+    "runtobiketransition_v2",
+    "safety",
+    "sailing_v2",
+    "single_gas_diving",
+    "skate_skiing_ws",
+    "skating_ws",
+    "sky_diving",
+    "snorkeling",
+    "snow_shoe_ws",
+    "snowmobiling_ws",
+    "soccer",
+    "softball",
+    "speed_walking",
+    "squash",
+    "stair_climbing",
+    "stand_up_paddleboarding_v2",
+    "steps",
+    "stop_watch",
+    "street_running",
+    "strength_training",
+    "surfing_v2",
+    "swimming",
+    "swimtobiketransition_v2",
+    "table_tennis",
+    "team_sports",
+    "tennis_v2",
+    "track_cycling",
+    "track_running",
+    "trail_running",
+    "transition_v2",
+    "treadmill_running",
+    "ultimate_disc",
+    "ultra_run",
+    "virtual_ride",
+    "virtual_run",
+    "volleyball",
+    "wakeboarding_v2",
+    "wakesurfing",
+    "walking",
+    "water_sports",
+    "water_tubing",
+    "waterskiing",
+    "wheelchair_push_run",
+    "wheelchair_push_walk",
+    "whitewater_rafting_kayaking",
+    "whitewater_rafting_v2",
+    "wind_kite_surfing",
+    "windsurfing_v2",
+    "wingsuit_flying",
+    "winter_sports",
+    "yoga",
+)
+
+
+def garmin_activity_types() -> list[dict]:
+    """The taxonomy as GarminClient.fetch_activity_types would report it."""
+    types = [
+        {"type_key": key, "label": key.replace("_", " ").title()}
+        for key in GARMIN_ACTIVITY_TYPE_KEYS
+    ]
+    types.sort(key=lambda t: t["label"])
+    return types
 
 
 class _FakePendingAuth:
@@ -71,10 +239,11 @@ class FakeGarminClient:
         self._conn = conn
 
     def fetch_activity_types(self) -> list[dict]:
-        return (
-            db.get_config_value(self._conn, "garmin_activity_types", default=[])
-            or _FALLBACK_ACTIVITY_TYPES
-        )
+        # Report the taxonomy, the way the real client reports what Garmin
+        # holds. Echoing the stored list back (as this used to) made Refresh
+        # categories a no-op in dev — it could never disagree with the DB, so
+        # the one thing the button exists to do went untested.
+        return garmin_activity_types()
 
     def fetch_recent_activities(self, lookback_days: int) -> list:
         return []

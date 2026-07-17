@@ -12,7 +12,14 @@ from pathlib import Path
 
 import requests
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -93,6 +100,24 @@ def _build_strava_client(conn: sqlite3.Connection):
     return StravaClient(conn, creds.get("client_id", ""), creds.get("client_secret", ""))
 
 
+def _asset_version(name: str) -> str:
+    """Cache-busting token for a stylesheet.
+
+    Production ships an immutable image per release, so the version is a fine
+    token. Dev is the problem: the version never moves while CSS is being
+    edited, and uvicorn's reloader only watches Python — so the browser keeps
+    serving the stylesheet it cached at the start of the session and quietly
+    renders something other than what is on disk. Key off the file's mtime
+    there instead.
+    """
+    if not _mock_mode():
+        return __version__
+    try:
+        return str(int((STATIC_DIR / "css" / f"{name}.css").stat().st_mtime))
+    except OSError:
+        return __version__
+
+
 def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     app = FastAPI(title="ActivSync", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -101,6 +126,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     # context, so the dev banner and tab-title marker render app-wide.
     templates.env.globals["dev_mode"] = _mock_mode()
     templates.env.globals["app_version"] = __version__
+    templates.env.globals["asset_version"] = _asset_version
     templates.env.globals["update_status"] = update_check.get_status
     # Single-user app: at most one Garmin login can be mid-MFA-challenge at a
     # time. Holds the in-flight GarminAuth object between whichever POST
@@ -251,6 +277,21 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         }
         context.update(overrides)
         return context
+
+    def _is_htmx(request: Request) -> bool:
+        return request.headers.get("HX-Request") == "true"
+
+    def _saved(request: Request, section: str) -> Response:
+        """Answer a settings save.
+
+        htmx posts these forms in place, and 204 keeps it that way: nothing
+        swaps, nothing navigates, and the reader stays exactly where they were.
+        The redirect is the no-htmx fallback, anchored so a full page load at
+        least lands back on the section instead of the top of the page.
+        """
+        if _is_htmx(request):
+            return Response(status_code=204)
+        return RedirectResponse(f"/settings#{section}", status_code=303)
 
     def _persist_strava_credentials(client_id: str, client_secret: str) -> None:
         existing = db.get_config_value(conn, "strava_credentials") or {}
@@ -774,9 +815,12 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         hevy2garmin_marker_enabled: bool = Form(False),
     ):
         if not timeutil.is_valid_timezone(display_timezone):
+            message = f"Unknown timezone: {display_timezone}"
+            if _is_htmx(request):
+                return PlainTextResponse(message, status_code=400)
             return templates.TemplateResponse(
                 request, "settings.html",
-                _settings_context(preferences_error=f"Unknown timezone: {display_timezone}"),
+                _settings_context(preferences_error=message),
                 status_code=400,
             )
         cfg = config.load_config(conn)
@@ -790,7 +834,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         })
         config.save_config(conn, cfg)
         logging_setup.set_log_timezone(display_timezone)
-        return RedirectResponse("/settings", status_code=303)
+        return _saved(request, "preferences")
 
     @app.post("/settings/strava-credentials")
     def settings_strava_credentials_submit(
@@ -843,9 +887,12 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     @app.post("/settings/autosync")
     def settings_autosync_submit(request: Request, autosync_types: list[str] = Form([])):
         if not _settings_context()["garmin_connected"]:
+            message = "Connect to Garmin before changing activity categories."
+            if _is_htmx(request):
+                return PlainTextResponse(message, status_code=400)
             return templates.TemplateResponse(
                 request, "settings.html",
-                _settings_context(garmin_sync_error="Connect to Garmin before changing activity categories."),
+                _settings_context(garmin_sync_error=message),
                 status_code=400,
             )
 
@@ -855,21 +902,30 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         cfg["held_activity_types"] = held_activity_types
         config.save_config(conn, cfg)
         sync.reconcile_held_activities(conn, held_activity_types)
-        return RedirectResponse("/settings", status_code=303)
+        return _saved(request, "autosync")
 
     @app.post("/settings/garmin-activity-types/refresh")
     def refresh_garmin_activity_types(request: Request):
         if not _settings_context()["garmin_connected"]:
+            message = "Connect to Garmin before refreshing activity categories."
+            if _is_htmx(request):
+                return PlainTextResponse(message, status_code=400)
             return templates.TemplateResponse(
                 request, "settings.html",
-                _settings_context(garmin_sync_error="Connect to Garmin before refreshing activity categories."),
+                _settings_context(garmin_sync_error=message),
                 status_code=400,
             )
         garmin = _build_garmin_client(conn)
         types = garmin.fetch_activity_types()
         db.set_config_value(conn, "garmin_activity_types", types)
         db.set_config_value(conn, "garmin_activity_types_fetched_at", datetime.now(timezone.utc).isoformat())
-        return RedirectResponse("/settings", status_code=303)
+        if _is_htmx(request):
+            # Just the picker: htmx swaps it into the open page, so refreshing
+            # redraws the list without reloading or moving the reader.
+            return templates.TemplateResponse(
+                request, "partials/_autosync_categories.html", _settings_context(),
+            )
+        return RedirectResponse("/settings#autosync", status_code=303)
 
     @app.get("/strava/connect")
     def strava_connect(request: Request):

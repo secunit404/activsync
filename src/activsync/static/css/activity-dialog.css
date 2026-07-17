@@ -41,6 +41,11 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 18px;
+    /* A grid item of the card, so it defaults to min-width:auto and refuses to
+       shrink below min-content. The kicker is nowrap, which makes min-content
+       the full untruncated line — without this the header pushes past the card
+       and the kicker's ellipsis never gets the chance to engage. */
+    min-width: 0;
 }
 
 .activity-dialog-header > div:first-child {
@@ -57,6 +62,11 @@
     margin-bottom: 6px;
 }
 
+/* One line, always. The timestamp leads because it is fixed-width, so the line
+   starts in the same column on every activity; the activity type has no bound,
+   so it takes what is left and truncates rather than wrapping. Wrapping here
+   grew the row and pushed the badge and links down with it, which is the whole
+   reason this is nowrap — the full text stays available via the title attr. */
 .dialog-kicker {
     min-width: 0;
     margin-bottom: 0;
@@ -65,7 +75,9 @@
     font-size: 0.74rem;
     font-weight: 600;
     letter-spacing: 0.03em;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .activity-dialog-meta-actions {
@@ -77,7 +89,9 @@
     gap: 6px 10px;
 }
 
-/* Match the link pills so badge and pills share one centre line. */
+/* The badge is the tallest thing on this row now that the links are plain
+   text, so it sets the row's height. Pin it: the row then measures the same on
+   every activity instead of tracking whatever is in it. */
 .activity-dialog-meta-actions .badge { min-height: 30px; }
 
 .activity-dialog-title {
@@ -103,25 +117,6 @@
     color: var(--muted);
     font-size: 0.92rem;
 }
-
-.link-pill {
-    display: inline-flex;
-    min-height: 30px;
-    align-items: center;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--garmin);
-    font-family: var(--mono);
-    padding: 4px 9px;
-    font-size: 0.76rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    line-height: 1.2;
-    white-space: nowrap;
-}
-
-.link-pill[href*="strava"] { color: var(--accent-ink); }
 
 .metadata-form { display: none; }
 
@@ -271,8 +266,10 @@
 }
 
 @media (max-width: 740px) {
-    /* Too narrow to sit beside the badge and pills without wrapping the
-       kicker mid-text, so give each its own row. */
+    /* Too narrow to sit beside the badge and links, so give each its own row.
+       The kicker keeps the base nowrap/ellipsis: letting it wrap here would
+       drop the activity type onto a line of its own, away from the timestamp
+       it belongs with, which is exactly what the one-line rule is for. */
     .activity-dialog-meta {
         align-items: center;
         flex-wrap: wrap;
@@ -284,6 +281,13 @@
     .activity-dialog-meta-actions {
         justify-content: flex-start;
         flex-basis: 100%;
+    }
+    /* The badge trails the links on desktop so it lands on the row's right
+       edge, a fixed point the eye can return to. This row is left-aligned, so
+       there is no such edge to hold — trailing would just leave the status
+       adrift after the links. Lead with it instead. */
+    .activity-dialog-meta-actions .badge {
+        order: -1;
     }
     .activity-dialog {
         width: 100%;

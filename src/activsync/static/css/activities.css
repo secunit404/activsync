@@ -245,16 +245,43 @@
     margin-top: 4px;
 }
 
-.activity-inline-link {
+/* The Garmin/Strava links, wherever they appear — activity rows and the detail
+   dialog both. This was two near-identical classes that drifted apart on case,
+   size and hover, so the dialog kept having to be walked back into line by hand.
+   One class, one treatment, no drift. */
+.service-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     color: var(--garmin);
     font-family: var(--mono);
     font-size: 0.74rem;
     font-weight: 600;
     letter-spacing: 0.04em;
+    line-height: 1.2;
     text-transform: uppercase;
+    white-space: nowrap;
+    transition: opacity 0.15s ease;
 }
 
-.activity-inline-link[href*="strava"] { color: var(--accent-ink); }
+/* base.css underlines links on hover. Under a mono, brand-coloured token that
+   reads as noise, and the colour is already the affordance — fade instead. */
+.service-link:hover {
+    text-decoration: none;
+    opacity: 0.7;
+}
+
+/* The old ↗ was a text glyph: shorter than the caps and sitting on the same
+   baseline, so its ink centred ~1.8px low, and screen readers read it out as
+   "north east arrow". An icon sized to the text centres on the flex row above
+   and stays out of the accessible name. */
+.service-link-icon {
+    width: 1em;
+    height: 1em;
+    flex: 0 0 auto;
+}
+
+.service-link[href*="strava"] { color: var(--accent-ink); }
 
 .activity-row-status {
     justify-self: start;
@@ -413,7 +440,7 @@
            [ 5 Jul · 09:56 ]        [ PENDING ]
            [ Morning run #1                   ]
            [ running                          ]
-           [ GARMIN ↗      ] [ Publish ][ Details ]
+           [ GARMIN ⧉      ] [ Publish ][ Details ]
        .activity-row-main is flattened so its children land on the row's grid;
        on desktop it stays a normal block and the date keeps its own column. */
     .activity-row {

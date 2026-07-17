@@ -118,9 +118,9 @@
                         <span>{{ activity.activity_type }}</span>
                     </div>
                     <div class="activity-inline-links activity-links-row" aria-label="Activity links">
-                        <a class="activity-inline-link" href="{{ activity.garmin_url }}" target="_blank" rel="noopener">Garmin ↗</a>
+                        <a class="service-link" href="{{ activity.garmin_url }}" target="_blank" rel="noopener">Garmin{% include "partials/_external_link_icon.svg" %}</a>
                         {% if activity.publish_status == "published" %}
-                        <a class="activity-inline-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank" rel="noopener">Strava ↗</a>
+                        <a class="service-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank" rel="noopener">Strava{% include "partials/_external_link_icon.svg" %}</a>
                         {% endif %}
                     </div>
                 </div>
@@ -144,15 +144,17 @@
                         <header class="activity-dialog-header">
                             <div>
                                 <div class="activity-dialog-meta">
-                                    <p class="dialog-kicker">{{ activity.activity_type }} · {{ activity.start_time_display }}</p>
+                                    {# title carries the full text: the kicker truncates when the
+                                       activity type is long, so hovering is the way back to it. #}
+                                    <p class="dialog-kicker" title="{{ activity.start_time_display }} · {{ activity.activity_type }}">{{ activity.start_time_display }} · {{ activity.activity_type }}</p>
                                     <div class="activity-dialog-meta-actions">
-                                        <span class="badge badge-{{ activity.publish_status }}">{{ activity.publish_status }}</span>
                                         <div class="activity-card-links" aria-label="External links">
-                                            <a class="link-pill" href="{{ activity.garmin_url }}" target="_blank">Garmin ↗</a>
+                                            <a class="service-link" href="{{ activity.garmin_url }}" target="_blank" rel="noopener">Garmin{% include "partials/_external_link_icon.svg" %}</a>
                                             {% if activity.publish_status == "published" %}
-                                                <a class="link-pill" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank">Strava ↗</a>
+                                                <a class="service-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank" rel="noopener">Strava{% include "partials/_external_link_icon.svg" %}</a>
                                             {% endif %}
                                         </div>
+                                        <span class="badge badge-{{ activity.publish_status }}">{{ activity.publish_status }}</span>
                                     </div>
                                 </div>
                                 <h2 id="{{ dialog_id }}-title" class="activity-dialog-title activity-title-read">{{ activity.title }}</h2>

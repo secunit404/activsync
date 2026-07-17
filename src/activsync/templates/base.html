@@ -32,8 +32,11 @@
             try { localStorage.setItem("activsync-theme", next); } catch (e) {}
             activsyncSyncToggles();
         }
-        function activsyncSetLoading(form) {
-            var button = form.querySelector('button[type="submit"]');
+        // `event` is optional, but pass it on any form with more than one submit
+        // button: the submitter is the one the reader actually pressed, and only
+        // that one should show the busy state.
+        function activsyncSetLoading(form, event) {
+            var button = (event && event.submitter) || form.querySelector('button[type="submit"]');
             if (!button) return true;
             if (form.dataset.loading === "true") return false;
             form.dataset.loading = "true";
@@ -75,14 +78,14 @@
         "tokens", "base", "layout", "buttons", "nav", "forms",
         "settings", "activities", "activity-dialog", "setup", "dev",
     ] %}
-    <link rel="stylesheet" href="/static/css/{{ sheet }}.css?v={{ app_version }}">
+    <link rel="stylesheet" href="/static/css/{{ sheet }}.css?v={{ asset_version(sheet) }}">
     {%- endfor %}
 </head>
 <body hx-ext="sse" sse-connect="/api/events">
 {% if dev_mode %}
 <div class="dev-banner" role="status" aria-label="Development mode">
     <span class="dev-banner-dot" aria-hidden="true"></span>
-    Dev mode · mock data · no real Garmin / Strava
+    Dev mode · mock data
 </div>
 {% endif %}
 <main class="app-shell">

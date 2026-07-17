@@ -6,9 +6,9 @@ import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from activsync import config, db
+from activsync import config, db, dev_mock
 
-SEED_VERSION = 4
+SEED_VERSION = 7
 
 
 def seed(conn: sqlite3.Connection) -> None:
@@ -38,6 +38,13 @@ def seed(conn: sqlite3.Connection) -> None:
         ("rowing", "Rowing intervals", "Short, hard intervals.", 32 * 60, 6_400, "pending"),
         ("elliptical", "Cross trainer", "Low-impact aerobic session.", 44 * 60, None, "held"),
         ("cardio", "Cardio workout", "Mixed cardio session.", 39 * 60, None, "published"),
+        # The taxonomy's longest type key. Every other sample here is short
+        # enough to flatter the layout; the detail dialog only shows what it
+        # does with a long category if something actually has one.
+        # Published, so both service links render: the longest key and the
+        # widest actions row are the same worst case the header has to survive.
+        ("backcountry_skiing_snowboarding_ws", "Backcountry day", "Skinned up, rode down.",
+         5 * 3600 + 20 * 60, 9_400, "published"),
     ]
     for offset in range(12):
         month_index = now.month - offset
@@ -70,17 +77,7 @@ def seed(conn: sqlite3.Connection) -> None:
             )
 
     db.set_config_value(conn, "settings", config.DEFAULT_CONFIG)
-    db.set_config_value(conn, "garmin_activity_types", [
-        {"type_key": key, "label": label}
-        for key, label in [
-            ("running", "Running"), ("trail_running", "Trail Running"),
-            ("cycling", "Cycling"), ("indoor_cycling", "Indoor Cycling"),
-            ("walking", "Walking"), ("hiking", "Hiking"),
-            ("swimming", "Swimming"), ("rowing", "Rowing"),
-            ("strength_training", "Strength Training"), ("yoga", "Yoga"),
-            ("elliptical", "Elliptical"), ("cardio", "Cardio"),
-            ("tennis", "Tennis"), ("basketball", "Basketball"),
-            ("golf", "Golf"), ("skiing", "Skiing"),
-        ]
-    ])
+    # One source of truth with the fake Garmin client, so a seeded dev DB
+    # and a refreshed one show the same categories.
+    db.set_config_value(conn, "garmin_activity_types", dev_mock.garmin_activity_types())
     db.set_config_value(conn, "dev_seed_version", SEED_VERSION)

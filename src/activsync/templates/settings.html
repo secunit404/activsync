@@ -142,75 +142,34 @@
   </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="autosync">
   <div class="panel-body stack">
     <h2>Autosync categories</h2>
     {% if garmin_sync_error %}<p class="error">{{ garmin_sync_error }}</p>{% endif %}
-    <form class="stack autosync-picker" method="post" action="/settings/autosync" data-categories-expanded="false">
+    <form class="stack autosync-picker" method="post" action="/settings/autosync"
+          data-categories-expanded="false" onsubmit="return activsyncSetLoading(this, event)">
         <div class="autosync-heading">
             <div>
-                <button type="submit" class="secondary compact-settings-button"
-                        formaction="/settings/garmin-activity-types/refresh" formmethod="post">Refresh categories</button>
+                <button type="submit" class="secondary compact-settings-button button-swap"
+                        formaction="/settings/garmin-activity-types/refresh" formmethod="post"
+                        data-refresh-categories hx-post="/settings/garmin-activity-types/refresh"
+                        hx-target="#autosync-categories" hx-swap="innerHTML" hx-disabled-elt="this">
+                    <span class="button-label">Refresh categories</span>
+                    <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Refreshing…</span>
+                </button>
                 <p class="hint">Checked categories publish automatically. Unchecked categories are held for manual publish.</p>
             </div>
         </div>
-        {% if activity_types %}
-            <div class="category-controls">
-                <label class="category-search">Find a category
-                    <input type="search" placeholder="Search Garmin categories…" autocomplete="off"
-                           oninput="var p=this.closest('.autosync-picker');var q=this.value.toLowerCase().trim();var expanded=p.dataset.categoriesExpanded==='true';p.querySelectorAll('.autosync-option').forEach(function(card){var matches=!q||card.dataset.search.includes(q);var extra=card.classList.contains('category-option-extra');card.hidden=!matches||(!q&&!expanded&&extra)});p.querySelector('.category-visible-count').textContent=p.querySelectorAll('.autosync-option:not([hidden])').length;">
-                </label>
-                <div class="category-actions-row">
-                    <p class="category-summary" role="status" aria-live="polite">
-                        <strong class="autosync-enabled-count">{{ activity_types | rejectattr('type_key', 'in', cfg.held_activity_types) | list | length }}</strong> enabled ·
-                        <span class="category-visible-count">{{ activity_types[:18]|length }}</span> shown
-                    </p>
-                    <div class="category-actions" role="group" aria-label="Category selection actions">
-                        <button type="button" class="secondary compact-settings-button" aria-label="Select visible"
-                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-option:not([hidden]) .autosync-cat').forEach(function(cb){cb.checked=true});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
-                            Select visible
-                        </button>
-                        <button type="button" class="secondary compact-settings-button" aria-label="Clear visible"
-                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-option:not([hidden]) .autosync-cat').forEach(function(cb){cb.checked=false});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
-                            Clear visible
-                        </button>
-                        <button type="button" class="secondary compact-settings-button" aria-label="Select all"
-                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-cat').forEach(function(cb){cb.checked=true});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
-                            Select all
-                        </button>
-                        <button type="button" class="secondary compact-settings-button" aria-label="Clear all"
-                                onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-cat').forEach(function(cb){cb.checked=false});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
-                            Clear all
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="check-list">
-                {% for t in activity_types %}
-                    <label class="check-item autosync-option{% if loop.index > 18 %} category-option-extra{% endif %}" data-search="{{ (t.label ~ ' ' ~ t.type_key)|lower }}"{% if loop.index > 18 %} hidden{% endif %}>
-                        <input type="checkbox" class="autosync-cat" name="autosync_types" value="{{ t.type_key }}"
-                               onchange="var p=this.closest('.autosync-picker');p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;"
-                               {% if t.type_key not in cfg.held_activity_types %}checked{% endif %}>
-                        <span class="check-item-label">{{ t.label }}</span>
-                    </label>
-                {% endfor %}
-            </div>
-            {% if activity_types|length > 18 %}
-                <button type="button" class="secondary compact-settings-button category-show-all"
-                        aria-expanded="false"
-                        onclick="var p=this.closest('.autosync-picker');var expanded=p.dataset.categoriesExpanded==='true';expanded=!expanded;p.dataset.categoriesExpanded=String(expanded);var q=p.querySelector('.category-search input').value.toLowerCase().trim();p.querySelectorAll('.autosync-option').forEach(function(card){var matches=!q||card.dataset.search.includes(q);var extra=card.classList.contains('category-option-extra');card.hidden=!matches||(!q&&!expanded&&extra)});this.setAttribute('aria-expanded',String(expanded));this.textContent=expanded?'Show fewer categories':'Show all {{ activity_types|length }} categories';p.querySelector('.category-visible-count').textContent=p.querySelectorAll('.autosync-option:not([hidden])').length;">
-                    Show all {{ activity_types|length }} categories
-                </button>
-            {% endif %}
-            <button class="settings-save" type="submit">Save categories</button>
-        {% else %}
-            <p class="hint">Categories aren't loaded yet — use Refresh categories above.</p>
-        {% endif %}
+        <div id="autosync-categories" class="stack">
+            {% include "partials/_autosync_categories.html" %}
+        </div>
+        <p class="error settings-save-error" role="alert" hidden></p>
+        <p class="settings-save-announcement" role="status"></p>
     </form>
   </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="preferences">
   <div class="panel-body stack">
     <h2>Preferences</h2>
     {% if preferences_error %}<p class="error">{{ preferences_error }}</p>{% endif %}
@@ -254,8 +213,85 @@
           <span class="hint">Must match the text hevy2garmin appends to each activity description.</span>
         </label>
       </div>
-      <button class="settings-save" type="submit">Save preferences</button>
+      <button class="settings-save button-swap" type="submit"
+              data-save-feedback="preferences" data-saved-message="Preferences saved."
+              hx-post="/settings/preferences" hx-include="closest form" hx-swap="none">
+        <span class="button-label">Save preferences</span>
+        <span class="button-saved" aria-hidden="true">{% include "partials/_check_icon.svg" %}Saved</span>
+      </button>
+      <p class="error settings-save-error" role="alert" hidden></p>
+      <p class="settings-save-announcement" role="status"></p>
     </form>
   </div>
 </section>
+
+<script>
+  (function () {
+    var SAVED_MS = 2400;
+
+    // Look the slots up from the section, not from the button's parent: the
+    // category list is swapped out on refresh, so the button is not a stable
+    // anchor but the section around it is.
+    function slot(button, selector) {
+      return button.closest("section").querySelector(selector);
+    }
+
+    function showError(button, message) {
+      var error = slot(button, ".settings-save-error");
+      error.textContent = message;
+      error.hidden = false;
+    }
+
+    function clearError(button) {
+      var error = slot(button, ".settings-save-error");
+      error.textContent = "";
+      error.hidden = true;
+    }
+
+    function confirmSave(button) {
+      button.classList.add("is-saved");
+      // The check mark is aria-hidden, so announce the save from here. The
+      // region has to be filled by script: a live region that already holds
+      // its text at first paint is not announced.
+      var announcement = slot(button, ".settings-save-announcement");
+      announcement.textContent = button.dataset.savedMessage;
+      clearTimeout(button._savedTimer);
+      button._savedTimer = setTimeout(function () {
+        button.classList.remove("is-saved");
+        announcement.textContent = "";
+      }, SAVED_MS);
+    }
+
+    // A save answers 204 and a refresh answers the picker fragment, so neither
+    // one navigates — the buttons are the only report the reader gets.
+    document.body.addEventListener("htmx:afterRequest", function (event) {
+      var button = event.detail.elt;
+      if (!button.matches) return;
+
+      var isSave = button.matches("button[data-save-feedback]");
+      if (!isSave && !button.matches("[data-refresh-categories]")) return;
+
+      if (event.detail.successful) {
+        clearError(button);
+        if (isSave) confirmSave(button);
+        return;
+      }
+
+      // Never leave a failed request looking like nothing happened.
+      if (isSave) {
+        button.classList.remove("is-saved");
+        slot(button, ".settings-save-announcement").textContent = "";
+      }
+      showError(button, event.detail.xhr.responseText ||
+        "Something went wrong — check your connection and try again.");
+    });
+
+    document.body.addEventListener("htmx:afterSwap", function (event) {
+      if (event.target.id !== "autosync-categories") return;
+      // A refreshed list always comes back collapsed, so the picker's expanded
+      // flag has to come back with it or "Show all" contradicts what's shown.
+      event.target.closest(".autosync-picker").dataset.categoriesExpanded = "false";
+    });
+  })();
+</script>
 {% endblock %}

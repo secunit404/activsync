@@ -698,3 +698,56 @@ def test_favicon_ico_is_the_same_image_the_pages_link(tmp_path):
     linked = client.get("/static/favicon.png")
 
     assert root.content == linked.content
+
+
+def test_activity_dialog_leads_with_the_time_not_the_activity_type(tmp_path):
+    """The timestamp is fixed-width and the type is not, so the type has to come
+    second: leading with it pushes the timestamp to a different column on every
+    row, and a long type wraps the line rather than just extending it."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 11, "backcountry_skiing_snowboarding_ws", "Backcountry day",
+                       "", "2026-07-09 09:00:00", "h11", "published", now)
+
+    response = client.get("/")
+
+    kicker = re.search(r'<p class="dialog-kicker"[^>]*>([^<]+)</p>', response.text)
+    assert kicker, "activity dialog is missing its kicker"
+    assert kicker.group(1).strip() == "2026-07-09 11:00 · backcountry_skiing_snowboarding_ws"
+
+
+def test_activity_dialog_kicker_keeps_its_full_text_reachable(tmp_path):
+    """The kicker is a single truncating line, so a long activity type gets cut
+    on screen. The full string has to stay somewhere the reader can get at it."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 12, "backcountry_skiing_snowboarding_ws", "Backcountry day",
+                       "", "2026-07-09 09:00:00", "h12", "published", now)
+
+    response = client.get("/")
+
+    assert ('<p class="dialog-kicker" '
+            'title="2026-07-09 11:00 · backcountry_skiing_snowboarding_ws">') in response.text
+
+
+def test_activity_dialog_puts_the_status_badge_after_the_links(tmp_path):
+    """Desktop right-aligns this row, so the last item lands on the row's right
+    edge. The badge goes there because it is what gets scanned for, and it holds
+    that edge whether or not the Strava pill is present — the links vary, the
+    anchor should not."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 13, "running", "Morning Run", "", "2026-07-09 09:00:00", "h13",
+                       "published", now)
+
+    response = client.get("/")
+
+    actions = re.search(
+        r'<div class="activity-dialog-meta-actions">(.*?)</div>\s*</div>',
+        response.text, re.S,
+    )
+    assert actions, "activity dialog is missing its meta actions row"
+    body = actions.group(1)
+    assert body.index("activity-card-links") < body.index("badge-published"), (
+        "the badge must come last so it lands on the right edge"
+    )

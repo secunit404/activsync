@@ -103,7 +103,7 @@ def test_settings_preferences_saves_all_fields(tmp_path):
     }, follow_redirects=False)
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings"
+    assert response.headers["location"] == "/settings#preferences"
     cfg = config.load_config(conn)
     assert cfg["display_timezone"] == "Europe/Oslo"
     assert cfg["garmin_poll_interval_minutes"] == 30
@@ -153,7 +153,7 @@ def test_settings_preferences_disables_hevy_toggle_when_unchecked(tmp_path):
     }, follow_redirects=False)
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings"
+    assert response.headers["location"] == "/settings#preferences"
     assert config.load_config(conn)["hevy2garmin_marker_enabled"] is False
 
 
@@ -1200,3 +1200,128 @@ def test_settings_renders_while_a_connection_is_broken(tmp_path):
 
     assert response.status_code == 200
     assert "Settings" in response.text
+
+
+def test_saving_preferences_over_htmx_saves_without_navigating(tmp_path):
+    """The in-place save is the whole point: a redirect would reload the page
+    and throw the reader back to the top, which is what this replaced."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn)
+    _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+
+    response = client.post("/settings/preferences", data={
+        "display_timezone": "Europe/Oslo",
+        "garmin_poll_interval_minutes": "30",
+        "strava_poll_interval_minutes": "8",
+        "lookback_days": "14",
+        "hevy2garmin_marker": "— via hevy",
+        "hevy2garmin_marker_enabled": "true",
+    }, headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 204
+    assert response.text == ""
+    assert config.load_config(conn)["display_timezone"] == "Europe/Oslo"
+
+
+def test_saving_preferences_over_htmx_reports_a_bad_timezone(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn)
+    _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    before = config.load_config(conn)["display_timezone"]
+
+    response = client.post("/settings/preferences", data={
+        "display_timezone": "Mars/Phobos",
+        "garmin_poll_interval_minutes": "30",
+        "strava_poll_interval_minutes": "8",
+        "lookback_days": "14",
+        "hevy2garmin_marker": "x",
+    }, headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 400
+    assert response.text == "Unknown timezone: Mars/Phobos"
+    assert config.load_config(conn)["display_timezone"] == before
+
+
+def test_saving_autosync_over_htmx_saves_without_navigating(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn)
+    db.set_config_value(conn, "garmin_activity_types", [
+        {"type_key": "running", "label": "Running"},
+        {"type_key": "yoga", "label": "Yoga"},
+    ])
+
+    response = client.post("/settings/autosync", data={"autosync_types": ["running"]},
+                           headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 204
+    assert config.load_config(conn)["held_activity_types"] == ["yoga"]
+
+
+def test_saving_autosync_over_htmx_reports_a_missing_garmin_connection(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+
+    response = client.post("/settings/autosync", data={"autosync_types": ["running"]},
+                           headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 400
+    assert "Connect to Garmin" in response.text
+
+
+def test_refreshing_categories_over_htmx_returns_only_the_category_list(tmp_path, monkeypatch):
+    """Refresh swaps the list in place rather than reloading, so it answers with
+    the picker fragment alone — a whole page here would nest a second document
+    inside the form."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn)
+    _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    garmin = MagicMock()
+    garmin.fetch_activity_types.return_value = [
+        {"type_key": "running", "label": "Running"},
+        {"type_key": "padel", "label": "Padel"},
+    ]
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda conn: garmin)
+
+    response = client.post("/settings/garmin-activity-types/refresh",
+                           headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 200
+    assert "Padel" in response.text
+    assert 'name="autosync_types"' in response.text
+    # The fragment must not drag the rest of the page in with it.
+    assert "<html" not in response.text
+    assert "<h2>" not in response.text
+    assert "/settings/preferences" not in response.text
+    assert db.get_config_value(conn, "garmin_activity_types") == [
+        {"type_key": "running", "label": "Running"},
+        {"type_key": "padel", "label": "Padel"},
+    ]
+
+
+def test_refreshing_categories_over_htmx_reports_a_missing_garmin_connection(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+
+    response = client.post("/settings/garmin-activity-types/refresh",
+                           headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 400
+    assert "Connect to Garmin" in response.text
+
+
+def test_refreshing_categories_without_htmx_returns_to_the_categories_section(tmp_path, monkeypatch):
+    """The no-htmx fallback still reloads, so the anchor is what keeps the
+    reader on the categories instead of at the top of the page."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn)
+    _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    garmin = MagicMock()
+    garmin.fetch_activity_types.return_value = [{"type_key": "running", "label": "Running"}]
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda conn: garmin)
+
+    response = client.post("/settings/garmin-activity-types/refresh", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/settings#autosync"
