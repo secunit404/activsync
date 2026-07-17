@@ -118,9 +118,9 @@
                         <span>{{ activity.activity_type }}</span>
                     </div>
                     <div class="activity-inline-links activity-links-row" aria-label="Activity links">
-                        <a class="activity-inline-link" href="{{ activity.garmin_url }}" target="_blank" rel="noopener">Garmin ↗</a>
+                        <a class="service-link" href="{{ activity.garmin_url }}" target="_blank" rel="noopener">Garmin ↗</a>
                         {% if activity.publish_status == "published" %}
-                        <a class="activity-inline-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank" rel="noopener">Strava ↗</a>
+                        <a class="service-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank" rel="noopener">Strava ↗</a>
                         {% endif %}
                     </div>
                 </div>
@@ -149,9 +149,9 @@
                                     <p class="dialog-kicker" title="{{ activity.start_time_display }} · {{ activity.activity_type }}">{{ activity.start_time_display }} · {{ activity.activity_type }}</p>
                                     <div class="activity-dialog-meta-actions">
                                         <div class="activity-card-links" aria-label="External links">
-                                            <a class="dialog-link" href="{{ activity.garmin_url }}" target="_blank">Garmin ↗</a>
+                                            <a class="service-link" href="{{ activity.garmin_url }}" target="_blank" rel="noopener">Garmin ↗</a>
                                             {% if activity.publish_status == "published" %}
-                                                <a class="dialog-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank">Strava ↗</a>
+                                                <a class="service-link" href="https://www.strava.com/activities/{{ activity.strava_activity_id }}" target="_blank" rel="noopener">Strava ↗</a>
                                             {% endif %}
                                         </div>
                                         <span class="badge badge-{{ activity.publish_status }}">{{ activity.publish_status }}</span>

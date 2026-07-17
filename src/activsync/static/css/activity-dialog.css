@@ -118,33 +118,6 @@
     font-size: 0.92rem;
 }
 
-/* A text link, not a button: no box. It carries the service's colour, which is
-   the affordance — a border and fill around it only competed with the badge
-   next to it for the same attention. */
-.dialog-link {
-    display: inline-flex;
-    align-items: center;
-    color: var(--garmin);
-    font-family: var(--mono);
-    font-size: 0.76rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    line-height: 1.2;
-    white-space: nowrap;
-    transition: opacity 0.15s ease;
-}
-
-/* base.css underlines links on hover. Fade these instead: an underline under a
-   mono, brand-coloured token reads as noise, and the colour is already doing
-   the work. Kept in step with .activity-inline-link, which is the same idea in
-   the activity rows. */
-.dialog-link:hover {
-    text-decoration: none;
-    opacity: 0.7;
-}
-
-.dialog-link[href*="strava"] { color: var(--accent-ink); }
-
 .metadata-form { display: none; }
 
 .description-read {

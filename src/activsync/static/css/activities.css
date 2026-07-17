@@ -245,27 +245,32 @@
     margin-top: 4px;
 }
 
-.activity-inline-link {
+/* The Garmin/Strava links, wherever they appear — activity rows and the detail
+   dialog both. This was two near-identical classes that drifted apart on case,
+   size and hover, so the dialog kept having to be walked back into line by hand.
+   One class, one treatment, no drift. */
+.service-link {
+    display: inline-flex;
+    align-items: center;
     color: var(--garmin);
     font-family: var(--mono);
     font-size: 0.74rem;
     font-weight: 600;
     letter-spacing: 0.04em;
+    line-height: 1.2;
     text-transform: uppercase;
+    white-space: nowrap;
+    transition: opacity 0.15s ease;
 }
 
-/* Matches .dialog-link: no underline on hover, fade instead. The colour is the
-   affordance; base.css's a:hover underline just adds noise under a mono token. */
-.activity-inline-link:hover {
+/* base.css underlines links on hover. Under a mono, brand-coloured token that
+   reads as noise, and the colour is already the affordance — fade instead. */
+.service-link:hover {
     text-decoration: none;
     opacity: 0.7;
 }
 
-.activity-inline-link {
-    transition: opacity 0.15s ease;
-}
-
-.activity-inline-link[href*="strava"] { color: var(--accent-ink); }
+.service-link[href*="strava"] { color: var(--accent-ink); }
 
 .activity-row-status {
     justify-self: start;
