@@ -11,6 +11,31 @@
     {% endfor %}
     {% if sync_error %}<p class="error">{{ sync_error }}</p>{% endif %}
     <div class="activity-toolbar">
+        {# In the toolbar rather than a bar of its own: the toolbar is already
+           sticky, so it follows the list down anyway. #}
+        {% if ns.has_publishable %}
+        <div class="multi-select-tools" role="group" aria-label="Publish multiple activities">
+            <p class="selection-count" role="status">0 selected</p>
+            {# Visible text stays short so the toolbar does not wrap into three
+               lines on a phone — it is sticky, and that much of it pinned costs
+               a quarter of the viewport. The accessible name keeps the scope,
+               and contains the visible text, so the two do not disagree. #}
+            <label class="select-all-card">
+                <input class="select-all-input" type="checkbox" aria-label="Select all on this page">
+                Select all
+            </label>
+            <button class="primary-action publish-selected-button" hx-post="/api/sync/strava/publish"
+                    hx-target="#activity-table" hx-swap="outerHTML"
+                    hx-include="[name='activity_ids']:checked"
+                    hx-on::before-request="this.setAttribute('aria-busy','true')"
+                    data-connections-broken="{{ 'true' if connections.broken else 'false' }}"
+                    disabled
+                    {% if connections.broken %}title="Reconnect to publish"{% endif %}>
+                <span class="button-label">Publish</span>
+                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
+            </button>
+        </div>
+        {% endif %}
         <div class="activity-view-controls">
             {% if ns.has_publishable %}
             <button type="button" class="select-multiple-button" aria-pressed="false">Select multiple</button>
@@ -70,13 +95,6 @@
                 <form id="{{ edit_form_id }}" class="metadata-form" hx-post="/api/activities/{{ activity.garmin_activity_id }}/edit" hx-target="#activity-table" hx-swap="outerHTML"
                       hx-on::before-request="var d=document.getElementById('{{ dialog_id }}');if(d&&d.open)window._activsyncOpenDialogIds=[d.dataset.gid];if(d){d.classList.add('is-saving');var b=d.querySelector('.save-metadata-button');if(b){b.disabled=true;b.setAttribute('aria-busy','true')}var c=d.querySelector('.cancel-edit-button');if(c)c.disabled=true;var x=d.querySelector('.dialog-close');if(x)x.disabled=true}"
                       hx-on::after-request="if(!event.detail.successful){var d=document.getElementById('{{ dialog_id }}');if(d){d.classList.remove('is-saving');var b=d.querySelector('.save-metadata-button');if(b){b.disabled=false;b.removeAttribute('aria-busy')}var c=d.querySelector('.cancel-edit-button');if(c)c.disabled=false;var x=d.querySelector('.dialog-close');if(x)x.disabled=false}}"></form>
-                {# Visually hidden, not removed: it carries the checked state for
-                   keyboard and screen reader users, :has(:checked) styles the row
-                   off it, and hx-include still selects on it — so the publish
-                   endpoint needs no change. #}
-                {% if activity.publish_status in ("held", "pending", "missing") %}
-                <input type="checkbox" class="activsync-select-input" name="activity_ids" value="{{ activity.garmin_activity_id }}" aria-label="Select {{ activity.title }}">
-                {% endif %}
                 <div class="activity-row-date">
                     <div class="activity-date-stack">
                         <span class="activity-date-day">{{ activity.start_date_display|default(fallback_date_display, true) }}</span>
@@ -110,12 +128,18 @@
                     {% endif %}
                     <button type="button" class="details-button" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" onclick="document.getElementById('{{ dialog_id }}').showModal()">Details</button>
                 </div>
-                {# Sits where .activity-row-actions was: those hide in selection
-                   mode, so the glyph costs the row no width. Selection is border
-                   + fill + this — colour alone is not a state signal. #}
-                {% if activity.publish_status in ("held", "pending", "missing") %}
-                <div class="activity-row-check" aria-hidden="true">{% include "partials/_check_icon.svg" %}</div>
-                {% endif %}
+                {# Takes the cell .activity-row-actions occupies — those hide in
+                   selection mode, so the box costs the row no width. Rendered on
+                   every row, empty where there is nothing to select: it holds
+                   that cell at the buttons' height, and a row without it would
+                   collapse to the height of its links alone. The real input
+                   rather than a drawn glyph: it fills natively when checked, is
+                   its own hit target, and hx-include already reads :checked. #}
+                <div class="activity-row-select">
+                    {% if activity.publish_status in ("held", "pending", "missing") %}
+                    <input type="checkbox" class="activsync-select-input" name="activity_ids" value="{{ activity.garmin_activity_id }}" aria-label="Select {{ activity.title }}">
+                    {% endif %}
+                </div>
                 <dialog id="{{ dialog_id }}" class="activity-dialog" data-gid="{{ activity.garmin_activity_id }}" aria-labelledby="{{ dialog_id }}-title" onclick="if (event.target === this) { this.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue}); this.classList.remove('is-editing'); this.close(); }" oncancel="this.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue}); this.classList.remove('is-editing');">
                     <div class="activity-dialog-card">
                         <header class="activity-dialog-header">
@@ -213,28 +237,6 @@
             </article>
         {% endfor %}
     </div>
-    {# After the list in document order: position:sticky can only pin it to the
-       bottom from here. Above the list it scrolled away exactly when a long
-       list needed it. #}
-    {% if ns.has_publishable %}
-    <div class="multi-select-tools" role="group" aria-label="Publish multiple activities">
-        <p class="selection-count" role="status">0 selected</p>
-        <label class="select-all-card">
-            <input class="select-all-input" type="checkbox">
-            Select all on this page
-        </label>
-        <button class="primary-action publish-selected-button" hx-post="/api/sync/strava/publish"
-                hx-target="#activity-table" hx-swap="outerHTML"
-                hx-include="[name='activity_ids']:checked"
-                hx-on::before-request="this.setAttribute('aria-busy','true')"
-                data-connections-broken="{{ 'true' if connections.broken else 'false' }}"
-                disabled
-                {% if connections.broken %}title="Reconnect to publish"{% endif %}>
-            <span class="button-label">Publish</span>
-            <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
-        </button>
-    </div>
-    {% endif %}
     {% set pagination_params = "sort=" ~ sort_order ~ "&page_size=" ~ page_size %}
     {% if status_filter %}{% set pagination_params = pagination_params ~ "&status_filter=" ~ status_filter %}{% endif %}
     <nav class="activity-pagination" aria-label="Activity pages">

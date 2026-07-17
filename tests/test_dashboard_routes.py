@@ -514,19 +514,24 @@ def test_strava_publish_requires_setup(tmp_path):
     assert 'id="activity-table"' in response.text
 
 
-def test_selection_uses_a_hidden_input_not_a_checkbox_column(tmp_path):
-    """The row lights up instead of growing a checkbox column, but the input
-    stays in the DOM: it carries the checked state for keyboard and screen
-    reader users, and hx-include still selects on it, so publish is unchanged."""
+def test_selection_checkbox_sits_in_the_row_not_a_column_of_its_own(tmp_path):
+    """The checkbox takes the cell the row actions vacate in selection mode, so
+    the row never grows a column and never shifts. It is a real input rather
+    than a drawn glyph, so hx-include still reads :checked off it and publish is
+    unchanged."""
     conn, client = _logged_in_client(tmp_path)
     now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
     db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
 
     page = client.get("/")
 
-    assert 'class="activity-row-select"' not in page.text
     assert 'name="activity_ids" value="5"' in page.text
     assert "activsync-select-input" in page.text
+    # The box is the control now; no separate drawn check to keep in step.
+    assert "activity-row-check" not in page.text
+    # It lives inside the row, after the row's own actions — not in a leading cell.
+    row = page.text.split('<article class="activity-row', 1)[1]
+    assert row.index("activity-row-actions") < row.index("activity-row-select")
 
 
 def test_only_publishable_rows_are_marked_selectable(tmp_path):
@@ -545,11 +550,10 @@ def test_only_publishable_rows_are_marked_selectable(tmp_path):
     assert selectable == {"5": True, "6": False, "7": False}
 
 
-def test_selection_tools_render_after_the_list_so_they_can_stick(tmp_path):
-    """Sticky-bottom needs the bar to come after every row in document order;
-    sitting above the list, the bar scrolled away exactly when a long list
-    needed it. Anchor on the LAST row, not the list's opening tag — the bar
-    used to live inside the list, which would satisfy a laxer check."""
+def test_selection_tools_live_in_the_sticky_toolbar(tmp_path):
+    """The toolbar is already sticky, so the selection controls follow the list
+    down from inside it — no floating bar of its own, and nothing to scroll
+    away from. Being in the toolbar means they precede the list."""
     conn, client = _logged_in_client(tmp_path)
     now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
     db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
@@ -557,9 +561,32 @@ def test_selection_tools_render_after_the_list_so_they_can_stick(tmp_path):
 
     page = client.get("/")
 
-    # Anchor on the opening tag, not class="activity-row": selectable rows carry
-    # a second class, so the bare attribute does not appear on every row.
-    assert page.text.rindex('<article class="activity-row') < page.text.index('class="multi-select-tools"')
+    toolbar = page.text.split('class="activity-toolbar"', 1)[1].split('class="activity-list"', 1)[0]
+    assert 'class="multi-select-tools"' in toolbar
+    assert "publish-selected-button" in toolbar
+    assert "selection-count" in toolbar
+    # One set of tools, in the toolbar — not also trailing the list.
+    assert page.text.count('class="multi-select-tools"') == 1
+
+
+def test_select_all_keeps_its_scope_in_the_accessible_name(tmp_path):
+    """The visible text is short so the sticky toolbar does not wrap into three
+    lines on a phone, but the control still says what it actually covers. The
+    accessible name contains the visible text, so the two never disagree."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    card = page.text.split('class="select-all-card"', 1)[1].split("</label>", 1)[0]
+    accessible_name = re.search(r'aria-label="([^"]+)"', card).group(1)
+    visible_text = card.split(">")[-1].strip()
+
+    assert visible_text == "Select all"
+    assert accessible_name == "Select all on this page"
+    # WCAG "Label in Name": the spoken name has to contain what is written on it.
+    assert visible_text in accessible_name
 
 
 def test_selection_mode_has_one_exit_not_two(tmp_path):

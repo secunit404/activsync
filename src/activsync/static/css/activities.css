@@ -5,9 +5,9 @@
 .activity-toolbar {
     display: flex;
     align-items: center;
-    /* The sync buttons used to hold the left end; with only the view controls
-       left, space-between would strand them against the right edge. */
-    justify-content: flex-end;
+    /* No justify-content: .activity-view-controls pins itself right with
+       margin-left:auto, which holds whether or not the selection tools are
+       showing on the left. */
     flex-wrap: wrap;
     gap: 10px 16px;
     position: sticky;
@@ -93,22 +93,18 @@
     cursor: pointer;
 }
 
-/* Sticky-bottom, and after the list in document order — above it, the bar
-   scrolled away exactly when a long list needed it. */
+/* Lives in the toolbar, which is already sticky — so these follow the list down
+   without a floating bar of their own. Sits in the space the sync buttons left
+   behind; .activity-view-controls keeps itself pinned right regardless. */
 .multi-select-tools {
     display: none;
-    position: sticky;
-    bottom: 12px;
-    z-index: 5;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: var(--surface);
-    box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+    gap: 8px;
+}
+
+.activity-panel.is-selecting .multi-select-tools {
+    display: flex;
 }
 
 .multi-select-tools button, .multi-select-tools .select-all-card {
@@ -119,12 +115,9 @@
 
 .selection-count {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     font-weight: 650;
-}
-
-.multi-select-tools .publish-selected-button {
-    margin-left: auto;
+    white-space: nowrap;
 }
 
 .multi-select-tools .publish-selected-button:disabled {
@@ -132,17 +125,23 @@
     cursor: not-allowed;
 }
 
+/* Reads as a control in the toolbar rather than the standalone card it is
+   elsewhere — the border and fill only add weight beside the other controls. */
 .multi-select-tools .select-all-card {
     gap: 8px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.multi-select-tools .select-all-card:hover {
+    color: var(--ink);
 }
 
 .multi-select-tools .select-all-input {
     width: 1rem;
     height: 1rem;
-}
-
-.activity-panel.is-selecting .multi-select-tools {
-    display: flex;
 }
 
 .select-multiple-button {
@@ -175,19 +174,19 @@
     align-items: center;
 }
 
-/* The input carries the checked state for keyboard and AT users and is what
-   hx-include selects on; the row is the visible control. Hidden this way rather
-   than display:none so it stays focusable and announced. */
+/* Out of the layout entirely at rest — there is no selection UI to expose then,
+   for sighted or screen reader users alike. It comes back as a real checkbox in
+   selection mode; hx-include reads :checked off it either way. */
+.activity-row-select {
+    display: none;
+}
+
 .activsync-select-input {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
 }
 
 .activity-row {
@@ -212,7 +211,7 @@
     cursor: pointer;
 }
 
-/* Border AND fill AND the glyph — colour alone is not a state signal. */
+/* Border AND fill AND the box — colour alone is not a state signal. */
 .activity-panel.is-selecting .activity-row:has(.activsync-select-input:checked) {
     border-color: var(--accent);
     background: var(--row-selected);
@@ -232,20 +231,18 @@
     display: none;
 }
 
-.activity-row-check {
-    display: none;
-    color: var(--accent);
-}
-
-.activity-panel.is-selecting .activity-row.is-selectable .activity-row-check {
+/* Takes the cell the row actions just vacated, and holds it at their height so
+   entering the mode does not shorten the rows. Applies to every row, including
+   the ones with nothing to select — those hide their actions too, and without
+   this the cell would collapse to nothing and only they would shrink.
+   Explicitly placed rather than auto-flowed: auto-placement lands it in a
+   different cell depending on what else the row has. */
+.activity-panel.is-selecting .activity-row .activity-row-select {
     display: flex;
     align-items: center;
-    justify-content: center;
-    opacity: 0.25;
-}
-
-.activity-panel.is-selecting .activity-row:has(.activsync-select-input:checked) .activity-row-check {
-    opacity: 1;
+    justify-content: flex-end;
+    grid-column: 4;
+    min-height: 36px;
 }
 
 .activity-row-date {
@@ -578,6 +575,15 @@
         grid-column: 1;
         grid-row: 4;
         align-self: center;
+        margin-top: 8px;
+    }
+    /* Same cell as the row actions it stands in for — the desktop rule puts it
+       in column 4, which does not exist here, and without a placement it would
+       auto-flow into a different cell per row. The margin matches the actions'
+       so the row keeps its height to the pixel. */
+    .activity-panel.is-selecting .activity-row .activity-row-select {
+        grid-column: 2;
+        grid-row: 4;
         margin-top: 8px;
     }
     .activity-row-actions {

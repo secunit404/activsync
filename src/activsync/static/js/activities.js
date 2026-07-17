@@ -74,6 +74,27 @@
             return;
         }
 
+        var row = event.target.closest(".activity-row");
+        if (!row) return;
+        var rowPanel = panelOf(row);
+        if (!rowPanel || !rowPanel.classList.contains("is-selecting")) return;
+
+        // The row is the hit target, but it still contains links and the
+        // checkbox's own label — let those behave normally. Without `label`
+        // here, a click on the box would toggle twice and land back where it
+        // started: once natively, once from this handler.
+        if (event.target.closest("a, button, input, select, textarea, dialog, label")) return;
+
+        var input = row.querySelector(".activsync-select-input");
+        if (!input) return;              // published/excluded rows are inert
+        input.checked = !input.checked;
+        refresh(rowPanel);
+    });
+
+    // Both checkboxes are reached by click, by keyboard, and by their label, and
+    // only `change` catches all three — a click handler misses the label text
+    // and the spacebar.
+    document.addEventListener("change", function (event) {
         var all = event.target.closest(".select-all-input");
         if (all) {
             var allPanel = panelOf(all);
@@ -82,24 +103,6 @@
             return;
         }
 
-        var row = event.target.closest(".activity-row");
-        if (!row) return;
-        var rowPanel = panelOf(row);
-        if (!rowPanel || !rowPanel.classList.contains("is-selecting")) return;
-
-        // The row is the hit target, but it still contains links and its own
-        // hidden input — let those behave normally.
-        if (event.target.closest("a, button, input, select, textarea, dialog")) return;
-
-        var input = row.querySelector(".activsync-select-input");
-        if (!input) return;              // published/excluded rows are inert
-        input.checked = !input.checked;
-        refresh(rowPanel);
-    });
-
-    // Keyboard and AT users operate the hidden input directly; the row styling
-    // is driven off :checked either way, but the count needs telling.
-    document.addEventListener("change", function (event) {
         var input = event.target.closest(".activsync-select-input");
         if (input) refresh(panelOf(input));
     });
