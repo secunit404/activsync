@@ -252,6 +252,7 @@
 .service-link {
     display: inline-flex;
     align-items: center;
+    gap: 5px;
     color: var(--garmin);
     font-family: var(--mono);
     font-size: 0.74rem;
@@ -268,6 +269,16 @@
 .service-link:hover {
     text-decoration: none;
     opacity: 0.7;
+}
+
+/* The old ↗ was a text glyph: shorter than the caps and sitting on the same
+   baseline, so its ink centred ~1.8px low, and screen readers read it out as
+   "north east arrow". An icon sized to the text centres on the flex row above
+   and stays out of the accessible name. */
+.service-link-icon {
+    width: 1em;
+    height: 1em;
+    flex: 0 0 auto;
 }
 
 .service-link[href*="strava"] { color: var(--accent-ink); }
@@ -429,7 +440,7 @@
            [ 5 Jul · 09:56 ]        [ PENDING ]
            [ Morning run #1                   ]
            [ running                          ]
-           [ GARMIN ↗      ] [ Publish ][ Details ]
+           [ GARMIN ⧉      ] [ Publish ][ Details ]
        .activity-row-main is flattened so its children land on the row's grid;
        on desktop it stays a normal block and the date keeps its own column. */
     .activity-row {
