@@ -652,6 +652,31 @@ def test_dashboard_shows_checkbox_for_pending_held_and_missing(tmp_path):
     assert 'name="activity_ids" value="6"' not in response.text
 
 
+def test_publish_buttons_show_busy_feedback_for_single_and_bulk_actions(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    # One bulk button, one row action, and one details-dialog action are all
+    # available for a publishable activity. Each must expose the same busy
+    # feedback before its request swaps the activity table away.
+    assert page.text.count("Publishing…") == 3
+    assert page.text.count('class="button-spinner"') >= 3
+    bulk_button = page.text.split('<button class="primary-action publish-selected-button"', 1)[1].split("</button>", 1)[0]
+    assert 'hx-disabled-elt="this"' in bulk_button
+    assert "hx-on::before-request" in bulk_button
+
+    publish_forms = re.findall(r'<form class="[^"]*publish-action"[^>]*>.*?</form>', page.text, re.S)
+    assert len(publish_forms) == 2
+    for form in publish_forms:
+        assert "button-swap" not in form
+        assert "b.setAttribute('aria-busy','true')" in form
+        assert "b.disabled=true" in form
+        assert "Publishing…" in form
+
+
 def test_logs_page_is_not_available(tmp_path):
     _, client = _logged_in_client(tmp_path)
 

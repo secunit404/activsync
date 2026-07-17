@@ -34,7 +34,8 @@
         if (publish) {
             var label = publish.querySelector(".button-label");
             if (label) label.textContent = selected ? "Publish " + selected : "Publish";
-            publish.disabled = selected === 0 || publish.dataset.connectionsBroken === "true";
+            publish.disabled = selected === 0 || publish.dataset.connectionsBroken === "true" ||
+                publish.getAttribute("aria-busy") === "true" || publish.classList.contains("htmx-request");
         }
 
         var all = panel.querySelector(".select-all-input");
