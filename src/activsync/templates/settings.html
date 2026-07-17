@@ -33,7 +33,13 @@
       <span class="conn-dot conn-dot-garmin"></span>
       <span class="conn-identity">
         <span class="conn-name">Garmin</span>
-        <span class="conn-meta">{{ connections.garmin.detail }}</span>
+        <span class="conn-status">{{ connections.garmin.status }}</span>
+        {% if connections.garmin.meta %}
+          <button type="button" class="conn-info" aria-label="{{ connections.garmin.meta }}">
+            <span aria-hidden="true">i</span>
+            <span class="conn-info-tip" role="tooltip">{{ connections.garmin.meta }}</span>
+          </button>
+        {% endif %}
       </span>
       <button type="button" class="connection-manage-button" aria-haspopup="dialog" aria-controls="garmin-manage-dialog"
               onclick="document.getElementById('garmin-manage-dialog').showModal()">
@@ -90,7 +96,13 @@
       <span class="conn-dot conn-dot-strava"></span>
       <span class="conn-identity">
         <span class="conn-name">Strava</span>
-        <span class="conn-meta">{{ connections.strava.detail }}</span>
+        <span class="conn-status">{{ connections.strava.status }}</span>
+        {% if connections.strava.meta %}
+          <button type="button" class="conn-info" aria-label="{{ connections.strava.meta }}">
+            <span aria-hidden="true">i</span>
+            <span class="conn-info-tip" role="tooltip">{{ connections.strava.meta }}</span>
+          </button>
+        {% endif %}
       </span>
       <button type="button" class="connection-manage-button" aria-haspopup="dialog" aria-controls="strava-manage-dialog"
               onclick="document.getElementById('strava-manage-dialog').showModal()">

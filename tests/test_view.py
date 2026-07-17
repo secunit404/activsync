@@ -49,7 +49,7 @@ def test_activities_view_does_not_mutate_db_rows(conn):
 def test_garmin_status_not_synced_when_never_attempted(conn):
     status = view.garmin_status(conn)
 
-    assert status == {"state": "not_synced", "message": "Not yet synced"}
+    assert status == {"state": "not_synced", "status": "Not yet synced", "meta": ""}
 
 
 def test_garmin_status_connected_after_successful_sync(conn):
@@ -61,7 +61,8 @@ def test_garmin_status_connected_after_successful_sync(conn):
     status = view.garmin_status(conn, now=now)
 
     assert status["state"] == "connected"
-    assert status["message"] == "Connected — last synced 5 min ago"
+    assert status["status"] == "Connected"
+    assert status["meta"] == "last synced 5 min ago"
 
 
 def test_garmin_status_needs_attention_after_failed_sync(conn):
@@ -73,7 +74,8 @@ def test_garmin_status_needs_attention_after_failed_sync(conn):
     status = view.garmin_status(conn, now=now)
 
     assert status["state"] == "needs_attention"
-    assert status["message"] == "Needs attention — last attempt at 14:02 failed: MFA required"
+    assert status["status"] == "Needs attention"
+    assert status["meta"] == "last attempt at 14:02 failed: MFA required"
 
 
 def test_connection_status_reports_garmin_broken_after_a_failed_sync(conn):
