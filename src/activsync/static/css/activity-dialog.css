@@ -77,8 +77,11 @@
     min-height: 30px;
 }
 
+/* The pills read as part of the metadata above them, not as a label for the
+   title below, so keep them tight to the kicker and give the title real room —
+   at 6px a row of 30px tap targets crowds a 27px heading. */
 .activity-dialog-links {
-    margin-bottom: 6px;
+    margin-bottom: 14px;
 }
 
 .activity-dialog-title {

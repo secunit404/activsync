@@ -6,12 +6,14 @@ interface `sync` actually uses. That drift is invisible until `make dev`
 raises AttributeError at runtime.
 """
 
+import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
 
 from activsync import config, db, dev_mock, dev_seed, sync
+from activsync import server as server_module
 from activsync.garmin_client import GarminClient
 from activsync.strava_client import StravaClient
 
@@ -135,3 +137,40 @@ def test_dev_taxonomy_is_large_enough_to_exercise_the_collapsed_picker(conn):
     """The picker only collapses past 18 categories. A dev list under that
     renders a shape production never shows."""
     assert len(dev_mock.garmin_activity_types()) > 18
+
+
+def test_dev_busts_the_stylesheet_cache_when_css_changes(tmp_path, monkeypatch):
+    """Dev keys stylesheet URLs off file mtime, not the release version. The
+    version cannot move while CSS is being edited and uvicorn's reloader only
+    watches Python, so a version-keyed URL serves the stylesheet cached at the
+    start of the session — and the browser renders something other than what is
+    on disk, which quietly invalidates any visual check made against it."""
+    monkeypatch.setattr(server_module, "_mock_mode", lambda: True)
+    monkeypatch.setattr(server_module, "STATIC_DIR", tmp_path)
+    css = tmp_path / "css" / "sheet.css"
+    css.parent.mkdir()
+    css.write_text("a{}")
+
+    before = server_module._asset_version("sheet")
+    os.utime(css, (1_000_000_000, 1_000_000_000))
+    after = server_module._asset_version("sheet")
+
+    assert before != after
+    assert after != server_module.__version__
+
+
+def test_asset_version_falls_back_to_the_version_for_an_unknown_sheet(monkeypatch, tmp_path):
+    """A missing file must not 500 the whole page over a cache-busting token."""
+    monkeypatch.setattr(server_module, "_mock_mode", lambda: True)
+    monkeypatch.setattr(server_module, "STATIC_DIR", tmp_path)
+
+    assert server_module._asset_version("nope") == server_module.__version__
+
+
+def test_production_keys_stylesheets_to_the_release_version(monkeypatch):
+    """Released images are immutable, so the version is the honest token there —
+    and it stays stable across restarts instead of busting every deploy's cache
+    for no reason."""
+    monkeypatch.setattr(server_module, "_mock_mode", lambda: False)
+
+    assert server_module._asset_version("buttons") == server_module.__version__

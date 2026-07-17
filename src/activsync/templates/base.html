@@ -78,7 +78,7 @@
         "tokens", "base", "layout", "buttons", "nav", "forms",
         "settings", "activities", "activity-dialog", "setup", "dev",
     ] %}
-    <link rel="stylesheet" href="/static/css/{{ sheet }}.css?v={{ app_version }}">
+    <link rel="stylesheet" href="/static/css/{{ sheet }}.css?v={{ asset_version(sheet) }}">
     {%- endfor %}
 </head>
 <body hx-ext="sse" sse-connect="/api/events">
