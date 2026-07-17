@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.4](https://github.com/secunit404/activsync/compare/v1.2.3...v1.2.4) (2026-07-17)
+
+
+### Bug Fixes
+
+* show publish progress in activity actions ([#33](https://github.com/secunit404/activsync/issues/33)) ([312bc7f](https://github.com/secunit404/activsync/commit/312bc7f8cfd83eecdbf10de7c2d3b91d2b6c0ab7))
+
 ## [1.2.3](https://github.com/secunit404/activsync/compare/v1.2.2...v1.2.3) (2026-07-17)
 
 
