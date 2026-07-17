@@ -265,15 +265,3 @@
     flex-wrap: wrap;
     gap: 8px;
 }
-
-/* Visible, unlike .settings-save-announcement — these buttons have no "Saved"
-   swap to carry the outcome, so this line is the only feedback there is. */
-.manual-sync-message {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.88rem;
-}
-
-.manual-sync-message:empty {
-    display: none;
-}

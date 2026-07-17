@@ -25,7 +25,7 @@
     </div>
 </header>
 
-<section class="panel">
+<section class="panel" id="connections">
   <div class="panel-body stack">
     <h2>Connections</h2>
 
@@ -140,21 +140,29 @@
     <div class="manual-sync">
       <h3>Manual sync</h3>
       <p class="hint">ActivSync polls both services on a schedule. Use these to check right now.</p>
+      {# Same three states as the save and setup buttons: idle, working, done —
+         all of them in the button. Garmin can take a while, so the spinner is
+         the only thing telling the reader it is still going. #}
       <div class="manual-sync-actions">
-        <button type="button" hx-post="/api/sync/garmin" hx-target="#manual-sync-status" hx-swap="outerHTML"
-                class="secondary compact-settings-button button-swap" hx-disabled-elt="this"
+        <button type="button" hx-post="/api/sync/garmin" hx-swap="none" hx-disabled-elt="this"
+                class="secondary compact-settings-button button-swap"
+                data-save-feedback="manual-sync" data-saved-message="Garmin synced."
                 {% if not connections.garmin.connected %}disabled title="Garmin is disconnected — reconnect to sync"{% endif %}>
           <span class="button-label">Sync Garmin</span>
-          <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing Garmin…</span>
+          <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing…</span>
+          <span class="button-saved" aria-hidden="true">{% include "partials/_check_icon.svg" %}Synced</span>
         </button>
-        <button type="button" hx-post="/api/sync/strava/status" hx-target="#manual-sync-status" hx-swap="outerHTML"
-                class="secondary compact-settings-button button-swap" hx-disabled-elt="this"
+        <button type="button" hx-post="/api/sync/strava/status" hx-swap="none" hx-disabled-elt="this"
+                class="secondary compact-settings-button button-swap"
+                data-save-feedback="manual-sync" data-saved-message="Strava synced."
                 {% if not connections.strava.connected %}disabled title="Strava is disconnected — reconnect to sync"{% endif %}>
           <span class="button-label">Sync Strava</span>
-          <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing Strava…</span>
+          <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing…</span>
+          <span class="button-saved" aria-hidden="true">{% include "partials/_check_icon.svg" %}Synced</span>
         </button>
       </div>
-      {% include "partials/_manual_sync_status.html" %}
+      <p class="error settings-save-error" role="alert" hidden></p>
+      <p class="settings-save-announcement" role="status"></p>
     </div>
   </div>
 </section>
