@@ -6,9 +6,9 @@ import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from activsync import config, db
+from activsync import config, db, dev_mock
 
-SEED_VERSION = 4
+SEED_VERSION = 5
 
 
 def seed(conn: sqlite3.Connection) -> None:
@@ -70,17 +70,7 @@ def seed(conn: sqlite3.Connection) -> None:
             )
 
     db.set_config_value(conn, "settings", config.DEFAULT_CONFIG)
-    db.set_config_value(conn, "garmin_activity_types", [
-        {"type_key": key, "label": label}
-        for key, label in [
-            ("running", "Running"), ("trail_running", "Trail Running"),
-            ("cycling", "Cycling"), ("indoor_cycling", "Indoor Cycling"),
-            ("walking", "Walking"), ("hiking", "Hiking"),
-            ("swimming", "Swimming"), ("rowing", "Rowing"),
-            ("strength_training", "Strength Training"), ("yoga", "Yoga"),
-            ("elliptical", "Elliptical"), ("cardio", "Cardio"),
-            ("tennis", "Tennis"), ("basketball", "Basketball"),
-            ("golf", "Golf"), ("skiing", "Skiing"),
-        ]
-    ])
+    # One source of truth with the fake Garmin client, so a seeded dev DB
+    # and a refreshed one show the same categories.
+    db.set_config_value(conn, "garmin_activity_types", dev_mock.garmin_activity_types())
     db.set_config_value(conn, "dev_seed_version", SEED_VERSION)

@@ -7,10 +7,11 @@ raises AttributeError at runtime.
 """
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
-from activsync import config, db, dev_mock, sync
+from activsync import config, db, dev_mock, dev_seed, sync
 from activsync.garmin_client import GarminClient
 from activsync.strava_client import StravaClient
 
@@ -93,3 +94,44 @@ def test_publish_pending_runs_end_to_end_against_the_fakes(conn):
     assert stats.published == 1
     assert stats.failed == 0
     assert db.get_activity(conn, 5)["publish_status"] == "published"
+
+
+def test_fake_garmin_derives_activity_types_exactly_as_the_real_client_does(conn):
+    """The fake ships keys and derives labels; the real client derives them from
+    what Garmin sends. Run the real derivation over the same keys: if the two
+    ever disagree, dev is rendering categories production never would."""
+    raw_client = MagicMock()
+    raw_client.get_activity_types.return_value = [
+        {"typeKey": key} for key in dev_mock.GARMIN_ACTIVITY_TYPE_KEYS
+    ]
+
+    real = GarminClient(raw_client).fetch_activity_types()
+
+    assert dev_mock.FakeGarminClient(conn).fetch_activity_types() == real
+
+
+def test_fake_garmin_reports_the_taxonomy_rather_than_the_stored_list(conn):
+    """Echoing the stored list back would make Refresh categories a no-op in
+    dev: it could never disagree with the DB, so the one thing the button does
+    would go unexercised."""
+    db.set_config_value(conn, "garmin_activity_types", [
+        {"type_key": "running", "label": "Running"},
+    ])
+
+    types = dev_mock.FakeGarminClient(conn).fetch_activity_types()
+
+    assert len(types) > 1
+    assert {"type_key": "yoga", "label": "Yoga"} in types
+
+
+def test_dev_seed_stores_what_the_fake_garmin_reports(conn):
+    dev_seed.seed(conn)
+
+    assert (db.get_config_value(conn, "garmin_activity_types")
+            == dev_mock.FakeGarminClient(conn).fetch_activity_types())
+
+
+def test_dev_taxonomy_is_large_enough_to_exercise_the_collapsed_picker(conn):
+    """The picker only collapses past 18 categories. A dev list under that
+    renders a shape production never shows."""
+    assert len(dev_mock.garmin_activity_types()) > 18
