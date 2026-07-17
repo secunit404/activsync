@@ -39,20 +39,19 @@
     text-decoration: none;
 }
 
+/* Filled rather than underlined: the nav pages dropped their h1, so this is
+   the only thing naming the current page and it has to carry that alone. */
 .nav-menu-items .button-link[aria-current="page"] {
-    border-color: transparent;
-    background: transparent;
-    color: var(--ink);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent-ink);
     font-weight: 750;
-    text-decoration: underline;
-    text-decoration-color: var(--border-strong);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 5px;
+    text-decoration: none;
 }
 
 .nav-menu-items .button-link[aria-current="page"]:hover {
-    border-color: transparent;
-    background: transparent;
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* Theme toggle */

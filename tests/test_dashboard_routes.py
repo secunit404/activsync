@@ -313,8 +313,32 @@ def test_the_wordmark_links_to_the_activities_page(tmp_path):
     for path in ("/", "/settings"):
         page = client.get(path)
         assert page.status_code == 200
-        lockup = page.text.split('class="page-kicker brand-lockup"')[1].split("</p>")[0]
+        lockup = page.text.split('class="brand-heading"')[1].split("</h1>")[0]
         assert '<a class="brand-link" href="/"' in lockup, f"wordmark is not a link on {path}"
+
+
+def test_nav_pages_state_the_page_name_once(tmp_path):
+    """The nav already says which page you are on; a matching h1 was pure
+    duplication and cost a whole row of vertical space."""
+    conn, client = _logged_in_client(tmp_path)
+
+    dashboard = client.get("/")
+    assert "<h1>Activities</h1>" not in dashboard.text
+    assert 'aria-current="page"' in dashboard.text
+
+    settings = client.get("/settings")
+    assert "<h1>Settings</h1>" not in settings.text
+    assert 'aria-current="page"' in settings.text
+
+
+def test_setup_keeps_its_own_page_title(tmp_path):
+    """setup.html has no nav, so its h1 is not redundant and must survive."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    page = client.get("/setup")
+    assert 'class="page-kicker brand-lockup"' in page.text
+    assert "Connect Garmin" in page.text
 
 
 def test_dashboard_banner_names_the_broken_connection(tmp_path):
