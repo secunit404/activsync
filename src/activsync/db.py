@@ -27,12 +27,6 @@ CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
-);
 """
 
 
@@ -52,6 +46,14 @@ def connect(path: str) -> sqlite3.Connection:
         # migrate to NULL, which reads as 'category' — the only kind of hold
         # that existed before catch-up.
         conn.execute("ALTER TABLE activities ADD COLUMN hold_reason TEXT")
+    # Password auth was removed before the first public release, but databases
+    # created under it still carry the session table and the stored password
+    # hash. Nothing reads either, and a dead feature's credential is not worth
+    # keeping at rest. Both statements are no-ops on a database that never had
+    # them, so this stays in connect() rather than needing a version check.
+    conn.execute("DROP TABLE IF EXISTS sessions")
+    conn.execute("DELETE FROM app_config WHERE key = 'auth'")
+    conn.commit()
     return conn
 
 
@@ -230,31 +232,4 @@ def set_config_value(conn: sqlite3.Connection, key: str, value) -> None:
            ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
         (key, json.dumps(value)),
     )
-    conn.commit()
-
-
-def insert_session(
-    conn: sqlite3.Connection, token_hash: str, created_at: str, expires_at: str
-) -> None:
-    conn.execute(
-        "INSERT INTO sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)",
-        (token_hash, created_at, expires_at),
-    )
-    conn.commit()
-
-
-def get_session(conn: sqlite3.Connection, token_hash: str) -> dict | None:
-    row = conn.execute(
-        "SELECT * FROM sessions WHERE token_hash = ?", (token_hash,)
-    ).fetchone()
-    return dict(row) if row else None
-
-
-def delete_session(conn: sqlite3.Connection, token_hash: str) -> None:
-    conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
-    conn.commit()
-
-
-def delete_all_sessions(conn: sqlite3.Connection) -> None:
-    conn.execute("DELETE FROM sessions")
     conn.commit()
