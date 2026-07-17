@@ -5,7 +5,9 @@
 .activity-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    /* The sync buttons used to hold the left end; with only the view controls
+       left, space-between would strand them against the right edge. */
+    justify-content: flex-end;
     flex-wrap: wrap;
     gap: 10px 16px;
     position: sticky;

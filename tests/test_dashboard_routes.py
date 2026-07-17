@@ -352,18 +352,6 @@ def test_dashboard_banner_names_the_broken_connection(tmp_path):
     assert "Garmin disconnected" in response.text
 
 
-def test_sync_with_garmin_broken_returns_the_table_not_a_redirect(tmp_path):
-    conn, client = _logged_in_client(tmp_path)
-    _setup_done(conn)
-    db.set_config_value(conn, "garmin_credentials_verified", False)
-
-    response = client.post("/api/sync/garmin", data={}, follow_redirects=False)
-
-    assert response.status_code == 409
-    assert 'id="activity-table"' in response.text
-    assert "Settings" not in response.text          # never the whole settings page
-
-
 def test_sync_garmin_route_runs_garmin_sync_and_returns_partial(tmp_path, monkeypatch):
     conn, client = _logged_in_client(tmp_path)
     fake_garmin = MagicMock()
@@ -379,16 +367,6 @@ def test_sync_garmin_route_runs_garmin_sync_and_returns_partial(tmp_path, monkey
     assert response.status_code == 200
     fake_garmin.fetch_recent_activities.assert_called_once()
     status_check.assert_called_once()
-
-
-def test_sync_garmin_route_requires_garmin_setup(tmp_path):
-    conn = db.connect(str(tmp_path / "test.db"))
-    client = TestClient(create_app(conn))
-
-    response = client.post("/api/sync/garmin", follow_redirects=False)
-
-    assert response.status_code == 409
-    assert 'id="activity-table"' in response.text
 
 
 def test_publish_to_strava_route_publishes_only_selected_activities(tmp_path, monkeypatch):
@@ -523,14 +501,17 @@ def test_sync_strava_status_route_flags_missing_activity(tmp_path, monkeypatch):
     assert db.get_activity(conn, 4)["publish_status"] == "missing"
 
 
-def test_strava_sync_endpoints_require_setup(tmp_path):
+def test_strava_publish_requires_setup(tmp_path):
+    """Bulk publish stays on the activities page, so it still answers with the
+    table. Its sibling /api/sync/strava/status moved to Settings and answers
+    with the manual sync fragment instead — covered in test_settings_routes.py."""
     conn = db.connect(str(tmp_path / "test.db"))
     client = TestClient(create_app(conn))
 
-    for path in ["/api/sync/strava/publish", "/api/sync/strava/status"]:
-        response = client.post(path, follow_redirects=False)
-        assert response.status_code == 409
-        assert 'id="activity-table"' in response.text
+    response = client.post("/api/sync/strava/publish", follow_redirects=False)
+
+    assert response.status_code == 409
+    assert 'id="activity-table"' in response.text
 
 
 def test_dashboard_shows_checkbox_for_pending_held_and_missing(tmp_path):

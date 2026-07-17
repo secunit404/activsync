@@ -136,6 +136,26 @@
     {% if strava_dialog_open %}
       <script>document.getElementById('strava-manage-dialog').showModal();</script>
     {% endif %}
+
+    <div class="manual-sync">
+      <h3>Manual sync</h3>
+      <p class="hint">ActivSync polls both services on a schedule. Use these to check right now.</p>
+      <div class="manual-sync-actions">
+        <button type="button" hx-post="/api/sync/garmin" hx-target="#manual-sync-status" hx-swap="outerHTML"
+                class="secondary compact-settings-button button-swap" hx-disabled-elt="this"
+                {% if not connections.garmin.connected %}disabled title="Garmin is disconnected — reconnect to sync"{% endif %}>
+          <span class="button-label">Sync Garmin</span>
+          <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing Garmin…</span>
+        </button>
+        <button type="button" hx-post="/api/sync/strava/status" hx-target="#manual-sync-status" hx-swap="outerHTML"
+                class="secondary compact-settings-button button-swap" hx-disabled-elt="this"
+                {% if not connections.strava.connected %}disabled title="Strava is disconnected — reconnect to sync"{% endif %}>
+          <span class="button-label">Sync Strava</span>
+          <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing Strava…</span>
+        </button>
+      </div>
+      {% include "partials/_manual_sync_status.html" %}
+    </div>
   </div>
 </section>
 

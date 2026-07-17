@@ -8,6 +8,7 @@ from activsync import config, db
 from activsync import server as server_module
 from activsync.garmin_client import MfaRequired
 from activsync.server import create_app
+from activsync.strava_client import StravaAuthError
 
 
 def _logged_in_client(tmp_path):
@@ -1325,3 +1326,75 @@ def test_refreshing_categories_without_htmx_returns_to_the_categories_section(tm
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings#autosync"
+
+
+def test_settings_offers_manual_sync_for_both_services(tmp_path):
+    """The poller does both on a loop, so these are manual overrides and belong
+    next to the connections they act on rather than atop the activities list."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+
+    page = client.get("/settings")
+
+    assert page.status_code == 200
+    assert 'hx-post="/api/sync/garmin"' in page.text
+    assert 'hx-post="/api/sync/strava/status"' in page.text
+    assert ">Sync Garmin<" in page.text
+    assert ">Sync Strava<" in page.text
+    assert ">Check Strava<" not in page.text
+
+
+def test_manual_sync_reports_success_into_the_settings_status_region(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    fake_garmin = MagicMock()
+    fake_garmin.fetch_recent_activities.return_value = []
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda c: fake_garmin)
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: MagicMock())
+    monkeypatch.setattr(server_module.sync, "check_strava_status", MagicMock())
+
+    response = client.post("/api/sync/garmin")
+
+    assert response.status_code == 200
+    assert 'id="manual-sync-status"' in response.text
+    assert "Garmin synced." in response.text
+    assert 'id="activity-table"' not in response.text
+    # .settings-save-announcement is visually hidden: its forms put the outcome
+    # on the button instead ("Saved"), so it only has to reach AT. These buttons
+    # have no such swap, so borrowing that class would show the user nothing.
+    assert "settings-save-announcement" not in response.text
+
+
+def test_manual_sync_reports_a_broken_connection_into_the_status_region(tmp_path):
+    """The error used to land in the activities table, which is not on screen
+    once the button lives in Settings."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    db.set_config_value(conn, "garmin_credentials_verified", False)
+
+    response = client.post("/api/sync/garmin", follow_redirects=False)
+
+    assert response.status_code == 409
+    assert 'id="manual-sync-status"' in response.text
+    assert "Garmin is disconnected" in response.text
+    assert 'id="activity-table"' not in response.text
+
+
+def test_manual_strava_sync_reports_a_rejected_token_into_the_status_region(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: MagicMock())
+    monkeypatch.setattr(
+        server_module.sync, "check_strava_status",
+        MagicMock(side_effect=StravaAuthError("Strava access token rejected")),
+    )
+
+    response = client.post("/api/sync/strava/status")
+
+    assert response.status_code == 409
+    assert 'id="manual-sync-status"' in response.text
+    assert "Strava access token rejected" in response.text

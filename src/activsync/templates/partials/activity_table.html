@@ -11,20 +11,6 @@
     {% endfor %}
     {% if sync_error %}<p class="error">{{ sync_error }}</p>{% endif %}
     <div class="activity-toolbar">
-        <div class="sync-actions">
-            <button hx-post="/api/sync/garmin" hx-target="#activity-table" hx-swap="outerHTML"
-                    hx-on::before-request="this.setAttribute('aria-busy','true')"
-                    {% if not connections.garmin.connected %}disabled title="Garmin is disconnected — reconnect to sync"{% endif %}>
-                <span class="button-label">Sync Garmin</span>
-                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing Garmin…</span>
-            </button>
-            <button hx-post="/api/sync/strava/status" hx-target="#activity-table" hx-swap="outerHTML"
-                    hx-on::before-request="this.setAttribute('aria-busy','true')"
-                    {% if not connections.strava.connected %}disabled title="Strava is disconnected — reconnect to check status"{% endif %}>
-                <span class="button-label">Check Strava</span>
-                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Checking Strava…</span>
-            </button>
-        </div>
         <div class="activity-view-controls">
             {% if ns.has_publishable %}
             <button type="button" class="select-multiple-button" aria-expanded="false"
