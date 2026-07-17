@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from activsync import config, db, dev_mock
 
-SEED_VERSION = 5
+SEED_VERSION = 7
 
 
 def seed(conn: sqlite3.Connection) -> None:
@@ -38,6 +38,13 @@ def seed(conn: sqlite3.Connection) -> None:
         ("rowing", "Rowing intervals", "Short, hard intervals.", 32 * 60, 6_400, "pending"),
         ("elliptical", "Cross trainer", "Low-impact aerobic session.", 44 * 60, None, "held"),
         ("cardio", "Cardio workout", "Mixed cardio session.", 39 * 60, None, "published"),
+        # The taxonomy's longest type key. Every other sample here is short
+        # enough to flatter the layout; the detail dialog only shows what it
+        # does with a long category if something actually has one.
+        # Published, so both link pills render: the longest key and the widest
+        # actions row are the same worst case the header has to survive.
+        ("backcountry_skiing_snowboarding_ws", "Backcountry day", "Skinned up, rode down.",
+         5 * 3600 + 20 * 60, 9_400, "published"),
     ]
     for offset in range(12):
         month_index = now.month - offset

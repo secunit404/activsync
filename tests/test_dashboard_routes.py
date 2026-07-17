@@ -698,3 +698,38 @@ def test_favicon_ico_is_the_same_image_the_pages_link(tmp_path):
     linked = client.get("/static/favicon.png")
 
     assert root.content == linked.content
+
+
+def test_activity_dialog_leads_with_the_time_not_the_activity_type(tmp_path):
+    """The timestamp is fixed-width and the type is not, so the type has to come
+    second: leading with it pushes the timestamp to a different column on every
+    row, and a long type wraps the line rather than just extending it."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 11, "backcountry_skiing_snowboarding_ws", "Backcountry day",
+                       "", "2026-07-09 09:00:00", "h11", "published", now)
+
+    response = client.get("/")
+
+    kicker = re.search(r'<p class="dialog-kicker">([^<]+)</p>', response.text)
+    assert kicker, "activity dialog is missing its kicker"
+    assert kicker.group(1).strip() == "2026-07-09 11:00 · backcountry_skiing_snowboarding_ws"
+
+
+def test_activity_dialog_keeps_the_link_pills_off_the_kicker_row(tmp_path):
+    """The pills cost ~260px beside the kicker, which wrapped a long type onto a
+    second line and dragged the badge down with it. They belong on their own row;
+    only the short, fixed badge shares the kicker's."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 12, "running", "Morning Run", "", "2026-07-09 09:00:00", "h12",
+                       "published", now)
+
+    response = client.get("/")
+
+    meta = re.search(r'<div class="activity-dialog-meta">(.*?)</div>', response.text, re.S)
+    assert meta, "activity dialog is missing its meta row"
+    assert "dialog-kicker" in meta.group(1)
+    assert "badge-published" in meta.group(1)
+    assert "link-pill" not in meta.group(1)
+    assert "activity-dialog-links" in response.text

@@ -68,17 +68,18 @@
     overflow-wrap: anywhere;
 }
 
-.activity-dialog-meta-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
+/* The badge is the only thing sharing the kicker's row: it is short and fixed,
+   so even the longest activity type gets the rest of the width and stays on one
+   line. The link pills used to sit here too, which cost ~260px and wrapped the
+   kicker mid-text, growing the header and shifting the badge down with it. */
+.activity-dialog-meta > .badge {
     flex: 0 0 auto;
-    flex-wrap: wrap;
-    gap: 6px 10px;
+    min-height: 30px;
 }
 
-/* Match the link pills so badge and pills share one centre line. */
-.activity-dialog-meta-actions .badge { min-height: 30px; }
+.activity-dialog-links {
+    margin-bottom: 6px;
+}
 
 .activity-dialog-title {
     font-size: clamp(1.3rem, 4vw, 1.7rem);
@@ -271,8 +272,8 @@
 }
 
 @media (max-width: 740px) {
-    /* Too narrow to sit beside the badge and pills without wrapping the
-       kicker mid-text, so give each its own row. */
+    /* Narrow enough that even the badge alongside can wrap the kicker mid-text,
+       so give each its own row. */
     .activity-dialog-meta {
         align-items: center;
         flex-wrap: wrap;
@@ -280,10 +281,6 @@
     }
     .dialog-kicker {
         flex: 1 1 100%;
-    }
-    .activity-dialog-meta-actions {
-        justify-content: flex-start;
-        flex-basis: 100%;
     }
     .activity-dialog {
         width: 100%;
