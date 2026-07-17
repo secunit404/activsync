@@ -313,8 +313,32 @@ def test_the_wordmark_links_to_the_activities_page(tmp_path):
     for path in ("/", "/settings"):
         page = client.get(path)
         assert page.status_code == 200
-        lockup = page.text.split('class="page-kicker brand-lockup"')[1].split("</p>")[0]
+        lockup = page.text.split('class="brand-heading"')[1].split("</h1>")[0]
         assert '<a class="brand-link" href="/"' in lockup, f"wordmark is not a link on {path}"
+
+
+def test_nav_pages_state_the_page_name_once(tmp_path):
+    """The nav already says which page you are on; a matching h1 was pure
+    duplication and cost a whole row of vertical space."""
+    conn, client = _logged_in_client(tmp_path)
+
+    dashboard = client.get("/")
+    assert "<h1>Activities</h1>" not in dashboard.text
+    assert 'aria-current="page"' in dashboard.text
+
+    settings = client.get("/settings")
+    assert "<h1>Settings</h1>" not in settings.text
+    assert 'aria-current="page"' in settings.text
+
+
+def test_setup_keeps_its_own_page_title(tmp_path):
+    """setup.html has no nav, so its h1 is not redundant and must survive."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    page = client.get("/setup")
+    assert 'class="page-kicker brand-lockup"' in page.text
+    assert "Connect Garmin" in page.text
 
 
 def test_dashboard_banner_names_the_broken_connection(tmp_path):
@@ -326,18 +350,6 @@ def test_dashboard_banner_names_the_broken_connection(tmp_path):
 
     assert response.status_code == 200
     assert "Garmin disconnected" in response.text
-
-
-def test_sync_with_garmin_broken_returns_the_table_not_a_redirect(tmp_path):
-    conn, client = _logged_in_client(tmp_path)
-    _setup_done(conn)
-    db.set_config_value(conn, "garmin_credentials_verified", False)
-
-    response = client.post("/api/sync/garmin", data={}, follow_redirects=False)
-
-    assert response.status_code == 409
-    assert 'id="activity-table"' in response.text
-    assert "Settings" not in response.text          # never the whole settings page
 
 
 def test_sync_garmin_route_runs_garmin_sync_and_returns_partial(tmp_path, monkeypatch):
@@ -355,16 +367,6 @@ def test_sync_garmin_route_runs_garmin_sync_and_returns_partial(tmp_path, monkey
     assert response.status_code == 200
     fake_garmin.fetch_recent_activities.assert_called_once()
     status_check.assert_called_once()
-
-
-def test_sync_garmin_route_requires_garmin_setup(tmp_path):
-    conn = db.connect(str(tmp_path / "test.db"))
-    client = TestClient(create_app(conn))
-
-    response = client.post("/api/sync/garmin", follow_redirects=False)
-
-    assert response.status_code == 409
-    assert 'id="activity-table"' in response.text
 
 
 def test_publish_to_strava_route_publishes_only_selected_activities(tmp_path, monkeypatch):
@@ -499,14 +501,141 @@ def test_sync_strava_status_route_flags_missing_activity(tmp_path, monkeypatch):
     assert db.get_activity(conn, 4)["publish_status"] == "missing"
 
 
-def test_strava_sync_endpoints_require_setup(tmp_path):
+def test_strava_publish_requires_setup(tmp_path):
+    """Bulk publish stays on the activities page, so it still answers with the
+    table. Its sibling /api/sync/strava/status moved to Settings and answers
+    with the manual sync fragment instead — covered in test_settings_routes.py."""
     conn = db.connect(str(tmp_path / "test.db"))
     client = TestClient(create_app(conn))
 
-    for path in ["/api/sync/strava/publish", "/api/sync/strava/status"]:
-        response = client.post(path, follow_redirects=False)
-        assert response.status_code == 409
-        assert 'id="activity-table"' in response.text
+    response = client.post("/api/sync/strava/publish", follow_redirects=False)
+
+    assert response.status_code == 409
+    assert 'id="activity-table"' in response.text
+
+
+def test_selection_checkbox_sits_in_the_row_not_a_column_of_its_own(tmp_path):
+    """The checkbox takes the cell the row actions vacate in selection mode, so
+    the row never grows a column and never shifts. It is a real input rather
+    than a drawn glyph, so hx-include still reads :checked off it and publish is
+    unchanged."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    assert 'name="activity_ids" value="5"' in page.text
+    assert "activsync-select-input" in page.text
+    # The box is the control now; no separate drawn check to keep in step.
+    assert "activity-row-check" not in page.text
+    # It lives inside the row, after the row's own actions — not in a leading cell.
+    row = page.text.split('<article class="activity-row', 1)[1]
+    assert row.index("activity-row-actions") < row.index("activity-row-select")
+
+
+def test_only_publishable_rows_are_marked_selectable(tmp_path):
+    """Whether a row can be selected is fixed at render time, so it ships as a
+    class; the CSS dims everything without it and ignores clicks on it."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+    db.insert_activity(conn, 6, "running", "Published Run", "", "2026-07-09 08:00:00", "h6", "published", now)
+    db.insert_activity(conn, 7, "running", "Excluded Run", "", "2026-07-09 07:00:00", "h7", "excluded", now)
+
+    page = client.get("/")
+
+    rows = re.findall(r'<article class="(activity-row[^"]*)" data-gid="(\d+)"', page.text)
+    selectable = {gid: ("is-selectable" in cls) for cls, gid in rows}
+    assert selectable == {"5": True, "6": False, "7": False}
+
+
+def test_selection_tools_live_in_the_sticky_toolbar(tmp_path):
+    """The toolbar is already sticky, so the selection controls follow the list
+    down from inside it — no floating bar of its own, and nothing to scroll
+    away from. Being in the toolbar means they precede the list."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+    db.insert_activity(conn, 6, "running", "Held Run", "", "2026-07-08 09:00:00", "h6", "held", now)
+
+    page = client.get("/")
+
+    toolbar = page.text.split('class="activity-toolbar"', 1)[1].split('class="activity-list"', 1)[0]
+    assert 'class="multi-select-tools"' in toolbar
+    assert "publish-selected-button" in toolbar
+    assert "selection-count" in toolbar
+    # One set of tools, in the toolbar — not also trailing the list.
+    assert page.text.count('class="multi-select-tools"') == 1
+
+
+def test_select_all_keeps_its_scope_in_the_accessible_name(tmp_path):
+    """The visible text is short so the sticky toolbar does not wrap into three
+    lines on a phone, but the control still says what it actually covers. The
+    accessible name contains the visible text, so the two never disagree."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    card = page.text.split('class="select-all-card"', 1)[1].split("</label>", 1)[0]
+    accessible_name = re.search(r'aria-label="([^"]+)"', card).group(1)
+    visible_text = card.split(">")[-1].strip()
+
+    assert visible_text == "Select all"
+    assert accessible_name == "Select all on this page"
+    # WCAG "Label in Name": the spoken name has to contain what is written on it.
+    assert visible_text in accessible_name
+
+
+def test_selection_mode_has_one_exit_not_two(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    assert "cancel-selection-button" not in page.text
+    assert page.text.count("select-multiple-button") == 1
+
+
+def test_publish_selected_ships_disabled_so_it_cannot_post_an_empty_selection(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    tools = page.text.split('class="multi-select-tools"')[1].split("</div>")[0]
+    assert "disabled" in tools
+
+
+def test_selection_logic_is_not_inline_onclick(tmp_path):
+    """The state logic lives in static/js/activities.js, not in ~600 characters
+    of onclick duplicated across three elements."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    assert "classList.toggle('is-selecting')" not in page.text
+    assert "querySelectorAll('.activsync-select')" not in page.text
+    assert "/static/js/activities.js" in page.text
+
+
+def test_pages_link_scripts_that_are_actually_served(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    page = client.get("/setup")
+    srcs = re.findall(r'<script src="(/static/[^"]+)"', page.text)
+    assert srcs, "no local scripts linked"
+    for src in srcs:
+        assert "?v=" in src, f"{src} is not cache-busted"
+        served = client.get(src.split("?")[0])
+        assert served.status_code == 200, f"{src} is linked but not served"
 
 
 def test_dashboard_shows_checkbox_for_pending_held_and_missing(tmp_path):

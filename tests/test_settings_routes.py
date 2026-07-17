@@ -8,6 +8,7 @@ from activsync import config, db
 from activsync import server as server_module
 from activsync.garmin_client import MfaRequired
 from activsync.server import create_app
+from activsync.strava_client import StravaAuthError
 
 
 def _logged_in_client(tmp_path):
@@ -1325,3 +1326,98 @@ def test_refreshing_categories_without_htmx_returns_to_the_categories_section(tm
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings#autosync"
+
+
+def test_settings_offers_manual_sync_for_both_services(tmp_path):
+    """The poller does both on a loop, so these are manual overrides and belong
+    next to the connections they act on rather than atop the activities list."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+
+    page = client.get("/settings")
+
+    assert page.status_code == 200
+    assert 'hx-post="/api/sync/garmin"' in page.text
+    assert 'hx-post="/api/sync/strava/status"' in page.text
+    assert ">Sync Garmin<" in page.text
+    assert ">Sync Strava<" in page.text
+    assert ">Check Strava<" not in page.text
+
+
+def test_manual_sync_answers_204_like_every_other_settings_action(tmp_path, monkeypatch):
+    """Same contract as the save buttons: 204, nothing swaps, and the button
+    reports the outcome itself. Anything rendered here would have to be a
+    second, parallel way of saying what the button already says."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    fake_garmin = MagicMock()
+    fake_garmin.fetch_recent_activities.return_value = []
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda c: fake_garmin)
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: MagicMock())
+    monkeypatch.setattr(server_module.sync, "check_strava_status", MagicMock())
+
+    response = client.post("/api/sync/garmin", headers={"HX-Request": "true"},
+                           follow_redirects=False)
+
+    assert response.status_code == 204
+    assert response.text == ""
+    fake_garmin.fetch_recent_activities.assert_called_once()
+
+
+def test_manual_sync_reports_a_broken_connection_as_plain_text(tmp_path):
+    """The error goes to the button's error slot, which reads xhr.responseText
+    verbatim — so the body has to be the message, not a page or a fragment."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    db.set_config_value(conn, "garmin_credentials_verified", False)
+
+    response = client.post("/api/sync/garmin", headers={"HX-Request": "true"},
+                           follow_redirects=False)
+
+    assert response.status_code == 409
+    assert response.text == "Garmin is disconnected — reconnect it to sync."
+    assert "<" not in response.text
+
+
+def test_manual_strava_sync_reports_a_rejected_token_as_plain_text(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: MagicMock())
+    monkeypatch.setattr(
+        server_module.sync, "check_strava_status",
+        MagicMock(side_effect=StravaAuthError("Strava access token rejected")),
+    )
+
+    response = client.post("/api/sync/strava/status", headers={"HX-Request": "true"},
+                           follow_redirects=False)
+
+    assert response.status_code == 409
+    assert response.text == "Strava access token rejected"
+    assert "<" not in response.text
+
+
+def test_manual_sync_buttons_wear_the_same_states_as_the_rest_of_settings(tmp_path):
+    """Idle, working, done — all three in the button, as on the save and setup
+    buttons. .button-swap holds every state in one grid cell, so swapping
+    between them does not resize the button."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn); _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+
+    page = client.get("/settings")
+
+    tools = page.text.split('class="manual-sync-actions"', 1)[1].split("</div>", 1)[0]
+    for button in tools.split("<button")[1:]:
+        assert "button-swap" in button
+        assert "button-label" in button
+        assert "button-loading" in button and "button-spinner" in button
+        assert "button-saved" in button
+        assert "data-save-feedback" in button and "data-saved-message" in button
+    # The section needs both slots the shared feedback script writes into.
+    section = page.text.split('id="connections"', 1)[1].split("</section>", 1)[0]
+    assert "settings-save-error" in section
+    assert "settings-save-announcement" in section

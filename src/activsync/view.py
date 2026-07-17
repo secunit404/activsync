@@ -128,22 +128,28 @@ def activities_view(
 
 def garmin_status(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
     """Garmin connection status for the Settings page, derived from the
-    outcome of the most recent sync_garmin() attempt (poller or manual)."""
+    outcome of the most recent sync_garmin() attempt (poller or manual).
+
+    `status` is the short label shown on the connection row; `meta` is the
+    extra detail (sync age, failure info) shown in the smaller row beneath it,
+    or "" when there's nothing more to say.
+    """
     last_sync_at = db.get_config_value(conn, "garmin_last_sync_at")
     if last_sync_at is None:
-        return {"state": "not_synced", "message": "Not yet synced"}
+        return {"state": "not_synced", "status": "Not yet synced", "meta": ""}
 
     synced_at = datetime.fromisoformat(last_sync_at)
     now = now or datetime.now(timezone.utc)
 
     if db.get_config_value(conn, "garmin_last_sync_ok"):
         age_minutes = max(int((now - synced_at).total_seconds() // 60), 0)
-        return {"state": "connected", "message": f"Connected — last synced {age_minutes} min ago"}
+        return {"state": "connected", "status": "Connected", "meta": f"last synced {age_minutes} min ago"}
 
     error = db.get_config_value(conn, "garmin_last_sync_error") or "unknown error"
     return {
         "state": "needs_attention",
-        "message": f"Needs attention — last attempt at {synced_at.strftime('%H:%M')} failed: {error}",
+        "status": "Needs attention",
+        "meta": f"last attempt at {synced_at.strftime('%H:%M')} failed: {error}",
     }
 
 
@@ -161,10 +167,12 @@ def connection_status(conn: sqlite3.Connection, now: datetime | None = None) -> 
     tokens = db.get_config_value(conn, "strava_tokens") or {}
     strava_connected = bool(tokens.get("refresh_token"))
 
-    garmin_detail = (
-        garmin_status(conn, now)["message"] if garmin_connected
-        else "Disconnected — sync paused"
-    )
+    if garmin_connected:
+        gs = garmin_status(conn, now)
+        garmin_line = {"status": gs["status"], "meta": gs["meta"]}
+    else:
+        garmin_line = {"status": "Disconnected — sync paused", "meta": ""}
+
     broken = [
         name for name, ok in (("garmin", garmin_connected), ("strava", strava_connected))
         if not ok
@@ -172,12 +180,14 @@ def connection_status(conn: sqlite3.Connection, now: datetime | None = None) -> 
     return {
         "garmin": {
             "connected": garmin_connected,
-            "detail": garmin_detail,
+            "status": garmin_line["status"],
+            "meta": garmin_line["meta"],
             "email": creds.get("email", ""),
         },
         "strava": {
             "connected": strava_connected,
-            "detail": "Connected" if strava_connected else "Disconnected — publishing paused",
+            "status": "Connected" if strava_connected else "Disconnected — publishing paused",
+            "meta": "",
         },
         "broken": broken,
     }

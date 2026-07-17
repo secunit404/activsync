@@ -100,20 +100,21 @@ def _build_strava_client(conn: sqlite3.Connection):
     return StravaClient(conn, creds.get("client_id", ""), creds.get("client_secret", ""))
 
 
-def _asset_version(name: str) -> str:
-    """Cache-busting token for a stylesheet.
+def _asset_version(name: str, kind: str = "css") -> str:
+    """Cache-busting token for a static asset.
 
     Production ships an immutable image per release, so the version is a fine
-    token. Dev is the problem: the version never moves while CSS is being
+    token. Dev is the problem: the version never moves while an asset is being
     edited, and uvicorn's reloader only watches Python — so the browser keeps
-    serving the stylesheet it cached at the start of the session and quietly
-    renders something other than what is on disk. Key off the file's mtime
-    there instead.
+    serving the file it cached at the start of the session and quietly renders
+    something other than what is on disk. Key off the file's mtime there
+    instead. `kind` is both the subdirectory and the extension: css/x.css,
+    js/x.js.
     """
     if not _mock_mode():
         return __version__
     try:
-        return str(int((STATIC_DIR / "css" / f"{name}.css").stat().st_mtime))
+        return str(int((STATIC_DIR / kind / f"{name}.{kind}").stat().st_mtime))
     except OSError:
         return __version__
 
@@ -448,20 +449,15 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache"})
 
-    @app.post("/api/sync/garmin", response_class=HTMLResponse)
-    def sync_garmin_route(
-        request: Request,
-        sort_order: str = Form("newest"),
-        status_filter: str = Form(""),
-    ):
+    @app.post("/api/sync/garmin")
+    def sync_garmin_route(request: Request):
+        """Manual sync answers like every other settings action: 204, nothing
+        swaps, and the button reports itself. Errors go back as plain text —
+        the shared feedback script puts xhr.responseText straight in the error
+        slot, so a fragment would land there as raw markup."""
         if not _settings_context()["garmin_connected"]:
-            return templates.TemplateResponse(
-                request, "partials/activity_table.html",
-                _activity_context(
-                    sort_order, status_filter,
-                    sync_error="Garmin is disconnected — reconnect it to sync.",
-                ),
-                status_code=409,
+            return PlainTextResponse(
+                "Garmin is disconnected — reconnect it to sync.", status_code=409,
             )
         garmin = _build_garmin_client(conn)
         now = datetime.now(timezone.utc)
@@ -469,7 +465,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         if _settings_context()["strava_connected"]:
             sync.check_strava_status(conn, _build_strava_client(conn), config.load_config(conn), now)
         events.bus.publish("refresh")
-        return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
+        return _saved(request, "connections")
 
     @app.post("/api/sync/strava/publish", response_class=HTMLResponse)
     def publish_to_strava_route(
@@ -511,20 +507,11 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             _activity_context(sort_order, status_filter, sync_error=_publish_failure_message(stats)),
         )
 
-    @app.post("/api/sync/strava/status", response_class=HTMLResponse)
-    def sync_strava_status_route(
-        request: Request,
-        sort_order: str = Form("newest"),
-        status_filter: str = Form(""),
-    ):
+    @app.post("/api/sync/strava/status")
+    def sync_strava_status_route(request: Request):
         if not _settings_context()["strava_connected"]:
-            return templates.TemplateResponse(
-                request, "partials/activity_table.html",
-                _activity_context(
-                    sort_order, status_filter,
-                    sync_error="Strava is disconnected — reconnect it to check status.",
-                ),
-                status_code=409,
+            return PlainTextResponse(
+                "Strava is disconnected — reconnect it to sync.", status_code=409,
             )
         strava = _build_strava_client(conn)
         try:
@@ -533,13 +520,9 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             # A revoked token or an app missing activity:read_all surfaces here
             # rather than as a 500, since this is the button a user reaches for
             # precisely when the connection has gone bad.
-            return templates.TemplateResponse(
-                request, "partials/activity_table.html",
-                _activity_context(sort_order, status_filter, sync_error=str(e)),
-                status_code=409,
-            )
+            return PlainTextResponse(str(e), status_code=409)
         events.bus.publish("refresh")
-        return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
+        return _saved(request, "connections")
 
     @app.post("/api/activities/{garmin_activity_id}/publish", response_class=HTMLResponse)
     def publish_activity(

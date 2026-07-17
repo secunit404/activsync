@@ -5,7 +5,9 @@
 .activity-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    /* No justify-content: .activity-view-controls pins itself right with
+       margin-left:auto, which holds whether or not the selection tools are
+       showing on the left. */
     flex-wrap: wrap;
     gap: 10px 16px;
     position: sticky;
@@ -91,12 +93,18 @@
     cursor: pointer;
 }
 
+/* Lives in the toolbar, which is already sticky — so these follow the list down
+   without a floating bar of their own. Sits in the space the sync buttons left
+   behind; .activity-view-controls keeps itself pinned right regardless. */
 .multi-select-tools {
     display: none;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-top: -4px;
+    gap: 8px;
+}
+
+.activity-panel.is-selecting .multi-select-tools {
+    display: flex;
 }
 
 .multi-select-tools button, .multi-select-tools .select-all-card {
@@ -105,17 +113,35 @@
     font-size: 0.82rem;
 }
 
+.selection-count {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+.multi-select-tools .publish-selected-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Reads as a control in the toolbar rather than the standalone card it is
+   elsewhere — the border and fill only add weight beside the other controls. */
 .multi-select-tools .select-all-card {
     gap: 8px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.multi-select-tools .select-all-card:hover {
+    color: var(--ink);
 }
 
 .multi-select-tools .select-all-input {
     width: 1rem;
     height: 1rem;
-}
-
-.activity-panel.is-selecting .multi-select-tools {
-    display: flex;
 }
 
 .select-multiple-button {
@@ -148,18 +174,19 @@
     align-items: center;
 }
 
-.activity-panel.is-selecting .activity-row {
-    grid-template-columns: 28px 68px minmax(260px, 1.6fr) auto minmax(180px, auto);
-}
-
+/* Out of the layout entirely at rest — there is no selection UI to expose then,
+   for sighted or screen reader users alike. It comes back as a real checkbox in
+   selection mode; hx-include reads :checked off it either way. */
 .activity-row-select {
     display: none;
 }
 
-.activity-panel.is-selecting .activity-row-select {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.activsync-select-input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
 }
 
 .activity-row {
@@ -168,6 +195,54 @@
     background: var(--surface);
     padding: 12px 16px;
     transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+/* Selection state. Must come after the .activity-row base above: that rule sets
+   the `border` and `background` shorthands, and a shorthand re-declares every
+   longhand it covers, so the base has to lose on order as well as specificity.
+
+   Selected-ness is read straight off the input with :has(:checked) rather than
+   mirrored onto the row as a class — the input is already the source of truth
+   (hx-include posts :checked), and a mirror is one more thing to keep in sync.
+   Whether a row CAN be selected is a different question: that never changes
+   after render, so it is the server-rendered .is-selectable class instead of
+   making the browser evaluate :has() for a constant. */
+.activity-panel.is-selecting .activity-row.is-selectable {
+    cursor: pointer;
+}
+
+/* Border AND fill AND the box — colour alone is not a state signal. */
+.activity-panel.is-selecting .activity-row:has(.activsync-select-input:checked) {
+    border-color: var(--accent);
+    background: var(--row-selected);
+}
+
+.activity-panel.is-selecting .activity-row.is-selectable:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Published and excluded rows: nothing to select. */
+.activity-panel.is-selecting .activity-row:not(.is-selectable) {
+    opacity: 0.45;
+}
+
+.activity-panel.is-selecting .activity-row-actions {
+    display: none;
+}
+
+/* Takes the cell the row actions just vacated, and holds it at their height so
+   entering the mode does not shorten the rows. Applies to every row, including
+   the ones with nothing to select — those hide their actions too, and without
+   this the cell would collapse to nothing and only they would shrink.
+   Explicitly placed rather than auto-flowed: auto-placement lands it in a
+   different cell depending on what else the row has. */
+.activity-panel.is-selecting .activity-row .activity-row-select {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    grid-column: 4;
+    min-height: 36px;
 }
 
 .activity-row-date {
@@ -454,18 +529,6 @@
     .activity-row-main {
         display: contents;
     }
-    .activity-panel.is-selecting .activity-row {
-        grid-template-columns: 24px minmax(0, 1fr) auto;
-    }
-    .activity-row-select {
-        grid-column: 1;
-        grid-row: 1;
-        align-self: center;
-        padding-top: 0;
-    }
-    .activity-panel.is-selecting .activity-row-select {
-        display: flex;
-    }
     .activity-row-date {
         grid-column: 1;
         grid-row: 1;
@@ -514,6 +577,15 @@
         align-self: center;
         margin-top: 8px;
     }
+    /* Same cell as the row actions it stands in for — the desktop rule puts it
+       in column 4, which does not exist here, and without a placement it would
+       auto-flow into a different cell per row. The margin matches the actions'
+       so the row keeps its height to the pixel. */
+    .activity-panel.is-selecting .activity-row .activity-row-select {
+        grid-column: 2;
+        grid-row: 4;
+        margin-top: 8px;
+    }
     .activity-row-actions {
         grid-column: 2;
         grid-row: 4;
@@ -521,18 +593,6 @@
         margin-top: 8px;
     }
     .activity-row-actions button, .activity-row-actions form, .activity-row-actions form button { flex: 0 0 auto; }
-    .activity-panel.is-selecting .activity-row-date,
-    .activity-panel.is-selecting .activity-inline-links {
-        grid-column: 2;
-    }
-    .activity-panel.is-selecting .activity-title-read,
-    .activity-panel.is-selecting .activity-subline {
-        grid-column: 2 / -1;
-    }
-    .activity-panel.is-selecting .activity-row-status,
-    .activity-panel.is-selecting .activity-row-actions {
-        grid-column: 3;
-    }
     .activity-pagination {
         align-items: stretch;
         flex-direction: column;

@@ -80,6 +80,7 @@
     ] %}
     <link rel="stylesheet" href="/static/css/{{ sheet }}.css?v={{ asset_version(sheet) }}">
     {%- endfor %}
+    <script src="/static/js/activities.js?v={{ asset_version('activities', 'js') }}" defer></script>
 </head>
 <body hx-ext="sse" sse-connect="/api/events">
 {% if dev_mode %}

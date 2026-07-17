@@ -11,26 +11,34 @@
     {% endfor %}
     {% if sync_error %}<p class="error">{{ sync_error }}</p>{% endif %}
     <div class="activity-toolbar">
-        <div class="sync-actions">
-            <button hx-post="/api/sync/garmin" hx-target="#activity-table" hx-swap="outerHTML"
+        {# In the toolbar rather than a bar of its own: the toolbar is already
+           sticky, so it follows the list down anyway. #}
+        {% if ns.has_publishable %}
+        <div class="multi-select-tools" role="group" aria-label="Publish multiple activities">
+            <p class="selection-count" role="status">0 selected</p>
+            {# Visible text stays short so the toolbar does not wrap into three
+               lines on a phone — it is sticky, and that much of it pinned costs
+               a quarter of the viewport. The accessible name keeps the scope,
+               and contains the visible text, so the two do not disagree. #}
+            <label class="select-all-card">
+                <input class="select-all-input" type="checkbox" aria-label="Select all on this page">
+                Select all
+            </label>
+            <button class="primary-action publish-selected-button" hx-post="/api/sync/strava/publish"
+                    hx-target="#activity-table" hx-swap="outerHTML"
+                    hx-include="[name='activity_ids']:checked"
                     hx-on::before-request="this.setAttribute('aria-busy','true')"
-                    {% if not connections.garmin.connected %}disabled title="Garmin is disconnected — reconnect to sync"{% endif %}>
-                <span class="button-label">Sync Garmin</span>
-                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Syncing Garmin…</span>
-            </button>
-            <button hx-post="/api/sync/strava/status" hx-target="#activity-table" hx-swap="outerHTML"
-                    hx-on::before-request="this.setAttribute('aria-busy','true')"
-                    {% if not connections.strava.connected %}disabled title="Strava is disconnected — reconnect to check status"{% endif %}>
-                <span class="button-label">Check Strava</span>
-                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Checking Strava…</span>
+                    data-connections-broken="{{ 'true' if connections.broken else 'false' }}"
+                    disabled
+                    {% if connections.broken %}title="Reconnect to publish"{% endif %}>
+                <span class="button-label">Publish</span>
+                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
             </button>
         </div>
+        {% endif %}
         <div class="activity-view-controls">
             {% if ns.has_publishable %}
-            <button type="button" class="select-multiple-button" aria-expanded="false"
-                    onclick="var p=this.closest('.activity-panel');var active=p.classList.toggle('is-selecting');this.setAttribute('aria-expanded',active);this.textContent=active?'Done selecting':'Select multiple';if(!active){p.querySelectorAll('.activsync-select').forEach(function(cb){cb.checked=false});var all=p.querySelector('.select-all-input');if(all)all.checked=false;}">
-                Select multiple
-            </button>
+            <button type="button" class="select-multiple-button" aria-pressed="false">Select multiple</button>
             {% endif %}
             <label class="activity-sort-control">
                 <span>Sort</span>
@@ -61,26 +69,9 @@
     {% endif %}
     {% if activities %}
     <div class="activity-list" aria-label="Activities">
-        {% if ns.has_publishable %}
-        <div class="multi-select-tools" role="group" aria-label="Multiple activity selection">
-            <label class="select-all-card">
-                <input class="select-all-input" type="checkbox" onclick="var c = this.checked; this.closest('.activity-panel').querySelectorAll('.activsync-select').forEach(function(cb){cb.checked = c})">
-                Select all
-            </label>
-            <button type="button" class="secondary cancel-selection-button"
-                    onclick="var p=this.closest('.activity-panel');var toggle=p.querySelector('.select-multiple-button');p.classList.remove('is-selecting');if(toggle){toggle.setAttribute('aria-expanded','false');toggle.textContent='Select multiple';}p.querySelectorAll('.activsync-select').forEach(function(cb){cb.checked=false});var all=p.querySelector('.select-all-input');if(all)all.checked=false;">
-                Cancel
-            </button>
-            <button class="primary-action publish-selected-button" hx-post="/api/sync/strava/publish" hx-target="#activity-table" hx-swap="outerHTML"
-                    hx-on::before-request="this.setAttribute('aria-busy','true')"
-                    hx-include="[name='activity_ids']:checked"
-                    {% if connections.broken %}disabled title="Reconnect to publish"{% endif %}>
-                <span class="button-label">Publish selected</span>
-                <span class="button-loading"><span class="button-spinner" aria-hidden="true"></span>Publishing…</span>
-            </button>
-        </div>
-        {% endif %}
-        {% set ns = namespace(previous_month_year="") %}
+        {# Distinct from `ns` above: that one carries has_publishable, which the
+           selection tools still need after this loop has run. #}
+        {% set month_ns = namespace(previous_month_year="") %}
         {% for activity in activities %}
             {% set d = activity.detail %}
             {% set local_date_parts = activity.start_time_display.split(' ')[0].split('-') %}
@@ -91,21 +82,19 @@
             {% set edit_form_id = "activity-edit-form-" ~ activity.garmin_activity_id %}
             {% set dialog_id = "activity-dialog-" ~ activity.garmin_activity_id %}
             {% set month_year_display = activity.start_month_year_display|default(full_month_names[local_date_parts[1]|int - 1] ~ " " ~ local_date_parts[0], true) %}
-            {% if month_year_display != ns.previous_month_year %}
+            {% if month_year_display != month_ns.previous_month_year %}
             <div class="activity-month-header">
                 <h2>{{ month_year_display }}</h2>
             </div>
-            {% set ns.previous_month_year = month_year_display %}
+            {% set month_ns.previous_month_year = month_year_display %}
             {% endif %}
-            <article class="activity-row" data-gid="{{ activity.garmin_activity_id }}">
+            {# Whether a row can be selected is fixed at render time, so it ships
+               as a class rather than making the browser derive it with :has().
+               Whether it IS selected stays on the input — see activities.css. #}
+            <article class="activity-row{% if activity.publish_status in ("held", "pending", "missing") %} is-selectable{% endif %}" data-gid="{{ activity.garmin_activity_id }}">
                 <form id="{{ edit_form_id }}" class="metadata-form" hx-post="/api/activities/{{ activity.garmin_activity_id }}/edit" hx-target="#activity-table" hx-swap="outerHTML"
                       hx-on::before-request="var d=document.getElementById('{{ dialog_id }}');if(d&&d.open)window._activsyncOpenDialogIds=[d.dataset.gid];if(d){d.classList.add('is-saving');var b=d.querySelector('.save-metadata-button');if(b){b.disabled=true;b.setAttribute('aria-busy','true')}var c=d.querySelector('.cancel-edit-button');if(c)c.disabled=true;var x=d.querySelector('.dialog-close');if(x)x.disabled=true}"
                       hx-on::after-request="if(!event.detail.successful){var d=document.getElementById('{{ dialog_id }}');if(d){d.classList.remove('is-saving');var b=d.querySelector('.save-metadata-button');if(b){b.disabled=false;b.removeAttribute('aria-busy')}var c=d.querySelector('.cancel-edit-button');if(c)c.disabled=false;var x=d.querySelector('.dialog-close');if(x)x.disabled=false}}"></form>
-                <div class="activity-row-select">
-                    {% if activity.publish_status in ("held", "pending", "missing") %}
-                    <input type="checkbox" class="activsync-select" name="activity_ids" value="{{ activity.garmin_activity_id }}" title="Select {{ activity.title }}">
-                    {% endif %}
-                </div>
                 <div class="activity-row-date">
                     <div class="activity-date-stack">
                         <span class="activity-date-day">{{ activity.start_date_display|default(fallback_date_display, true) }}</span>
@@ -138,6 +127,18 @@
                     </form>
                     {% endif %}
                     <button type="button" class="details-button" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" onclick="document.getElementById('{{ dialog_id }}').showModal()">Details</button>
+                </div>
+                {# Takes the cell .activity-row-actions occupies — those hide in
+                   selection mode, so the box costs the row no width. Rendered on
+                   every row, empty where there is nothing to select: it holds
+                   that cell at the buttons' height, and a row without it would
+                   collapse to the height of its links alone. The real input
+                   rather than a drawn glyph: it fills natively when checked, is
+                   its own hit target, and hx-include already reads :checked. #}
+                <div class="activity-row-select">
+                    {% if activity.publish_status in ("held", "pending", "missing") %}
+                    <input type="checkbox" class="activsync-select-input" name="activity_ids" value="{{ activity.garmin_activity_id }}" aria-label="Select {{ activity.title }}">
+                    {% endif %}
                 </div>
                 <dialog id="{{ dialog_id }}" class="activity-dialog" data-gid="{{ activity.garmin_activity_id }}" aria-labelledby="{{ dialog_id }}-title" onclick="if (event.target === this) { this.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue}); this.classList.remove('is-editing'); this.close(); }" oncancel="this.querySelectorAll('[data-editable]').forEach(function(el){el.value=el.defaultValue}); this.classList.remove('is-editing');">
                     <div class="activity-dialog-card">

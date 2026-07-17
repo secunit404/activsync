@@ -1,6 +1,6 @@
 /* Buttons and button-shaped links, plus the busy/spinner states. */
 
-.button-row, .sync-actions {
+.button-row {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -68,35 +68,6 @@ button:disabled, button:disabled:hover {
     color: var(--garmin-action-ink);
 }
 
-/* Sync controls follow their platform colors: Garmin = blue, Strava = orange */
-.sync-actions button {
-    background: transparent;
-    border-color: var(--border-strong);
-    color: var(--ink);
-}
-
-.sync-actions button:nth-child(1) {
-    border-color: var(--garmin);
-    color: var(--garmin);
-}
-
-.sync-actions button:nth-child(1):hover {
-    border-color: var(--garmin);
-    background: color-mix(in srgb, var(--garmin) 13%, transparent);
-    color: var(--garmin);
-}
-
-.sync-actions button:nth-child(2) {
-    border-color: var(--accent);
-    color: var(--accent-ink);
-}
-
-.sync-actions button:nth-child(2):hover {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 13%, transparent);
-    color: var(--accent-ink);
-}
-
 .ghost-button {
     background: transparent;
     border-color: transparent;
@@ -108,7 +79,7 @@ button:focus-visible {
     outline-offset: 2px;
 }
 
-.sync-actions button[disabled], .primary-action[disabled] {
+.primary-action[disabled] {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -182,7 +153,3 @@ button.htmx-request .button-loading, button[aria-busy="true"] .button-loading { 
     .button-check { animation: none; }
 }
 
-@media (max-width: 740px) {
-    .sync-actions { display: grid; grid-template-columns: 1fr 1fr; }
-    .sync-actions button { width: 100%; }
-}

@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime, timezone
 
 import pytest
@@ -153,26 +154,46 @@ def test_config_value_roundtrip(conn):
     assert db.get_config_value(conn, "settings") == {"poll_interval_minutes": 5}
 
 
-def test_session_insert_get_delete(conn):
-    db.insert_session(conn, "hash1", "2026-07-09T10:00:00", "2026-08-08T10:00:00")
+def test_connect_purges_the_dead_password_auth_state(tmp_path):
+    """Password auth was removed, but databases created before that still hold
+    its session table and its stored password hash. Nothing reads either, and a
+    stale credential is not worth keeping at rest, so connect() clears both.
+    Unrelated config must survive untouched."""
+    path = str(tmp_path / "legacy.db")
+    legacy = sqlite3.connect(path)
+    legacy.executescript(
+        """
+        CREATE TABLE app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE sessions (
+            token_hash TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        );
+        """
+    )
+    legacy.execute(
+        "INSERT INTO app_config (key, value) VALUES ('auth', ?)",
+        ('{"password_hash": "deadbeef", "salt": "cafe"}',),
+    )
+    legacy.execute(
+        "INSERT INTO app_config (key, value) VALUES ('settings', ?)",
+        ('{"lookback_days": 30}',),
+    )
+    legacy.execute("INSERT INTO sessions VALUES ('h', '2026-01-01', '2026-02-01')")
+    legacy.commit()
+    legacy.close()
 
-    row = db.get_session(conn, "hash1")
-    assert row["token_hash"] == "hash1"
-    assert row["expires_at"] == "2026-08-08T10:00:00"
+    conn = db.connect(path)
 
-    db.delete_session(conn, "hash1")
-    assert db.get_session(conn, "hash1") is None
-
-
-def test_get_session_missing_returns_none(conn):
-    assert db.get_session(conn, "nope") is None
+    assert db.get_config_value(conn, "auth") is None
+    tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "sessions" not in tables
+    assert db.get_config_value(conn, "settings") == {"lookback_days": 30}
 
 
-def test_delete_all_sessions(conn):
-    db.insert_session(conn, "a", "2026-07-09T10:00:00", "2026-08-08T10:00:00")
-    db.insert_session(conn, "b", "2026-07-09T10:00:00", "2026-08-08T10:00:00")
-
-    db.delete_all_sessions(conn)
-
-    assert db.get_session(conn, "a") is None
-    assert db.get_session(conn, "b") is None
+def test_connect_purge_is_idempotent_on_a_fresh_database(conn):
+    """A database that never had password auth must not trip the purge."""
+    assert db.get_config_value(conn, "auth") is None
+    tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "sessions" not in tables
+    assert "activities" in tables
