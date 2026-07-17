@@ -1,0 +1,60 @@
+{# The autosync picker body. Rendered inline by settings.html and returned
+   on its own by /settings/garmin-activity-types/refresh, which swaps it in
+   place so refreshing does not reload the page. #}
+    {% if activity_types %}
+        <div class="category-controls">
+            <label class="category-search">Find a category
+                <input type="search" placeholder="Search Garmin categories…" autocomplete="off"
+                       oninput="var p=this.closest('.autosync-picker');var q=this.value.toLowerCase().trim();var expanded=p.dataset.categoriesExpanded==='true';p.querySelectorAll('.autosync-option').forEach(function(card){var matches=!q||card.dataset.search.includes(q);var extra=card.classList.contains('category-option-extra');card.hidden=!matches||(!q&&!expanded&&extra)});p.querySelector('.category-visible-count').textContent=p.querySelectorAll('.autosync-option:not([hidden])').length;">
+            </label>
+            <div class="category-actions-row">
+                <p class="category-summary" role="status" aria-live="polite">
+                    <strong class="autosync-enabled-count">{{ activity_types | rejectattr('type_key', 'in', cfg.held_activity_types) | list | length }}</strong> enabled ·
+                    <span class="category-visible-count">{{ activity_types[:18]|length }}</span> shown
+                </p>
+                <div class="category-actions" role="group" aria-label="Category selection actions">
+                    <button type="button" class="secondary compact-settings-button" aria-label="Select visible"
+                            onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-option:not([hidden]) .autosync-cat').forEach(function(cb){cb.checked=true});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                        Select visible
+                    </button>
+                    <button type="button" class="secondary compact-settings-button" aria-label="Clear visible"
+                            onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-option:not([hidden]) .autosync-cat').forEach(function(cb){cb.checked=false});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                        Clear visible
+                    </button>
+                    <button type="button" class="secondary compact-settings-button" aria-label="Select all"
+                            onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-cat').forEach(function(cb){cb.checked=true});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                        Select all
+                    </button>
+                    <button type="button" class="secondary compact-settings-button" aria-label="Clear all"
+                            onclick="var p=this.closest('.autosync-picker');p.querySelectorAll('.autosync-cat').forEach(function(cb){cb.checked=false});p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;">
+                        Clear all
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="check-list">
+            {% for t in activity_types %}
+                <label class="check-item autosync-option{% if loop.index > 18 %} category-option-extra{% endif %}" data-search="{{ (t.label ~ ' ' ~ t.type_key)|lower }}"{% if loop.index > 18 %} hidden{% endif %}>
+                    <input type="checkbox" class="autosync-cat" name="autosync_types" value="{{ t.type_key }}"
+                           onchange="var p=this.closest('.autosync-picker');p.querySelector('.autosync-enabled-count').textContent=p.querySelectorAll('.autosync-cat:checked').length;"
+                           {% if t.type_key not in cfg.held_activity_types %}checked{% endif %}>
+                    <span class="check-item-label">{{ t.label }}</span>
+                </label>
+            {% endfor %}
+        </div>
+        {% if activity_types|length > 18 %}
+            <button type="button" class="secondary compact-settings-button category-show-all"
+                    aria-expanded="false"
+                    onclick="var p=this.closest('.autosync-picker');var expanded=p.dataset.categoriesExpanded==='true';expanded=!expanded;p.dataset.categoriesExpanded=String(expanded);var q=p.querySelector('.category-search input').value.toLowerCase().trim();p.querySelectorAll('.autosync-option').forEach(function(card){var matches=!q||card.dataset.search.includes(q);var extra=card.classList.contains('category-option-extra');card.hidden=!matches||(!q&&!expanded&&extra)});this.setAttribute('aria-expanded',String(expanded));this.textContent=expanded?'Show fewer categories':'Show all {{ activity_types|length }} categories';p.querySelector('.category-visible-count').textContent=p.querySelectorAll('.autosync-option:not([hidden])').length;">
+                Show all {{ activity_types|length }} categories
+            </button>
+        {% endif %}
+        <button class="settings-save button-swap" type="submit"
+                data-save-feedback="autosync" data-saved-message="Autosync categories saved."
+                hx-post="/settings/autosync" hx-include="closest form" hx-swap="none">
+          <span class="button-label">Save categories</span>
+          <span class="button-saved" aria-hidden="true">{% include "partials/_check_icon.svg" %}Saved</span>
+        </button>
+    {% else %}
+        <p class="hint">Categories aren't loaded yet — use Refresh categories above.</p>
+    {% endif %}

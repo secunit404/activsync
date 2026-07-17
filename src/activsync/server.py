@@ -888,15 +888,24 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     @app.post("/settings/garmin-activity-types/refresh")
     def refresh_garmin_activity_types(request: Request):
         if not _settings_context()["garmin_connected"]:
+            message = "Connect to Garmin before refreshing activity categories."
+            if _is_htmx(request):
+                return PlainTextResponse(message, status_code=400)
             return templates.TemplateResponse(
                 request, "settings.html",
-                _settings_context(garmin_sync_error="Connect to Garmin before refreshing activity categories."),
+                _settings_context(garmin_sync_error=message),
                 status_code=400,
             )
         garmin = _build_garmin_client(conn)
         types = garmin.fetch_activity_types()
         db.set_config_value(conn, "garmin_activity_types", types)
         db.set_config_value(conn, "garmin_activity_types_fetched_at", datetime.now(timezone.utc).isoformat())
+        if _is_htmx(request):
+            # Just the picker: htmx swaps it into the open page, so refreshing
+            # redraws the list without reloading or moving the reader.
+            return templates.TemplateResponse(
+                request, "partials/_autosync_categories.html", _settings_context(),
+            )
         return RedirectResponse("/settings#autosync", status_code=303)
 
     @app.get("/strava/connect")

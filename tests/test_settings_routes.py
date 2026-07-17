@@ -1269,9 +1269,50 @@ def test_saving_autosync_over_htmx_reports_a_missing_garmin_connection(tmp_path)
     assert "Connect to Garmin" in response.text
 
 
-def test_refreshing_categories_returns_to_the_categories_section(tmp_path, monkeypatch):
-    """Refresh is a real navigation (it round-trips to Garmin), so the anchor is
-    what keeps the reader where they were instead of at the top of the page."""
+def test_refreshing_categories_over_htmx_returns_only_the_category_list(tmp_path, monkeypatch):
+    """Refresh swaps the list in place rather than reloading, so it answers with
+    the picker fragment alone — a whole page here would nest a second document
+    inside the form."""
+    conn, client = _logged_in_client(tmp_path)
+    _mark_garmin_connected(conn)
+    _mark_strava_connected(conn)
+    db.set_config_value(conn, "initial_sync_done", True)
+    garmin = MagicMock()
+    garmin.fetch_activity_types.return_value = [
+        {"type_key": "running", "label": "Running"},
+        {"type_key": "padel", "label": "Padel"},
+    ]
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda conn: garmin)
+
+    response = client.post("/settings/garmin-activity-types/refresh",
+                           headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 200
+    assert "Padel" in response.text
+    assert 'name="autosync_types"' in response.text
+    # The fragment must not drag the rest of the page in with it.
+    assert "<html" not in response.text
+    assert "<h2>" not in response.text
+    assert "/settings/preferences" not in response.text
+    assert db.get_config_value(conn, "garmin_activity_types") == [
+        {"type_key": "running", "label": "Running"},
+        {"type_key": "padel", "label": "Padel"},
+    ]
+
+
+def test_refreshing_categories_over_htmx_reports_a_missing_garmin_connection(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+
+    response = client.post("/settings/garmin-activity-types/refresh",
+                           headers={"HX-Request": "true"}, follow_redirects=False)
+
+    assert response.status_code == 400
+    assert "Connect to Garmin" in response.text
+
+
+def test_refreshing_categories_without_htmx_returns_to_the_categories_section(tmp_path, monkeypatch):
+    """The no-htmx fallback still reloads, so the anchor is what keeps the
+    reader on the categories instead of at the top of the page."""
     conn, client = _logged_in_client(tmp_path)
     _mark_garmin_connected(conn)
     _mark_strava_connected(conn)
