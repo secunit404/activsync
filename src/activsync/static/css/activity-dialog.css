@@ -41,6 +41,11 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 18px;
+    /* A grid item of the card, so it defaults to min-width:auto and refuses to
+       shrink below min-content. The kicker is nowrap, which makes min-content
+       the full untruncated line — without this the header pushes past the card
+       and the kicker's ellipsis never gets the chance to engage. */
+    min-width: 0;
 }
 
 .activity-dialog-header > div:first-child {
@@ -279,8 +284,9 @@
 
 @media (max-width: 740px) {
     /* Too narrow to sit beside the badge and pills, so give each its own row.
-       The kicker owns its row here, so nothing moves if it wraps — let it wrap
-       and keep the activity type rather than truncating it for no gain. */
+       The kicker keeps the base nowrap/ellipsis: letting it wrap here would
+       drop the activity type onto a line of its own, away from the timestamp
+       it belongs with, which is exactly what the one-line rule is for. */
     .activity-dialog-meta {
         align-items: center;
         flex-wrap: wrap;
@@ -288,9 +294,6 @@
     }
     .dialog-kicker {
         flex: 1 1 100%;
-        white-space: normal;
-        overflow: visible;
-        overflow-wrap: anywhere;
     }
     .activity-dialog-meta-actions {
         justify-content: flex-start;
