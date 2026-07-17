@@ -21,6 +21,10 @@
     --border-strong: #b9c5d0;
     --accent: #e85b2a;
     --accent-ink: #c5441b;
+    /* Fill of a selected activity row. A token rather than a color-mix at the
+       call site because the ratio is not the same in both themes: the same 10%
+       that reads clearly on white all but vanishes on the dark surface. */
+    --row-selected: #fdeee8;
     --garmin: #176ca5;
     --garmin-action-ink: #fff;
     --green-action-ink: #fff;
@@ -56,6 +60,7 @@
     --border-strong: #465462;
     --accent: #f06432;
     --accent-ink: #ff9a72;
+    --row-selected: #40281f;
     --garmin: #63b8ee;
     --garmin-action-ink: #15212b;
     --green-action-ink: #15212b;
@@ -100,6 +105,7 @@
         --border-strong: #465462;
         --accent: #f06432;
         --accent-ink: #ff9a72;
+        --row-selected: #40281f;
         --garmin: #63b8ee;
         --garmin-action-ink: #15212b;
         --green-action-ink: #15212b;

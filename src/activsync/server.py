@@ -100,20 +100,21 @@ def _build_strava_client(conn: sqlite3.Connection):
     return StravaClient(conn, creds.get("client_id", ""), creds.get("client_secret", ""))
 
 
-def _asset_version(name: str) -> str:
-    """Cache-busting token for a stylesheet.
+def _asset_version(name: str, kind: str = "css") -> str:
+    """Cache-busting token for a static asset.
 
     Production ships an immutable image per release, so the version is a fine
-    token. Dev is the problem: the version never moves while CSS is being
+    token. Dev is the problem: the version never moves while an asset is being
     edited, and uvicorn's reloader only watches Python — so the browser keeps
-    serving the stylesheet it cached at the start of the session and quietly
-    renders something other than what is on disk. Key off the file's mtime
-    there instead.
+    serving the file it cached at the start of the session and quietly renders
+    something other than what is on disk. Key off the file's mtime there
+    instead. `kind` is both the subdirectory and the extension: css/x.css,
+    js/x.js.
     """
     if not _mock_mode():
         return __version__
     try:
-        return str(int((STATIC_DIR / "css" / f"{name}.css").stat().st_mtime))
+        return str(int((STATIC_DIR / kind / f"{name}.{kind}").stat().st_mtime))
     except OSError:
         return __version__
 

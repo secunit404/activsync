@@ -514,6 +514,103 @@ def test_strava_publish_requires_setup(tmp_path):
     assert 'id="activity-table"' in response.text
 
 
+def test_selection_uses_a_hidden_input_not_a_checkbox_column(tmp_path):
+    """The row lights up instead of growing a checkbox column, but the input
+    stays in the DOM: it carries the checked state for keyboard and screen
+    reader users, and hx-include still selects on it, so publish is unchanged."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    assert 'class="activity-row-select"' not in page.text
+    assert 'name="activity_ids" value="5"' in page.text
+    assert "activsync-select-input" in page.text
+
+
+def test_only_publishable_rows_are_marked_selectable(tmp_path):
+    """Whether a row can be selected is fixed at render time, so it ships as a
+    class; the CSS dims everything without it and ignores clicks on it."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+    db.insert_activity(conn, 6, "running", "Published Run", "", "2026-07-09 08:00:00", "h6", "published", now)
+    db.insert_activity(conn, 7, "running", "Excluded Run", "", "2026-07-09 07:00:00", "h7", "excluded", now)
+
+    page = client.get("/")
+
+    rows = re.findall(r'<article class="(activity-row[^"]*)" data-gid="(\d+)"', page.text)
+    selectable = {gid: ("is-selectable" in cls) for cls, gid in rows}
+    assert selectable == {"5": True, "6": False, "7": False}
+
+
+def test_selection_tools_render_after_the_list_so_they_can_stick(tmp_path):
+    """Sticky-bottom needs the bar to come after every row in document order;
+    sitting above the list, the bar scrolled away exactly when a long list
+    needed it. Anchor on the LAST row, not the list's opening tag — the bar
+    used to live inside the list, which would satisfy a laxer check."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+    db.insert_activity(conn, 6, "running", "Held Run", "", "2026-07-08 09:00:00", "h6", "held", now)
+
+    page = client.get("/")
+
+    # Anchor on the opening tag, not class="activity-row": selectable rows carry
+    # a second class, so the bare attribute does not appear on every row.
+    assert page.text.rindex('<article class="activity-row') < page.text.index('class="multi-select-tools"')
+
+
+def test_selection_mode_has_one_exit_not_two(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    assert "cancel-selection-button" not in page.text
+    assert page.text.count("select-multiple-button") == 1
+
+
+def test_publish_selected_ships_disabled_so_it_cannot_post_an_empty_selection(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    tools = page.text.split('class="multi-select-tools"')[1].split("</div>")[0]
+    assert "disabled" in tools
+
+
+def test_selection_logic_is_not_inline_onclick(tmp_path):
+    """The state logic lives in static/js/activities.js, not in ~600 characters
+    of onclick duplicated across three elements."""
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 5, "running", "Pending Run", "", "2026-07-09 09:00:00", "h5", "pending", now)
+
+    page = client.get("/")
+
+    assert "classList.toggle('is-selecting')" not in page.text
+    assert "querySelectorAll('.activsync-select')" not in page.text
+    assert "/static/js/activities.js" in page.text
+
+
+def test_pages_link_scripts_that_are_actually_served(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = TestClient(create_app(conn))
+
+    page = client.get("/setup")
+    srcs = re.findall(r'<script src="(/static/[^"]+)"', page.text)
+    assert srcs, "no local scripts linked"
+    for src in srcs:
+        assert "?v=" in src, f"{src} is not cache-busted"
+        served = client.get(src.split("?")[0])
+        assert served.status_code == 200, f"{src} is linked but not served"
+
+
 def test_dashboard_shows_checkbox_for_pending_held_and_missing(tmp_path):
     conn, client = _logged_in_client(tmp_path)
     now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
