@@ -57,6 +57,11 @@
     margin-bottom: 6px;
 }
 
+/* One line, always. The timestamp leads because it is fixed-width, so the line
+   starts in the same column on every activity; the activity type has no bound,
+   so it takes what is left and truncates rather than wrapping. Wrapping here
+   grew the row and pushed the badge and pills down with it, which is the whole
+   reason this is nowrap — the full text stays available via the title attr. */
 .dialog-kicker {
     min-width: 0;
     margin-bottom: 0;
@@ -65,24 +70,22 @@
     font-size: 0.74rem;
     font-weight: 600;
     letter-spacing: 0.03em;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* The badge is the only thing sharing the kicker's row: it is short and fixed,
-   so even the longest activity type gets the rest of the width and stays on one
-   line. The link pills used to sit here too, which cost ~260px and wrapped the
-   kicker mid-text, growing the header and shifting the badge down with it. */
-.activity-dialog-meta > .badge {
+.activity-dialog-meta-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     flex: 0 0 auto;
-    min-height: 30px;
+    flex-wrap: wrap;
+    gap: 6px 10px;
 }
 
-/* The pills read as part of the metadata above them, not as a label for the
-   title below, so keep them tight to the kicker and give the title real room —
-   at 6px a row of 30px tap targets crowds a 27px heading. */
-.activity-dialog-links {
-    margin-bottom: 14px;
-}
+/* Match the link pills so badge and pills share one centre line. */
+.activity-dialog-meta-actions .badge { min-height: 30px; }
 
 .activity-dialog-title {
     font-size: clamp(1.3rem, 4vw, 1.7rem);
@@ -275,8 +278,9 @@
 }
 
 @media (max-width: 740px) {
-    /* Narrow enough that even the badge alongside can wrap the kicker mid-text,
-       so give each its own row. */
+    /* Too narrow to sit beside the badge and pills, so give each its own row.
+       The kicker owns its row here, so nothing moves if it wraps — let it wrap
+       and keep the activity type rather than truncating it for no gain. */
     .activity-dialog-meta {
         align-items: center;
         flex-wrap: wrap;
@@ -284,6 +288,13 @@
     }
     .dialog-kicker {
         flex: 1 1 100%;
+        white-space: normal;
+        overflow: visible;
+        overflow-wrap: anywhere;
+    }
+    .activity-dialog-meta-actions {
+        justify-content: flex-start;
+        flex-basis: 100%;
     }
     .activity-dialog {
         width: 100%;

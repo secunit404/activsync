@@ -711,25 +711,20 @@ def test_activity_dialog_leads_with_the_time_not_the_activity_type(tmp_path):
 
     response = client.get("/")
 
-    kicker = re.search(r'<p class="dialog-kicker">([^<]+)</p>', response.text)
+    kicker = re.search(r'<p class="dialog-kicker"[^>]*>([^<]+)</p>', response.text)
     assert kicker, "activity dialog is missing its kicker"
     assert kicker.group(1).strip() == "2026-07-09 11:00 · backcountry_skiing_snowboarding_ws"
 
 
-def test_activity_dialog_keeps_the_link_pills_off_the_kicker_row(tmp_path):
-    """The pills cost ~260px beside the kicker, which wrapped a long type onto a
-    second line and dragged the badge down with it. They belong on their own row;
-    only the short, fixed badge shares the kicker's."""
+def test_activity_dialog_kicker_keeps_its_full_text_reachable(tmp_path):
+    """The kicker is a single truncating line, so a long activity type gets cut
+    on screen. The full string has to stay somewhere the reader can get at it."""
     conn, client = _logged_in_client(tmp_path)
     now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
-    db.insert_activity(conn, 12, "running", "Morning Run", "", "2026-07-09 09:00:00", "h12",
-                       "published", now)
+    db.insert_activity(conn, 12, "backcountry_skiing_snowboarding_ws", "Backcountry day",
+                       "", "2026-07-09 09:00:00", "h12", "published", now)
 
     response = client.get("/")
 
-    meta = re.search(r'<div class="activity-dialog-meta">(.*?)</div>', response.text, re.S)
-    assert meta, "activity dialog is missing its meta row"
-    assert "dialog-kicker" in meta.group(1)
-    assert "badge-published" in meta.group(1)
-    assert "link-pill" not in meta.group(1)
-    assert "activity-dialog-links" in response.text
+    assert ('<p class="dialog-kicker" '
+            'title="2026-07-09 11:00 · backcountry_skiing_snowboarding_ws">') in response.text
