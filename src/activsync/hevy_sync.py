@@ -116,6 +116,11 @@ def ingest_events(conn: sqlite3.Connection, hevy: HevyClient, now: datetime) -> 
                 (event_type, workout_id, ts),
             ).fetchone()
             if already:
+                # Processed on an earlier poll (possibly one that crashed
+                # before persisting the cursor) — still move the cursor past
+                # it, or it would lag until an unrelated newer event arrives.
+                if max_processed is None or ts > max_processed:
+                    max_processed = ts
                 continue
             # Effect first, dedupe record second: a crash in between re-runs
             # the idempotent effect next poll. The reverse order would burn
@@ -168,6 +173,8 @@ def apply_mapping_gate(
         if template_id and hevy_db.get_template(conn, template_id) is None:
             try:
                 template = hevy.get_exercise_template(template_id)
+            except HevyAuthError:
+                raise  # the poller must see auth failures and pause the leg
             except Exception as exc:
                 logger.warning("template fetch failed for %s: %s", template_id, exc)
                 template = None
@@ -297,6 +304,10 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
             if end_dt and now - end_dt < timedelta(minutes=grace_min):
                 hevy_db.set_workout_status(conn, hevy_id, "waiting_watch")
             else:
+                # The passive path pushes structured sets, so it is gated even
+                # when the configured strategy (e.g. describe) is not.
+                if not apply_mapping_gate(conn, row, "passive", hevy):
+                    return
                 execute_passive(conn, garmin, row, cfg)
     except HevyAuthError:
         raise
@@ -350,7 +361,12 @@ def _reapply(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
 
 # -- the leg -----------------------------------------------------------------
 
-_ACTIONABLE = ("waiting_watch", "syncing", "needs_mapping", "failed")
+# failed and needs_mapping are deliberately NOT here: a definite rejection
+# must not re-upload every tick, and a Garmin-rejected pair that still
+# resolves must not repeat the identical PUT. failed re-enters via the user's
+# explicit retry (Task 13); needs_mapping via hevy_db.wake_needs_mapping when
+# a mapping is saved.
+_ACTIONABLE = ("waiting_watch", "syncing")
 
 
 def _row_fingerprint(row: dict | None) -> tuple:
@@ -361,7 +377,8 @@ def _row_fingerprint(row: dict | None) -> tuple:
 
 
 def run_hevy_leg(conn: sqlite3.Connection, garmin: GarminClient,
-                 hevy: HevyClient, cfg: dict, now: datetime) -> bool:
+                 hevy: HevyClient, cfg: dict, now: datetime,
+                 strava=None) -> bool:
     """One tick of the Hevy leg. Returns whether anything changed (drives the
     poller's Garmin-leg handoff and the SSE refresh)."""
     changed = ingest_events(conn, hevy, now) > 0
@@ -380,4 +397,38 @@ def run_hevy_leg(conn: sqlite3.Connection, garmin: GarminClient,
                 _reapply(conn, garmin, row, now)
                 changed = True
 
+    if strava is not None:
+        changed = _strava_catchup(conn, strava) or changed
+    return changed
+
+
+def _strava_catchup(conn: sqlite3.Connection, strava) -> bool:
+    """Push edited titles/descriptions to already-published Strava copies.
+
+    The Garmin and Strava sides are applied separately: the Garmin update can
+    succeed while Strava is down, so this retries every tick until the Strava
+    side has caught up to the applied Garmin revision."""
+    changed = False
+    for status in _TERMINAL_APPLIED:
+        for row in hevy_db.list_workouts(conn, status=status):
+            garmin_applied = row["garmin_applied_updated_at"] or ""
+            strava_applied = row["strava_applied_updated_at"] or ""
+            if not garmin_applied or garmin_applied <= strava_applied:
+                continue
+            activity = (db.get_activity(conn, row["garmin_activity_id"])
+                        if row["garmin_activity_id"] else None)
+            if not activity or not activity.get("strava_activity_id"):
+                continue  # not published yet — publish carries current content
+            payload = _payload_of(row)
+            try:
+                strava.update_activity_metadata(
+                    activity["strava_activity_id"],
+                    row["title"] or payload.get("title", "Workout"),
+                    generate_description(payload))
+            except Exception as exc:
+                logger.warning("strava catch-up failed for %s: %s",
+                               row["hevy_id"], exc)
+                continue
+            hevy_db.set_applied(conn, row["hevy_id"], "strava", garmin_applied)
+            changed = True
     return changed

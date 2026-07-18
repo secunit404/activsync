@@ -29,6 +29,7 @@ from activsync.garmin_client import (
     GarminClient,
     GarminUploadRejected,
     SubcategoryRejected,
+    _is_not_found,
 )
 from activsync.hevy_mapper import (
     CATEGORY_NAMES,
@@ -443,44 +444,64 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
             continue
 
         if phase == "uploading":
-            resolved = resolve_exercises(conn, _payload_of(row))
-            start_dt = _parse_ts(row["start_time"])
-            end_dt = _parse_ts(row["end_time"])
-            if kind == "replace":
-                backup = hevy_db.get_backup(conn, source)
-                fit_bytes = backup["original_fit"] if backup else None
-                hr = (hr_sources.extract_fit_hr(
-                    fit_bytes, round(start_dt.timestamp() * 1000))
-                    if fit_bytes and start_dt else [])
-            else:
-                hr = (hr_sources.passive_hr_for_window(garmin, start_dt, end_dt)
-                      if start_dt and end_dt else [])
-            profile = _profile_from_cfg(cfg)
-            identity = _identity_for_build(conn, cfg)
-
+            # Everything before the upload call is pre-submission: a
+            # deterministic failure here closes the operation instead of
+            # wedging it open in `uploading` forever.
             import tempfile
-            with tempfile.TemporaryDirectory(prefix="activsync-fit-") as tmp_dir:
-                fit_path = f"{tmp_dir}/hevy_{hevy_id}.fit"
-                build_fit(_payload_of(row), resolved, hr or None, profile,
-                          identity, fit_path)
-                try:
-                    result = garmin.upload_fit(fit_path)
-                except GarminUploadRejected as exc:
+            try:
+                resolved = resolve_exercises(conn, _payload_of(row))
+                start_dt = _parse_ts(row["start_time"])
+                end_dt = _parse_ts(row["end_time"])
+                if kind == "replace":
+                    backup = hevy_db.get_backup(conn, source)
+                    fit_bytes = backup["original_fit"] if backup else None
+                    hr = (hr_sources.extract_fit_hr(
+                        fit_bytes, round(start_dt.timestamp() * 1000))
+                        if fit_bytes and start_dt else [])
+                else:
+                    hr = (hr_sources.passive_hr_for_window(garmin, start_dt, end_dt)
+                          if start_dt and end_dt else [])
+                profile = _profile_from_cfg(cfg)
+                identity = _identity_for_build(conn, cfg)
+                tmp_dir_ctx = tempfile.TemporaryDirectory(prefix="activsync-fit-")
+                with tmp_dir_ctx as tmp_dir:
+                    fit_path = f"{tmp_dir}/hevy_{hevy_id}.fit"
+                    build_fit(_payload_of(row), resolved, hr or None, profile,
+                              identity, fit_path)
+                    upload_error: Exception | None = None
+                    try:
+                        result = garmin.upload_fit(fit_path)
+                    except Exception as exc:
+                        upload_error = exc
+            except MappingMiss as miss:
+                hevy_db.close_operation(conn, op["id"], "failed")
+                hevy_db.set_workout_status(
+                    conn, hevy_id, "needs_mapping",
+                    error=f"unmapped exercises: {miss.title}")
+                return
+            except Exception as exc:
+                hevy_db.close_operation(conn, op["id"], "failed")
+                hevy_db.set_workout_status(conn, hevy_id, "failed",
+                                           error=f"FIT build failed: {exc}")
+                return
+
+            if upload_error is not None:
+                if isinstance(upload_error, GarminUploadRejected):
                     hevy_db.close_operation(conn, op["id"], "failed")
                     hevy_db.set_workout_status(conn, hevy_id, "failed",
-                                               error=str(exc))
+                                               error=str(upload_error))
                     return
-                except Exception as exc:
-                    # Outcome unknown — record and wait; NEVER resubmit.
-                    hevy_db.update_operation(conn, op["id"],
-                                             phase="submission_unknown",
-                                             last_error=str(exc))
-                    return
+                # Outcome unknown — record and wait; NEVER resubmit.
+                hevy_db.update_operation(conn, op["id"],
+                                         phase="submission_unknown",
+                                         last_error=str(upload_error))
+                return
 
             new_id = result.get("activity_id")
             pre_ids = set(op["pre_upload_ids"])
             if new_id and new_id not in pre_ids and new_id != source:
                 hevy_db.update_operation(conn, op["id"], phase="finalizing",
+                                         next_step="metadata",
                                          target_activity_id=new_id,
                                          upload_id=result.get("upload_id"))
                 continue
@@ -490,10 +511,12 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
             return
 
         if phase == "submission_unknown":
-            current = set(garmin.list_activity_ids_near(row["start_time"]))
-            candidates = current - set(op["pre_upload_ids"]) - {source}
+            candidates = _resolution_candidates(
+                garmin.list_activities_near(row["start_time"]), row,
+                set(op["pre_upload_ids"]), source)
             if len(candidates) == 1:
                 hevy_db.update_operation(conn, op["id"], phase="finalizing",
+                                         next_step="metadata",
                                          target_activity_id=candidates.pop())
                 continue
             if len(candidates) > 1:
@@ -510,28 +533,88 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
             return
 
         if phase == "finalizing":
+            # Sub-steps persist through next_step so a crash resumes exactly
+            # where it stopped: metadata → delete → finalize.
             target = op["target_activity_id"]
-            _apply_metadata(garmin, target, row)
-            if kind == "replace" and source and target != source:
-                try:
-                    garmin.delete_activity(source)
-                except Exception as exc:
-                    deletes = op["delete_attempt_count"] + 1
-                    if deletes >= 3:
-                        _park_operation(
-                            conn, op, row,
-                            f"could not delete watch activity {source}: {exc}")
-                        return
-                    hevy_db.update_operation(conn, op["id"],
-                                             delete_attempt_count=deletes,
-                                             last_error=str(exc))
-                    return
-            hevy_db.close_operation(conn, op["id"], "done")
+            next_step = op["next_step"] or "metadata"
+
+            if next_step == "metadata":
+                _apply_metadata(garmin, target, row)
+                hevy_db.update_operation(conn, op["id"], next_step="delete")
+                next_step = "delete"
+
+            if next_step == "delete":
+                if kind == "replace" and source and target != source:
+                    try:
+                        garmin.delete_activity(source)
+                    except Exception as exc:
+                        if _is_not_found(exc):
+                            # Already gone — a crash after a successful delete
+                            # replays here; 404 IS the success signal.
+                            pass
+                        else:
+                            deletes = op["delete_attempt_count"] + 1
+                            if deletes >= 3:
+                                _park_operation(
+                                    conn, op, row,
+                                    f"could not delete watch activity "
+                                    f"{source}: {exc}")
+                                return
+                            hevy_db.update_operation(
+                                conn, op["id"], delete_attempt_count=deletes,
+                                last_error=str(exc))
+                            return
+                hevy_db.update_operation(conn, op["id"], next_step="finalize")
+
             strategy = "replace" if kind == "replace" else "passive"
             status = "replaced" if kind == "replace" else "uploaded_passive"
-            hevy_db.link_target(conn, hevy_id, target, strategy)
-            hevy_db.set_workout_status(conn, hevy_id, status)
-            hevy_db.set_applied(conn, hevy_id, "garmin", row["source_updated_at"])
+            # Terminal transition is atomic: op done + link + status + applied
+            # land in one transaction (a split would strand an unlinked
+            # replacement behind a closed journal → duplicate upload later).
+            hevy_db.complete_operation(conn, op["id"], hevy_id, target,
+                                       strategy, status,
+                                       row["source_updated_at"])
             return
 
         return  # done/failed/needs_review — nothing to drive
+
+
+_RESOLUTION_DRIFT_MIN = 10
+_RESOLUTION_TYPES = ("strength_training", "other")
+
+
+def _resolution_candidates(activities: list[dict], row: dict,
+                           pre_upload_ids: set, source: int | None) -> set[int]:
+    """Strict matching for submission_unknown resolution: an unknown-outcome
+    upload may only be adopted if the candidate looks like OUR upload — new
+    id, strength/other type, start near the workout's start, plausible
+    duration. A new run appearing in the 3-day window must never be adopted,
+    renamed, and have the watch activity deleted under it."""
+    hevy_start = _parse_ts(row["start_time"])
+    hevy_end = _parse_ts(row["end_time"])
+    hevy_duration = ((hevy_end - hevy_start).total_seconds()
+                     if hevy_start and hevy_end else 0.0)
+
+    candidates: set[int] = set()
+    for act in activities:
+        activity_id = act.get("activityId")
+        if activity_id is None or activity_id in pre_upload_ids \
+                or activity_id == source:
+            continue
+        act_type = (act.get("activityType") or {}).get("typeKey", "")
+        if act_type and act_type not in _RESOLUTION_TYPES:
+            continue
+        act_start = _parse_ts(act.get("startTimeGMT", ""))
+        if hevy_start is not None:
+            if act_start is None:
+                continue
+            drift_s = abs((act_start - hevy_start).total_seconds())
+            if drift_s > _RESOLUTION_DRIFT_MIN * 60:
+                continue
+        duration = act.get("duration")
+        if duration and hevy_duration > 0:
+            ratio = float(duration) / hevy_duration
+            if not (0.25 <= ratio <= 4.0):
+                continue
+        candidates.add(int(activity_id))
+    return candidates

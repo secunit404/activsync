@@ -319,6 +319,19 @@ class GarminClient:
         return {"weight_kg": weight_kg, "birth_year": birth_year,
                 "sex": sex, "vo2max": vo2max}
 
+    def list_activities_near(self, start_time: str) -> list[dict]:
+        """ALL activities (raw dicts) in start_time's date ±1 day — the
+        journal's resolution primitive needs metadata (type, start, duration)
+        for strict candidate matching, not bare ids. Failures PROPAGATE."""
+        target = _parse_garmin_time(start_time) or _parse_iso_utc(start_time)
+        if target is None:
+            raise ValueError(f"unparseable start_time: {start_time!r}")
+        date_from = (target - timedelta(days=1)).date().isoformat()
+        date_to = (target + timedelta(days=1)).date().isoformat()
+        activities = _limiter.call(
+            self._client.get_activities_by_date, date_from, date_to)
+        return list(activities or [])
+
     def list_activity_ids_near(self, start_time: str) -> list[int]:
         """ALL activity ids in start_time's date ±1 day, every type — the
         operation journal's pre/post-upload snapshot primitive. Failures

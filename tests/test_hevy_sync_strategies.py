@@ -66,6 +66,7 @@ class StubGarmin:
         self.upload_results = [{"upload_id": "u1", "activity_id": 999}]
         self.upload_exc = None
         self.snapshot_results = [[]]
+        self.activities_near = []
         self.delete_exc = None
         self.daily_hr = {"heartRateValues": []}
 
@@ -102,6 +103,10 @@ class StubGarmin:
     def list_activity_ids_near(self, start_time):
         self.calls.append(("list_activity_ids_near", start_time))
         return self.snapshot_results.pop(0)
+
+    def list_activities_near(self, start_time):
+        self.calls.append(("list_activities_near", start_time))
+        return list(self.activities_near)
 
     def get_daily_heart_rates(self, date_str):
         self.calls.append(("get_daily_heart_rates", date_str))
@@ -259,7 +264,12 @@ def test_replace_crash_resume_no_second_upload():
 
     # next tick: the upload actually landed — snapshot diff finds exactly 999
     garmin.upload_exc = None
-    garmin.snapshot_results = [[111, 500, 999]]
+    garmin.activities_near = [
+        {"activityId": 111, "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:05:00", "duration": 3300},
+        {"activityId": 999, "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:00:00", "duration": 3600},
+    ]
     result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
                      base_cfg(hevy_watch_strategy="replace"))
     assert result["status"] == "replaced"
@@ -274,7 +284,13 @@ def test_submission_unknown_multiple_candidates_parks():
     process(conn, garmin, row, base_cfg(hevy_watch_strategy="replace"))
 
     garmin.upload_exc = None
-    garmin.snapshot_results = [[111, 500, 888, 999]]  # two new ids
+    # two new ids, BOTH plausible strength uploads near the workout start
+    garmin.activities_near = [
+        {"activityId": 888, "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:00:00", "duration": 3600},
+        {"activityId": 999, "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:01:00", "duration": 3600},
+    ]
     result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
                      base_cfg(hevy_watch_strategy="replace"))
     assert result["status"] == "needs_review"
@@ -422,3 +438,213 @@ def test_build_exercise_sets_payload_rejects_unknown():
     resolved = [ResolvedExercise("Mystery", 65534, 0, [{"reps": 1}])]
     with pytest.raises(ValueError):
         hevy_sync.build_exercise_sets_payload(resolved, "2026-07-18 10:05:00", 600.0)
+
+
+# -- Checkpoint C.1: review-driven safety tests ------------------------------
+
+def test_submission_unknown_ignores_unrelated_activities():
+    """A new run appearing in the window must NOT be adopted as the target."""
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = replace_setup(conn, garmin)
+    garmin.upload_exc = RuntimeError("timeout")
+    process(conn, garmin, row, base_cfg(hevy_watch_strategy="replace"))
+
+    garmin.upload_exc = None
+    # one new id, but it's a RUN far from the workout start
+    garmin.activities_near = [
+        {"activityId": 111, "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:05:00", "duration": 3300},
+        {"activityId": 500, "activityType": {"typeKey": "running"},
+         "startTimeGMT": "2026-07-18 07:00:00", "duration": 1800},
+        {"activityId": 888, "activityType": {"typeKey": "running"},
+         "startTimeGMT": "2026-07-18 16:00:00", "duration": 1800},
+    ]
+    result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
+                     base_cfg(hevy_watch_strategy="replace"))
+    # unresolved: still syncing, no adoption, nothing renamed or deleted
+    assert result["status"] == "syncing"
+    assert hevy_db.get_open_operation(conn, "w1")["phase"] == "submission_unknown"
+    assert garmin.called("set_title") == []
+    assert garmin.called("delete_activity") == []
+
+
+def test_submission_unknown_adopts_strict_match_only():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = replace_setup(conn, garmin)
+    garmin.upload_exc = RuntimeError("timeout")
+    process(conn, garmin, row, base_cfg(hevy_watch_strategy="replace"))
+
+    garmin.upload_exc = None
+    garmin.activities_near = [
+        {"activityId": 999, "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:00:00", "duration": 3600},  # the upload
+        {"activityId": 777, "activityType": {"typeKey": "running"},
+         "startTimeGMT": "2026-07-18 10:01:00", "duration": 3500},  # wrong type
+    ]
+    result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
+                     base_cfg(hevy_watch_strategy="replace"))
+    assert result["status"] == "replaced"
+    assert result["garmin_activity_id"] == 999
+
+
+def test_finalize_resume_from_delete_step_treats_404_as_done():
+    """Crash after the delete happened: retry sees 404 → success, not parking."""
+    conn = make_conn()
+    garmin = StubGarmin()
+    garmin.delete_exc = RuntimeError("404 Not Found for url")
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    assert hevy_db.claim_source(conn, "w1", 111)
+    op_id = hevy_db.open_operation(conn, "w1", "replace", 111, [500])
+    hevy_db.update_operation(conn, op_id, phase="finalizing",
+                             target_activity_id=999, next_step="delete")
+    hevy_db.set_workout_status(conn, "w1", "syncing")
+    result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
+                     base_cfg(hevy_watch_strategy="replace"))
+    assert result["status"] == "replaced"
+    assert garmin.called("set_title") == []  # metadata step already done
+
+
+def test_finalize_resume_from_finalize_step_links_without_side_effects():
+    """Crash after delete but before the terminal transition: resume only
+    links — no metadata calls, no delete attempt."""
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    assert hevy_db.claim_source(conn, "w1", 111)
+    op_id = hevy_db.open_operation(conn, "w1", "replace", 111, [500])
+    hevy_db.update_operation(conn, op_id, phase="finalizing",
+                             target_activity_id=999, next_step="finalize")
+    hevy_db.set_workout_status(conn, "w1", "syncing")
+    result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
+                     base_cfg(hevy_watch_strategy="replace"))
+    assert result["status"] == "replaced"
+    assert result["garmin_activity_id"] == 999
+    assert garmin.calls == []  # nothing left to do against Garmin
+    op = conn.execute("SELECT * FROM hevy_operations").fetchone()
+    assert op["phase"] == "done"
+
+
+def test_terminal_transition_is_atomic():
+    """Operation completion and workout linking land together, never split."""
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = replace_setup(conn, garmin)
+    process(conn, garmin, row, base_cfg(hevy_watch_strategy="replace"))
+    op = conn.execute("SELECT * FROM hevy_operations").fetchone()
+    result = hevy_db.get_workout(conn, "w1")
+    assert op["phase"] == "done"
+    assert result["status"] == "replaced"
+    assert result["garmin_activity_id"] == 999
+    assert result["garmin_applied_updated_at"] == "2026-07-18T11:05:00Z"
+
+
+def test_failed_rows_are_not_auto_retried():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = replace_setup(conn, garmin)
+    garmin.upload_exc = GarminUploadRejected("409 Duplicate Activity")
+    process(conn, garmin, row, base_cfg(hevy_watch_strategy="replace"))
+    assert hevy_db.get_workout(conn, "w1")["status"] == "failed"
+
+    garmin.upload_exc = None
+    garmin.snapshot_results = [[111, 500]]
+    garmin.upload_results = [{"upload_id": "u2", "activity_id": 998}]
+    changed = hevy_sync.run_hevy_leg(conn, garmin, NoHevy(),
+                                     base_cfg(hevy_watch_strategy="replace"), NOW)
+    assert len(garmin.called("upload_fit")) == 1  # no automatic re-upload
+    assert hevy_db.get_workout(conn, "w1")["status"] == "failed"
+
+
+def test_needs_mapping_rows_wait_for_explicit_wake():
+    conn = make_conn()
+    garmin = StubGarmin()
+    garmin.put_exc = SubcategoryRejected("400 invalid sub-category")
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    process(conn, garmin, row, base_cfg())
+    assert hevy_db.get_workout(conn, "w1")["status"] == "needs_mapping"
+
+    # next tick: the built-in mapping still resolves, but the row stays
+    # parked — the identical rejected PUT must not repeat automatically
+    garmin.put_exc = None
+    garmin.calls.clear()
+    hevy_sync.run_hevy_leg(conn, garmin, NoHevy(), base_cfg(), NOW)
+    assert garmin.called("put_exercise_sets") == []
+    assert hevy_db.get_workout(conn, "w1")["status"] == "needs_mapping"
+
+    # explicit wake (mapping saved) re-enters the flow
+    assert hevy_db.wake_needs_mapping(conn) == 1
+    hevy_sync.run_hevy_leg(conn, garmin, NoHevy(), base_cfg(), NOW)
+    assert hevy_db.get_workout(conn, "w1")["status"] == "merged"
+
+
+def test_describe_strategy_passive_path_still_gated():
+    """describe bypasses the gate only while a watch match is possible; the
+    passive fallback pushes structured sets and must be gated."""
+    conn = make_conn()
+    garmin = StubGarmin()
+    end = NOW - timedelta(minutes=121)
+    row = seed_row(conn, start=(end - timedelta(hours=1)).isoformat(),
+                   end=end.isoformat(),
+                   exercises=[{"title": "Custom Blaster",
+                               "exercise_template_id": "CUSTOM01",
+                               "sets": [{"type": "normal", "reps": 5}]}])
+    result = process(conn, garmin, row, base_cfg(hevy_watch_strategy="describe"))
+    assert result["status"] == "needs_mapping"
+    assert garmin.called("upload_fit") == []
+    assert hevy_db.get_open_operation(conn, "w1") is None  # no op left open
+
+
+def test_pre_submission_failure_closes_operation():
+    """An unmapped exercise surfacing in the uploading phase must not leave
+    the op wedged in `uploading` with the row `syncing` forever."""
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn, exercises=[{"title": "Custom Blaster",
+                                     "exercise_template_id": "CUSTOM01",
+                                     "sets": [{"type": "normal", "reps": 5}]}])
+    op_id = hevy_db.open_operation(conn, "w1", "upload_passive", None, [])
+    hevy_db.update_operation(conn, op_id, phase="uploading")
+    hevy_db.set_workout_status(conn, "w1", "syncing")
+    result = process(conn, garmin, hevy_db.get_workout(conn, "w1"), base_cfg())
+    assert result["status"] == "needs_mapping"
+    assert hevy_db.get_open_operation(conn, "w1") is None
+    assert garmin.called("upload_fit") == []
+
+
+class StubStrava:
+    def __init__(self):
+        self.calls = []
+
+    def update_activity_metadata(self, strava_activity_id, name, description):
+        self.calls.append((strava_activity_id, name, description))
+
+
+def test_post_sync_edit_reaches_strava():
+    conn = make_conn()
+    garmin = StubGarmin()
+    strava = StubStrava()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    process(conn, garmin, row, base_cfg())
+    assert hevy_db.get_workout(conn, "w1")["status"] == "merged"
+    # publish the linked activity on Strava
+    conn.execute("UPDATE activities SET strava_activity_id = 555 "
+                 "WHERE garmin_activity_id = 111")
+    conn.commit()
+
+    hevy_sync.run_hevy_leg(conn, garmin, NoHevy(), base_cfg(), NOW,
+                           strava=strava)
+    assert strava.calls and strava.calls[0][0] == 555
+    updated = hevy_db.get_workout(conn, "w1")
+    assert updated["strava_applied_updated_at"] == updated["source_updated_at"]
+
+    # already caught up → no second push
+    strava.calls.clear()
+    hevy_sync.run_hevy_leg(conn, garmin, NoHevy(), base_cfg(), NOW,
+                           strava=strava)
+    assert strava.calls == []

@@ -285,3 +285,31 @@ def test_match_own_claim_counts_as_match():
     assert hevy_db.claim_source(conn, "w1", 111) is True
     row = hevy_db.get_workout(conn, "w1")
     assert hevy_sync.find_watch_match(conn, row) == 111
+
+
+# -- Checkpoint C.1 additions ------------------------------------------------
+
+def test_seen_events_still_advance_cursor():
+    """Crash after dedupe-record but before cursor persist: the re-poll skips
+    the seen event but must still move the cursor past it."""
+    conn = make_conn()
+    set_cursor(conn)
+    event = updated_event("w1", "2026-07-18T10:30:00Z")
+    hevy_db.record_event_seen(conn, "updated", "w1", "2026-07-18T10:30:00Z")
+    hevy_db.upsert_workout(conn, "w1", "Push Day", "2026-07-18T10:00:00Z",
+                           "2026-07-18T11:00:00Z", "2026-07-18T10:30:00Z", {})
+    assert hevy_sync.ingest_events(conn, FakeHevy(events=[event]), NOW) == 0
+    assert db.get_config_value(conn, CURSOR_KEY) == "2026-07-18T10:30:00Z"
+
+
+def test_gate_template_fetch_auth_error_propagates():
+    from activsync.hevy_client import HevyAuthError
+
+    class AuthFailingHevy(FakeHevy):
+        def get_exercise_template(self, template_id):
+            raise HevyAuthError("bad key")
+
+    conn = make_conn()
+    row = seed_row(conn, exercises=[UNMAPPED])
+    with pytest.raises(HevyAuthError):
+        hevy_sync.apply_mapping_gate(conn, row, "merge", AuthFailingHevy())

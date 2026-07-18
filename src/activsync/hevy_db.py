@@ -371,6 +371,55 @@ def close_operation(conn: sqlite3.Connection, op_id: int, phase: str) -> None:
     conn.commit()
 
 
+def complete_operation(
+    conn: sqlite3.Connection,
+    op_id: int,
+    hevy_id: str,
+    target_activity_id: int,
+    applied_strategy: str,
+    status: str,
+    applied_updated_at: str | None,
+) -> None:
+    """The terminal transition, in ONE transaction: close the operation, link
+    the target, set the terminal status, and record the applied revision.
+    Split across separate commits, a crash in between would leave a closed
+    journal with an unlinked replacement — a later tick would upload again."""
+    now = _now_iso()
+    try:
+        conn.execute(
+            "UPDATE hevy_operations SET phase = 'done', updated_at = ? WHERE id = ?",
+            (now, op_id),
+        )
+        conn.execute(
+            """UPDATE hevy_workouts
+               SET garmin_activity_id = ?,
+                   applied_strategy = COALESCE(applied_strategy, ?),
+                   status = ?, error = NULL,
+                   garmin_applied_updated_at = ?, updated_at = ?
+               WHERE hevy_id = ?""",
+            (target_activity_id, applied_strategy, status, applied_updated_at,
+             now, hevy_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def wake_needs_mapping(conn: sqlite3.Connection) -> int:
+    """Re-enter all parked needs_mapping workouts (called when a mapping is
+    saved — the only event that can change their outcome). Returns how many
+    woke."""
+    cur = conn.execute(
+        """UPDATE hevy_workouts SET status = 'waiting_watch', error = NULL,
+               updated_at = ?
+           WHERE status = 'needs_mapping'""",
+        (_now_iso(),),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
 # -- merge_backups ----------------------------------------------------------
 
 
