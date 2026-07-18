@@ -139,6 +139,17 @@ class HevyClient:
 
     # -- exercise templates --------------------------------------------------
 
+    def get_exercise_template(self, template_id: str) -> dict | None:
+        """Fetch one exercise template; None on a true 404, outages propagate
+        (same contract as get_workout)."""
+        try:
+            data = self._get(f"/exercise_templates/{template_id}")
+        except requests.HTTPError as exc:
+            if getattr(exc.response, "status_code", None) == 404:
+                return None
+            raise
+        return data if isinstance(data, dict) else None
+
     def get_exercise_templates_page(self, page: int = 1, page_size: int = 10) -> dict:
         return self._get("/exercise_templates",
                          {"page": page, "pageSize": page_size})
