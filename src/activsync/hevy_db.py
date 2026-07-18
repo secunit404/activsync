@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS hevy_workouts (
     source_garmin_activity_id INTEGER,
     garmin_activity_id INTEGER,
     locked_until TEXT,
+    lease_owner TEXT,
     error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -119,6 +120,10 @@ def _now_iso() -> str:
 def init_schema(conn: sqlite3.Connection) -> None:
     """Create the Hevy tables and indexes. Idempotent; called from db.connect."""
     conn.executescript(SCHEMA)
+    # migrate pre-release dev DBs created before the lease-owner column
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(hevy_workouts)")}
+    if "lease_owner" not in cols:
+        conn.execute("ALTER TABLE hevy_workouts ADD COLUMN lease_owner TEXT")
     conn.commit()
 
 
@@ -204,15 +209,20 @@ def claim_source(
     conn: sqlite3.Connection, hevy_id: str, source_garmin_activity_id: int
 ) -> bool:
     """Claim a watch activity as this workout's source. The partial UNIQUE
-    index makes double-claims impossible at the schema level."""
+    index blocks cross-row double claims; the WHERE guard makes a claim
+    immutable (no overwrite) and a missing row a failure, not a silent
+    success. Re-claiming the identical source is an idempotent True."""
     try:
-        conn.execute(
-            "UPDATE hevy_workouts SET source_garmin_activity_id = ?, updated_at = ? "
-            "WHERE hevy_id = ?",
-            (source_garmin_activity_id, _now_iso(), hevy_id),
+        cur = conn.execute(
+            """UPDATE hevy_workouts SET source_garmin_activity_id = ?, updated_at = ?
+               WHERE hevy_id = ?
+                 AND (source_garmin_activity_id IS NULL
+                      OR source_garmin_activity_id = ?)""",
+            (source_garmin_activity_id, _now_iso(), hevy_id,
+             source_garmin_activity_id),
         )
         conn.commit()
-        return True
+        return cur.rowcount == 1
     except sqlite3.IntegrityError:
         conn.rollback()
         return False
@@ -225,35 +235,47 @@ def link_target(
     applied_strategy: str,
     provenance: str = "activsync",
 ) -> None:
-    conn.execute(
+    """Record the final linked activity. applied_strategy is set once and
+    never changed afterwards — future edits follow the original strategy."""
+    cur = conn.execute(
         """UPDATE hevy_workouts
-           SET garmin_activity_id = ?, applied_strategy = ?, provenance = ?,
-               updated_at = ?
+           SET garmin_activity_id = ?,
+               applied_strategy = COALESCE(applied_strategy, ?),
+               provenance = ?, updated_at = ?
            WHERE hevy_id = ?""",
         (garmin_activity_id, applied_strategy, provenance, _now_iso(), hevy_id),
     )
     conn.commit()
+    if cur.rowcount != 1:
+        raise ValueError(f"link_target: no hevy workout {hevy_id!r}")
 
 
 def acquire_lease(
     conn: sqlite3.Connection, hevy_id: str, now: datetime, seconds: int = 300
-) -> bool:
-    """Take the per-workout execution lease. Returns False while another
-    holder's unexpired lease is in place."""
+) -> str | None:
+    """Take the per-workout execution lease. Returns an owner token, or None
+    while another holder's unexpired lease is in place. The token must be
+    presented to release_lease — a worker whose lease expired and was taken
+    over cannot clear the new holder's lease."""
+    import secrets
+
+    token = secrets.token_hex(8)
     now_iso = now.isoformat()
     until = (now + timedelta(seconds=seconds)).isoformat()
     cur = conn.execute(
-        """UPDATE hevy_workouts SET locked_until = ?
+        """UPDATE hevy_workouts SET locked_until = ?, lease_owner = ?
            WHERE hevy_id = ? AND (locked_until IS NULL OR locked_until <= ?)""",
-        (until, hevy_id, now_iso),
+        (until, token, hevy_id, now_iso),
     )
     conn.commit()
-    return cur.rowcount == 1
+    return token if cur.rowcount == 1 else None
 
 
-def release_lease(conn: sqlite3.Connection, hevy_id: str) -> None:
+def release_lease(conn: sqlite3.Connection, hevy_id: str, token: str) -> None:
     conn.execute(
-        "UPDATE hevy_workouts SET locked_until = NULL WHERE hevy_id = ?", (hevy_id,)
+        """UPDATE hevy_workouts SET locked_until = NULL, lease_owner = NULL
+           WHERE hevy_id = ? AND lease_owner = ?""",
+        (hevy_id, token),
     )
     conn.commit()
 
@@ -299,13 +321,22 @@ def open_operation(
         return None
 
 
+def _decode_operation(row: sqlite3.Row) -> dict:
+    op = dict(row)
+    try:
+        op["pre_upload_ids"] = json.loads(op["pre_upload_ids"] or "[]")
+    except (TypeError, ValueError):
+        op["pre_upload_ids"] = []
+    return op
+
+
 def get_open_operation(conn: sqlite3.Connection, hevy_id: str) -> dict | None:
     row = conn.execute(
         """SELECT * FROM hevy_operations
            WHERE hevy_id = ? AND phase NOT IN ('done','failed')""",
         (hevy_id,),
     ).fetchone()
-    return dict(row) if row else None
+    return _decode_operation(row) if row else None
 
 
 _OPERATION_FIELDS = {
@@ -321,6 +352,8 @@ def update_operation(conn: sqlite3.Connection, op_id: int, **fields) -> None:
         raise ValueError(f"unknown operation fields: {sorted(unknown)}")
     if not fields:
         return
+    if "pre_upload_ids" in fields and not isinstance(fields["pre_upload_ids"], str):
+        fields = {**fields, "pre_upload_ids": json.dumps(fields["pre_upload_ids"])}
     assignments = ", ".join(f"{name} = ?" for name in fields)
     values = list(fields.values())
     conn.execute(

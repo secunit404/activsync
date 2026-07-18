@@ -684,15 +684,19 @@ def lookup_exercise(
     template-id table -> built-in English-name table. A miss raises
     MappingMiss; this function never returns the UNKNOWN sentinel.
     """
+    # Both ported tables contain UNKNOWN (65534) entries — exercises even
+    # upstream could not place. Every resolution source filters them: the
+    # sentinel behaves as a miss, so it can never reach Garmin.
     if template_id:
         user = hevy_db.get_mapping(conn, template_id)
-        if user is not None and not user["garmin_rejected"]:
+        if (user is not None and not user["garmin_rejected"]
+                and user["category"] != UNKNOWN_CATEGORY):
             return (user["category"], user["subcategory"], title)
         pair = TEMPLATE_TO_GARMIN.get(template_id)
-        if pair is not None:
+        if pair is not None and pair[0] != UNKNOWN_CATEGORY:
             return (pair[0], pair[1], title)
     pair = HEVY_TO_GARMIN.get(title)
-    if pair is not None:
+    if pair is not None and pair[0] != UNKNOWN_CATEGORY:
         return (pair[0], pair[1], title)
     raise MappingMiss(title, template_id)
 
@@ -721,7 +725,11 @@ def _normalize(title: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", title.lower()).strip()
 
 
-_NORMALIZED_NAME_TABLE = {_normalize(name): pair for name, pair in HEVY_TO_GARMIN.items()}
+_NORMALIZED_NAME_TABLE = {
+    _normalize(name): pair
+    for name, pair in HEVY_TO_GARMIN.items()
+    if pair[0] != UNKNOWN_CATEGORY  # never suggest the sentinel
+}
 
 
 def suggest_mapping(title: str, template: dict | None) -> tuple[int, int] | None:

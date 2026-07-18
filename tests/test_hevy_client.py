@@ -67,15 +67,42 @@ def test_auth_error_on_401(monkeypatch):
 
 
 def test_get_workout_unwraps_and_handles_missing(monkeypatch):
+    import requests
+
     client = HevyClient(api_key="k")
     monkeypatch.setattr(client, "_get",
                         lambda path, params=None: {"workout": {"id": "w1"}})
     assert client.get_workout("w1")["id"] == "w1"
 
-    def boom(path, params=None):
-        raise RuntimeError("404")
-    monkeypatch.setattr(client, "_get", boom)
+    class Resp404:
+        status_code = 404
+
+    def gone(path, params=None):
+        raise requests.HTTPError("404 Client Error", response=Resp404())
+    monkeypatch.setattr(client, "_get", gone)
     assert client.get_workout("gone") is None
+
+
+def test_get_workout_outage_propagates(monkeypatch):
+    # A timeout/500 must NOT read as "workout deleted".
+    import requests
+
+    client = HevyClient(api_key="k")
+
+    class Resp500:
+        status_code = 500
+
+    def boom(path, params=None):
+        raise requests.HTTPError("500 Server Error", response=Resp500())
+    monkeypatch.setattr(client, "_get", boom)
+    with pytest.raises(requests.HTTPError):
+        client.get_workout("w1")
+
+    def timeout(path, params=None):
+        raise requests.Timeout("timed out")
+    monkeypatch.setattr(client, "_get", timeout)
+    with pytest.raises(requests.Timeout):
+        client.get_workout("w1")
 
 
 def test_iter_all_exercise_templates_paginates(monkeypatch):

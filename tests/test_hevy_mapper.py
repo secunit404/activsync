@@ -69,6 +69,41 @@ def test_lookup_never_returns_unknown():
     assert UNKNOWN_CATEGORY == 65534
 
 
+def test_unknown_entries_in_tables_raise_mapping_miss():
+    # Both ported tables contain UNKNOWN (65534) entries (e.g. neck
+    # exercises). Those must behave as misses, not resolve.
+    conn = make_conn()
+    from activsync.hevy_mapper import HEVY_TO_GARMIN
+    from activsync.hevy_template_map import TEMPLATE_TO_GARMIN
+
+    unknown_names = [n for n, (c, _s) in HEVY_TO_GARMIN.items() if c == UNKNOWN_CATEGORY]
+    unknown_templates = [t for t, (c, _s) in TEMPLATE_TO_GARMIN.items()
+                         if c == UNKNOWN_CATEGORY]
+    assert unknown_names, "expected UNKNOWN entries in the name table"
+    with pytest.raises(MappingMiss):
+        lookup_exercise(conn, unknown_names[0], None)
+    if unknown_templates:
+        with pytest.raises(MappingMiss):
+            lookup_exercise(conn, "Whatever Title", unknown_templates[0])
+
+
+def test_unknown_user_mapping_is_rejected():
+    # A user mapping row carrying the sentinel must not resolve either.
+    conn = make_conn()
+    hevy_db.save_mapping(conn, "TPLX", UNKNOWN_CATEGORY, 0)
+    with pytest.raises(MappingMiss):
+        lookup_exercise(conn, "Some Exercise", "TPLX")
+
+
+def test_suggest_mapping_never_suggests_unknown():
+    from activsync.hevy_mapper import HEVY_TO_GARMIN
+
+    unknown_names = [n for n, (c, _s) in HEVY_TO_GARMIN.items() if c == UNKNOWN_CATEGORY]
+    for name in unknown_names:
+        got = suggest_mapping(name, None)
+        assert got is None or got[0] != UNKNOWN_CATEGORY
+
+
 # -- suggest_mapping --------------------------------------------------------
 
 def test_suggest_fuzzy_hit_on_typo():

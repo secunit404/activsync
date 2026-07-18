@@ -241,3 +241,40 @@ def test_find_activity_near_none_when_no_match():
     raw.activities_by_date = []
     client = GarminClient(raw)
     assert client.find_activity_near("2026-07-17 06:00:00", exclude_ids=set()) is None
+
+
+# -- list_activity_ids_near (journal snapshots) -----------------------------
+
+def test_list_activity_ids_near_returns_all_ids_any_type():
+    raw = StubRaw()
+    raw.activities_by_date = ACTIVITIES
+    client = GarminClient(raw)
+    ids = client.list_activity_ids_near("2026-07-17 06:00:00")
+    assert ids == [1, 2, 3]  # snapshot includes every type, no window filter
+
+
+def test_list_activity_ids_near_propagates_outage():
+    class ExplodingRaw(StubRaw):
+        def get_activities_by_date(self, date_from, date_to):
+            raise RuntimeError("garmin down")
+
+    client = GarminClient(ExplodingRaw())
+    # An outage must NOT read as "no activities" — an empty snapshot would
+    # poison later submission_unknown diffs.
+    with pytest.raises(RuntimeError):
+        client.list_activity_ids_near("2026-07-17 06:00:00")
+
+
+def test_put_exercise_sets_goes_through_limiter(monkeypatch):
+    calls = []
+
+    class RecordingLimiter:
+        def call(self, func, *args, **kwargs):
+            calls.append(func)
+            return func(*args, **kwargs)
+
+    monkeypatch.setattr(gc_module, "_limiter", RecordingLimiter())
+    raw = StubRaw()
+    client = GarminClient(raw)
+    client.put_exercise_sets(99, {"exerciseSets": []})
+    assert calls, "put_exercise_sets bypassed the shared limiter"

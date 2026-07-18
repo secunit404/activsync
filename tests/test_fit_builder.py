@@ -92,6 +92,44 @@ def test_missing_start_raises(tmp_path):
         build(tmp_path, workout=workout)
 
 
+def test_nonpositive_duration_raises(tmp_path):
+    workout = dict(WORKOUT, end_time=WORKOUT["start_time"])
+    with pytest.raises(ValueError):
+        build(tmp_path, workout=workout)
+    workout = dict(WORKOUT, end_time="2026-07-17T05:00:00Z")  # ends before start
+    with pytest.raises(ValueError):
+        build(tmp_path, workout=workout)
+
+
+def test_unknown_category_rejected(tmp_path):
+    bad = [ResolvedExercise("Mystery", 65534, 0, [{"reps": 5}])]
+    with pytest.raises(ValueError):
+        build(tmp_path, resolved=bad)
+
+
+def test_all_timestamps_stay_within_activity_window(tmp_path):
+    # Short workout (5 min) with many sets → the 0.3 scale floor would push
+    # synthetic sets past the end; HR beyond the end must be dropped too.
+    workout = dict(WORKOUT, end_time="2026-07-17T06:05:00Z")
+    hr = [{"time": 0.0, "hr": 100}, {"time": 290.0, "hr": 120},
+          {"time": 350.0, "hr": 130}]  # 350 s > 300 s duration
+    result = build(tmp_path, workout=workout, hr=hr)
+
+    from fit_tool.fit_file import FitFile
+    fit = FitFile.from_file(result["output_path"])
+    end_ms = None
+    timestamps = []
+    for record in fit.records:
+        message = record.message
+        name = type(message).__name__
+        if name == "SessionMessage":
+            end_ms = message.timestamp
+        if name in ("RecordMessage", "SetMessage"):
+            timestamps.append(message.timestamp)
+    assert end_ms is not None
+    assert timestamps and all(ts <= end_ms for ts in timestamps)
+
+
 def test_identity_fields_land_in_file(tmp_path):
     from fit_tool.fit_file import FitFile
     from fit_tool.profile.messages.file_id_message import FileIdMessage

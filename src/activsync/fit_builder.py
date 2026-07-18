@@ -57,9 +57,23 @@ class DeviceIdentity:
 
 # Fallback when no watch FIT has ever been seen. Spike-proven: a generic
 # Garmin identity (manufacturer 1, product 0) is accepted and gets TE/Load.
+# The serial is a placeholder — installs should persist new_fallback_identity()
+# so each carries its own stable serial rather than a shared constant.
 GENERIC_GARMIN_IDENTITY = DeviceIdentity(manufacturer=1, product=0, serial=424242)
 # Upstream's choice, kept for reference/tests only — never the default.
 DEVELOPMENT_IDENTITY = DeviceIdentity(manufacturer=255, product=0, serial=12345)
+
+UNKNOWN_CATEGORY = 65534
+
+
+def new_fallback_identity() -> DeviceIdentity:
+    """A generic Garmin identity with a fresh random serial. Generated once
+    per install and persisted (hevy_device_identity), so installs don't share
+    a serial while still avoiding any hardcoded user value."""
+    import secrets
+
+    return DeviceIdentity(manufacturer=1, product=0,
+                          serial=secrets.randbelow(2**31 - 1) + 1)
 
 
 @dataclass(frozen=True)
@@ -203,6 +217,16 @@ def build_fit(
             f"(start={workout.get('start_time')!r}, end={workout.get('end_time')!r})"
         )
     duration_s = (end_dt - start_dt).total_seconds()
+    if duration_s <= 0:
+        raise ValueError(
+            f"Workout '{workout.get('title', '?')}' has non-positive duration "
+            f"({workout.get('start_time')!r} → {workout.get('end_time')!r})"
+        )
+    for exercise in resolved:
+        # Defense in depth behind the mapping gate: the sentinel must never
+        # be written into a FIT, whatever upstream data slipped through.
+        if exercise.category == UNKNOWN_CATEGORY:
+            raise ValueError(f"exercise {exercise.title!r} resolved to UNKNOWN")
     start_ms = _ms(start_dt)
     end_ms = start_ms + round(duration_s * 1000)
 
@@ -355,6 +379,24 @@ def build_fit(
 
             timeline.append((rest_end_ms, "set", rest))
             msg_index += 1
+
+    # Nothing may be stamped after TIMER STOP_ALL: HR carries a ±60 s slice
+    # buffer and the scale floor can push synthetic sets past the end, so
+    # clamp set boundaries to end_ms and drop out-of-window records.
+    clipped: list[tuple[int, str, object]] = []
+    for ts, kind, msg in timeline:
+        if kind == "record":
+            if ts <= end_ms:
+                clipped.append((ts, kind, msg))
+            continue
+        if msg.start_time >= end_ms:
+            continue
+        if ts > end_ms:
+            msg.timestamp = end_ms
+            msg.duration = (end_ms - msg.start_time) / 1000.0
+            ts = end_ms
+        clipped.append((ts, kind, msg))
+    timeline = clipped
 
     timeline.sort(key=lambda x: (x[0], 0 if x[1] == "record" else 1))
     for _, _, msg in timeline:

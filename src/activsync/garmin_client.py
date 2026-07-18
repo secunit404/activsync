@@ -257,14 +257,11 @@ class GarminClient:
         return _limiter.call(self._client.get_activity_exercise_sets, activity_id)
 
     def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
-        """PUT the full exercise-set list (atomic replace of ALL sets).
-
-        Called on the raw client, not through the limiter: the endpoint
-        returns 204 No Content, which the limiter misreads as an error
-        (upstream finding)."""
+        """PUT the full exercise-set list (atomic replace of ALL sets)."""
         url = f"/activity-service/activity/{activity_id}/exerciseSets"
         try:
-            self._client.client.request("PUT", "connectapi", url, json=payload)
+            _limiter.call(self._client.client.request, "PUT", "connectapi", url,
+                          json=payload)
         except Exception as exc:
             if _is_subcategory_rejection(exc):
                 raise SubcategoryRejected(str(exc)) from exc
@@ -321,6 +318,21 @@ class GarminClient:
 
         return {"weight_kg": weight_kg, "birth_year": birth_year,
                 "sex": sex, "vo2max": vo2max}
+
+    def list_activity_ids_near(self, start_time: str) -> list[int]:
+        """ALL activity ids in start_time's date ±1 day, every type — the
+        operation journal's pre/post-upload snapshot primitive. Failures
+        PROPAGATE: an outage must never read as an empty snapshot, or a later
+        submission_unknown diff would adopt the wrong activity."""
+        target = _parse_garmin_time(start_time) or _parse_iso_utc(start_time)
+        if target is None:
+            raise ValueError(f"unparseable start_time: {start_time!r}")
+        date_from = (target - timedelta(days=1)).date().isoformat()
+        date_to = (target + timedelta(days=1)).date().isoformat()
+        activities = _limiter.call(
+            self._client.get_activities_by_date, date_from, date_to)
+        return [int(act["activityId"]) for act in (activities or [])
+                if act.get("activityId") is not None]
 
     def find_activity_near(
         self,

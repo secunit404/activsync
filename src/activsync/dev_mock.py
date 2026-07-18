@@ -290,6 +290,9 @@ class FakeGarminClient:
     ) -> int | None:
         return None
 
+    def list_activity_ids_near(self, start_time: str) -> list[int]:
+        return []
+
 
 class FakeStravaClient:
     """No-network Strava client. The "OAuth" handshake loops straight back to

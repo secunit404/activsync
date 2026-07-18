@@ -91,18 +91,22 @@ class HevyClient:
     # -- workouts -----------------------------------------------------------
 
     def get_workout(self, workout_id: str) -> dict | None:
-        """Fetch a single workout by id; None when missing or malformed."""
+        """Fetch a single workout by id. None means Garmin-side truth: the
+        workout does not exist (404) or the response was malformed. Outages
+        (timeouts, 5xx, 429 past retries) PROPAGATE — they must never read
+        as "workout deleted"."""
         try:
             data = self._get(f"/workouts/{workout_id}")
-        except HevyAuthError:
+        except requests.HTTPError as exc:
+            if getattr(exc.response, "status_code", None) == 404:
+                return None
             raise
-        except Exception:
-            return None
         if isinstance(data, dict):
             if "id" in data:
                 return data
             if isinstance(data.get("workout"), dict):
                 return data["workout"]
+        logger.warning("malformed workout response for %s: %.200s", workout_id, data)
         return None
 
     def get_workouts_page(self, page: int = 1, page_size: int = 10) -> dict:

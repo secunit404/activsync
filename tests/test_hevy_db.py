@@ -109,6 +109,18 @@ def test_claim_source_is_unique():
     assert hevy_db.get_workout(conn, "w2")["source_garmin_activity_id"] is None
 
 
+def test_claim_source_missing_row_and_reclaim_fail():
+    conn = make_conn()
+    seed_workout(conn, "w1")
+    assert hevy_db.claim_source(conn, "missing", 111) is False
+    assert hevy_db.claim_source(conn, "w1", 111) is True
+    # a claim is immutable — no silent overwrite with a different source
+    assert hevy_db.claim_source(conn, "w1", 222) is False
+    assert hevy_db.get_workout(conn, "w1")["source_garmin_activity_id"] == 111
+    # re-claiming the identical source is an idempotent success
+    assert hevy_db.claim_source(conn, "w1", 111) is True
+
+
 def test_link_target_records_strategy_and_provenance():
     conn = make_conn()
     seed_workout(conn, "w1")
@@ -119,23 +131,47 @@ def test_link_target_records_strategy_and_provenance():
     assert row["provenance"] == "activsync"
 
 
+def test_link_target_strategy_is_immutable_and_missing_row_raises():
+    conn = make_conn()
+    seed_workout(conn, "w1")
+    hevy_db.link_target(conn, "w1", 222, "merge")
+    hevy_db.link_target(conn, "w1", 222, "replace")  # later strategy ignored
+    assert hevy_db.get_workout(conn, "w1")["applied_strategy"] == "merge"
+    import pytest
+    with pytest.raises(ValueError):
+        hevy_db.link_target(conn, "missing", 1, "merge")
+
+
 # -- leases -----------------------------------------------------------------
 
 def test_acquire_lease_blocks_second_acquire_until_expiry():
     conn = make_conn()
     seed_workout(conn, "w1")
-    assert hevy_db.acquire_lease(conn, "w1", NOW) is True
-    assert hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=10)) is False
+    token = hevy_db.acquire_lease(conn, "w1", NOW)
+    assert token
+    assert hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=10)) is None
     # after expiry (default 300 s) the lease can be taken again
-    assert hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=301)) is True
+    assert hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=301))
 
 
 def test_release_lease_frees_immediately():
     conn = make_conn()
     seed_workout(conn, "w1")
-    assert hevy_db.acquire_lease(conn, "w1", NOW) is True
-    hevy_db.release_lease(conn, "w1")
-    assert hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=1)) is True
+    token = hevy_db.acquire_lease(conn, "w1", NOW)
+    hevy_db.release_lease(conn, "w1", token)
+    assert hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=1))
+
+
+def test_stale_owner_cannot_release_new_owners_lease():
+    conn = make_conn()
+    seed_workout(conn, "w1")
+    token_a = hevy_db.acquire_lease(conn, "w1", NOW)
+    # A's lease expires; B acquires
+    token_b = hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=301))
+    assert token_b and token_b != token_a
+    # A finishes late and releases — must NOT clear B's lease
+    hevy_db.release_lease(conn, "w1", token_a)
+    assert hevy_db.acquire_lease(conn, "w1", NOW + timedelta(seconds=310)) is None
 
 
 # -- set_applied ------------------------------------------------------------
@@ -186,6 +222,15 @@ def test_update_operation_sets_fields():
     assert op["phase"] == "uploading"
     assert op["upload_id"] == "u-9"
     assert op["attempt_count"] == 2
+
+
+def test_pre_upload_ids_round_trip_as_list():
+    conn = make_conn()
+    seed_workout(conn, "w1")
+    op_id = hevy_db.open_operation(conn, "w1", "replace", 111, [1, 2])
+    assert hevy_db.get_open_operation(conn, "w1")["pre_upload_ids"] == [1, 2]
+    hevy_db.update_operation(conn, op_id, pre_upload_ids=[3, 4, 5])
+    assert hevy_db.get_open_operation(conn, "w1")["pre_upload_ids"] == [3, 4, 5]
 
 
 # -- merge backups ----------------------------------------------------------
