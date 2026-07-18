@@ -396,8 +396,8 @@ def _overlapping_any_type(conn: sqlite3.Connection, row: dict) -> str | None:
 
 def _park_operation(conn: sqlite3.Connection, op: dict, row: dict,
                     error: str) -> None:
-    hevy_db.close_operation(conn, op["id"], "needs_review")
-    hevy_db.set_workout_status(conn, row["hevy_id"], "needs_review", error=error)
+    hevy_db.set_operation_outcome(
+        conn, op["id"], row["hevy_id"], "needs_review", "needs_review", error)
 
 
 def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
@@ -474,22 +474,21 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
                     except Exception as exc:
                         upload_error = exc
             except MappingMiss as miss:
-                hevy_db.close_operation(conn, op["id"], "failed")
-                hevy_db.set_workout_status(
-                    conn, hevy_id, "needs_mapping",
-                    error=f"unmapped exercises: {miss.title}")
+                hevy_db.set_operation_outcome(
+                    conn, op["id"], hevy_id, "failed", "needs_mapping",
+                    f"unmapped exercises: {miss.title}")
                 return
             except Exception as exc:
-                hevy_db.close_operation(conn, op["id"], "failed")
-                hevy_db.set_workout_status(conn, hevy_id, "failed",
-                                           error=f"FIT build failed: {exc}")
+                hevy_db.set_operation_outcome(
+                    conn, op["id"], hevy_id, "failed", "failed",
+                    f"FIT build failed: {exc}")
                 return
 
             if upload_error is not None:
                 if isinstance(upload_error, GarminUploadRejected):
-                    hevy_db.close_operation(conn, op["id"], "failed")
-                    hevy_db.set_workout_status(conn, hevy_id, "failed",
-                                               error=str(upload_error))
+                    hevy_db.set_operation_outcome(
+                        conn, op["id"], hevy_id, "failed", "failed",
+                        str(upload_error))
                     return
                 # Outcome unknown — record and wait; NEVER resubmit.
                 hevy_db.update_operation(conn, op["id"],
@@ -592,29 +591,48 @@ def _resolution_candidates(activities: list[dict], row: dict,
     renamed, and have the watch activity deleted under it."""
     hevy_start = _parse_ts(row["start_time"])
     hevy_end = _parse_ts(row["end_time"])
-    hevy_duration = ((hevy_end - hevy_start).total_seconds()
-                     if hevy_start and hevy_end else 0.0)
+    if not hevy_start or not hevy_end:
+        return set()
+    hevy_duration = (hevy_end - hevy_start).total_seconds()
+    if hevy_duration <= 0:
+        return set()
+
+    normalized_pre_ids: set[int] = set()
+    for raw_id in pre_upload_ids:
+        try:
+            normalized_pre_ids.add(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+    try:
+        normalized_source = int(source) if source is not None else None
+    except (TypeError, ValueError):
+        normalized_source = None
 
     candidates: set[int] = set()
     for act in activities:
-        activity_id = act.get("activityId")
-        if activity_id is None or activity_id in pre_upload_ids \
-                or activity_id == source:
+        try:
+            activity_id = int(act.get("activityId"))
+        except (TypeError, ValueError):
+            continue
+        if activity_id in normalized_pre_ids or activity_id == normalized_source:
             continue
         act_type = (act.get("activityType") or {}).get("typeKey", "")
-        if act_type and act_type not in _RESOLUTION_TYPES:
+        if act_type not in _RESOLUTION_TYPES:
             continue
         act_start = _parse_ts(act.get("startTimeGMT", ""))
-        if hevy_start is not None:
-            if act_start is None:
-                continue
-            drift_s = abs((act_start - hevy_start).total_seconds())
-            if drift_s > _RESOLUTION_DRIFT_MIN * 60:
-                continue
-        duration = act.get("duration")
-        if duration and hevy_duration > 0:
-            ratio = float(duration) / hevy_duration
-            if not (0.25 <= ratio <= 4.0):
-                continue
-        candidates.add(int(activity_id))
+        if act_start is None:
+            continue
+        drift_s = abs((act_start - hevy_start).total_seconds())
+        if drift_s > _RESOLUTION_DRIFT_MIN * 60:
+            continue
+        try:
+            duration = float(act.get("duration"))
+        except (TypeError, ValueError):
+            continue
+        if duration <= 0:
+            continue
+        ratio = duration / hevy_duration
+        if not (0.25 <= ratio <= 4.0):
+            continue
+        candidates.add(activity_id)
     return candidates

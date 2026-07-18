@@ -313,3 +313,20 @@ def test_gate_template_fetch_auth_error_propagates():
     row = seed_row(conn, exercises=[UNMAPPED])
     with pytest.raises(HevyAuthError):
         hevy_sync.apply_mapping_gate(conn, row, "merge", AuthFailingHevy())
+
+
+def test_newer_hevy_edit_wakes_its_needs_mapping_workout():
+    """Removing the unmapped exercise in Hevy can itself resolve the gate."""
+    conn = make_conn()
+    set_cursor(conn)
+    seed_row(conn, exercises=[UNMAPPED])
+    hevy_db.set_workout_status(conn, "w1", "needs_mapping",
+                               error="unmapped exercises: Custom Blaster")
+
+    event = updated_event(
+        "w1", "2026-07-18T12:00:00Z", exercises=[MAPPED])
+    assert hevy_sync.ingest_events(conn, FakeHevy(events=[event]), NOW) == 1
+
+    updated = hevy_db.get_workout(conn, "w1")
+    assert updated["status"] == "waiting_watch"
+    assert updated["error"] is None

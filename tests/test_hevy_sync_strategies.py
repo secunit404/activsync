@@ -576,10 +576,19 @@ def test_needs_mapping_rows_wait_for_explicit_wake():
     assert garmin.called("put_exercise_sets") == []
     assert hevy_db.get_workout(conn, "w1")["status"] == "needs_mapping"
 
-    # explicit wake (mapping saved) re-enters the flow
-    assert hevy_db.wake_needs_mapping(conn) == 1
+    # An unrelated parked row must not wake when w1's template is mapped.
+    seed_row(conn, hevy_id="w2", exercises=[{
+        "title": "Other Custom", "exercise_template_id": "OTHER02",
+        "sets": [{"type": "normal", "reps": 3}],
+    }])
+    hevy_db.set_workout_status(conn, "w2", "needs_mapping",
+                               error="unmapped exercises: Other Custom")
+
+    # Explicit targeted wake (mapping saved) re-enters only the affected flow.
+    assert hevy_db.wake_needs_mapping(conn, template_id="79D0BB3A") == 1
     hevy_sync.run_hevy_leg(conn, garmin, NoHevy(), base_cfg(), NOW)
     assert hevy_db.get_workout(conn, "w1")["status"] == "merged"
+    assert hevy_db.get_workout(conn, "w2")["status"] == "needs_mapping"
 
 
 def test_describe_strategy_passive_path_still_gated():
@@ -614,6 +623,48 @@ def test_pre_submission_failure_closes_operation():
     assert result["status"] == "needs_mapping"
     assert hevy_db.get_open_operation(conn, "w1") is None
     assert garmin.called("upload_fit") == []
+
+
+def test_resolution_candidates_require_complete_metadata():
+    """Ambiguous-upload recovery fails closed on partial Garmin rows."""
+    from activsync.hevy_apply import _resolution_candidates
+
+    row = {
+        "start_time": "2026-07-18T10:00:00Z",
+        "end_time": "2026-07-18T11:00:00Z",
+    }
+    incomplete = [
+        # no type
+        {"activityId": 901, "startTimeGMT": "2026-07-18 10:00:00",
+         "duration": 3600},
+        # no duration
+        {"activityId": 902, "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:00:00"},
+        # non-positive duration
+        {"activityId": 903, "activityType": {"typeKey": "other"},
+         "startTimeGMT": "2026-07-18 10:00:00", "duration": 0},
+        # malformed id
+        {"activityId": "not-an-id",
+         "activityType": {"typeKey": "strength_training"},
+         "startTimeGMT": "2026-07-18 10:00:00", "duration": 3600},
+    ]
+    assert _resolution_candidates(incomplete, row, set(), None) == set()
+
+
+def test_resolution_candidates_normalize_ids_before_exclusion():
+    from activsync.hevy_apply import _resolution_candidates
+
+    row = {
+        "start_time": "2026-07-18T10:00:00Z",
+        "end_time": "2026-07-18T11:00:00Z",
+    }
+    activity = {
+        "activityId": "999",
+        "activityType": {"typeKey": "strength_training"},
+        "startTimeGMT": "2026-07-18 10:00:00",
+        "duration": 3600,
+    }
+    assert _resolution_candidates([activity], row, {999}, None) == set()
 
 
 class StubStrava:

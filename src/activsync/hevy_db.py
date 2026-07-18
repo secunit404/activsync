@@ -371,6 +371,47 @@ def close_operation(conn: sqlite3.Connection, op_id: int, phase: str) -> None:
     conn.commit()
 
 
+def set_operation_outcome(
+    conn: sqlite3.Connection,
+    op_id: int,
+    hevy_id: str,
+    phase: str,
+    status: str,
+    error: str | None,
+) -> None:
+    """Atomically park or fail an operation and its workout.
+
+    Closing the operation before updating the workout can leave a closed
+    journal behind an actionable ``syncing`` row if the process dies between
+    commits. That row would be eligible to open and submit a second operation.
+    Both records therefore transition together or neither does.
+    """
+    if phase not in ("failed", "needs_review"):
+        raise ValueError(f"invalid operation outcome phase: {phase!r}")
+    if status not in STATUSES:
+        raise ValueError(f"invalid workout status: {status!r}")
+    now = _now_iso()
+    try:
+        op_cur = conn.execute(
+            """UPDATE hevy_operations SET phase = ?, last_error = ?, updated_at = ?
+               WHERE id = ? AND hevy_id = ?""",
+            (phase, error, now, op_id, hevy_id),
+        )
+        workout_cur = conn.execute(
+            """UPDATE hevy_workouts SET status = ?, error = ?, updated_at = ?
+               WHERE hevy_id = ?""",
+            (status, error, now, hevy_id),
+        )
+        if op_cur.rowcount != 1 or workout_cur.rowcount != 1:
+            raise ValueError(
+                f"operation outcome target missing: op={op_id}, hevy={hevy_id!r}"
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
 def complete_operation(
     conn: sqlite3.Connection,
     op_id: int,
@@ -406,18 +447,50 @@ def complete_operation(
         raise
 
 
-def wake_needs_mapping(conn: sqlite3.Connection) -> int:
-    """Re-enter all parked needs_mapping workouts (called when a mapping is
-    saved — the only event that can change their outcome). Returns how many
-    woke."""
-    cur = conn.execute(
+def wake_needs_mapping(
+    conn: sqlite3.Connection,
+    *,
+    template_id: str | None = None,
+    hevy_id: str | None = None,
+) -> int:
+    """Wake only mapping rows affected by one concrete change.
+
+    A saved mapping targets workouts containing that template; a newer Hevy
+    revision targets its own workout. Waking every parked row would also retry
+    unrelated Garmin-rejected pairs whose mappings have not changed.
+    """
+    if (template_id is None) == (hevy_id is None):
+        raise ValueError("provide exactly one of template_id or hevy_id")
+
+    affected: list[str] = []
+    for row in list_workouts(conn, status="needs_mapping"):
+        if hevy_id is not None:
+            if row["hevy_id"] == hevy_id:
+                affected.append(row["hevy_id"])
+            continue
+        try:
+            payload = json.loads(row["payload"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        exercises = payload.get("exercises", []) if isinstance(payload, dict) else []
+        if any(
+            isinstance(exercise, dict)
+            and exercise.get("exercise_template_id") == template_id
+            for exercise in exercises
+        ):
+            affected.append(row["hevy_id"])
+
+    if not affected:
+        return 0
+    now = _now_iso()
+    conn.executemany(
         """UPDATE hevy_workouts SET status = 'waiting_watch', error = NULL,
                updated_at = ?
-           WHERE status = 'needs_mapping'""",
-        (_now_iso(),),
+           WHERE hevy_id = ? AND status = 'needs_mapping'""",
+        [(now, workout_id) for workout_id in affected],
     )
     conn.commit()
-    return cur.rowcount
+    return len(affected)
 
 
 # -- merge_backups ----------------------------------------------------------

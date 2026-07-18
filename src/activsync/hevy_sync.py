@@ -61,6 +61,7 @@ def _event_key(event: dict) -> tuple[str, str, str]:
 
 def _apply_updated(conn: sqlite3.Connection, event: dict) -> None:
     workout = event["workout"]
+    before = hevy_db.get_workout(conn, workout["id"])
     hevy_db.upsert_workout(
         conn,
         workout["id"],
@@ -70,6 +71,17 @@ def _apply_updated(conn: sqlite3.Connection, event: dict) -> None:
         workout["updated_at"],
         workout,
     )
+    after = hevy_db.get_workout(conn, workout["id"])
+    # A Hevy edit can itself remove or replace the exercise that required a
+    # mapping. Wake this workout when this event is its current revision. The
+    # equality also makes a crash after upsert but before wake safe on replay.
+    if (
+        before is not None
+        and before["status"] == "needs_mapping"
+        and after is not None
+        and after["source_updated_at"] == workout["updated_at"]
+    ):
+        hevy_db.wake_needs_mapping(conn, hevy_id=workout["id"])
 
 
 def _apply_deleted(conn: sqlite3.Connection, event: dict) -> None:

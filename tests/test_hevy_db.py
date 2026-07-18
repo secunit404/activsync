@@ -3,6 +3,8 @@
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from activsync import hevy_db
 
 
@@ -222,6 +224,25 @@ def test_update_operation_sets_fields():
     assert op["phase"] == "uploading"
     assert op["upload_id"] == "u-9"
     assert op["attempt_count"] == 2
+
+
+def test_operation_outcome_rolls_back_if_workout_transition_fails():
+    """The op must not close if its paired workout update cannot land."""
+    conn = make_conn()
+    seed_workout(conn, "w1")
+    op_id = hevy_db.open_operation(conn, "w1", "replace", 111, [])
+    # Simulate a corrupt/missing paired row after the operation was opened.
+    conn.execute("DELETE FROM hevy_workouts WHERE hevy_id = 'w1'")
+    conn.commit()
+
+    with pytest.raises(ValueError):
+        hevy_db.set_operation_outcome(
+            conn, op_id, "w1", "failed", "failed", "definite rejection")
+
+    op = conn.execute(
+        "SELECT phase FROM hevy_operations WHERE id = ?", (op_id,)
+    ).fetchone()
+    assert op["phase"] == "preparing"
 
 
 def test_pre_upload_ids_round_trip_as_list():
