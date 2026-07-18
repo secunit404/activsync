@@ -55,6 +55,19 @@ def common_timezones() -> list[str]:
     return [tz for tz in _COMMON_TIMEZONES if is_valid_timezone(tz)]
 
 
+def parse_iso_utc(value: object) -> datetime | None:
+    """Parse an ISO-8601 timestamp and normalize it to timezone-aware UTC."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def format_local_time(start_time: str, tz_name: str) -> str:
     """Convert a Garmin UTC start_time string ("%Y-%m-%d %H:%M:%S") to a
     display string in tz_name, e.g. "2026-07-09 11:00"."""

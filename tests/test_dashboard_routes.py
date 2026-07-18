@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-from activsync import db
+from activsync import db, hevy_db
 from activsync import server as server_module
 from activsync.server import create_app
 from activsync.strava_client import StravaAuthError, StravaUploadError
@@ -425,6 +425,32 @@ def test_publish_route_reports_failed_uploads(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert "1 activity could not be published" in response.text
     assert db.get_activity(conn, 1)["publish_status"] == "pending"
+
+
+def test_bulk_publish_route_reports_rows_blocked_by_hevy(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(
+        conn, 1, "strength_training", "Leg Day", "",
+        "2026-07-09 09:00:00", "h1", "pending", now,
+    )
+    hevy_db.upsert_workout(
+        conn, "hevy-1", "Leg Day", "2026-07-09T09:00:00+00:00",
+        "2026-07-09T10:00:00+00:00", "2026-07-09T10:01:00+00:00", {},
+    )
+    hevy_db.link_target(conn, "hevy-1", 1, "replace")
+    hevy_db.set_workout_status(conn, "hevy-1", "needs_review")
+    fake_strava = MagicMock()
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda c: MagicMock())
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+
+    response = client.post("/api/sync/strava/publish", data={"activity_ids": ["1"]})
+
+    assert response.status_code == 200
+    assert "1 activity was blocked by Hevy sync" in response.text
+    assert "hevy workout hevy-1 is needs_review" in response.text
+    assert db.get_activity(conn, 1)["publish_status"] == "pending"
+    fake_strava.publish.assert_not_called()
 
 
 def test_publish_route_says_nothing_when_every_upload_succeeds(tmp_path, monkeypatch):

@@ -13,6 +13,8 @@ DEFAULT_CONFIG = {
     "display_timezone": "Europe/Stockholm",
     "hevy2garmin_marker": "— synced by hevy2garmin",
     "hevy2garmin_marker_enabled": False,
+    "hevy_enabled": False,
+    "hevy_poll_interval_minutes": 10,
     "held_activity_types": [],
 }
 

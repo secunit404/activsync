@@ -190,6 +190,96 @@ def list_workouts(conn: sqlite3.Connection, status: str | None = None) -> list[d
     return [dict(row) for row in rows]
 
 
+_BLOCKING_STATUSES = (
+    "needs_mapping",
+    "waiting_watch",
+    "syncing",
+    "failed",
+    "needs_review",
+)
+
+_PROMOTABLE_STATUSES = (
+    "merged",
+    "described",
+    "replaced",
+    "uploaded_passive",
+)
+
+
+def blocking_workout_for_activity(
+    conn: sqlite3.Connection, garmin_activity_id: int
+) -> dict | None:
+    """Return the Hevy workout that currently owns an activity.
+
+    An unresolved workout blocks through either of its durable activity links.
+    An open journal operation blocks independently of workout status because a
+    resumed operation may still replace or delete the referenced activity.
+    """
+    status_placeholders = ", ".join("?" for _ in _BLOCKING_STATUSES)
+    row = conn.execute(
+        f"""SELECT workout.*
+            FROM hevy_workouts AS workout
+            WHERE (
+                workout.status IN ({status_placeholders})
+                AND (
+                    workout.source_garmin_activity_id = ?
+                    OR workout.garmin_activity_id = ?
+                )
+            ) OR EXISTS (
+                SELECT 1
+                FROM hevy_operations AS operation
+                WHERE operation.hevy_id = workout.hevy_id
+                  AND operation.phase NOT IN ('done', 'failed')
+                  AND (
+                      operation.source_activity_id = ?
+                      OR operation.target_activity_id = ?
+                  )
+            )
+            ORDER BY CASE WHEN workout.status IN ({status_placeholders}) THEN 0 ELSE 1 END,
+                     workout.created_at
+            LIMIT 1""",
+        (
+            *_BLOCKING_STATUSES,
+            garmin_activity_id,
+            garmin_activity_id,
+            garmin_activity_id,
+            garmin_activity_id,
+            *_BLOCKING_STATUSES,
+        ),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def linked_workout_for_activity(
+    conn: sqlite3.Connection, garmin_activity_id: int
+) -> dict | None:
+    """Return any durable Hevy link for an activity, regardless of status."""
+    row = conn.execute(
+        """SELECT * FROM hevy_workouts
+           WHERE source_garmin_activity_id = ? OR garmin_activity_id = ?
+           ORDER BY created_at
+           LIMIT 1""",
+        (garmin_activity_id, garmin_activity_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def promotable_workout_for_activity(
+    conn: sqlite3.Connection, garmin_activity_id: int
+) -> dict | None:
+    """Return an ActivSync-produced terminal link eligible to bypass holds."""
+    status_placeholders = ", ".join("?" for _ in _PROMOTABLE_STATUSES)
+    row = conn.execute(
+        f"""SELECT * FROM hevy_workouts
+            WHERE garmin_activity_id = ?
+              AND provenance = 'activsync'
+              AND status IN ({status_placeholders})
+            LIMIT 1""",
+        (garmin_activity_id, *_PROMOTABLE_STATUSES),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def set_workout_status(
     conn: sqlite3.Connection, hevy_id: str, status: str, error: str | None = None
 ) -> None:

@@ -83,14 +83,25 @@ def _complete_garmin_login(pending_auth, mfa_code: str):
 
 
 def _publish_failure_message(stats: "sync.PublishStats") -> str:
-    """Wording for uploads that failed inside a batch that otherwise succeeded."""
-    if not stats.failed:
-        return ""
-    noun = "activity" if stats.failed == 1 else "activities"
-    return (
-        f"{stats.failed} {noun} could not be published to Strava and stayed pending — "
-        "check the logs for the reason, then try again."
-    )
+    """User-facing summary for failed or Hevy-blocked manual uploads."""
+    messages: list[str] = []
+    if stats.failed:
+        noun = "activity" if stats.failed == 1 else "activities"
+        messages.append(
+            f"{stats.failed} {noun} could not be published to Strava and stayed "
+            "pending — check the logs for the reason, then try again."
+        )
+    if stats.blocked:
+        noun = "activity was" if stats.blocked == 1 else "activities were"
+        reasons = (
+            "; ".join(dict.fromkeys(stats.blocked_reasons))
+            or "Hevy processing is unresolved"
+        )
+        messages.append(
+            f"{stats.blocked} {noun} blocked by Hevy sync and stayed pending: "
+            f"{reasons}."
+        )
+    return " ".join(messages)
 
 
 def _build_strava_client(conn: sqlite3.Connection):
@@ -533,7 +544,21 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     ):
         garmin = _build_garmin_client(conn)
         strava = _build_strava_client(conn)
-        sync.publish_now(conn, garmin, strava, garmin_activity_id, datetime.now(timezone.utc))
+        try:
+            sync.publish_now(
+                conn, garmin, strava, garmin_activity_id, datetime.now(timezone.utc)
+            )
+        except sync.PublishBlocked as exc:
+            return templates.TemplateResponse(
+                request,
+                "partials/activity_table.html",
+                _activity_context(
+                    sort_order,
+                    status_filter,
+                    sync_error=f"Activity was blocked by Hevy sync: {exc.reason}.",
+                ),
+                status_code=409,
+            )
         events.bus.publish("refresh")
         return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
 

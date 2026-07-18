@@ -8,8 +8,10 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from garminconnect import Garmin
 from garmin_auth import GarminAuth, RateLimiter
+from garminconnect import Garmin
+
+from activsync.timeutil import parse_iso_utc
 
 logger = logging.getLogger("activsync.garmin_client")
 _limiter = RateLimiter(delay=1.0, max_retries=3, base_wait=30)
@@ -137,18 +139,6 @@ def _parse_garmin_time(value: str) -> datetime | None:
         return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
     except ValueError:
         return None
-
-
-def _parse_iso_utc(value: str) -> datetime | None:
-    if not value or not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 class GarminClient:
@@ -323,7 +313,7 @@ class GarminClient:
         """ALL activities (raw dicts) in start_time's date ±1 day — the
         journal's resolution primitive needs metadata (type, start, duration)
         for strict candidate matching, not bare ids. Failures PROPAGATE."""
-        target = _parse_garmin_time(start_time) or _parse_iso_utc(start_time)
+        target = _parse_garmin_time(start_time) or parse_iso_utc(start_time)
         if target is None:
             raise ValueError(f"unparseable start_time: {start_time!r}")
         date_from = (target - timedelta(days=1)).date().isoformat()
@@ -337,7 +327,7 @@ class GarminClient:
         operation journal's pre/post-upload snapshot primitive. Failures
         PROPAGATE: an outage must never read as an empty snapshot, or a later
         submission_unknown diff would adopt the wrong activity."""
-        target = _parse_garmin_time(start_time) or _parse_iso_utc(start_time)
+        target = _parse_garmin_time(start_time) or parse_iso_utc(start_time)
         if target is None:
             raise ValueError(f"unparseable start_time: {start_time!r}")
         date_from = (target - timedelta(days=1)).date().isoformat()
@@ -356,7 +346,7 @@ class GarminClient:
         """A strength_training/other activity starting within window_minutes
         of start_time, searching the date ±1 day (timezone edges). Excluded
         ids are skipped. Ported from upstream find_activity_by_start_time."""
-        target = _parse_garmin_time(start_time) or _parse_iso_utc(start_time)
+        target = _parse_garmin_time(start_time) or parse_iso_utc(start_time)
         if target is None:
             return None
         date_from = (target - timedelta(days=1)).date().isoformat()
@@ -377,7 +367,7 @@ class GarminClient:
             if act_type and act_type not in ("strength_training", "other"):
                 continue
             act_start = (_parse_garmin_time(act.get("startTimeGMT", ""))
-                         or _parse_iso_utc(act.get("startTimeGMT", "")))
+                         or parse_iso_utc(act.get("startTimeGMT", "")))
             if act_start is None:
                 continue
             if abs((act_start - target).total_seconds()) < window_minutes * 60:

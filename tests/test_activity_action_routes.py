@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-from activsync import db
+from activsync import db, hevy_db
 from activsync import server as server_module
 from activsync.server import create_app
 
@@ -34,6 +34,32 @@ def test_publish_action_publishes_held_activity(tmp_path, monkeypatch):
     row = db.get_activity(conn, 1)
     assert row["publish_status"] == "published"
     assert row["strava_activity_id"] == 7001
+
+
+def test_publish_action_reports_hevy_interlock_instead_of_returning_500(
+    tmp_path, monkeypatch
+):
+    conn, client = _logged_in_client(tmp_path)
+    db.insert_activity(
+        conn, 8, "strength_training", "Leg Day", "",
+        "2026-07-09 09:00:00", "h", "pending", NOW,
+    )
+    hevy_db.upsert_workout(
+        conn, "hevy-8", "Leg Day", "2026-07-09T09:00:00+00:00",
+        "2026-07-09T10:00:00+00:00", "2026-07-09T10:01:00+00:00", {},
+    )
+    hevy_db.link_target(conn, "hevy-8", 8, "replace")
+    hevy_db.set_workout_status(conn, "hevy-8", "needs_review")
+    fake_strava = MagicMock()
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda c: MagicMock())
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda c: fake_strava)
+
+    response = client.post("/api/activities/8/publish")
+
+    assert response.status_code == 409
+    assert "hevy workout hevy-8 is needs_review" in response.text
+    assert db.get_activity(conn, 8)["publish_status"] == "pending"
+    fake_strava.publish.assert_not_called()
 
 
 def test_exclude_action_excludes_activity(tmp_path):
