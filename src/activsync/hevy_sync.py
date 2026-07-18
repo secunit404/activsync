@@ -15,8 +15,22 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from activsync import db, hevy_db
-from activsync.fit_builder import ResolvedExercise
-from activsync.hevy_client import HevyClient
+from activsync.garmin_client import ActivityGone, GarminClient
+from activsync.hevy_apply import (
+    _parse_ts,
+    _activity_window,
+    _apply_metadata,
+    _payload_of,
+    advance_operation,
+    build_exercise_sets_payload,
+    execute_describe,
+    execute_merge,
+    execute_passive,
+    execute_replace,
+    generate_description,
+    resolve_exercises,
+)
+from activsync.hevy_client import HevyAuthError, HevyClient
 from activsync.hevy_mapper import MappingMiss, lookup_exercise
 
 logger = logging.getLogger("activsync.hevy_sync")
@@ -32,23 +46,6 @@ GRACE_DEFAULT_MIN = 120
 # a Hevy deletion for one of these is surfaced for review, never auto-applied.
 _SYNCED_STATUSES = {"merged", "described", "replaced", "uploaded_passive",
                     "linked_existing", "syncing", "needs_review"}
-
-
-def _parse_ts(raw: str | None) -> datetime | None:
-    """ISO-8601 (with T/Z) or Garmin space-separated timestamp → UTC."""
-    if not raw or not isinstance(raw, str):
-        return None
-    cleaned = raw.strip()
-    try:
-        if "T" in cleaned:
-            parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        return datetime.strptime(cleaned, "%Y-%m-%d %H:%M:%S").replace(
-            tzinfo=timezone.utc)
-    except (ValueError, TypeError):
-        return None
 
 
 # -- event ingestion --------------------------------------------------------
@@ -139,20 +136,6 @@ def ingest_events(conn: sqlite3.Connection, hevy: HevyClient, now: datetime) -> 
 
 
 # -- mapping gate -----------------------------------------------------------
-
-
-def resolve_exercises(
-    conn: sqlite3.Connection, workout_payload: dict
-) -> list[ResolvedExercise]:
-    """Resolve every exercise or raise MappingMiss on the first unmapped one."""
-    resolved: list[ResolvedExercise] = []
-    for exercise in workout_payload.get("exercises", []):
-        category, subcategory, title = lookup_exercise(
-            conn, exercise.get("title", ""), exercise.get("exercise_template_id"))
-        resolved.append(ResolvedExercise(
-            title=title, category=category, subcategory=subcategory,
-            sets=exercise.get("sets", [])))
-    return resolved
 
 
 def apply_mapping_gate(
@@ -265,3 +248,136 @@ def find_watch_match(conn: sqlite3.Connection, row: dict):
     if claimed_by_others:
         return "claimed"
     return None
+
+
+# -- per-workout decision flow -----------------------------------------------
+
+
+def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
+                    hevy: HevyClient, row: dict, cfg: dict,
+                    now: datetime) -> None:
+    hevy_id = row["hevy_id"]
+    token = hevy_db.acquire_lease(conn, hevy_id, now)
+    if not token:
+        return
+    try:
+        op = hevy_db.get_open_operation(conn, hevy_id)
+        if op is not None:
+            advance_operation(conn, garmin, row, op, cfg)
+            return
+
+        strategy = cfg.get("hevy_watch_strategy", "merge")
+        if not apply_mapping_gate(conn, row, strategy, hevy):
+            return
+
+        match = find_watch_match(conn, row)
+        if isinstance(match, int):
+            if not hevy_db.claim_source(conn, hevy_id, match):
+                hevy_db.set_workout_status(
+                    conn, hevy_id, "needs_review",
+                    error=f"watch activity {match} claim conflict")
+                return
+            row = hevy_db.get_workout(conn, hevy_id)
+            if strategy == "describe":
+                execute_describe(conn, garmin, row)
+            elif strategy == "replace":
+                execute_replace(conn, garmin, row, cfg)
+            else:
+                execute_merge(conn, garmin, row)
+        elif match == "multiple":
+            hevy_db.set_workout_status(conn, hevy_id, "needs_review",
+                                       error="multiple matching watch activities")
+        elif match == "claimed":
+            hevy_db.set_workout_status(
+                conn, hevy_id, "needs_review",
+                error="matching watch activity already claimed by another workout")
+        else:
+            grace_min = int(cfg.get("hevy_grace_minutes", GRACE_DEFAULT_MIN))
+            end_dt = _parse_ts(row["end_time"])
+            if end_dt and now - end_dt < timedelta(minutes=grace_min):
+                hevy_db.set_workout_status(conn, hevy_id, "waiting_watch")
+            else:
+                execute_passive(conn, garmin, row, cfg)
+    except HevyAuthError:
+        raise
+    except Exception as exc:
+        logger.exception("processing hevy workout %s failed", hevy_id)
+        status = "syncing" if hevy_db.get_open_operation(conn, hevy_id) else "failed"
+        hevy_db.set_workout_status(conn, hevy_id, status, error=str(exc))
+    finally:
+        hevy_db.release_lease(conn, hevy_id, token)
+
+
+# -- post-sync edits ---------------------------------------------------------
+
+_TERMINAL_APPLIED = ("merged", "described", "replaced", "uploaded_passive")
+
+
+def _reapply(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
+             now: datetime) -> None:
+    """A newer Hevy revision for an already-applied workout: re-apply
+    following the ORIGINALLY applied strategy, never the current setting."""
+    hevy_id = row["hevy_id"]
+    token = hevy_db.acquire_lease(conn, hevy_id, now)
+    if not token:
+        return
+    try:
+        target = row["garmin_activity_id"]
+        if row["applied_strategy"] != "describe":
+            try:
+                resolved = resolve_exercises(conn, _payload_of(row))
+            except MappingMiss as miss:
+                hevy_db.set_workout_status(
+                    conn, hevy_id, "needs_mapping",
+                    error=f"unmapped exercises: {miss.title}")
+                return
+            start, duration = _activity_window(conn, target, row)
+            payload = {**build_exercise_sets_payload(resolved, start, duration),
+                       "activityId": target}
+            garmin.put_exercise_sets(target, payload)
+        _apply_metadata(garmin, target, row)
+        hevy_db.set_applied(conn, hevy_id, "garmin", row["source_updated_at"])
+    except ActivityGone:
+        hevy_db.set_workout_status(
+            conn, hevy_id, "needs_review",
+            error="linked activity deleted on Garmin — re-sync as fresh upload")
+    except Exception as exc:
+        logger.exception("re-applying hevy workout %s failed", hevy_id)
+        hevy_db.set_workout_status(conn, hevy_id, row["status"], error=str(exc))
+    finally:
+        hevy_db.release_lease(conn, hevy_id, token)
+
+
+# -- the leg -----------------------------------------------------------------
+
+_ACTIONABLE = ("waiting_watch", "syncing", "needs_mapping", "failed")
+
+
+def _row_fingerprint(row: dict | None) -> tuple:
+    if row is None:
+        return ()
+    return (row["status"], row["garmin_activity_id"],
+            row["garmin_applied_updated_at"], row["error"])
+
+
+def run_hevy_leg(conn: sqlite3.Connection, garmin: GarminClient,
+                 hevy: HevyClient, cfg: dict, now: datetime) -> bool:
+    """One tick of the Hevy leg. Returns whether anything changed (drives the
+    poller's Garmin-leg handoff and the SSE refresh)."""
+    changed = ingest_events(conn, hevy, now) > 0
+
+    for status in _ACTIONABLE:
+        for row in hevy_db.list_workouts(conn, status=status):
+            before = _row_fingerprint(row)
+            process_workout(conn, garmin, hevy, row, cfg, now)
+            if _row_fingerprint(hevy_db.get_workout(conn, row["hevy_id"])) != before:
+                changed = True
+
+    for status in _TERMINAL_APPLIED:
+        for row in hevy_db.list_workouts(conn, status=status):
+            applied = row["garmin_applied_updated_at"] or ""
+            if row["source_updated_at"] and row["source_updated_at"] > applied:
+                _reapply(conn, garmin, row, now)
+                changed = True
+
+    return changed
