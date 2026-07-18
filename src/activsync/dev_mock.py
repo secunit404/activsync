@@ -259,6 +259,37 @@ class FakeGarminClient:
     ) -> None:
         return None
 
+    # -- Hevy-integration surface (minimal; Task-14 scenarios flesh these out) --
+
+    def upload_fit(self, fit_path: str) -> dict:
+        return {"upload_id": "dev-upload", "activity_id": None}
+
+    def get_exercise_sets(self, activity_id: int) -> dict:
+        return {"exerciseSets": []}
+
+    def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
+        return None
+
+    def set_title(self, activity_id: int, title: str) -> None:
+        return None
+
+    def set_description(self, activity_id: int, description: str) -> None:
+        return None
+
+    def delete_activity(self, activity_id: int) -> None:
+        return None
+
+    def get_daily_heart_rates(self, date_str: str) -> dict:
+        return {"heartRateValues": []}
+
+    def fetch_user_profile(self) -> dict:
+        return {"weight_kg": 80.0, "birth_year": 1990, "sex": "male", "vo2max": 45.0}
+
+    def find_activity_near(
+        self, start_time: str, exclude_ids: set, window_minutes: int = 10
+    ) -> int | None:
+        return None
+
 
 class FakeStravaClient:
     """No-network Strava client. The "OAuth" handshake loops straight back to

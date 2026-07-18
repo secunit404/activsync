@@ -16,6 +16,49 @@ _limiter = RateLimiter(delay=1.0, max_retries=3, base_wait=30)
 _PAGE_SIZE = 20
 
 
+class GarminUploadRejected(RuntimeError):
+    """Garmin definitively rejected a FIT upload (failures, no successes)."""
+
+
+class SubcategoryRejected(Exception):
+    """Garmin 400-rejected an exerciseSets payload over a (category,
+    subcategory) pair. The PUT is atomic, so the whole payload failed; the
+    response does not identify which pair was at fault."""
+
+
+class ActivityGone(Exception):
+    """The target activity no longer exists on Garmin (404)."""
+
+
+def _sanitize_activity_id(raw: object) -> int | None:
+    """Normalize an activity id from the upload API. Garmin occasionally
+    returns internalId as a string wrapped in quote characters (upstream
+    hevy2garmin #153); stored verbatim, every later call 404s."""
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw
+    cleaned = str(raw).strip().strip("'\"").strip()
+    try:
+        return int(cleaned)
+    except (ValueError, TypeError):
+        return None
+
+
+def _is_subcategory_rejection(exc: Exception) -> bool:
+    """A 400 whose body complains about the exercise sub-category (upstream
+    finding: fit_tool-valid pairs can still be rejected by the API)."""
+    msg = str(exc).lower()
+    return "sub-category" in msg or "subcategory" in msg or "invalid sub" in msg
+
+
+def _is_not_found(exc: Exception) -> bool:
+    response = getattr(exc, "response", None)
+    if response is not None and getattr(response, "status_code", None) == 404:
+        return True
+    return "404" in str(exc)
+
+
 @dataclass
 class ActivityRecord:
     garmin_activity_id: int
@@ -96,6 +139,18 @@ def _parse_garmin_time(value: str) -> datetime | None:
         return None
 
 
+def _parse_iso_utc(value: str) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 class GarminClient:
     """Thin wrapper around garminconnect.Garmin for what ActivSync needs."""
 
@@ -168,6 +223,141 @@ class GarminClient:
     def update_activity_metadata(self, garmin_activity_id: int, title: str, description: str) -> None:
         _limiter.call(self._client.set_activity_name, garmin_activity_id, title)
         _limiter.call(self._client.set_activity_description, garmin_activity_id, description)
+
+    # -- Hevy integration additions -------------------------------------
+
+    def upload_fit(self, fit_path: str) -> dict:
+        """Upload a FIT file; returns {"upload_id", "activity_id"}.
+
+        activity_id is None when Garmin's response omits it (import still
+        processing) — resolution is the operation journal's job, never a
+        start-time retry loop here. Definite rejection raises
+        GarminUploadRejected."""
+        from pathlib import Path
+
+        if not Path(fit_path).exists():
+            raise FileNotFoundError(f"FIT file not found: {fit_path}")
+        resp = _limiter.call(self._client.upload_activity, str(fit_path))
+
+        upload_id = None
+        activity_id = None
+        if isinstance(resp, dict):
+            detail = resp.get("detailedImportResult", {})
+            upload_id = detail.get("uploadId")
+            successes = detail.get("successes", [])
+            if successes and isinstance(successes, list):
+                activity_id = _sanitize_activity_id(successes[0].get("internalId"))
+            failures = detail.get("failures", [])
+            if failures and not activity_id and not successes:
+                raise GarminUploadRejected(f"Garmin rejected upload: {failures}")
+        logger.info("fit upload: upload_id=%s activity_id=%s", upload_id, activity_id)
+        return {"upload_id": upload_id, "activity_id": activity_id}
+
+    def get_exercise_sets(self, activity_id: int) -> dict:
+        return _limiter.call(self._client.get_activity_exercise_sets, activity_id)
+
+    def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
+        """PUT the full exercise-set list (atomic replace of ALL sets).
+
+        Called on the raw client, not through the limiter: the endpoint
+        returns 204 No Content, which the limiter misreads as an error
+        (upstream finding)."""
+        url = f"/activity-service/activity/{activity_id}/exerciseSets"
+        try:
+            self._client.client.request("PUT", "connectapi", url, json=payload)
+        except Exception as exc:
+            if _is_subcategory_rejection(exc):
+                raise SubcategoryRejected(str(exc)) from exc
+            if _is_not_found(exc):
+                raise ActivityGone(f"activity {activity_id} not found") from exc
+            raise
+
+    def set_title(self, activity_id: int, title: str) -> None:
+        _limiter.call(self._client.set_activity_name, activity_id, title)
+
+    def set_description(self, activity_id: int, description: str) -> None:
+        _limiter.call(self._client.set_activity_description, activity_id, description)
+
+    def delete_activity(self, activity_id: int) -> None:
+        _limiter.call(self._client.delete_activity, activity_id)
+        logger.info("deleted garmin activity %s", activity_id)
+
+    def get_daily_heart_rates(self, date_str: str) -> dict:
+        return _limiter.call(self._client.get_heart_rates, date_str)
+
+    def fetch_user_profile(self) -> dict:
+        """User physiology for calorie estimation: weight (grams → kg), birth
+        year, sex, and VO2max from the max-metrics endpoint. Missing pieces
+        come back as None — hevy_profile fills defaults."""
+        user_data = {}
+        try:
+            user_data = _limiter.call(self._client.get_user_profile).get("userData") or {}
+        except Exception as exc:
+            logger.warning("user profile fetch failed: %s", exc)
+
+        weight = user_data.get("weight")
+        weight_kg = round(float(weight) / 1000.0, 1) if weight else None
+        birth_date = user_data.get("birthDate") or ""
+        try:
+            birth_year = int(str(birth_date)[:4])
+        except (ValueError, TypeError):
+            birth_year = None
+        gender = user_data.get("gender")
+        sex = str(gender).lower() if gender else None
+
+        vo2max = None
+        try:
+            today = datetime.now(timezone.utc).date().isoformat()
+            metrics = _limiter.call(self._client.get_max_metrics, today)
+            entries = metrics if isinstance(metrics, list) else [metrics]
+            for entry in entries:
+                generic = (entry or {}).get("generic") or {}
+                value = generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue")
+                if value:
+                    vo2max = float(value)
+                    break
+        except Exception as exc:
+            logger.debug("vo2max fetch failed: %s", exc)
+
+        return {"weight_kg": weight_kg, "birth_year": birth_year,
+                "sex": sex, "vo2max": vo2max}
+
+    def find_activity_near(
+        self,
+        start_time: str,
+        exclude_ids: set,
+        window_minutes: int = 10,
+    ) -> int | None:
+        """A strength_training/other activity starting within window_minutes
+        of start_time, searching the date ±1 day (timezone edges). Excluded
+        ids are skipped. Ported from upstream find_activity_by_start_time."""
+        target = _parse_garmin_time(start_time) or _parse_iso_utc(start_time)
+        if target is None:
+            return None
+        date_from = (target - timedelta(days=1)).date().isoformat()
+        date_to = (target + timedelta(days=1)).date().isoformat()
+        try:
+            activities = _limiter.call(
+                self._client.get_activities_by_date, date_from, date_to)
+        except Exception as exc:
+            logger.warning("activity search failed: %s", exc)
+            return None
+
+        excluded = {str(x) for x in (exclude_ids or set())}
+        for act in activities or []:
+            activity_id = act.get("activityId")
+            if str(activity_id) in excluded:
+                continue
+            act_type = act.get("activityType", {}).get("typeKey", "")
+            if act_type and act_type not in ("strength_training", "other"):
+                continue
+            act_start = (_parse_garmin_time(act.get("startTimeGMT", ""))
+                         or _parse_iso_utc(act.get("startTimeGMT", "")))
+            if act_start is None:
+                continue
+            if abs((act_start - target).total_seconds()) < window_minutes * 60:
+                return activity_id
+        return None
 
     def fetch_activity_types(self) -> list[dict]:
         """Garmin's canonical activity type taxonomy, as
