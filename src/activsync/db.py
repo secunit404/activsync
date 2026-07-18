@@ -54,6 +54,9 @@ def connect(path: str) -> sqlite3.Connection:
     conn.execute("DROP TABLE IF EXISTS sessions")
     conn.execute("DELETE FROM app_config WHERE key = 'auth'")
     conn.commit()
+    # Hevy sync tables live in their own module; local import avoids a cycle.
+    from activsync import hevy_db
+    hevy_db.init_schema(conn)
     return conn
 
 
