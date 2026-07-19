@@ -69,8 +69,16 @@ class Poller:
         now = now or datetime.now(timezone.utc)
         garmin = self._garmin_factory()
         hevy = self._hevy_factory()
-        hevy_profile.get_profile(self._conn, garmin, now)
+        profile = hevy_profile.get_profile(self._conn, garmin, now)
         cfg = config.load_config(self._conn)
+        # hevy_apply remains pure/config-driven; inject the already merged
+        # cached+override profile without persisting cache data in settings.
+        cfg[hevy_profile.CACHE_KEY] = {
+            "weight_kg": profile.weight_kg,
+            "birth_year": profile.birth_year,
+            "vo2max": profile.vo2max,
+            "sex": profile.sex,
+        }
         strava = self._strava_factory() if self._strava_ready() else None
         changed = hevy_sync.run_hevy_leg(self._conn, garmin, hevy, cfg, now,
                                          strava=strava)

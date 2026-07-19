@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
@@ -1740,6 +1740,69 @@ def test_hevy_backfill_run_links_twins_without_touching_publish_status(tmp_path,
     fresh = hevy_db.get_workout(conn, "bw2")
     assert fresh is not None and fresh["status"] == "waiting_watch"
     assert hevy_db.get_workout(conn, "bw_old") is None
+
+
+def test_hevy_backfill_does_not_rewrite_already_tracked_workout(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    db.set_config_value(conn, "hevy_api_key", "k123")
+    _seed_twin_activity(conn)
+    workout = _BACKFILL_WORKOUTS[1]["workouts"][0]
+    hevy_db.upsert_workout(
+        conn, workout["id"], workout["title"], workout["start_time"],
+        workout["end_time"], workout["updated_at"], workout,
+    )
+    assert hevy_db.claim_source(conn, workout["id"], 555)
+    hevy_db.set_workout_status(conn, workout["id"], "syncing")
+    op_id = hevy_db.open_operation(conn, workout["id"], "replace", 555, [])
+    _patch_hevy_client(monkeypatch, workout_pages=_BACKFILL_WORKOUTS)
+
+    response = client.post(
+        "/settings/hevy/backfill/run",
+        data={"since": "2026-05-01"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code in (200, 303)
+    row = hevy_db.get_workout(conn, workout["id"])
+    assert row["status"] == "syncing"
+    assert row["provenance"] == "activsync"
+    assert row["garmin_activity_id"] is None
+    assert hevy_db.get_open_operation(conn, workout["id"])["id"] == op_id
+    assert "already tracked" in response.text
+
+
+def test_hevy_backfill_preview_mirrors_mapping_gate_and_grace(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    db.set_config_value(conn, "hevy_api_key", "k123")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    fresh_start = now - timedelta(minutes=30)
+    fresh_end = now - timedelta(minutes=5)
+    old_start = now - timedelta(hours=4)
+    old_end = now - timedelta(hours=3)
+    pages = {1: {"page": 1, "page_count": 1, "workouts": [
+        {"id": "fresh", "title": "Fresh workout",
+         "start_time": fresh_start.isoformat(), "end_time": fresh_end.isoformat(),
+         "updated_at": fresh_end.isoformat(), "exercises": []},
+        {"id": "unmapped", "title": "Unmapped workout",
+         "start_time": old_start.isoformat(), "end_time": old_end.isoformat(),
+         "updated_at": old_end.isoformat(), "exercises": [{
+             "title": "Never Mapped Move", "exercise_template_id": "missing-template",
+             "sets": [],
+         }]},
+    ]}}
+    _patch_hevy_client(monkeypatch, workout_pages=pages)
+
+    response = client.post(
+        "/settings/hevy/backfill/preview",
+        data={"since": (now - timedelta(days=1)).date().isoformat()},
+    )
+
+    assert response.status_code == 200
+    assert "waiting_watch" in response.text
+    assert "needs_mapping" in response.text
+    assert hevy_db.list_workouts(conn) == []
 
 
 def test_settings_page_renders_the_hevy_card(tmp_path):

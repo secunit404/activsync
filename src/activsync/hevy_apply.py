@@ -493,6 +493,7 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
                 # Outcome unknown — record and wait; NEVER resubmit.
                 hevy_db.update_operation(conn, op["id"],
                                          phase="submission_unknown",
+                                         next_step="resolve",
                                          last_error=str(upload_error))
                 return
 
@@ -506,6 +507,7 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
                 continue
             # Accepted but not yet resolvable — let Garmin finish processing.
             hevy_db.update_operation(conn, op["id"], phase="submission_unknown",
+                                     next_step="resolve",
                                      upload_id=result.get("upload_id"))
             return
 

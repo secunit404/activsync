@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from activsync import config, db
+from activsync.fit_builder import Profile
 from activsync.hevy_client import HevyAuthError
 from activsync.poller import Poller
 
@@ -38,7 +39,10 @@ def _make_poller(conn, monkeypatch, leg=None, garmin_interval=100000):
     monkeypatch.setattr("activsync.poller.hevy_sync.run_hevy_leg", fake_leg)
     monkeypatch.setattr(
         "activsync.poller.hevy_profile.get_profile",
-        lambda c, garmin, now: calls.__setitem__("profile", True),
+        lambda c, garmin, now: (
+            calls.__setitem__("profile", True)
+            or Profile(weight_kg=80.0, birth_year=1990, vo2max=45.0, sex="male")
+        ),
     )
     monkeypatch.setattr(
         "activsync.poller.sync.sync_garmin",

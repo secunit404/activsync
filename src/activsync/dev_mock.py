@@ -56,6 +56,9 @@ HEVY_DEV_PASSIVE_ACTIVITY_ID = 910050
 # subcategory-rejection path end to end in dev.
 HEVY_SUBCATEGORY_REJECT_ACTIVITY_ID = HEVY_DEV_SYNCING_ACTIVITY_ID
 
+_DEV_GARMIN_ACTIVITIES_KEY = "dev_garmin_remote_activities"
+_DEV_GARMIN_DELETED_KEY = "dev_garmin_deleted_activity_ids"
+
 
 def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
@@ -356,15 +359,70 @@ def complete_login(pending_auth, mfa_code: str):
 
 
 class FakeGarminClient:
-    """No-network Garmin client. Activities come from :mod:`activsync.dev_seed`,
-    so the recent-activity fetch returns nothing new; only the methods the
-    wizard and sync actually call are stubbed."""
+    """No-network Garmin client backed by seeded and DB-persisted remote state.
+
+    Uploads, metadata edits, and deletions survive the fresh client instance
+    built for the next request, so multi-tick workflows behave like Garmin.
+    """
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
         # Per-instance recording (a fresh client is built per request):
         # lets tests and the dev pass inspect what a merge would have PUT.
         self.recorded_exercise_sets: list[tuple[int, dict]] = []
+
+    def _remote_activities(self) -> dict[str, dict]:
+        return db.get_config_value(
+            self._conn, _DEV_GARMIN_ACTIVITIES_KEY, default={}
+        ) or {}
+
+    def _save_remote_activities(self, activities: dict[str, dict]) -> None:
+        db.set_config_value(self._conn, _DEV_GARMIN_ACTIVITIES_KEY, activities)
+
+    def _deleted_ids(self) -> set[int]:
+        return {
+            int(activity_id)
+            for activity_id in db.get_config_value(
+                self._conn, _DEV_GARMIN_DELETED_KEY, default=[]
+            ) or []
+        }
+
+    def _ensure_remote_activity(self, activity_id: int) -> tuple[dict, dict]:
+        activities = self._remote_activities()
+        key = str(activity_id)
+        activity = activities.get(key)
+        if activity is None:
+            row = db.get_activity(self._conn, activity_id)
+            if row is None:
+                activity = {
+                    "garmin_activity_id": activity_id,
+                    "activity_type": "strength_training",
+                    "title": "Strength Training",
+                    "description": "",
+                    "start_time": datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "duration": 3600.0,
+                }
+            else:
+                try:
+                    data = json.loads(row.get("garmin_data") or "{}")
+                except (ValueError, TypeError):
+                    data = {}
+                activity = {
+                    "garmin_activity_id": activity_id,
+                    "activity_type": row["activity_type"],
+                    "title": row["title"],
+                    "description": row.get("description") or "",
+                    "start_time": row["start_time"],
+                    **{key: data.get(key) for key in {
+                        field.name for field in dataclass_fields(ActivityRecord)
+                    } if key not in {
+                        "garmin_activity_id", "activity_type", "title",
+                        "description", "start_time",
+                    }},
+                }
+        return activities, dict(activity)
 
     def fetch_activity_types(self) -> list[dict]:
         # Report the taxonomy, the way the real client reports what Garmin
@@ -385,23 +443,35 @@ class FakeGarminClient:
             field.name for field in dataclass_fields(ActivityRecord)
         } - {"garmin_activity_id", "activity_type", "title", "description",
              "start_time"}
-        records = []
+        deleted = self._deleted_ids()
+        records: dict[int, ActivityRecord] = {}
         for row in db.list_activities(self._conn):
-            if row["start_time"] < cutoff:
+            if row["garmin_activity_id"] in deleted or row["start_time"] < cutoff:
                 continue
             try:
                 data = json.loads(row.get("garmin_data") or "{}")
             except (ValueError, TypeError):
                 data = {}
-            records.append(ActivityRecord(
+            record = ActivityRecord(
                 garmin_activity_id=row["garmin_activity_id"],
                 activity_type=row["activity_type"],
                 title=row["title"],
                 description=row.get("description") or "",
                 start_time=row["start_time"],
                 **{key: data.get(key) for key in optional_keys},
-            ))
-        return records
+            )
+            records[record.garmin_activity_id] = record
+        # Remote overlays represent uploads and metadata mutations. They win
+        # over the local echo until sync_garmin reconciles the same values.
+        for raw in self._remote_activities().values():
+            activity_id = int(raw["garmin_activity_id"])
+            if activity_id in deleted or raw["start_time"] < cutoff:
+                continue
+            records[activity_id] = ActivityRecord(
+                **{field.name: raw.get(field.name)
+                   for field in dataclass_fields(ActivityRecord)}
+            )
+        return list(records.values())
 
     def download_fit(self, garmin_activity_id: int) -> bytes:
         return b""
@@ -409,17 +479,52 @@ class FakeGarminClient:
     def update_activity_metadata(
         self, garmin_activity_id: int, title: str, description: str
     ) -> None:
-        return None
+        activities, activity = self._ensure_remote_activity(garmin_activity_id)
+        activity.update({"title": title, "description": description})
+        activities[str(garmin_activity_id)] = activity
+        self._save_remote_activities(activities)
 
     # -- Hevy-integration surface ---------------------------------------------
 
     def upload_fit(self, fit_path: str) -> dict:
         # DB-backed sequence so ids stay fresh across requests (each request
         # builds a new client instance).
-        sequence = int(db.get_config_value(self._conn, "dev_upload_seq", default=0)) + 1
+        sequence = int(
+            db.get_config_value(self._conn, "dev_upload_seq", default=0)
+        ) + 1
         db.set_config_value(self._conn, "dev_upload_seq", sequence)
+        activity_id = 950000 + sequence
+        start_time = datetime.now(timezone.utc)
+        duration = 3600.0
+        try:
+            from fit_tool.fit_file import FitFile
+            from fit_tool.profile.messages.session_message import SessionMessage
+
+            fit = FitFile.from_file(fit_path)
+            session = next(
+                record.message for record in fit.records
+                if isinstance(record.message, SessionMessage)
+            )
+            start_time = datetime.fromtimestamp(
+                float(session.start_time) / 1000.0, tz=timezone.utc
+            )
+            duration = float(session.total_elapsed_time)
+        except Exception:
+            # Surface tests may pass a placeholder path; the fake still needs
+            # a coherent activity record for later reconciliation.
+            pass
+        activities = self._remote_activities()
+        activities[str(activity_id)] = {
+            "garmin_activity_id": activity_id,
+            "activity_type": "strength_training",
+            "title": "Strength Training",
+            "description": "",
+            "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "duration": duration,
+        }
+        self._save_remote_activities(activities)
         return {"upload_id": f"dev-upload-{sequence}",
-                "activity_id": 950000 + sequence}
+                "activity_id": activity_id}
 
     def get_exercise_sets(self, activity_id: int) -> dict:
         return {"exerciseSets": []}
@@ -432,13 +537,21 @@ class FakeGarminClient:
         return None
 
     def set_title(self, activity_id: int, title: str) -> None:
-        return None
+        activities, activity = self._ensure_remote_activity(activity_id)
+        activity["title"] = title
+        activities[str(activity_id)] = activity
+        self._save_remote_activities(activities)
 
     def set_description(self, activity_id: int, description: str) -> None:
-        return None
+        activities, activity = self._ensure_remote_activity(activity_id)
+        activity["description"] = description
+        activities[str(activity_id)] = activity
+        self._save_remote_activities(activities)
 
     def delete_activity(self, activity_id: int) -> None:
-        return None
+        deleted = self._deleted_ids()
+        deleted.add(int(activity_id))
+        db.set_config_value(self._conn, _DEV_GARMIN_DELETED_KEY, sorted(deleted))
 
     def get_daily_heart_rates(self, date_str: str) -> dict:
         return {"heartRateValues": []}
@@ -449,13 +562,42 @@ class FakeGarminClient:
     def find_activity_near(
         self, start_time: str, exclude_ids: set, window_minutes: int = 10
     ) -> int | None:
+        target = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+        for activity in self.fetch_recent_activities(3):
+            if activity.garmin_activity_id in exclude_ids:
+                continue
+            actual = datetime.strptime(
+                activity.start_time, "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone.utc)
+            if abs((actual - target).total_seconds()) <= window_minutes * 60:
+                return activity.garmin_activity_id
         return None
 
     def list_activity_ids_near(self, start_time: str) -> list[int]:
-        return []
+        return [
+            activity["activityId"] for activity in self.list_activities_near(start_time)
+        ]
 
     def list_activities_near(self, start_time: str) -> list[dict]:
-        return []
+        target = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+        activities = []
+        for record in self.fetch_recent_activities(3):
+            actual = datetime.strptime(
+                record.start_time, "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone.utc)
+            if abs((actual.date() - target.date()).days) > 1:
+                continue
+            activities.append({
+                "activityId": record.garmin_activity_id,
+                "activityType": {"typeKey": record.activity_type},
+                "startTimeGMT": record.start_time,
+                "duration": record.duration,
+            })
+        return activities
 
 
 class FakeStravaClient:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import (
@@ -19,7 +19,12 @@ from fastapi.responses import (
 from activsync import config, db, events, hevy_db, hevy_sync, view
 from activsync.hevy_apply import _parse_ts
 from activsync.hevy_client import HevyAuthError, HevyClient
-from activsync.hevy_mapper import CATEGORY_NAMES, SUBCATEGORY_NAMES
+from activsync.hevy_mapper import (
+    CATEGORY_NAMES,
+    SUBCATEGORY_NAMES,
+    MappingMiss,
+    lookup_exercise,
+)
 
 logger = logging.getLogger("activsync.hevy_routes")
 
@@ -286,23 +291,63 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
 
     def _backfill_items(client, conn, since_dt: datetime) -> list[dict]:
         cfg = config.load_config(conn)
+        now = datetime.now(timezone.utc)
         items: list[dict] = []
         for workout in _workouts_since(client, since_dt):
+            hevy_id = workout.get("id")
+            if hevy_id and hevy_db.get_workout(conn, hevy_id) is not None:
+                items.append({"workout": workout, "twin": None,
+                              "action": "already tracked"})
+                continue
             twin = _twin_activity(conn, workout)
             if twin is not None:
-                action = "linked_existing"
+                owner = conn.execute(
+                    """SELECT hevy_id FROM hevy_workouts
+                       WHERE source_garmin_activity_id = ?
+                          OR garmin_activity_id = ?
+                       LIMIT 1""",
+                    (twin["garmin_activity_id"], twin["garmin_activity_id"]),
+                ).fetchone()
+                action = "needs_review" if owner else "linked_existing"
             else:
+                strategy = cfg["hevy_watch_strategy"]
+                exercises = workout.get("exercises", []) or []
+
+                def has_mapping_miss() -> bool:
+                    for exercise in exercises:
+                        try:
+                            lookup_exercise(
+                                conn,
+                                exercise.get("title", ""),
+                                exercise.get("exercise_template_id"),
+                            )
+                        except MappingMiss:
+                            return True
+                    return False
+
+                missing_mapping = strategy != "describe" and has_mapping_miss()
                 match = hevy_sync.find_watch_match(conn, {
                     "hevy_id": f"__preview_{workout.get('id')}__",
                     "start_time": workout.get("start_time"),
                     "end_time": workout.get("end_time"),
                 })
-                if isinstance(match, int):
-                    action = cfg["hevy_watch_strategy"]
+                if missing_mapping:
+                    action = "needs_mapping"
+                elif isinstance(match, int):
+                    action = strategy
                 elif match in ("multiple", "claimed"):
                     action = "needs_review"
                 else:
-                    action = "passive"
+                    end = _parse_ts(workout.get("end_time"))
+                    grace = timedelta(minutes=int(cfg["hevy_grace_minutes"]))
+                    if end is not None and now - end < grace:
+                        action = "waiting_watch"
+                    elif strategy == "describe" and has_mapping_miss():
+                        # With no watch match, describe falls back to a passive
+                        # structured upload, which still needs mappings.
+                        action = "needs_mapping"
+                    else:
+                        action = "passive"
             items.append({"workout": workout, "twin": twin, "action": action})
         return items
 
@@ -370,7 +415,7 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
                     # would re-upload.
                     if op["target_activity_id"]:
                         resume = "finalizing"
-                    elif op["upload_id"]:
+                    elif op["next_step"] == "resolve" or op["upload_id"]:
                         resume = "submission_unknown"
                     else:
                         resume = "preparing"
@@ -420,6 +465,15 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
                 return PlainTextResponse(
                     "An operation is in progress for this workout — resolve it "
                     "before re-syncing fresh.", status_code=409)
+            if (
+                row["status"] != "needs_review"
+                or "deleted on Garmin" not in (row.get("error") or "")
+            ):
+                return PlainTextResponse(
+                    "Re-sync as fresh is only available when the linked "
+                    "activity was deleted on Garmin.",
+                    status_code=400,
+                )
             hevy_db.reset_links(conn, hevy_id)
             hevy_db.set_workout_status(conn, hevy_id, "waiting_watch",
                                        error=None)
@@ -448,6 +502,12 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
             hevy_id = workout.get("id")
             if not hevy_id:
                 continue
+            # Preview/run overlap and repeated backfills are safe: forward-sync
+            # rows are immutable here, especially while a journal is open.
+            if item["action"] == "already tracked" or hevy_db.get_workout(
+                conn, hevy_id
+            ) is not None:
+                continue
             hevy_db.upsert_workout(
                 conn, hevy_id, workout.get("title", ""),
                 workout.get("start_time", ""), workout.get("end_time", ""),
@@ -455,6 +515,14 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
             )
             if item["twin"] is None:
                 continue  # the normal flow picks it up next tick
+            if item["action"] != "linked_existing":
+                hevy_db.set_workout_status(
+                    conn,
+                    hevy_id,
+                    "needs_review",
+                    error="backfill twin is already claimed by another workout",
+                )
+                continue
             try:
                 hevy_db.link_target(
                     conn, hevy_id, item["twin"]["garmin_activity_id"],

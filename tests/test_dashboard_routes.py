@@ -1026,6 +1026,31 @@ def test_hevy_retry_resumes_at_preparing_without_an_upload(tmp_path):
     assert hevy_db.get_open_operation(conn, "hw1")["phase"] == "preparing"
 
 
+def test_hevy_retry_never_resubmits_an_unknown_outcome_without_upload_id(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "syncing")
+    op_id = hevy_db.open_operation(conn, "hw1", "upload_passive", None, [])
+    hevy_db.update_operation(
+        conn,
+        op_id,
+        phase="needs_review",
+        next_step="resolve",
+        upload_id=None,
+        attempt_count=5,
+        last_error="upload outcome unresolved after 5 checks",
+    )
+    hevy_db.set_workout_status(
+        conn, "hw1", "needs_review", error="upload outcome unresolved after 5 checks"
+    )
+
+    response = client.post("/api/hevy/hw1/retry")
+
+    assert response.status_code in (200, 204, 303)
+    op = hevy_db.get_open_operation(conn, "hw1")
+    assert op["phase"] == "submission_unknown"
+    assert op["attempt_count"] == 0
+
+
 def test_hevy_skip_and_unskip_round_trip(tmp_path):
     conn, client = _logged_in_client(tmp_path)
     _seed_hevy_workout(conn, "hw1", "failed", error="boom")
@@ -1089,6 +1114,19 @@ def test_hevy_resync_fresh_rejected_while_an_operation_is_open(tmp_path):
     response = client.post("/api/hevy/hw1/resync-fresh")
 
     assert response.status_code == 409
+
+
+def test_hevy_resync_fresh_rejects_non_tombstone_workout(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "merged")
+    hevy_db.link_target(conn, "hw1", 42, "merge")
+
+    response = client.post("/api/hevy/hw1/resync-fresh")
+
+    assert response.status_code == 400
+    row = hevy_db.get_workout(conn, "hw1")
+    assert row["status"] == "merged"
+    assert row["garmin_activity_id"] == 42
 
 
 def test_hevy_actions_404_for_unknown_workout(tmp_path):

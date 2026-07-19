@@ -27,9 +27,11 @@ def _garmin(profile=None, fail=False):
 
 
 def _seed_cache(conn, fetched_at, **values):
-    settings = db.get_config_value(conn, "settings", default={}) or {}
-    settings["garmin_user_profile"] = {**values, "fetched_at": fetched_at.isoformat()}
-    db.set_config_value(conn, "settings", settings)
+    db.set_config_value(
+        conn,
+        hevy_profile.CACHE_KEY,
+        {**values, "fetched_at": fetched_at.isoformat()},
+    )
 
 
 def test_fetch_populates_cache_and_returns_profile(conn):
@@ -41,7 +43,7 @@ def test_fetch_populates_cache_and_returns_profile(conn):
     assert profile.birth_year == 1988
     assert profile.sex == "female"
     assert profile.vo2max == 52.0
-    cached = db.get_config_value(conn, "settings")["garmin_user_profile"]
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY)
     assert cached["fetched_at"] == NOW.isoformat()
     assert cached["weight_kg"] == 72.5
 
@@ -68,7 +70,7 @@ def test_stale_cache_refetches(conn):
 
 def test_override_wins_field_by_field(conn):
     _seed_cache(conn, NOW - timedelta(hours=1), weight_kg=70.0, birth_year=1985)
-    settings = db.get_config_value(conn, "settings")
+    settings = db.get_config_value(conn, "settings", default={}) or {}
     settings["profile_override"] = {"weight_kg": 90.0}
     db.set_config_value(conn, "settings", settings)
 
@@ -109,3 +111,24 @@ def test_partial_fetch_fills_missing_fields_with_defaults(conn):
     assert profile.birth_year == 1990
     assert profile.vo2max == 45.0
     assert profile.sex == "male"
+
+
+def test_profile_fetch_does_not_clobber_settings_saved_during_network_call(conn):
+    db.set_config_value(conn, "settings", {"hevy_watch_strategy": "merge"})
+    garmin = MagicMock()
+
+    def fetch_and_save():
+        db.set_config_value(conn, "settings", {
+            "hevy_watch_strategy": "describe",
+            "profile_override": {"weight_kg": 91.0},
+        })
+        return dict(FETCHED)
+
+    garmin.fetch_user_profile.side_effect = fetch_and_save
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    settings = db.get_config_value(conn, "settings")
+    assert settings["hevy_watch_strategy"] == "describe"
+    assert settings["profile_override"] == {"weight_kg": 91.0}
+    assert profile.weight_kg == 91.0

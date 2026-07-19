@@ -95,6 +95,24 @@ def test_fake_garmin_upload_returns_fresh_ids(conn):
     assert first["activity_id"] != second["activity_id"]
 
 
+def test_fake_garmin_upload_and_delete_change_later_fetches(conn):
+    garmin = dev_mock.FakeGarminClient(conn)
+    db.insert_activity(
+        conn, 42, "strength_training", "Watch source", "",
+        "2026-07-19 10:00:00", "dev-42", "pending", NOW,
+        garmin_data='{"duration": 3600}',
+    )
+
+    uploaded = garmin.upload_fit("/tmp/dev-generated.fit")["activity_id"]
+    garmin.set_title(uploaded, "Uploaded from Hevy")
+    garmin.delete_activity(42)
+
+    fetched = {record.garmin_activity_id: record
+               for record in garmin.fetch_recent_activities(7)}
+    assert 42 not in fetched
+    assert fetched[uploaded].title == "Uploaded from Hevy"
+
+
 def test_fake_garmin_records_exercise_set_payloads(conn):
     garmin = dev_mock.FakeGarminClient(conn)
 

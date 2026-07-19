@@ -213,7 +213,7 @@ def hevy_settings_view(conn: sqlite3.Connection) -> dict:
     else:
         status = "Connected"
 
-    cache = settings.get(hevy_profile.CACHE_KEY) or {}
+    cache = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={}) or {}
     override = settings.get(hevy_profile.OVERRIDE_KEY) or {}
     profile = dict(hevy_profile.PROFILE_DEFAULTS)
     for source in (cache, override):
