@@ -150,8 +150,11 @@ _HEVY_PROBLEMS = ("needs_mapping", "failed", "needs_review")
 
 
 def _hevy_time_display(start_time: str, tz_name: str) -> str:
+    """Hevy rows carry ISO timestamps; activities carry Garmin's space-separated
+    form. Normalize to the latter so both render through the same formatter."""
+    cleaned = (start_time or "").replace("T", " ").split("+")[0].rstrip("Z")
     try:
-        return timeutil.format_local_time(start_time, tz_name)
+        return timeutil.format_local_time(cleaned, tz_name)
     except Exception:
         return start_time or ""
 

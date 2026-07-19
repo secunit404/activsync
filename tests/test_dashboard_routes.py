@@ -118,16 +118,22 @@ def test_setup_advances_through_states(tmp_path):
     assert 'action="/setup/strava/connect"' in step2.text
     assert "Save credentials" not in step2.text
 
-    # Both connected, not yet synced -> step 3 (syncing)
+    # Both connected -> step 3 (optional Hevy), skippable.
     db.set_config_value(conn, "strava_credentials", {"client_id": "cid", "client_secret": "csecret"})
     db.set_config_value(conn, "strava_tokens", {
         "access_token": "access", "refresh_token": "refresh", "expires_at": 4102444800,
     })
     step3 = client.get("/setup")
+    assert "Connect Hevy" in step3.text
+    assert 'action="/setup/hevy/skip"' in step3.text
+
+    # Skipping Hevy -> step 4 (syncing)
+    client.post("/setup/hevy/skip")
+    step4 = client.get("/setup")
     # Syncing screen: Garmin/Strava already read as done, activity sync in progress.
-    assert "Syncing activities" in step3.text
-    assert "Garmin connected" in step3.text
-    assert "Strava connected" in step3.text
+    assert "Syncing activities" in step4.text
+    assert "Garmin connected" in step4.text
+    assert "Strava connected" in step4.text
 
     # Fully done -> /setup redirects to /
     db.set_config_value(conn, "initial_sync_done", True)

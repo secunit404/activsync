@@ -6,11 +6,12 @@
     <div class="setup-head">
       <div>
         <p class="page-kicker brand-lockup" aria-label="ActivSync first-run"><span class="brand-activ">Activ</span><span class="brand-sync">Sync</span><span class="brand-suffix"> · first-run</span></p>
-        <h1 id="setup-title">{% if step == 'garmin' %}Connect Garmin{% elif step == 'strava' %}Connect Strava{% else %}Almost there{% endif %}</h1>
+        <h1 id="setup-title">{% if step == 'garmin' %}Connect Garmin{% elif step == 'strava' %}Connect Strava{% elif step == 'hevy' %}Connect Hevy{% else %}Almost there{% endif %}</h1>
       </div>
       <ol class="setup-progress" aria-label="Setup progress">
         <li class="{% if step == 'garmin' %}is-active{% else %}is-done{% endif %} step-garmin"></li>
-        <li class="{% if step == 'strava' %}is-active{% elif step == 'syncing' %}is-done{% endif %} step-strava"></li>
+        <li class="{% if step == 'strava' %}is-active{% elif step in ('hevy', 'syncing') %}is-done{% endif %} step-strava"></li>
+        <li class="{% if step == 'hevy' %}is-active{% elif step == 'syncing' %}is-done{% endif %} step-hevy"></li>
         <li class="{% if step == 'syncing' %}is-active{% endif %} step-sync"></li>
       </ol>
     </div>
@@ -18,6 +19,8 @@
       {% include "partials/setup_garmin.html" %}
     {% elif step == 'strava' %}
       {% include "partials/setup_strava.html" %}
+    {% elif step == 'hevy' %}
+      {% include "partials/setup_hevy.html" %}
     {% else %}
       {% include "partials/setup_syncing.html" %}
     {% endif %}

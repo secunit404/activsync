@@ -98,9 +98,18 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
             return dev_mock.MockHevyClient(conn)
         return HevyClient(api_key=api_key)
 
+    def _in_wizard() -> bool:
+        return not db.get_config_value(conn, "initial_sync_done", default=False)
+
     def _card_error(request: Request, message: str, status_code: int = 400):
         if is_htmx(request):
             return PlainTextResponse(message, status_code=status_code)
+        if _in_wizard():
+            return templates.TemplateResponse(
+                request, "setup.html",
+                settings_context(step="hevy", hevy_error=message),
+                status_code=status_code,
+            )
         return templates.TemplateResponse(
             request, "settings.html", settings_context(hevy_error=message),
             status_code=status_code,
@@ -149,7 +158,20 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
             # The key is proven valid; a template hiccup only delays the
             # mappings view (the gate re-fetches unknown templates on demand).
             logger.warning("hevy template prefetch failed: %s", exc)
+        if _in_wizard():
+            # Connecting during first-run setup finishes the optional step and
+            # enables the leg — entering a key here IS the opt-in.
+            db.set_config_value(conn, "setup_hevy_done", True)
+            cfg = config.load_config(conn)
+            cfg["hevy_enabled"] = True
+            config.save_config(conn, cfg)
+            return RedirectResponse("/setup", status_code=303)
         return saved(request, "hevy")
+
+    @app.post("/setup/hevy/skip")
+    def setup_hevy_skip(request: Request):
+        db.set_config_value(conn, "setup_hevy_done", True)
+        return RedirectResponse("/setup", status_code=303)
 
     @app.post("/settings/hevy")
     def hevy_settings_submit(

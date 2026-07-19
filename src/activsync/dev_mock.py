@@ -25,13 +25,135 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import json
+from dataclasses import fields as dataclass_fields
 
 from activsync import db
-from activsync.garmin_client import MfaRequired
+from activsync.garmin_client import ActivityRecord, MfaRequired, SubcategoryRejected
 
 MFA_TRIGGER_PASSWORD = "mfa"
 MFA_REJECT_CODE = "000000"
+
+# -- Hevy demo fixtures -------------------------------------------------------
+# Five canned workouts covering the demo scenarios the dev pass must show:
+# a merge onto a seeded watch activity, an unmapped custom exercise (mapping
+# queue), a graceless passive upload, a midnight-spanning session, and an
+# in-flight sync holding the publish interlock on its watch activity.
+HEVY_DEV_MERGED_ID = "hw-dev-merged"
+HEVY_DEV_UNMAPPED_ID = "hw-dev-unmapped"
+HEVY_DEV_PASSIVE_ID = "hw-dev-passive"
+HEVY_DEV_MIDNIGHT_ID = "hw-dev-midnight"
+HEVY_DEV_SYNCING_ID = "hw-dev-syncing"
+HEVY_DEV_CUSTOM_TEMPLATE_ID = "tpl-dev-custom"
+
+# Watch/upload activity ids the seeded scenarios link against.
+HEVY_DEV_MERGED_ACTIVITY_ID = 910001
+HEVY_DEV_SYNCING_ACTIVITY_ID = 910002
+HEVY_DEV_PASSIVE_ACTIVITY_ID = 910050
+# Putting exercise sets onto this activity 400s, exercising the
+# subcategory-rejection path end to end in dev.
+HEVY_SUBCATEGORY_REJECT_ACTIVITY_ID = HEVY_DEV_SYNCING_ACTIVITY_ID
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+def _bench_sets() -> list[dict]:
+    return [{"type": "normal", "weight_kg": 80.0, "reps": 5} for _ in range(3)]
+
+
+def dev_hevy_workouts(now: datetime | None = None) -> list[dict]:
+    """The canned Hevy workouts, timestamped relative to `now` so the demo
+    stays fresh no matter when the dev DB was seeded."""
+    now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
+    midnight_start = (now - timedelta(days=1)).replace(hour=23, minute=30, second=0)
+    return [
+        {
+            "id": HEVY_DEV_MERGED_ID,
+            "title": "Push day (Hevy)",
+            "start_time": _iso(now - timedelta(hours=3)),
+            "end_time": _iso(now - timedelta(hours=2)),
+            "updated_at": _iso(now - timedelta(hours=2)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_UNMAPPED_ID,
+            "title": "Ring circuit (Hevy)",
+            "start_time": _iso(now - timedelta(hours=6)),
+            "end_time": _iso(now - timedelta(hours=5)),
+            "updated_at": _iso(now - timedelta(hours=5)),
+            "exercises": [{
+                "title": "Bulgarian Ring Row",
+                "exercise_template_id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_PASSIVE_ID,
+            "title": "Forgot the watch (Hevy)",
+            "start_time": _iso(now - timedelta(hours=27)),
+            "end_time": _iso(now - timedelta(hours=26)),
+            "updated_at": _iso(now - timedelta(hours=26)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_MIDNIGHT_ID,
+            "title": "Midnight session (Hevy)",
+            "start_time": _iso(midnight_start),
+            "end_time": _iso(midnight_start + timedelta(minutes=75)),
+            "updated_at": _iso(midnight_start + timedelta(minutes=75)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_SYNCING_ID,
+            "title": "Leg day (Hevy)",
+            "start_time": _iso(now - timedelta(minutes=90)),
+            "end_time": _iso(now - timedelta(minutes=30)),
+            "updated_at": _iso(now - timedelta(minutes=30)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+    ]
+
+
+def dev_hevy_templates() -> list[dict]:
+    return [
+        {
+            "id": "tpl-dev-bench",
+            "title": "Bench Press (Barbell)",
+            "primary_muscle_group": "chest",
+            "secondary_muscle_groups": ["triceps"],
+            "equipment_category": "barbell",
+            "is_custom": False,
+        },
+        {
+            "id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
+            "title": "Bulgarian Ring Row",
+            "primary_muscle_group": "upper_back",
+            "secondary_muscle_groups": ["biceps"],
+            "equipment_category": "other",
+            "is_custom": True,
+        },
+    ]
+
 # Keep the local publish request on screen long enough to exercise the button's
 # busy state. This fake is only wired in when mock mode is enabled.
 DEV_PUBLISH_DELAY_SECONDS = 1.0
@@ -240,6 +362,9 @@ class FakeGarminClient:
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
+        # Per-instance recording (a fresh client is built per request):
+        # lets tests and the dev pass inspect what a merge would have PUT.
+        self.recorded_exercise_sets: list[tuple[int, dict]] = []
 
     def fetch_activity_types(self) -> list[dict]:
         # Report the taxonomy, the way the real client reports what Garmin
@@ -248,8 +373,35 @@ class FakeGarminClient:
         # the one thing the button exists to do went untested.
         return garmin_activity_types()
 
-    def fetch_recent_activities(self, lookback_days: int) -> list:
-        return []
+    def fetch_recent_activities(self, lookback_days: int) -> list[ActivityRecord]:
+        # Echo the local table back as what "Garmin" holds. Returning [] (as
+        # this used to) made sync_garmin's removal pass mark every seeded
+        # activity inside the lookback window as deleted from Garmin — which
+        # wiped the recent Hevy demo activities on the wizard's initial sync.
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        optional_keys = {
+            field.name for field in dataclass_fields(ActivityRecord)
+        } - {"garmin_activity_id", "activity_type", "title", "description",
+             "start_time"}
+        records = []
+        for row in db.list_activities(self._conn):
+            if row["start_time"] < cutoff:
+                continue
+            try:
+                data = json.loads(row.get("garmin_data") or "{}")
+            except (ValueError, TypeError):
+                data = {}
+            records.append(ActivityRecord(
+                garmin_activity_id=row["garmin_activity_id"],
+                activity_type=row["activity_type"],
+                title=row["title"],
+                description=row.get("description") or "",
+                start_time=row["start_time"],
+                **{key: data.get(key) for key in optional_keys},
+            ))
+        return records
 
     def download_fit(self, garmin_activity_id: int) -> bytes:
         return b""
@@ -259,15 +411,24 @@ class FakeGarminClient:
     ) -> None:
         return None
 
-    # -- Hevy-integration surface (minimal; Task-14 scenarios flesh these out) --
+    # -- Hevy-integration surface ---------------------------------------------
 
     def upload_fit(self, fit_path: str) -> dict:
-        return {"upload_id": "dev-upload", "activity_id": None}
+        # DB-backed sequence so ids stay fresh across requests (each request
+        # builds a new client instance).
+        sequence = int(db.get_config_value(self._conn, "dev_upload_seq", default=0)) + 1
+        db.set_config_value(self._conn, "dev_upload_seq", sequence)
+        return {"upload_id": f"dev-upload-{sequence}",
+                "activity_id": 950000 + sequence}
 
     def get_exercise_sets(self, activity_id: int) -> dict:
         return {"exerciseSets": []}
 
     def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
+        if activity_id == HEVY_SUBCATEGORY_REJECT_ACTIVITY_ID:
+            raise SubcategoryRejected(
+                "dev mock: Garmin rejects this category/subcategory pair")
+        self.recorded_exercise_sets.append((activity_id, payload))
         return None
 
     def set_title(self, activity_id: int, title: str) -> None:
@@ -367,3 +528,49 @@ class FakeStravaClient:
         self, strava_activity_id: int, name: str, description: str
     ) -> None:
         return None
+
+
+class MockHevyClient:
+    """No-network Hevy client serving the canned demo workouts/templates.
+    Any API key validates, so the wizard step and the settings card can be
+    walked without a Hevy Pro account."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get_user_info(self) -> dict:
+        return {"id": "dev-user", "username": "dev"}
+
+    def get_workout(self, workout_id: str) -> dict | None:
+        for workout in dev_hevy_workouts():
+            if workout["id"] == workout_id:
+                return workout
+        return None
+
+    def get_workouts_page(self, page: int = 1, page_size: int = 10) -> dict:
+        workouts = dev_hevy_workouts() if page == 1 else []
+        return {"page": page, "page_count": 1, "workouts": workouts}
+
+    def get_events(self, since: str, page: int = 1, page_size: int = 10) -> dict:
+        events = [
+            {"type": "updated", "workout": workout}
+            for workout in dev_hevy_workouts()
+            if page == 1 and workout["updated_at"] > since
+        ]
+        return {"page": page, "page_count": 1, "events": events}
+
+    def iter_events_since(self, since: str) -> list[dict]:
+        return self.get_events(since)["events"]
+
+    def get_exercise_template(self, template_id: str) -> dict | None:
+        for template in dev_hevy_templates():
+            if template["id"] == template_id:
+                return template
+        return None
+
+    def get_exercise_templates_page(self, page: int = 1, page_size: int = 10) -> dict:
+        templates = dev_hevy_templates() if page == 1 else []
+        return {"page": page, "page_count": 1, "exercise_templates": templates}
+
+    def iter_all_exercise_templates(self) -> list[dict]:
+        return dev_hevy_templates()

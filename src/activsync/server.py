@@ -334,6 +334,9 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             return "garmin"
         if not ctx["strava_connected"]:
             return "strava"
+        if not db.get_config_value(conn, "setup_hevy_done", default=False):
+            # Optional and skippable — connecting or skipping both set the flag.
+            return "hevy"
         return "syncing"
 
     def _activity_context(
