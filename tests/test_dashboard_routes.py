@@ -931,3 +931,163 @@ def test_activity_dialog_puts_the_status_badge_after_the_links(tmp_path):
     assert body.index("activity-card-links") < body.index("badge-published"), (
         "the badge must come last so it lands on the right edge"
     )
+
+
+# -- Hevy dashboard integration (Task 13) ------------------------------------
+
+
+def _seed_hevy_workout(conn, hevy_id="hw1", status="waiting_watch", error=None,
+                       title="Push Day"):
+    hevy_db.upsert_workout(
+        conn, hevy_id, title, "2026-07-18 10:00:00", "2026-07-18 11:00:00",
+        "2026-07-18T12:00:00+00:00", {"exercises": []},
+    )
+    if status != "waiting_watch" or error:
+        hevy_db.set_workout_status(conn, hevy_id, status, error=error)
+
+
+def test_activity_row_shows_hevy_badge_for_linked_activity(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 18, 12, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 42, "strength_training", "Leg Day", "",
+                       "2026-07-18 10:00:00", "h42", "held", now)
+    _seed_hevy_workout(conn)
+    hevy_db.link_target(conn, "hw1", 42, "merge")
+    hevy_db.set_workout_status(conn, "hw1", "merged")
+
+    response = client.get("/")
+
+    assert "hevy-badge" in response.text
+    assert "merge" in response.text
+
+
+def test_dashboard_lists_hevy_problem_rows_with_errors(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "needs_mapping",
+                       error="unmapped exercises: Landmine Press")
+    _seed_hevy_workout(conn, "hw2", "waiting_watch", title="Pull Day")
+
+    response = client.get("/")
+
+    assert "unmapped exercises: Landmine Press" in response.text
+    assert "Pull Day" in response.text  # in-flight section
+    # needs_mapping rows link to the mappings section in settings.
+    assert "/settings#hevy-mappings" in response.text
+
+
+def test_hevy_retry_returns_problem_row_to_the_queue(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "failed", error="upload rejected")
+
+    response = client.post("/api/hevy/hw1/retry")
+
+    assert response.status_code in (200, 204, 303)
+    row = hevy_db.get_workout(conn, "hw1")
+    assert row["status"] == "waiting_watch"
+    assert row["error"] is None
+
+
+def test_hevy_retry_resumes_a_parked_operation(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "syncing")
+    op_id = hevy_db.open_operation(conn, "hw1", "upload_passive", None, [])
+    hevy_db.update_operation(conn, op_id, phase="needs_review",
+                             upload_id="up-9", attempt_count=5,
+                             last_error="upload outcome unresolved")
+    hevy_db.set_workout_status(conn, "hw1", "needs_review",
+                               error="upload outcome unresolved")
+
+    response = client.post("/api/hevy/hw1/retry")
+
+    assert response.status_code in (200, 204, 303)
+    op = hevy_db.get_open_operation(conn, "hw1")
+    assert op["phase"] == "submission_unknown", \
+        "an op with an upload to resolve resumes at submission_unknown"
+    assert op["attempt_count"] == 0
+    assert hevy_db.get_workout(conn, "hw1")["status"] == "syncing"
+
+
+def test_hevy_retry_resumes_at_preparing_without_an_upload(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "syncing")
+    op_id = hevy_db.open_operation(conn, "hw1", "upload_passive", None, [])
+    hevy_db.update_operation(conn, op_id, phase="needs_review",
+                             last_error="overlapping cycling activity exists")
+    hevy_db.set_workout_status(conn, "hw1", "needs_review", error="overlap")
+
+    client.post("/api/hevy/hw1/retry")
+
+    assert hevy_db.get_open_operation(conn, "hw1")["phase"] == "preparing"
+
+
+def test_hevy_skip_and_unskip_round_trip(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "failed", error="boom")
+
+    skip = client.post("/api/hevy/hw1/skip")
+    assert skip.status_code in (200, 204, 303)
+    assert hevy_db.get_workout(conn, "hw1")["status"] == "skipped"
+
+    unskip = client.post("/api/hevy/hw1/unskip")
+    assert unskip.status_code in (200, 204, 303)
+    assert hevy_db.get_workout(conn, "hw1")["status"] == "waiting_watch"
+
+
+def test_hevy_skip_rejected_for_terminal_status(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "merged")
+
+    response = client.post("/api/hevy/hw1/skip")
+
+    assert response.status_code == 400
+    assert hevy_db.get_workout(conn, "hw1")["status"] == "merged"
+
+
+def test_hevy_skip_rejected_while_an_operation_is_open(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "syncing")
+    hevy_db.open_operation(conn, "hw1", "upload_passive", None, [])
+
+    response = client.post("/api/hevy/hw1/skip")
+
+    assert response.status_code == 409
+    assert hevy_db.get_workout(conn, "hw1")["status"] == "syncing"
+
+
+def test_hevy_resync_fresh_clears_links_and_requeues(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    now = datetime(2026, 7, 18, 12, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 42, "strength_training", "Leg Day", "",
+                       "2026-07-18 10:00:00", "h42", "held", now)
+    _seed_hevy_workout(conn, "hw1")
+    assert hevy_db.claim_source(conn, "hw1", 42)
+    hevy_db.link_target(conn, "hw1", 42, "merge")
+    hevy_db.set_workout_status(conn, "hw1", "needs_review",
+                               error="linked activity deleted on Garmin")
+
+    response = client.post("/api/hevy/hw1/resync-fresh")
+
+    assert response.status_code in (200, 204, 303)
+    row = hevy_db.get_workout(conn, "hw1")
+    assert row["status"] == "waiting_watch"
+    assert row["garmin_activity_id"] is None
+    assert row["source_garmin_activity_id"] is None
+    assert row["error"] is None
+
+
+def test_hevy_resync_fresh_rejected_while_an_operation_is_open(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _seed_hevy_workout(conn, "hw1", "syncing")
+    hevy_db.open_operation(conn, "hw1", "upload_passive", None, [])
+
+    response = client.post("/api/hevy/hw1/resync-fresh")
+
+    assert response.status_code == 409
+
+
+def test_hevy_actions_404_for_unknown_workout(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+
+    for action in ("retry", "skip", "unskip", "resync-fresh"):
+        response = client.post(f"/api/hevy/nope/{action}")
+        assert response.status_code == 404, action

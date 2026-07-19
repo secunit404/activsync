@@ -9,7 +9,12 @@ import sqlite3
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 
 from activsync import config, db, events, hevy_db, hevy_sync, view
 from activsync.hevy_apply import _parse_ts
@@ -299,6 +304,106 @@ def register(app: FastAPI, conn: sqlite3.Connection, templates, *,
                 request, f"Could not fetch workouts from Hevy: {exc}",
                 status_code=502)
         return {"items": items, "since": since}, None
+
+    # -- dashboard workout actions -------------------------------------------
+
+    _TERMINAL_STATUSES = ("merged", "described", "replaced", "uploaded_passive",
+                          "linked_existing")
+    _RETRYABLE_STATUSES = ("needs_mapping", "failed", "needs_review")
+
+    def _with_lease(hevy_id: str, mutate):
+        """Run `mutate(row)` under the per-workout execution lease so a user
+        action can never interleave with the poller applying the same row."""
+        row = hevy_db.get_workout(conn, hevy_id)
+        if row is None:
+            return PlainTextResponse("Unknown Hevy workout.", status_code=404)
+        token = hevy_db.acquire_lease(conn, hevy_id,
+                                      datetime.now(timezone.utc))
+        if not token:
+            return PlainTextResponse(
+                "Workout is being processed right now — try again in a moment.",
+                status_code=409)
+        try:
+            response = mutate(row)
+        finally:
+            hevy_db.release_lease(conn, hevy_id, token)
+        if response.status_code < 400:
+            events.bus.publish("refresh")
+        return response
+
+    @app.post("/api/hevy/{hevy_id}/retry")
+    def hevy_retry(request: Request, hevy_id: str):
+        def mutate(row):
+            if row["status"] not in _RETRYABLE_STATUSES:
+                return PlainTextResponse(
+                    f"Nothing to retry — workout is {row['status']}.",
+                    status_code=400)
+            op = hevy_db.get_open_operation(conn, hevy_id)
+            if op is not None:
+                if op["phase"] == "needs_review":
+                    # Resume where the operation actually stopped. A confirmed
+                    # target resumes finalizing; an unresolved upload resumes
+                    # its snapshot diff; only an op that never uploaded may
+                    # start over — resuming one that DID upload at `preparing`
+                    # would re-upload.
+                    if op["target_activity_id"]:
+                        resume = "finalizing"
+                    elif op["upload_id"]:
+                        resume = "submission_unknown"
+                    else:
+                        resume = "preparing"
+                    hevy_db.update_operation(
+                        conn, op["id"], phase=resume, attempt_count=0,
+                        delete_attempt_count=0, last_error=None)
+                hevy_db.set_workout_status(conn, hevy_id, "syncing", error=None)
+            else:
+                hevy_db.set_workout_status(conn, hevy_id, "waiting_watch",
+                                           error=None)
+            return Response(status_code=204)
+
+        return _with_lease(hevy_id, mutate)
+
+    @app.post("/api/hevy/{hevy_id}/skip")
+    def hevy_skip(request: Request, hevy_id: str):
+        def mutate(row):
+            if row["status"] in _TERMINAL_STATUSES or row["status"] == "skipped":
+                return PlainTextResponse(
+                    f"Cannot skip a {row['status']} workout.", status_code=400)
+            if hevy_db.get_open_operation(conn, hevy_id) is not None:
+                # Skipping mid-operation would orphan the journal and leave
+                # the publish interlock stuck on the referenced activities.
+                return PlainTextResponse(
+                    "An operation is in progress for this workout — resolve or "
+                    "retry it instead of skipping.", status_code=409)
+            hevy_db.set_workout_status(conn, hevy_id, "skipped")
+            return Response(status_code=204)
+
+        return _with_lease(hevy_id, mutate)
+
+    @app.post("/api/hevy/{hevy_id}/unskip")
+    def hevy_unskip(request: Request, hevy_id: str):
+        def mutate(row):
+            if row["status"] != "skipped":
+                return PlainTextResponse(
+                    f"Workout is {row['status']}, not skipped.", status_code=400)
+            hevy_db.set_workout_status(conn, hevy_id, "waiting_watch")
+            return Response(status_code=204)
+
+        return _with_lease(hevy_id, mutate)
+
+    @app.post("/api/hevy/{hevy_id}/resync-fresh")
+    def hevy_resync_fresh(request: Request, hevy_id: str):
+        def mutate(row):
+            if hevy_db.get_open_operation(conn, hevy_id) is not None:
+                return PlainTextResponse(
+                    "An operation is in progress for this workout — resolve it "
+                    "before re-syncing fresh.", status_code=409)
+            hevy_db.reset_links(conn, hevy_id)
+            hevy_db.set_workout_status(conn, hevy_id, "waiting_watch",
+                                       error=None)
+            return Response(status_code=204)
+
+        return _with_lease(hevy_id, mutate)
 
     @app.post("/settings/hevy/backfill/preview", response_class=HTMLResponse)
     def hevy_backfill_preview(request: Request, since: str = Form("")):

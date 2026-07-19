@@ -71,6 +71,23 @@ def _fmt_elev(metres: float | None) -> str:
     return f"{int(metres)} m"
 
 
+def _hevy_badges(conn: sqlite3.Connection) -> dict[int, str]:
+    """garmin_activity_id → applied strategy, for every applied Hevy link
+    (both the final linked activity and the claimed watch source)."""
+    from activsync import hevy_db
+
+    badges: dict[int, str] = {}
+    for workout in hevy_db.list_workouts(conn):
+        strategy = workout.get("applied_strategy")
+        if not strategy:
+            continue
+        for column in ("garmin_activity_id", "source_garmin_activity_id"):
+            activity_id = workout.get(column)
+            if activity_id is not None:
+                badges[activity_id] = strategy
+    return badges
+
+
 def activities_view(
     conn: sqlite3.Connection,
     sort_order: str = "newest",
@@ -84,6 +101,7 @@ def activities_view(
         status=status_filter or None,
         sort_order=sort_order,
     )
+    hevy_badges = _hevy_badges(conn)
     result: list[dict] = []
     for row in rows:
         gd = _parse_garmin_data(row)
@@ -97,6 +115,7 @@ def activities_view(
             "start_month_year_display": timeutil.format_local_month_year(row["start_time"], tz_name),
             "start_clock_display": timeutil.format_local_clock(row["start_time"], tz_name),
             "garmin_url": GARMIN_ACTIVITY_URL.format(row["garmin_activity_id"]),
+            "hevy_badge": hevy_badges.get(row["garmin_activity_id"]),
             "detail": {
                 "description": row.get("description") or None,
                 "distance": _fmt_distance(distance),
@@ -124,6 +143,56 @@ def activities_view(
             },
         })
     return result
+
+
+_HEVY_IN_FLIGHT = ("waiting_watch", "syncing")
+_HEVY_PROBLEMS = ("needs_mapping", "failed", "needs_review")
+
+
+def _hevy_time_display(start_time: str, tz_name: str) -> str:
+    try:
+        return timeutil.format_local_time(start_time, tz_name)
+    except Exception:
+        return start_time or ""
+
+
+def hevy_summary(conn: sqlite3.Connection) -> dict:
+    """In-flight and problem Hevy workouts for the dashboard queue."""
+    from activsync import hevy_db
+
+    cfg = config.load_config(conn)
+    tz_name = cfg["display_timezone"]
+
+    def rows_for(statuses: tuple[str, ...]) -> list[dict]:
+        rows: list[dict] = []
+        for status in statuses:
+            for row in hevy_db.list_workouts(conn, status=status):
+                rows.append({
+                    "hevy_id": row["hevy_id"],
+                    "title": row["title"] or row["hevy_id"],
+                    "status": status,
+                    "error": row["error"],
+                    "start_display": _hevy_time_display(row["start_time"], tz_name),
+                    "needs_mapping": status == "needs_mapping",
+                    "has_open_operation": (
+                        hevy_db.get_open_operation(conn, row["hevy_id"]) is not None),
+                    # The 404-tombstone case gets the "re-sync as fresh upload"
+                    # action; everything else retries in place.
+                    "resyncable": "deleted on Garmin" in (row["error"] or ""),
+                })
+        return rows
+
+    in_flight = rows_for(_HEVY_IN_FLIGHT)
+    problems = rows_for(_HEVY_PROBLEMS)
+    skipped = rows_for(("skipped",))
+    return {
+        "enabled": bool(cfg.get("hevy_enabled")),
+        "in_flight": in_flight,
+        "problems": problems,
+        "skipped": skipped,
+        "counts": {"in_flight": len(in_flight), "problems": len(problems),
+                   "skipped": len(skipped)},
+    }
 
 
 def hevy_settings_view(conn: sqlite3.Connection) -> dict:

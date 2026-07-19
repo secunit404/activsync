@@ -1,0 +1,69 @@
+{% if hevy_summary and (hevy_summary.in_flight or hevy_summary.problems or hevy_summary.skipped) %}
+<section class="panel hevy-queue" id="hevy-queue">
+  <div class="panel-body stack">
+    <h2>Hevy sync</h2>
+
+    {% if hevy_summary.problems %}
+      <h3>Needs attention</h3>
+      {% for row in hevy_summary.problems %}
+      <div class="hevy-queue-row" data-status="{{ row.status }}">
+        <div class="hevy-queue-main">
+          <span class="hevy-queue-title">{{ row.title }}</span>
+          <span class="hevy-queue-time">{{ row.start_display }}</span>
+          <span class="badge badge-missing">{{ row.status | replace("_", " ") }}</span>
+        </div>
+        {% if row.error %}<p class="hevy-queue-error error">{{ row.error }}</p>{% endif %}
+        <div class="hevy-queue-actions">
+          {% if row.needs_mapping %}
+            <a class="button-link" href="/settings#hevy-mappings">Map exercises</a>
+          {% endif %}
+          {% if row.resyncable %}
+          <form class="inline" hx-post="/api/hevy/{{ row.hevy_id }}/resync-fresh" hx-swap="none">
+            <button type="submit" class="secondary compact-settings-button">Re-sync as fresh upload</button>
+          </form>
+          {% endif %}
+          <form class="inline" hx-post="/api/hevy/{{ row.hevy_id }}/retry" hx-swap="none">
+            <button type="submit" class="secondary compact-settings-button">Retry</button>
+          </form>
+          {% if not row.has_open_operation %}
+          <form class="inline" hx-post="/api/hevy/{{ row.hevy_id }}/skip" hx-swap="none">
+            <button type="submit" class="secondary compact-settings-button">Skip</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if hevy_summary.in_flight %}
+      <h3>In flight</h3>
+      {% for row in hevy_summary.in_flight %}
+      <div class="hevy-queue-row" data-status="{{ row.status }}">
+        <div class="hevy-queue-main">
+          <span class="hevy-queue-title">{{ row.title }}</span>
+          <span class="hevy-queue-time">{{ row.start_display }}</span>
+          <span class="badge badge-pending">{{ row.status | replace("_", " ") }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if hevy_summary.skipped %}
+      <details>
+        <summary>Skipped ({{ hevy_summary.skipped | length }})</summary>
+        {% for row in hevy_summary.skipped %}
+        <div class="hevy-queue-row" data-status="skipped">
+          <div class="hevy-queue-main">
+            <span class="hevy-queue-title">{{ row.title }}</span>
+            <span class="hevy-queue-time">{{ row.start_display }}</span>
+          </div>
+          <form class="inline" hx-post="/api/hevy/{{ row.hevy_id }}/unskip" hx-swap="none">
+            <button type="submit" class="secondary compact-settings-button">Unskip</button>
+          </form>
+        </div>
+        {% endfor %}
+      </details>
+    {% endif %}
+  </div>
+</section>
+{% endif %}

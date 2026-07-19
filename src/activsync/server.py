@@ -369,6 +369,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             "connections": view.connection_status(conn),
             "sync_error": "",
             "catch_up_report": db.get_config_value(conn, "catch_up_report"),
+            "hevy_summary": view.hevy_summary(conn),
         }
         context.update(overrides)
         return context

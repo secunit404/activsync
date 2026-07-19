@@ -340,6 +340,22 @@ def link_target(
         raise ValueError(f"link_target: no hevy workout {hevy_id!r}")
 
 
+def reset_links(conn: sqlite3.Connection, hevy_id: str) -> None:
+    """Detach a workout from its Garmin activities for a fresh re-sync (the
+    404-tombstone action): clears both claims, the applied strategy, and the
+    per-side applied revisions so the normal flow starts over. Callers must
+    ensure no operation is open — resetting under one would orphan the journal."""
+    conn.execute(
+        """UPDATE hevy_workouts
+           SET source_garmin_activity_id = NULL, garmin_activity_id = NULL,
+               applied_strategy = NULL, garmin_applied_updated_at = NULL,
+               strava_applied_updated_at = NULL, updated_at = ?
+           WHERE hevy_id = ?""",
+        (_now_iso(), hevy_id),
+    )
+    conn.commit()
+
+
 def acquire_lease(
     conn: sqlite3.Connection, hevy_id: str, now: datetime, seconds: int = 300
 ) -> str | None:

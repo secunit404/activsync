@@ -10,6 +10,7 @@
         {% endif %}
     {% endfor %}
     {% if sync_error %}<p class="error">{{ sync_error }}</p>{% endif %}
+    {% include "partials/hevy_queue.html" %}
     <div class="activity-toolbar">
         {# In the toolbar rather than a bar of its own: the toolbar is already
            sticky, so it follows the list down anyway. #}
@@ -115,6 +116,9 @@
                     </div>
                 </div>
                 <div class="activity-row-status">
+                    {% if activity.hevy_badge %}
+                    <span class="badge hevy-badge" title="Hevy sync applied: {{ activity.hevy_badge }}">hevy: {{ activity.hevy_badge }}</span>
+                    {% endif %}
                     <span class="badge badge-{{ activity.publish_status }}">{{ activity.publish_status }}</span>
                 </div>
                 <div class="activity-row-actions">
