@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from activsync import config, db, logging_setup, timeutil
 from activsync.dev_seed import seed as seed_dev_data
 from activsync.garmin_client import GarminClient, get_client as get_garmin_raw_client
+from activsync.hevy_client import HevyClient
 from activsync.poller import Poller
 from activsync.server import create_app
 from activsync.strava_client import StravaClient
@@ -66,7 +67,19 @@ def _strava_factory() -> StravaClient:
     return StravaClient(_conn, creds.get("client_id", ""), creds.get("client_secret", ""))
 
 
-_poller = Poller(_conn, garmin_factory=_garmin_factory, strava_factory=_strava_factory)
+def _hevy_factory() -> HevyClient:
+    api_key = db.get_config_value(_conn, "hevy_api_key")
+    if not api_key:
+        raise RuntimeError("Hevy API key is not configured")
+    return HevyClient(api_key=api_key)
+
+
+_poller = Poller(
+    _conn,
+    garmin_factory=_garmin_factory,
+    strava_factory=_strava_factory,
+    hevy_factory=_hevy_factory,
+)
 _update_checker = UpdateChecker()
 
 

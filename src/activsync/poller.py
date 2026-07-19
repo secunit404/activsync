@@ -9,8 +9,9 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from activsync import config, db, events, logging_setup, sync
+from activsync import config, db, events, hevy_profile, hevy_sync, logging_setup, sync
 from activsync.garmin_client import GarminClient
+from activsync.hevy_client import HevyAuthError, HevyClient
 from activsync.strava_client import StravaClient, StravaRateLimitError
 
 logger = logging.getLogger("activsync.poller")
@@ -24,20 +25,25 @@ class Poller:
         conn: sqlite3.Connection,
         garmin_factory: Callable[[], GarminClient],
         strava_factory: Callable[[], StravaClient],
+        hevy_factory: Callable[[], HevyClient] | None = None,
         tick_seconds: float = _DEFAULT_TICK_SECONDS,
         garmin_interval_seconds_override: float | None = None,
         strava_interval_seconds_override: float | None = None,
+        hevy_interval_seconds_override: float | None = None,
     ):
         self._conn = conn
         self._garmin_factory = garmin_factory
         self._strava_factory = strava_factory
+        self._hevy_factory = hevy_factory
         self._tick_seconds = tick_seconds
         self._garmin_interval_seconds_override = garmin_interval_seconds_override
         self._strava_interval_seconds_override = strava_interval_seconds_override
+        self._hevy_interval_seconds_override = hevy_interval_seconds_override
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_garmin_run: datetime | None = None
         self._last_strava_run: datetime | None = None
+        self._last_hevy_run: datetime | None = None
         self._strava_backoff_until: datetime | None = None
 
     def run_garmin_once(self, now: datetime | None = None) -> sync.GarminSyncStats:
@@ -57,6 +63,22 @@ class Poller:
         status_stats = sync.check_strava_status(self._conn, strava, cfg, now)
         return publish_stats, status_stats
 
+    def run_hevy_once(self, now: datetime | None = None) -> bool:
+        """One Hevy leg pass. Returns whether anything changed. The profile
+        cache refresh runs first so the cfg snapshot the leg reads is current."""
+        now = now or datetime.now(timezone.utc)
+        garmin = self._garmin_factory()
+        hevy = self._hevy_factory()
+        hevy_profile.get_profile(self._conn, garmin, now)
+        cfg = config.load_config(self._conn)
+        strava = self._strava_factory() if self._strava_ready() else None
+        changed = hevy_sync.run_hevy_leg(self._conn, garmin, hevy, cfg, now,
+                                         strava=strava)
+        # Top-level app_config key (not the settings dict): drives the
+        # settlement hold in sync._publish_row.
+        db.set_config_value(self._conn, "hevy_last_success_at", now.isoformat())
+        return changed
+
     def _garmin_interval_seconds(self) -> float:
         if self._garmin_interval_seconds_override is not None:
             return self._garmin_interval_seconds_override
@@ -67,6 +89,11 @@ class Poller:
             return self._strava_interval_seconds_override
         return config.load_config(self._conn)["strava_poll_interval_minutes"] * 60
 
+    def _hevy_interval_seconds(self) -> float:
+        if self._hevy_interval_seconds_override is not None:
+            return self._hevy_interval_seconds_override
+        return config.load_config(self._conn)["hevy_poll_interval_minutes"] * 60
+
     def _due(self, last_run: datetime | None, now: datetime, interval_seconds: float) -> bool:
         return last_run is None or (now - last_run).total_seconds() >= interval_seconds
 
@@ -76,6 +103,17 @@ class Poller:
     def _strava_ready(self) -> bool:
         tokens = db.get_config_value(self._conn, "strava_tokens") or {}
         return bool(tokens.get("refresh_token"))
+
+    def _hevy_ready(self) -> bool:
+        if self._hevy_factory is None:
+            return False
+        if not config.load_config(self._conn).get("hevy_enabled"):
+            return False
+        if not db.get_config_value(self._conn, "hevy_api_key"):
+            return False
+        # An auth failure pauses the leg until the key is re-validated
+        # (the garmin_credentials_verified pattern).
+        return db.get_config_value(self._conn, "hevy_auth_ok", default=True) is not False
 
     def _strava_rate_limited(self, now: datetime) -> bool:
         return self._strava_backoff_until is not None and now < self._strava_backoff_until
@@ -120,6 +158,25 @@ class Poller:
 
         changed = False
         strava_ran_this_tick = False
+
+        # The Hevy leg runs before the Garmin block: when it changed anything
+        # on Garmin, clearing _last_garmin_run makes the Garmin leg due THIS
+        # tick, so the enriched activity flows into the Strava pipeline
+        # immediately instead of after the Garmin interval.
+        if self._hevy_ready() and self._due(
+            self._last_hevy_run, now, self._hevy_interval_seconds()
+        ):
+            try:
+                if self.run_hevy_once(now):
+                    changed = True
+                    self._last_garmin_run = None
+            except HevyAuthError:
+                db.set_config_value(self._conn, "hevy_auth_ok", False)
+                logger.warning(
+                    "hevy auth failed; pausing hevy sync until the key is updated")
+            except Exception:
+                logger.exception("hevy sync failed")
+            self._last_hevy_run = now
 
         # NOTE: while a side is not ready we deliberately do NOT advance its
         # _last_run. Advancing it would make a reconnect wait out a full
