@@ -80,6 +80,16 @@ def test_timestamped_hr_lands_in_avg(tmp_path):
     assert result["avg_hr"] == round(sum(hr_values) / len(hr_values))
 
 
+def test_timestamped_hr_outside_workout_does_not_skew_summary(tmp_path):
+    result = build(
+        tmp_path,
+        hr=[{"time": 0, "hr": 100}, {"time": 1800, "hr": 140},
+            {"time": 7200, "hr": 250}],
+    )
+    assert result["hr_samples"] == 2
+    assert result["avg_hr"] == 120
+
+
 def test_no_hr_yields_none_avg_and_default_calories(tmp_path):
     result = build(tmp_path, hr=None)
     assert result["avg_hr"] is None

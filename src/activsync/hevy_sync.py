@@ -190,16 +190,19 @@ def apply_mapping_gate(
             except Exception as exc:
                 logger.warning("template fetch failed for %s: %s", template_id, exc)
                 template = None
-            if template:
-                hevy_db.upsert_template(conn, {
-                    "exercise_template_id": template.get("id", template_id),
-                    "title": template.get("title", miss.title),
-                    "primary_muscle_group": template.get("primary_muscle_group"),
-                    "secondary_muscle_groups": template.get("secondary_muscle_groups", []),
-                    "equipment_category": template.get("equipment_category")
-                                          or template.get("equipment"),
-                    "is_custom": template.get("is_custom", False),
-                })
+            # A transient fetch failure must not leave a parked workout with
+            # no actionable mapping row. The payload still gives us the stable
+            # id/title; a later catalog refresh enriches this placeholder.
+            template = template or {"id": template_id, "title": miss.title}
+            hevy_db.upsert_template(conn, {
+                "exercise_template_id": template.get("id", template_id),
+                "title": template.get("title", miss.title),
+                "primary_muscle_group": template.get("primary_muscle_group"),
+                "secondary_muscle_groups": template.get("secondary_muscle_groups", []),
+                "equipment_category": template.get("equipment_category")
+                                      or template.get("equipment"),
+                "is_custom": template.get("is_custom", False),
+            })
 
     titles = ", ".join(miss.title for miss in misses)
     hevy_db.set_workout_status(conn, row["hevy_id"], "needs_mapping",
@@ -336,8 +339,8 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
 _TERMINAL_APPLIED = ("merged", "described", "replaced", "uploaded_passive")
 
 
-def _reapply(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
-             now: datetime) -> None:
+def _reapply(conn: sqlite3.Connection, garmin: GarminClient, hevy: HevyClient,
+             row: dict, now: datetime) -> None:
     """A newer Hevy revision for an already-applied workout: re-apply
     following the ORIGINALLY applied strategy, never the current setting."""
     hevy_id = row["hevy_id"]
@@ -345,6 +348,10 @@ def _reapply(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
     if not token:
         return
     try:
+        if not apply_mapping_gate(
+            conn, row, row["applied_strategy"] or "merge", hevy
+        ):
+            return
         target = row["garmin_activity_id"]
         if row["applied_strategy"] != "describe":
             try:
@@ -406,7 +413,7 @@ def run_hevy_leg(conn: sqlite3.Connection, garmin: GarminClient,
         for row in hevy_db.list_workouts(conn, status=status):
             applied = row["garmin_applied_updated_at"] or ""
             if row["source_updated_at"] and row["source_updated_at"] > applied:
-                _reapply(conn, garmin, row, now)
+                _reapply(conn, garmin, hevy, row, now)
                 changed = True
 
     if strava is not None:

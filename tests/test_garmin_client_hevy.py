@@ -27,6 +27,7 @@ class StubRaw:
     def __init__(self):
         self.calls = []
         self.upload_response = {}
+        self.upload_exc = None
         self.activities_by_date = []
         self.user_profile = {}
         self.max_metrics = []
@@ -46,6 +47,8 @@ class StubRaw:
 
     def upload_activity(self, path):
         self.calls.append(("upload_activity", path))
+        if self.upload_exc is not None:
+            raise self.upload_exc
         return self.upload_response
 
     def get_activity_exercise_sets(self, activity_id):
@@ -112,6 +115,20 @@ def test_upload_rejected_raises(tmp_path):
         client.upload_fit(make_fit(tmp_path))
 
 
+def test_upload_http_409_duplicate_is_a_definite_rejection(tmp_path):
+    raw = StubRaw()
+    response = type("Response", (), {
+        "status_code": 409,
+        "text": '{"code":202,"message":"Duplicate Activity"}',
+    })()
+    error = RuntimeError("409 Client Error: Duplicate Activity")
+    error.response = response
+    raw.upload_exc = error
+
+    with pytest.raises(GarminUploadRejected, match="Duplicate Activity"):
+        GarminClient(raw).upload_fit(make_fit(tmp_path))
+
+
 def test_upload_pending_processing_returns_none_id(tmp_path):
     raw = StubRaw()
     raw.upload_response = {"detailedImportResult": {
@@ -174,6 +191,25 @@ def test_set_title_and_description_and_delete():
     kinds = [c[0] for c in raw.calls]
     assert kinds == ["set_activity_name", "set_activity_description",
                      "delete_activity"]
+
+
+@pytest.mark.parametrize("method,args", [
+    ("get_exercise_sets", (5,)),
+    ("set_title", (5, "Push Day")),
+    ("set_description", (5, "desc")),
+])
+def test_activity_specific_wrappers_translate_404(method, args):
+    raw = StubRaw()
+
+    def gone(*_args, **_kwargs):
+        raise RuntimeError("404 Not Found")
+
+    raw.get_activity_exercise_sets = gone
+    raw.set_activity_name = gone
+    raw.set_activity_description = gone
+
+    with pytest.raises(ActivityGone):
+        getattr(GarminClient(raw), method)(*args)
 
 
 # -- profile ----------------------------------------------------------------

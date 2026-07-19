@@ -222,6 +222,12 @@ def build_fit(
             f"Workout '{workout.get('title', '?')}' has non-positive duration "
             f"({workout.get('start_time')!r} → {workout.get('end_time')!r})"
         )
+    if hr_timed is not None:
+        # Buffered source samples that cannot land in the activity must not
+        # influence calories or avg/max summaries either.
+        hr_timed = [(offset, bpm) for offset, bpm in hr_timed
+                    if offset <= duration_s]
+        hr_bpm = [bpm for _, bpm in hr_timed]
     for exercise in resolved:
         # Defense in depth behind the mapping gate: the sentinel must never
         # be written into a FIT, whatever upstream data slipped through.

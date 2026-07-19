@@ -235,29 +235,44 @@ def generate_description(workout: dict, calories: int | None = None,
         for ex in exercises:
             name = ex.get("title") or ex.get("name", "Unknown")
             all_sets = ex.get("sets", [])
-            normal = [s for s in all_sets if s.get("type") == "normal"]
             warmup = [s for s in all_sets if s.get("type") == "warmup"]
-            if normal:
-                n_label = "set" if len(normal) == 1 else "sets"
-                has_distance = any(s.get("distance_meters") for s in normal)
-                has_duration = any(s.get("duration_seconds") for s in normal)
-                has_weight = any(s.get("weight_kg") or s.get("weight") for s in normal)
+            working = [s for s in all_sets if s.get("type") != "warmup"]
+            if working:
+                n_label = "set" if len(working) == 1 else "sets"
+                has_distance = any(s.get("distance_meters") for s in working)
+                has_duration = any(s.get("duration_seconds") for s in working)
+                has_weight = any(s.get("weight_kg") or s.get("weight") for s in working)
                 if has_distance or (has_duration and not has_weight):
-                    total_dist = sum(s.get("distance_meters", 0) or 0 for s in normal)
-                    total_dur = sum(s.get("duration_seconds", 0) or 0 for s in normal)
-                    parts = [f"{len(normal)} {n_label}"]
+                    total_dist = sum(s.get("distance_meters", 0) or 0 for s in working)
+                    total_dur = sum(s.get("duration_seconds", 0) or 0 for s in working)
+                    parts = [f"{len(working)} {n_label}"]
                     if total_dist > 0:
                         parts.append(f"{total_dist / 1000:.1f}km")
                     if total_dur > 0:
                         parts.append(f"{int(total_dur // 60)}min")
-                    lines.append(f"• {name}: {' · '.join(parts)}")
                 else:
-                    weights = [s.get("weight_kg") or s.get("weight", 0) for s in normal]
-                    reps = [s.get("reps", 0) or 0 for s in normal]
+                    weights = [s.get("weight_kg") or s.get("weight", 0) for s in working]
+                    reps = [s.get("reps", 0) or 0 for s in working]
                     top_weight = max(weights) if weights else 0
                     top_reps = max(reps) if reps else 0
-                    lines.append(f"• {name}: {len(normal)} {n_label} · "
-                                 f"{top_weight:.1f}kg × {top_reps}")
+                    parts = [f"{len(working)} {n_label}",
+                             f"{top_weight:.1f}kg × {top_reps}"]
+
+                if warmup:
+                    parts.append(f"{len(warmup)} warmup")
+                for set_type in ("dropset", "failure"):
+                    count = sum(s.get("type") == set_type for s in working)
+                    if count:
+                        parts.append(f"{count} {set_type}")
+                for key, label in (("rpe", "RPE"), ("custom_metric", "metric")):
+                    values = []
+                    for set_data in all_sets:
+                        value = set_data.get(key)
+                        if value is not None and value not in values:
+                            values.append(value)
+                    if values:
+                        parts.append(f"{label} {', '.join(str(v) for v in values)}")
+                lines.append(f"• {name}: {' · '.join(parts)}")
             elif warmup:
                 s_label = "set" if len(warmup) == 1 else "sets"
                 lines.append(f"• {name}: {len(warmup)} warmup {s_label}")
@@ -421,7 +436,10 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
                 existing = garmin.get_exercise_sets(source)
                 hevy_db.save_backup(conn, source, hevy_id, existing, fit_bytes)
                 settings = db.get_config_value(conn, "settings", default={}) or {}
-                if not settings.get("hevy_device_identity"):
+                stored_identity = settings.get("hevy_device_identity") or {}
+                # Product 0 is the generic no-watch fallback. Upgrade it as
+                # soon as a real watch FIT makes per-user detection possible.
+                if not stored_identity or stored_identity.get("product") in (0, "0"):
                     detected = identity_from_fit(fit_bytes)
                     if detected:
                         _persist_identity(conn, detected)

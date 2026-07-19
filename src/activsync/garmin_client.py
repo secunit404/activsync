@@ -61,6 +61,16 @@ def _is_not_found(exc: Exception) -> bool:
     return "404" in str(exc)
 
 
+def _exception_response(exc: Exception):
+    """Find an HTTP response on an exception or its immediate wrapper chain."""
+    for candidate in (exc, exc.__cause__, exc.__context__):
+        if candidate is not None:
+            response = getattr(candidate, "response", None)
+            if response is not None:
+                return response
+    return None
+
+
 @dataclass
 class ActivityRecord:
     garmin_activity_id: int
@@ -147,6 +157,15 @@ class GarminClient:
     def __init__(self, raw_client: Garmin):
         self._client = raw_client
 
+    def _activity_call(self, activity_id: int, func, *args):
+        """Call an activity endpoint and normalize a real 404."""
+        try:
+            return _limiter.call(func, activity_id, *args)
+        except Exception as exc:
+            if _is_not_found(exc):
+                raise ActivityGone(f"activity {activity_id} not found") from exc
+            raise
+
     def fetch_recent_activities(self, lookback_days: int) -> list[ActivityRecord]:
         cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
         records: list[ActivityRecord] = []
@@ -227,7 +246,18 @@ class GarminClient:
 
         if not Path(fit_path).exists():
             raise FileNotFoundError(f"FIT file not found: {fit_path}")
-        resp = _limiter.call(self._client.upload_activity, str(fit_path))
+        try:
+            resp = _limiter.call(self._client.upload_activity, str(fit_path))
+        except Exception as exc:
+            response = _exception_response(exc)
+            status = getattr(response, "status_code", None)
+            body = getattr(response, "text", "") if response is not None else ""
+            # The phase-0 spike proved this is a definite non-import, not an
+            # ambiguous outcome that belongs in submission_unknown.
+            if status == 409 or "duplicate activity" in str(exc).lower():
+                raise GarminUploadRejected(
+                    f"Garmin rejected upload: {body or exc}") from exc
+            raise
 
         upload_id = None
         activity_id = None
@@ -244,7 +274,8 @@ class GarminClient:
         return {"upload_id": upload_id, "activity_id": activity_id}
 
     def get_exercise_sets(self, activity_id: int) -> dict:
-        return _limiter.call(self._client.get_activity_exercise_sets, activity_id)
+        return self._activity_call(
+            activity_id, self._client.get_activity_exercise_sets)
 
     def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
         """PUT the full exercise-set list (atomic replace of ALL sets)."""
@@ -260,10 +291,11 @@ class GarminClient:
             raise
 
     def set_title(self, activity_id: int, title: str) -> None:
-        _limiter.call(self._client.set_activity_name, activity_id, title)
+        self._activity_call(activity_id, self._client.set_activity_name, title)
 
     def set_description(self, activity_id: int, description: str) -> None:
-        _limiter.call(self._client.set_activity_description, activity_id, description)
+        self._activity_call(
+            activity_id, self._client.set_activity_description, description)
 
     def delete_activity(self, activity_id: int) -> None:
         _limiter.call(self._client.delete_activity, activity_id)

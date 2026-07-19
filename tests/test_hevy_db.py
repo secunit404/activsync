@@ -312,6 +312,24 @@ def test_mapping_crud_and_rejected_flag():
     assert hevy_db.get_mapping(conn, "t1") is None
 
 
+@pytest.mark.parametrize(("strategy", "expected_status"), [
+    ("merge", "merged"),
+    ("describe", "described"),
+    ("replace", "replaced"),
+    ("passive", "uploaded_passive"),
+    (None, "waiting_watch"),
+])
+def test_waking_mapping_row_preserves_applied_strategy(strategy, expected_status):
+    conn = make_conn()
+    seed_workout(conn)
+    if strategy is not None:
+        hevy_db.link_target(conn, "w1", 901, strategy)
+    hevy_db.set_workout_status(conn, "w1", "needs_mapping")
+
+    assert hevy_db.wake_needs_mapping(conn, hevy_id="w1") == 1
+    assert hevy_db.get_workout(conn, "w1")["status"] == expected_status
+
+
 # -- events dedupe ----------------------------------------------------------
 
 def test_record_event_seen_dedupes():

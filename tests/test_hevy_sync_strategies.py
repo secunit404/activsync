@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from activsync import db, hevy_db, hevy_sync
+from activsync.fit_builder import DeviceIdentity
 from activsync.garmin_client import ActivityGone, GarminUploadRejected, SubcategoryRejected
 
 NOW = datetime(2026, 7, 18, 12, 0, 0, tzinfo=timezone.utc)
@@ -239,6 +240,23 @@ def test_replace_happy_path():
     assert op["phase"] == "done"
 
 
+def test_replace_upgrades_generic_fallback_to_detected_watch_identity(monkeypatch):
+    conn = make_conn()
+    generic = {"manufacturer": 1, "product": 0, "serial": 123}
+    db.set_config_value(conn, "settings", {"hevy_device_identity": generic})
+    garmin = StubGarmin()
+    row = replace_setup(conn, garmin)
+    detected = DeviceIdentity(manufacturer=1, product=4534, serial=987)
+    monkeypatch.setattr("activsync.hevy_apply.identity_from_fit",
+                        lambda _fit: detected)
+
+    process(conn, garmin, row, base_cfg(
+        hevy_watch_strategy="replace", hevy_device_identity=generic))
+
+    stored = db.get_config_value(conn, "settings")["hevy_device_identity"]
+    assert stored == {"manufacturer": 1, "product": 4534, "serial": 987}
+
+
 def test_replace_refuses_published_source():
     conn = make_conn()
     garmin = StubGarmin()
@@ -438,6 +456,33 @@ def test_build_exercise_sets_payload_rejects_unknown():
     resolved = [ResolvedExercise("Mystery", 65534, 0, [{"reps": 1}])]
     with pytest.raises(ValueError):
         hevy_sync.build_exercise_sets_payload(resolved, "2026-07-18 10:05:00", 600.0)
+
+
+def test_description_surfaces_set_types_rpe_and_custom_metrics():
+    workout = {
+        "title": "Push Day",
+        "start_time": "2026-07-18T10:00:00Z",
+        "end_time": "2026-07-18T11:00:00Z",
+        "exercises": [{
+            "title": "Bench Press",
+            "sets": [
+                {"type": "warmup", "reps": 10, "weight_kg": 40},
+                {"type": "normal", "reps": 5, "weight_kg": 80, "rpe": 8},
+                {"type": "dropset", "reps": 8, "weight_kg": 60, "rpe": 9,
+                 "custom_metric": 12.5},
+                {"type": "failure", "reps": 10, "weight_kg": 50},
+            ],
+        }],
+    }
+
+    description = hevy_sync.generate_description(workout)
+
+    assert "3 sets" in description
+    assert "1 warmup" in description
+    assert "1 dropset" in description
+    assert "1 failure" in description
+    assert "RPE 8, 9" in description
+    assert "metric 12.5" in description
 
 
 # -- Checkpoint C.1: review-driven safety tests ------------------------------
@@ -699,3 +744,45 @@ def test_post_sync_edit_reaches_strava():
     hevy_sync.run_hevy_leg(conn, garmin, NoHevy(), base_cfg(), NOW,
                            strava=strava)
     assert strava.calls == []
+
+
+def test_post_sync_mapping_wake_keeps_original_strategy():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    process(conn, garmin, row, base_cfg(hevy_watch_strategy="merge"))
+
+    custom = {
+        "title": "Custom Press", "exercise_template_id": "CUSTOM01",
+        "sets": [{"type": "normal", "reps": 8, "weight_kg": 20}],
+    }
+    payload = {"id": "w1", "title": "Push Day",
+               "start_time": "2026-07-18T10:00:00Z",
+               "end_time": "2026-07-18T11:00:00Z", "exercises": [custom]}
+    hevy_db.upsert_workout(
+        conn, "w1", "Push Day", payload["start_time"], payload["end_time"],
+        "2026-07-18T12:30:00Z", payload)
+    garmin.calls.clear()
+
+    hevy_sync.run_hevy_leg(
+        conn, garmin, NoHevy(), base_cfg(hevy_watch_strategy="replace"), NOW)
+    parked = hevy_db.get_workout(conn, "w1")
+    assert parked["status"] == "needs_mapping"
+    # Even when the template API has no row, the workout payload supplies
+    # enough cache data for the mapping UI to remain actionable.
+    assert hevy_db.get_template(conn, "CUSTOM01")["title"] == "Custom Press"
+
+    hevy_db.save_mapping(conn, "CUSTOM01", 0, 1)
+    assert hevy_db.wake_needs_mapping(conn, template_id="CUSTOM01") == 1
+    assert hevy_db.get_workout(conn, "w1")["status"] == "merged"
+
+    hevy_sync.run_hevy_leg(
+        conn, garmin, NoHevy(), base_cfg(hevy_watch_strategy="replace"), NOW)
+    reapplied = hevy_db.get_workout(conn, "w1")
+    assert reapplied["status"] == "merged"
+    assert reapplied["applied_strategy"] == "merge"
+    assert reapplied["garmin_applied_updated_at"] == "2026-07-18T12:30:00Z"
+    assert garmin.called("put_exercise_sets")
+    assert garmin.called("upload_fit") == []
+    assert garmin.called("delete_activity") == []

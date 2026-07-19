@@ -590,8 +590,15 @@ def wake_needs_mapping(
         return 0
     now = _now_iso()
     conn.executemany(
-        """UPDATE hevy_workouts SET status = 'waiting_watch', error = NULL,
-               updated_at = ?
+        """UPDATE hevy_workouts
+           SET status = CASE applied_strategy
+                   WHEN 'merge' THEN 'merged'
+                   WHEN 'describe' THEN 'described'
+                   WHEN 'replace' THEN 'replaced'
+                   WHEN 'passive' THEN 'uploaded_passive'
+                   ELSE 'waiting_watch'
+               END,
+               error = NULL, updated_at = ?
            WHERE hevy_id = ? AND status = 'needs_mapping'""",
         [(now, workout_id) for workout_id in affected],
     )
