@@ -126,6 +126,112 @@ def activities_view(
     return result
 
 
+def hevy_settings_view(conn: sqlite3.Connection) -> dict:
+    """Context for the settings page's Hevy card."""
+    from activsync import hevy_profile
+
+    settings = db.get_config_value(conn, "settings", default={}) or {}
+    api_key = db.get_config_value(conn, "hevy_api_key")
+    auth_ok = db.get_config_value(conn, "hevy_auth_ok")
+
+    if not api_key:
+        status = "Not connected"
+    elif auth_ok is False:
+        status = "Needs attention — Hevy rejected the API key"
+    else:
+        status = "Connected"
+
+    cache = settings.get(hevy_profile.CACHE_KEY) or {}
+    override = settings.get(hevy_profile.OVERRIDE_KEY) or {}
+    profile = dict(hevy_profile.PROFILE_DEFAULTS)
+    for source in (cache, override):
+        for key in hevy_profile.PROFILE_DEFAULTS:
+            if source.get(key) is not None:
+                profile[key] = source[key]
+
+    identity = settings.get("hevy_device_identity")
+    if identity:
+        numbers = "{}/{}/{}".format(identity.get("manufacturer"),
+                                    identity.get("product"),
+                                    identity.get("serial"))
+        # product 0 is the generic-Garmin / per-install fallback shape; a real
+        # watch FIT always carries a product number.
+        if identity.get("product"):
+            identity_display = f"detected from your watch: {numbers}"
+        else:
+            identity_display = f"generic Garmin fallback: {numbers}"
+    else:
+        identity_display = "not yet detected — set automatically from your watch"
+
+    return {
+        "api_key_saved": bool(api_key),
+        "connected": bool(api_key) and auth_ok is not False,
+        "status": status,
+        "profile": profile,
+        "profile_override": override,
+        "profile_fetched_at": cache.get("fetched_at"),
+        "identity": identity or {},
+        "identity_display": identity_display,
+        "last_success_at": db.get_config_value(conn, "hevy_last_success_at"),
+    }
+
+
+def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
+    """Exercise templates joined with user mappings for the mappings section.
+
+    Only rows a user can act on: custom templates, templates with a user
+    mapping, and templates no built-in table resolves. Built-in templates that
+    already resolve have nothing to configure and would drown the list."""
+    from activsync import hevy_db
+    from activsync.hevy_mapper import (
+        CATEGORY_NAMES,
+        SUBCATEGORY_NAMES,
+        MappingMiss,
+        lookup_exercise,
+        suggest_mapping,
+    )
+
+    mappings = {m["exercise_template_id"]: m for m in hevy_db.list_mappings(conn)}
+    rows: list[dict] = []
+    for template in hevy_db.list_templates(conn):
+        template_id = template["exercise_template_id"]
+        mapping = mappings.get(template_id)
+        resolves = True
+        if mapping is None:
+            try:
+                lookup_exercise(conn, template["title"], template_id)
+            except MappingMiss:
+                resolves = False
+        if not template["is_custom"] and mapping is None and resolves:
+            continue
+
+        suggestion = (suggest_mapping(template["title"], template)
+                      if mapping is None else None)
+        category = mapping["category"] if mapping else (
+            suggestion[0] if suggestion else None)
+        subcategory = mapping["subcategory"] if mapping else (
+            suggestion[1] if suggestion else None)
+        rows.append({
+            "template_id": template_id,
+            "title": template["title"],
+            "is_custom": bool(template["is_custom"]),
+            "muscle_group": template.get("primary_muscle_group") or "",
+            "mapped": mapping is not None,
+            "unmapped": mapping is None and not resolves,
+            "garmin_rejected": bool(mapping and mapping["garmin_rejected"]),
+            "suggested": mapping is None and suggestion is not None,
+            "category": category,
+            "subcategory": subcategory,
+            "category_name": (CATEGORY_NAMES.get(category)
+                              if category is not None else None),
+            "subcategory_name": (SUBCATEGORY_NAMES.get(category, {}).get(subcategory)
+                                 if category is not None and subcategory is not None
+                                 else None),
+        })
+    rows.sort(key=lambda r: (not r["is_custom"], r["mapped"], r["title"].lower()))
+    return rows
+
+
 def garmin_status(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
     """Garmin connection status for the Settings page, derived from the
     outcome of the most recent sync_garmin() attempt (poller or manual).

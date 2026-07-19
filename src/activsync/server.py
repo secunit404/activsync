@@ -23,7 +23,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from activsync import __version__, config, db, dev_mock, events, logging_setup, sync, timeutil, update_check, view
+from activsync import __version__, config, db, dev_mock, events, hevy_routes, logging_setup, sync, timeutil, update_check, view
 from activsync.garmin_client import (
     GarminClient,
     MfaRequired,
@@ -286,6 +286,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             "cfg": config.load_config(conn),
             "activity_types": db.get_config_value(conn, "garmin_activity_types", default=[]),
             "timezones": timeutil.common_timezones(),
+            "hevy": view.hevy_settings_view(conn),
         }
         context.update(overrides)
         return context
@@ -1044,5 +1045,11 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         strava.disconnect()
         target = "/settings" if _settings_context()["initial_sync_done"] else "/setup"
         return RedirectResponse(target, status_code=303)
+
+    hevy_routes.register(
+        app, conn, templates,
+        settings_context=_settings_context, saved=_saved,
+        is_htmx=_is_htmx, mock_mode=_mock_mode,
+    )
 
     return app

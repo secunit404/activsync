@@ -1,0 +1,74 @@
+<div class="hevy-mappings">
+  <h3>Exercise mappings</h3>
+  {% if not mappings %}
+    <p class="hint">Nothing to map yet. Custom Hevy exercises appear here once templates are
+      fetched; workouts with unmapped exercises wait until each exercise has a Garmin mapping.</p>
+  {% else %}
+    <p class="hint">Every exercise must map to a Garmin category before merge, replace, or
+      passive uploads run. Suggestions are pre-selected — confirm or adjust, then save.</p>
+    <table class="hevy-mappings-table">
+      <thead>
+        <tr><th>Exercise</th><th>Status</th><th>Garmin mapping</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in mappings %}
+        <tr data-template-id="{{ row.template_id }}">
+          <td>
+            {{ row.title }}
+            {% if row.is_custom %}<span class="badge">custom</span>{% endif %}
+            {% if row.muscle_group %}<span class="hint">{{ row.muscle_group }}</span>{% endif %}
+          </td>
+          <td>
+            {% if row.garmin_rejected %}<span class="badge badge-error">rejected by Garmin</span>
+            {% elif row.mapped %}<span class="badge badge-ok">mapped</span>
+            {% elif row.unmapped %}<span class="badge badge-warn">unmapped</span>
+            {% else %}<span class="badge">built-in</span>{% endif %}
+          </td>
+          <td>
+            <form class="hevy-mapping-form" hx-post="/settings/hevy/mappings/{{ row.template_id }}"
+                  hx-target="closest .hevy-mappings" hx-swap="outerHTML">
+              <select name="category" class="hevy-mapping-category"
+                      onchange="activsyncHevyRepopulateSubcategories(this)">
+                {% for cat_id, cat_name in category_names | dictsort %}
+                  <option value="{{ cat_id }}"
+                          {% if cat_id == row.category %}selected{% endif %}>{{ cat_name }}</option>
+                {% endfor %}
+              </select>
+              <select name="subcategory" class="hevy-mapping-subcategory">
+                {% set active_category = row.category if row.category is not none else 0 %}
+                {% for sub_id, sub_name in subcategory_names.get(active_category, {}) | dictsort %}
+                  <option value="{{ sub_id }}"
+                          {% if sub_id == row.subcategory %}selected{% endif %}>{{ sub_name }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="secondary compact-settings-button">Save</button>
+            </form>
+          </td>
+          <td>
+            {% if row.mapped %}
+            <form hx-post="/settings/hevy/mappings/{{ row.template_id }}/delete"
+                  hx-target="closest .hevy-mappings" hx-swap="outerHTML">
+              <button type="submit" class="secondary compact-settings-button">Remove</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <script>
+      window.activsyncHevySubcategories = {{ subcategory_names | tojson }};
+      function activsyncHevyRepopulateSubcategories(categorySelect) {
+        var subSelect = categorySelect.closest("form").querySelector(".hevy-mapping-subcategory");
+        var subs = window.activsyncHevySubcategories[categorySelect.value] || {"0": "GENERIC"};
+        subSelect.innerHTML = "";
+        Object.keys(subs).sort(function (a, b) { return a - b; }).forEach(function (id) {
+          var option = document.createElement("option");
+          option.value = id;
+          option.textContent = subs[id];
+          subSelect.appendChild(option);
+        });
+      }
+    </script>
+  {% endif %}
+</div>

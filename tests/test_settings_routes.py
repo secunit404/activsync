@@ -168,7 +168,8 @@ def test_settings_page_shows_connection_rows_and_one_preferences_form(tmp_path):
     assert "/settings/preferences" in response.text
     assert "me@example.com" in response.text          # Garmin connection meta
     assert response.text.count('class="connection-manage-button"') == 2
-    assert response.text.count('class="conn-identity"') == 2
+    # Garmin + Strava in the connections section, plus the Hevy card's row.
+    assert response.text.count('class="conn-identity"') == 3
     assert 'id="garmin-manage-dialog"' in response.text
     assert 'id="strava-manage-dialog"' in response.text
     assert 'class="conn-manage"' not in response.text
@@ -1421,3 +1422,331 @@ def test_manual_sync_buttons_wear_the_same_states_as_the_rest_of_settings(tmp_pa
     section = page.text.split('id="connections"', 1)[1].split("</section>", 1)[0]
     assert "settings-save-error" in section
     assert "settings-save-announcement" in section
+
+
+# -- Hevy settings (Task 12) -------------------------------------------------
+
+from activsync import hevy_db  # noqa: E402
+from activsync.hevy_client import HevyAuthError  # noqa: E402
+from activsync.hevy_sync import CURSOR_KEY  # noqa: E402
+
+
+class _StubHevyClient:
+    """Configurable stand-in for HevyClient; monkeypatched over
+    activsync.hevy_routes.HevyClient so no route ever touches the network."""
+
+    def __init__(self, api_key, base_url=None, *, fail_auth=False,
+                 templates=None, workout_pages=None):
+        self.api_key = api_key
+        self.fail_auth = fail_auth
+        self.templates = templates if templates is not None else []
+        self.workout_pages = workout_pages or {
+            1: {"page": 1, "page_count": 1, "workouts": []}}
+
+    def get_user_info(self):
+        if self.fail_auth:
+            raise HevyAuthError("invalid api key")
+        return {"username": "tester"}
+
+    def iter_all_exercise_templates(self):
+        if self.fail_auth:
+            raise HevyAuthError("invalid api key")
+        return list(self.templates)
+
+    def get_workouts_page(self, page=1, page_size=10):
+        return self.workout_pages[page]
+
+
+def _patch_hevy_client(monkeypatch, **stub_kwargs):
+    from activsync import hevy_routes
+
+    def factory(api_key, base_url=None):
+        return _StubHevyClient(api_key, base_url, **stub_kwargs)
+
+    monkeypatch.setattr(hevy_routes, "HevyClient", factory)
+
+
+_API_TEMPLATE = {
+    "id": "TPL1", "title": "Landmine Press", "primary_muscle_group": "chest",
+    "secondary_muscle_groups": ["triceps"], "equipment_category": "barbell",
+    "is_custom": True,
+}
+
+
+def test_hevy_credentials_valid_key_stores_and_initializes_cursor(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    _patch_hevy_client(monkeypatch, templates=[_API_TEMPLATE])
+
+    response = client.post("/settings/hevy-credentials", data={"api_key": "k123"},
+                           follow_redirects=False)
+
+    assert response.status_code == 303
+    assert db.get_config_value(conn, "hevy_api_key") == "k123"
+    assert db.get_config_value(conn, "hevy_auth_ok") is True
+    assert db.get_config_value(conn, CURSOR_KEY) is not None
+    cached = hevy_db.get_template(conn, "TPL1")
+    assert cached is not None and cached["title"] == "Landmine Press"
+
+
+def test_hevy_credentials_does_not_move_an_existing_cursor(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    db.set_config_value(conn, CURSOR_KEY, "2026-07-01T00:00:00+00:00")
+    _patch_hevy_client(monkeypatch)
+
+    client.post("/settings/hevy-credentials", data={"api_key": "k123"},
+                follow_redirects=False)
+
+    assert db.get_config_value(conn, CURSOR_KEY) == "2026-07-01T00:00:00+00:00"
+
+
+def test_hevy_credentials_invalid_key_stores_nothing(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    _patch_hevy_client(monkeypatch, fail_auth=True)
+
+    response = client.post("/settings/hevy-credentials", data={"api_key": "bad"},
+                           follow_redirects=False)
+
+    assert response.status_code == 400
+    assert db.get_config_value(conn, "hevy_api_key") is None
+    assert db.get_config_value(conn, "hevy_auth_ok") is None
+    assert db.get_config_value(conn, CURSOR_KEY) is None
+
+
+def test_hevy_settings_enable_toggle_and_fields_persist(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    db.set_config_value(conn, "hevy_api_key", "k123")
+
+    response = client.post("/settings/hevy", data={
+        "hevy_enabled": "true",
+        "hevy_watch_strategy": "merge",
+        "hevy_grace_minutes": "90",
+        "hevy_poll_interval_minutes": "15",
+    }, follow_redirects=False)
+
+    assert response.status_code == 303
+    cfg = config.load_config(conn)
+    assert cfg["hevy_enabled"] is True
+    assert cfg["hevy_watch_strategy"] == "merge"
+    assert cfg["hevy_grace_minutes"] == 90
+    assert cfg["hevy_poll_interval_minutes"] == 15
+
+
+def test_hevy_settings_rejects_unknown_strategy_and_out_of_range_values(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+
+    for data in (
+        {"hevy_watch_strategy": "yolo", "hevy_grace_minutes": "90",
+         "hevy_poll_interval_minutes": "15"},
+        {"hevy_watch_strategy": "merge", "hevy_grace_minutes": "2000",
+         "hevy_poll_interval_minutes": "15"},
+        {"hevy_watch_strategy": "merge", "hevy_grace_minutes": "90",
+         "hevy_poll_interval_minutes": "0"},
+    ):
+        response = client.post("/settings/hevy", data=data, follow_redirects=False)
+        assert response.status_code == 400, data
+    assert config.load_config(conn)["hevy_watch_strategy"] == "replace"
+
+
+def test_hevy_settings_identity_override_is_all_or_none(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    base = {"hevy_watch_strategy": "replace", "hevy_grace_minutes": "120",
+            "hevy_poll_interval_minutes": "10"}
+
+    partial = client.post("/settings/hevy", data={
+        **base, "identity_manufacturer": "1"}, follow_redirects=False)
+    assert partial.status_code == 400
+
+    full = client.post("/settings/hevy", data={
+        **base, "identity_manufacturer": "1", "identity_product": "4534",
+        "identity_serial": "42"}, follow_redirects=False)
+    assert full.status_code == 303
+    assert config.load_config(conn)["hevy_device_identity"] == {
+        "manufacturer": 1, "product": 4534, "serial": 42}
+
+    cleared = client.post("/settings/hevy", data=base, follow_redirects=False)
+    assert cleared.status_code == 303
+    assert config.load_config(conn)["hevy_device_identity"] is None
+
+
+def test_hevy_settings_profile_override_round_trip(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    base = {"hevy_watch_strategy": "replace", "hevy_grace_minutes": "120",
+            "hevy_poll_interval_minutes": "10"}
+
+    client.post("/settings/hevy", data={
+        **base, "profile_weight_kg": "85.5", "profile_sex": "female",
+    }, follow_redirects=False)
+    override = db.get_config_value(conn, "settings")["profile_override"]
+    assert override == {"weight_kg": 85.5, "sex": "female"}
+
+    client.post("/settings/hevy", data=base, follow_redirects=False)
+    assert not db.get_config_value(conn, "settings").get("profile_override")
+
+
+def test_hevy_disconnect_clears_key_and_disables(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    db.set_config_value(conn, "hevy_api_key", "k123")
+    db.set_config_value(conn, "hevy_auth_ok", True)
+    cfg = config.load_config(conn)
+    cfg["hevy_enabled"] = True
+    config.save_config(conn, cfg)
+
+    response = client.post("/settings/hevy/disconnect", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert db.get_config_value(conn, "hevy_api_key") is None
+    assert config.load_config(conn)["hevy_enabled"] is False
+
+
+def test_hevy_mappings_section_lists_custom_templates_with_suggestions(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    hevy_db.upsert_template(conn, {
+        "exercise_template_id": "TPL1", "title": "Bench Press (Barbel)",
+        "primary_muscle_group": "chest", "secondary_muscle_groups": [],
+        "equipment_category": "barbell", "is_custom": True,
+    })
+
+    response = client.get("/settings/hevy/mappings")
+
+    assert response.status_code == 200
+    assert "Bench Press (Barbel)" in response.text
+    # The fuzzy suggestion (BENCH_PRESS / BARBELL) is pre-selected.
+    assert 'selected' in response.text
+
+
+def test_hevy_mapping_save_clears_rejected_and_wakes_workouts(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    hevy_db.upsert_template(conn, {
+        "exercise_template_id": "TPL1", "title": "Landmine Press",
+        "primary_muscle_group": "chest", "secondary_muscle_groups": [],
+        "equipment_category": "barbell", "is_custom": True,
+    })
+    hevy_db.save_mapping(conn, "TPL1", 5, 5)
+    hevy_db.mark_mapping_rejected(conn, "TPL1")
+    hevy_db.upsert_workout(conn, "w1", "Push", "2026-07-18 10:00:00",
+                           "2026-07-18 11:00:00", "2026-07-18T12:00:00Z",
+                           {"exercises": [{"exercise_template_id": "TPL1",
+                                           "title": "Landmine Press"}]})
+    hevy_db.set_workout_status(conn, "w1", "needs_mapping", error="unmapped")
+
+    response = client.post("/settings/hevy/mappings/TPL1",
+                           data={"category": "0", "subcategory": "1"},
+                           follow_redirects=False)
+
+    assert response.status_code in (200, 303)
+    mapping = hevy_db.get_mapping(conn, "TPL1")
+    assert (mapping["category"], mapping["subcategory"]) == (0, 1)
+    assert mapping["garmin_rejected"] == 0
+    assert hevy_db.get_workout(conn, "w1")["status"] == "waiting_watch"
+
+
+def test_hevy_mapping_save_rejects_unknown_pair(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    hevy_db.upsert_template(conn, {
+        "exercise_template_id": "TPL1", "title": "Landmine Press",
+        "primary_muscle_group": "chest", "secondary_muscle_groups": [],
+        "equipment_category": "barbell", "is_custom": True,
+    })
+
+    response = client.post("/settings/hevy/mappings/TPL1",
+                           data={"category": "99999", "subcategory": "0"},
+                           follow_redirects=False)
+
+    assert response.status_code == 400
+    assert hevy_db.get_mapping(conn, "TPL1") is None
+
+
+def test_hevy_mapping_delete(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    hevy_db.save_mapping(conn, "TPL1", 0, 1)
+
+    response = client.post("/settings/hevy/mappings/TPL1/delete",
+                           follow_redirects=False)
+
+    assert response.status_code in (200, 303)
+    assert hevy_db.get_mapping(conn, "TPL1") is None
+
+
+_BACKFILL_WORKOUTS = {
+    1: {"page": 1, "page_count": 1, "workouts": [
+        {"id": "bw1", "title": "Twin session",
+         "start_time": "2026-06-01T10:00:00Z", "end_time": "2026-06-01T11:00:00Z",
+         "updated_at": "2026-06-01T12:00:00Z", "exercises": []},
+        {"id": "bw2", "title": "Fresh session",
+         "start_time": "2026-06-02T10:00:00Z", "end_time": "2026-06-02T11:00:00Z",
+         "updated_at": "2026-06-02T12:00:00Z", "exercises": []},
+        {"id": "bw_old", "title": "Ancient session",
+         "start_time": "2026-01-05T10:00:00Z", "end_time": "2026-01-05T11:00:00Z",
+         "updated_at": "2026-01-05T12:00:00Z", "exercises": []},
+    ]},
+}
+
+
+def _seed_twin_activity(conn):
+    db.insert_activity(
+        conn, 555, "strength_training", "Morning strength", "",
+        "2026-06-01 10:00:00", "hash", "held", datetime.now(timezone.utc),
+        garmin_data='{"duration": 3600}',
+    )
+
+
+def test_hevy_backfill_preview_writes_nothing(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    db.set_config_value(conn, "hevy_api_key", "k123")
+    _seed_twin_activity(conn)
+    _patch_hevy_client(monkeypatch, workout_pages=_BACKFILL_WORKOUTS)
+
+    response = client.post("/settings/hevy/backfill/preview",
+                           data={"since": "2026-05-01"})
+
+    assert response.status_code == 200
+    assert "Twin session" in response.text
+    assert "Fresh session" in response.text
+    assert "Ancient session" not in response.text, "since boundary ignored"
+    assert hevy_db.list_workouts(conn) == [], "preview must not write"
+
+
+def test_hevy_backfill_run_links_twins_without_touching_publish_status(tmp_path, monkeypatch):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+    db.set_config_value(conn, "hevy_api_key", "k123")
+    _seed_twin_activity(conn)
+    _patch_hevy_client(monkeypatch, workout_pages=_BACKFILL_WORKOUTS)
+
+    response = client.post("/settings/hevy/backfill/run",
+                           data={"since": "2026-05-01"}, follow_redirects=False)
+
+    assert response.status_code in (200, 303)
+    twin = hevy_db.get_workout(conn, "bw1")
+    assert twin["status"] == "linked_existing"
+    assert twin["provenance"] == "backfill"
+    assert twin["applied_strategy"] == "external"
+    assert twin["garmin_activity_id"] == 555
+    assert db.get_activity(conn, 555)["publish_status"] == "held", \
+        "backfill linking must not bypass holds"
+    fresh = hevy_db.get_workout(conn, "bw2")
+    assert fresh is not None and fresh["status"] == "waiting_watch"
+    assert hevy_db.get_workout(conn, "bw_old") is None
+
+
+def test_settings_page_renders_the_hevy_card(tmp_path):
+    conn, client = _logged_in_client(tmp_path)
+    _setup_done(conn)
+
+    page = client.get("/settings")
+
+    assert 'id="hevy"' in page.text
+    assert "standalone hevy2garmin" in page.text, "migration warning missing"
