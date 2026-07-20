@@ -79,12 +79,14 @@ The setup wizard shows the exact value to enter. Two things it can't tell you:
 
 ## Development
 
-Standard Python workflow — a local virtualenv, no Docker required:
+Local development uses the React dev server on port 8382 and the mock-only
+FastAPI backend on port 8383. A local virtualenv and Node.js 22+ are required;
+Docker is not:
 
 ```sh
-make install   # create .venv and install with dev extras
-make dev       # dev server on http://localhost:8382 (mock data, isolated DB)
-make test      # run the test suite
+make install   # install Python and frontend dependencies
+make dev       # React UI on http://localhost:8382 (mock data, isolated DB)
+make test      # run the Python and frontend test suites
 ```
 
 `make dev` runs with auto-reload and **mock data**: it seeds an isolated

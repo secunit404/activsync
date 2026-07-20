@@ -1,4 +1,16 @@
 # syntax=docker/dockerfile:1.7
+FROM node:22-slim AS web-builder
+
+WORKDIR /web
+
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+COPY app ./app
+COPY components.json react-router.config.ts tsconfig.json vite.config.ts ./
+
+RUN npm run build
+
 FROM python:3.14-slim
 
 ARG VERSION=dev
@@ -14,6 +26,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY src ./src
+COPY --from=web-builder /web/build/client ./src/activsync/web
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install .

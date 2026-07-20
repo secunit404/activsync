@@ -1,15 +1,13 @@
 """Dev-mode Hevy fakes: MockHevyClient surface, FakeGarminClient scenario
-behaviour, seeded demo rows, and the wizard's optional Hevy step."""
+behaviour, and seeded demo rows."""
 
 from datetime import datetime, timezone
 
 import pytest
-from fastapi.testclient import TestClient
 
 from activsync import db, dev_mock, dev_seed, hevy_db, view
 from activsync.garmin_client import SubcategoryRejected
 from activsync.hevy_client import HevyClient
-from activsync.server import create_app
 
 NOW = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
 
@@ -164,61 +162,3 @@ def test_dev_seed_is_idempotent_for_hevy_rows(conn):
 
     assert len([w for w in hevy_db.list_workouts(conn)
                 if w["hevy_id"] == dev_mock.HEVY_DEV_MERGED_ID]) == 1
-
-
-# -- wizard step -------------------------------------------------------------
-
-
-def _wizard_at_hevy_step(tmp_path):
-    conn = db.connect(str(tmp_path / "test.db"))
-    db.set_config_value(conn, "garmin_credentials_verified", True)
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "a", "refresh_token": "r", "expires_at": 4102444800,
-    })
-    return conn, TestClient(create_app(conn))
-
-
-def test_wizard_shows_optional_hevy_step_after_strava(tmp_path):
-    conn, client = _wizard_at_hevy_step(tmp_path)
-
-    page = client.get("/setup")
-
-    assert "Hevy" in page.text
-    assert 'action="/setup/hevy/skip"' in page.text
-
-
-def test_wizard_hevy_step_is_skippable(tmp_path):
-    conn, client = _wizard_at_hevy_step(tmp_path)
-
-    resp = client.post("/setup/hevy/skip", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/setup"
-
-    page = client.get("/setup")
-    assert "Syncing activities" in page.text
-
-
-def test_wizard_hevy_connect_marks_step_done_and_returns_to_setup(tmp_path, monkeypatch):
-    conn, client = _wizard_at_hevy_step(tmp_path)
-    from activsync import hevy_routes
-
-    class _Stub:
-        def __init__(self, api_key, base_url=None):
-            pass
-
-        def get_user_info(self):
-            return {"username": "dev"}
-
-        def iter_all_exercise_templates(self):
-            return []
-
-    monkeypatch.setattr(hevy_routes, "HevyClient", _Stub)
-
-    resp = client.post("/settings/hevy-credentials", data={"api_key": "k"},
-                       follow_redirects=False)
-
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/setup"
-    assert db.get_config_value(conn, "hevy_api_key") == "k"
-    page = client.get("/setup")
-    assert "Syncing activities" in page.text

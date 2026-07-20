@@ -5,6 +5,8 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 build/
+.react-router/
+coverage/
 
 # Data & secrets — NEVER commit (real DB holds Garmin/Strava tokens)
 *.db

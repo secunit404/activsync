@@ -1,9 +1,4 @@
-"""End-to-end walk of the first-run setup wizard in mock mode.
-
-Verifies that with ACTIVSYNC_DEV_MOCK_DATA on, the whole onboarding flow —
-Garmin login (incl. MFA), Strava OAuth, and the initial sync — completes without
-any real account or network call, landing on a usable dashboard.
-"""
+"""End-to-end first-run setup through the typed API in mock mode."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,133 +22,109 @@ def seeded_conn(tmp_path):
 
 
 def _client(conn):
-    # Don't auto-follow redirects: the wizard leans on 303/307 hops we assert on.
     return TestClient(create_app(conn), follow_redirects=False)
 
 
-def test_fresh_start_redirects_to_setup(mock_env, seeded_conn):
-    client = _client(seeded_conn)
-    resp = client.get("/", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/setup"
+def _garmin_payload(password: str = "whatever") -> dict:
+    return {
+        "email": "someone@example.com",
+        "password": password,
+        "lookbackDays": 7,
+        "detectedTimezone": "Europe/Oslo",
+    }
 
 
-def test_full_wizard_completes_end_to_end(mock_env, seeded_conn):
+def test_fresh_start_reports_garmin_setup_step(mock_env, seeded_conn):
+    response = _client(seeded_conn).get("/api/v1/app")
+
+    assert response.status_code == 200
+    assert response.json()["setup"] == {"complete": False, "step": "garmin"}
+
+
+def test_full_setup_completes_end_to_end(mock_env, seeded_conn):
     conn = seeded_conn
     client = _client(conn)
 
-    # 1. Garmin connect — any credentials succeed in mock mode.
-    resp = client.post("/setup/garmin/connect", data={
-        "garmin_email": "someone@example.com",
-        "garmin_password": "whatever",
-        "lookback_days": 7,
-        "detected_timezone": "Europe/Oslo",
-    })
-    assert resp.status_code == 303
+    garmin = client.post("/api/v1/setup/garmin", json=_garmin_payload())
+    assert garmin.status_code == 200
+    assert garmin.json()["setupStep"] == "strava"
     assert view.connection_status(conn)["garmin"]["connected"] is True
 
-    # 2. Strava connect — persists creds, then /strava/connect bounces through
-    #    the faked OAuth callback and stores a token.
-    resp = client.post("/setup/strava/connect", data={
-        "strava_client_id": "dev-id",
-        "strava_client_secret": "dev-secret",
-    })
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/strava/connect"
+    credentials = client.put(
+        "/api/v1/settings/strava-credentials",
+        json={"clientId": "dev-id", "clientSecret": "dev-secret"},
+    )
+    assert credentials.status_code == 200
 
-    resp = client.get("/strava/connect")
-    assert resp.status_code == 307
-    # Fake authorize_url loops straight back to our own callback.
-    assert "/strava/callback?code=dev-mock-code" in resp.headers["location"]
-
-    # Follow the fake's redirect verbatim rather than rebuilding it, so the
-    # OAuth state issued by /strava/connect round-trips the way it would
-    # through Strava.
-    resp = client.get(resp.headers["location"])
-    assert resp.status_code == 303
+    connect = client.get("/strava/connect")
+    assert connect.status_code == 307
+    assert "/strava/callback?code=dev-mock-code" in connect.headers["location"]
+    callback = client.get(connect.headers["location"])
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/setup"
     assert view.connection_status(conn)["strava"]["connected"] is True
 
-    # 3. Initial sync — completes against the seeded data and finishes the wizard,
-    #    then shows the completion screen (no auto-redirect) with a button into the app.
-    resp = client.post("/setup/initial-sync")
-    assert resp.status_code == 200
-    assert "hx-redirect" not in resp.headers
-    assert 'href="/"' in resp.text
-    assert "Go to ActivSync" in resp.text
-    # The completion screen confirms each step of the wizard.
-    for label in ("Garmin connected", "Strava connected", "Activities synced"):
-        assert label in resp.text
-    assert db.get_config_value(conn, "initial_sync_done") is True
+    skipped = client.post("/api/v1/setup/hevy/skip")
+    assert skipped.status_code == 200
+    assert skipped.json()["setupStep"] == "syncing"
 
-    # 4. Following that button reaches the dashboard instead of bouncing to /setup.
-    resp = client.get("/")
-    assert resp.status_code == 200
+    initial = client.post("/api/v1/setup/initial-sync")
+    assert initial.status_code == 200
+    assert initial.json()["setupStep"] is None
+    assert db.get_config_value(conn, "initial_sync_done") is True
+    assert client.get("/api/v1/app").json()["setup"]["complete"] is True
 
 
 def test_mfa_challenge_flow(mock_env, seeded_conn):
     conn = seeded_conn
     client = _client(conn)
 
-    # The magic password triggers a simulated MFA challenge instead of an
-    # immediate success, so the code-entry modal can be exercised.
-    resp = client.post("/setup/garmin/connect", data={
-        "garmin_email": "someone@example.com",
-        "garmin_password": dev_mock.MFA_TRIGGER_PASSWORD,
-        "lookback_days": 7,
-        "detected_timezone": "",
-    })
-    assert resp.status_code == 303
+    challenge = client.post(
+        "/api/v1/setup/garmin",
+        json=_garmin_payload(dev_mock.MFA_TRIGGER_PASSWORD),
+    )
+    assert challenge.status_code == 200
+    assert challenge.json()["mfaRequired"] is True
     assert view.connection_status(conn)["garmin"]["connected"] is False
 
-    # A rejected code surfaces the error screen and does not connect.
-    resp = client.post("/setup/garmin-mfa", data={"mfa_code": dev_mock.MFA_REJECT_CODE})
-    assert resp.status_code == 401
+    rejected = client.post(
+        "/api/v1/garmin/mfa",
+        json={"code": dev_mock.MFA_REJECT_CODE},
+    )
+    assert rejected.status_code == 401
     assert view.connection_status(conn)["garmin"]["connected"] is False
 
-    # Any other code completes the login and connects.
-    resp = client.post("/setup/garmin-mfa", data={"mfa_code": "123456"})
-    assert resp.status_code == 303
+    accepted = client.post("/api/v1/garmin/mfa", json={"code": "123456"})
+    assert accepted.status_code == 200
     assert view.connection_status(conn)["garmin"]["connected"] is True
 
 
-_BANNER_MARKUP = 'aria-label="Development mode"'
+def test_app_state_marks_mock_mode_without_frontend_markup(mock_env, seeded_conn):
+    assert _client(seeded_conn).get("/api/v1/app").json()["development"] is True
 
 
-def test_dev_banner_shown_in_mock_mode(mock_env, seeded_conn):
-    body = _client(seeded_conn).get("/setup").text
-    assert _BANNER_MARKUP in body
-    assert "<title>[DEV] " in body
-
-
-def test_dev_banner_hidden_when_mock_off(monkeypatch, seeded_conn):
+def test_app_state_hides_mock_mode_when_disabled(monkeypatch, seeded_conn):
     monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "0")
-    body = _client(seeded_conn).get("/setup").text
-    assert _BANNER_MARKUP not in body
-    assert "[DEV]" not in body
+
+    assert _client(seeded_conn).get("/api/v1/app").json()["development"] is False
 
 
 def test_mock_off_uses_real_login_path(monkeypatch, seeded_conn):
-    # With mock mode off, the setup path must go through the real Garmin login
-    # (stubbed here to avoid the network), never the dev fake. If the fake were
-    # used, this bogus login would "succeed"; the real path raising proves it is
-    # taken, and the connect surfaces the error screen instead of connecting.
     monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "0")
 
-    def _fake_dev_login(*args, **kwargs):
+    def fake_dev_login(*_args, **_kwargs):
         raise AssertionError("dev_mock.begin_login must not run when mock is off")
 
-    def _real_login_fails(email, password, token_dir):
+    def real_login_fails(_email, _password, _token_dir):
         raise RuntimeError("invalid credentials")
 
-    monkeypatch.setattr(dev_mock, "begin_login", _fake_dev_login)
-    monkeypatch.setattr(server_module, "garmin_begin_login", _real_login_fails)
+    monkeypatch.setattr(dev_mock, "begin_login", fake_dev_login)
+    monkeypatch.setattr(server_module, "garmin_begin_login", real_login_fails)
 
-    client = _client(seeded_conn)
-    resp = client.post("/setup/garmin/connect", data={
-        "garmin_email": "someone@example.com",
-        "garmin_password": "whatever",
-        "lookback_days": 7,
-        "detected_timezone": "",
-    })
-    assert resp.status_code == 502
+    response = _client(seeded_conn).post(
+        "/api/v1/setup/garmin",
+        json=_garmin_payload(),
+    )
+
+    assert response.status_code == 502
     assert view.connection_status(seeded_conn)["garmin"]["connected"] is False

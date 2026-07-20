@@ -6,8 +6,6 @@ requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "jinja2>=3.1",
-    "python-multipart>=0.0.9",
     "garminconnect>=0.3.6",
     "garmin-auth>=0.3.0",
     "requests>=2.31",
@@ -29,4 +27,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-activsync = ["templates/*.html", "templates/partials/*.html", "templates/partials/*.svg", "static/*", "static/css/*.css", "static/js/*.js"]
+activsync = ["static/favicon.png", "web/*", "web/assets/*"]
