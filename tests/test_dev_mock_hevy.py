@@ -180,12 +180,6 @@ def test_preview_reports_missing_template_ids_for_unmapped_exercise(conn):
     assert locked["action"] == "needs_mapping"
     assert locked["missing_template_ids"] == [dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID]
 
-    # A workout whose exercise repeats the same unmapped template across
-    # several sets must not list that template repeatedly (de-duplicated).
-    assert len(locked["missing_template_ids"]) == len(
-        set(locked["missing_template_ids"])
-    )
-
     # Every other workout never reaches the mapping-miss branch and must
     # still get a bound (empty) list, not a value leaked from a prior
     # iteration of the loop.
@@ -195,6 +189,78 @@ def test_preview_reports_missing_template_ids_for_unmapped_exercise(conn):
     ]
     assert others, "expected other demo workouts alongside the unmapped one"
     assert all(item["missing_template_ids"] == [] for item in others)
+
+
+class _StubHevyClient:
+    """Serves a fixed, single-page set of workouts through the same shape as
+    MockHevyClient, for scenarios the shared dev-mode fixtures don't cover."""
+
+    def __init__(self, workouts: list[dict]):
+        self._workouts = workouts
+
+    def get_workouts_page(self, page: int, page_size: int = 10) -> dict:
+        if page > 1:
+            return {"workouts": [], "page_count": 1}
+        return {"workouts": self._workouts, "page_count": 1}
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+def test_preview_deduplicates_repeated_missing_template_id(conn):
+    """Two *exercises* (not sets) in the same workout that share one unmapped
+    template id must collapse to a single missing_template_ids entry, not one
+    per exercise — the collector iterates workout["exercises"], never sets."""
+    now = datetime.now(timezone.utc)
+    duplicate_exercise = {
+        "title": "Bulgarian Ring Row",
+        "exercise_template_id": dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID,
+        "sets": [],
+    }
+    workout = {
+        "id": "hw-dup-unmapped",
+        "title": "Duplicate unmapped circuit",
+        "start_time": _iso(now - timedelta(hours=1)),
+        "end_time": _iso(now - timedelta(minutes=30)),
+        "updated_at": _iso(now - timedelta(minutes=30)),
+        "exercises": [duplicate_exercise, dict(duplicate_exercise)],
+    }
+    client = _StubHevyClient([workout])
+    since_dt = now - timedelta(days=7)
+
+    items = hevy_backfill.preview_items(conn, client, since_dt)
+
+    item = next(i for i in items if i["workout"]["id"] == "hw-dup-unmapped")
+    assert item["action"] == "needs_mapping"
+    assert item["missing_template_ids"] == [dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID]
+
+
+def test_preview_needs_mapping_when_template_id_is_falsy(conn):
+    """A miss can occur with no template id to report (falsy id, unmappable
+    title): action must still be needs_mapping even though the reporting
+    list stays empty — the two are tracked independently."""
+    now = datetime.now(timezone.utc)
+    workout = {
+        "id": "hw-falsy-template",
+        "title": "Mystery move",
+        "start_time": _iso(now - timedelta(hours=1)),
+        "end_time": _iso(now - timedelta(minutes=30)),
+        "updated_at": _iso(now - timedelta(minutes=30)),
+        "exercises": [{
+            "title": "Not A Real Exercise",
+            "exercise_template_id": None,
+            "sets": [],
+        }],
+    }
+    client = _StubHevyClient([workout])
+    since_dt = now - timedelta(days=7)
+
+    items = hevy_backfill.preview_items(conn, client, since_dt)
+
+    item = next(i for i in items if i["workout"]["id"] == "hw-falsy-template")
+    assert item["action"] == "needs_mapping"
+    assert item["missing_template_ids"] == []
 
 
 def test_preview_reports_no_missing_templates_once_exercise_is_mapped(conn):
