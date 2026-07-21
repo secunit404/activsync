@@ -4,12 +4,22 @@ import { Navigate, useSearchParams } from "react-router";
 
 import { CategorySettings } from "@/components/settings-categories";
 import { ConnectionsSettings } from "@/components/settings-connections";
+import { SettingsFooter } from "@/components/settings-footer";
 import { HevySettings } from "@/components/settings-hevy";
 import { PreferencesSettings } from "@/components/settings-preferences";
 import { SettingsShell, SettingsSection } from "@/components/settings-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
-import { getSettings, type SettingsState } from "@/lib/api";
+import { useSettingsAction } from "@/hooks/use-settings-action";
+import { useSettingsDrafts } from "@/hooks/use-settings-drafts";
+import { hevyDraftToPayload } from "@/lib/hevy-draft";
+import {
+  getSettings,
+  saveActivityTypes,
+  saveHevySettings,
+  savePreferences,
+  type SettingsState,
+} from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { Route } from "./+types/settings";
 
@@ -78,6 +88,27 @@ export function SettingsView({
   state: SettingsState;
   stravaError?: string | null;
 }) {
+  const drafts = useSettingsDrafts(state);
+  const savePreferencesAction = useSettingsAction(savePreferences);
+  const saveActivityTypesAction = useSettingsAction(saveActivityTypes);
+  const saveHevyAction = useSettingsAction(saveHevySettings);
+  const saving =
+    savePreferencesAction.isPending ||
+    saveActivityTypesAction.isPending ||
+    saveHevyAction.isPending;
+
+  function handleSave() {
+    if (drafts.preferencesDirty) {
+      savePreferencesAction.mutate(drafts.preferencesDraft);
+    }
+    if (drafts.activityTypesDirty) {
+      saveActivityTypesAction.mutate([...drafts.selectedTypes].sort());
+    }
+    if (drafts.hevyDirty) {
+      saveHevyAction.mutate(hevyDraftToPayload(drafts.hevyDraft));
+    }
+  }
+
   return (
     <SettingsShell
       development={state.development}
@@ -93,15 +124,30 @@ export function SettingsView({
           <AlertDescription>{stravaError}</AlertDescription>
         </Alert>
       ) : null}
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-        <div className="grid gap-6">
-          <ConnectionsSettings state={state} />
-          <PreferencesSettings state={state} />
-        </div>
-        <div className="grid gap-6">
-          <CategorySettings state={state} />
-          <HevySettings state={state} />
-        </div>
+      <div className="grid gap-5">
+        <ConnectionsSettings state={state} />
+        <PreferencesSettings
+          state={state}
+          draft={drafts.preferencesDraft}
+          onChange={drafts.setPreferencesDraft}
+        />
+        <CategorySettings
+          state={state}
+          selected={drafts.selectedTypes}
+          onChange={drafts.setSelectedTypes}
+          resetToken={drafts.discardToken}
+        />
+        <HevySettings
+          state={state}
+          draft={drafts.hevyDraft}
+          onChange={drafts.setHevyDraft}
+        />
+        <SettingsFooter
+          dirty={drafts.dirty}
+          saving={saving}
+          onDiscard={drafts.discard}
+          onSave={handleSave}
+        />
       </div>
     </SettingsShell>
   );

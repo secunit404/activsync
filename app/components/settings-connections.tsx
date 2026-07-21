@@ -24,9 +24,11 @@ import { useSettingsAction } from "@/hooks/use-settings-action";
 import {
   cancelGarminMfa,
   completeGarminMfa,
+  disconnectHevy,
   disconnectStrava,
   reconnectGarmin,
   runManualSync,
+  saveHevyCredentials,
   saveStravaCredentials,
   type SettingsState,
 } from "@/lib/api";
@@ -40,9 +42,9 @@ export function ConnectionsSettings({ state }: { state: SettingsState }) {
       title="Connections"
       description="Credentials are stored locally. Reconnecting only replaces them after verification succeeds."
     >
-      <div className="grid gap-3">
+      <div>
         <ConnectionStatus
-          name="Garmin"
+          name="Garmin Connect"
           connected={state.connections.garmin.connected}
           status={state.connections.garmin.status}
           meta={state.connections.garmin.meta}
@@ -55,37 +57,43 @@ export function ConnectionsSettings({ state }: { state: SettingsState }) {
           meta={state.connections.strava.meta}
           action={<StravaDialog state={state} />}
         />
-        <div className="mt-3 grid gap-3 border-t pt-5">
-          <div>
-            <h3 className="font-semibold">Manual sync</h3>
-            <p className="text-sm text-muted-foreground">
-              ActivSync polls automatically. Use these to check right now.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex">
-            <Button
-              variant="outline"
-              className="h-11"
-              disabled={
-                !state.connections.garmin.connected || syncGarmin.isPending
-              }
-              onClick={() => syncGarmin.mutate()}
-            >
-              {syncGarmin.isPending ? <Spinner /> : null}
-              {syncGarmin.isPending ? "Syncing…" : "Sync Garmin"}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-11"
-              disabled={
-                !state.connections.strava.connected || syncStrava.isPending
-              }
-              onClick={() => syncStrava.mutate()}
-            >
-              {syncStrava.isPending ? <Spinner /> : null}
-              {syncStrava.isPending ? "Syncing…" : "Sync Strava"}
-            </Button>
-          </div>
+        <ConnectionStatus
+          name="Hevy"
+          connected={state.hevy.connected}
+          status={state.hevy.status}
+          action={<HevyDialog state={state} />}
+        />
+      </div>
+      <div className="mt-5 grid gap-3 border-t border-border/70 pt-5">
+        <div>
+          <h3 className="font-semibold">Manual sync</h3>
+          <p className="text-sm text-muted-foreground">
+            ActivSync polls automatically. Use these to check right now.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <Button
+            variant="outline"
+            className="h-11"
+            disabled={
+              !state.connections.garmin.connected || syncGarmin.isPending
+            }
+            onClick={() => syncGarmin.mutate()}
+          >
+            {syncGarmin.isPending ? <Spinner /> : null}
+            {syncGarmin.isPending ? "Syncing…" : "Sync Garmin"}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            disabled={
+              !state.connections.strava.connected || syncStrava.isPending
+            }
+            onClick={() => syncStrava.mutate()}
+          >
+            {syncStrava.isPending ? <Spinner /> : null}
+            {syncStrava.isPending ? "Syncing…" : "Sync Strava"}
+          </Button>
         </div>
       </div>
     </SettingsSection>
@@ -334,6 +342,82 @@ function StravaDialog({ state }: { state: SettingsState }) {
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function HevyDialog({ state }: { state: SettingsState }) {
+  const [open, setOpen] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const connect = useSettingsAction(saveHevyCredentials);
+  const disconnect = useSettingsAction(disconnectHevy);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="h-10">
+          {state.hevy.connected ? "Manage" : "Connect"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Manage Hevy</DialogTitle>
+          <DialogDescription>
+            Requires Hevy Pro. The key is validated before it is saved.
+            Watch strategy and sync behavior live in Hevy integration below.
+          </DialogDescription>
+        </DialogHeader>
+        {state.hevy.connected ? (
+          <DialogFooter className="sm:flex-wrap">
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-11"
+              disabled={disconnect.isPending}
+              onClick={async () => {
+                if (!window.confirm("Disconnect Hevy and pause Hevy sync?")) {
+                  return;
+                }
+                await disconnect.mutateAsync();
+                setOpen(false);
+              }}
+            >
+              {disconnect.isPending ? <Spinner /> : null}
+              {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          </DialogFooter>
+        ) : (
+          <form
+            className="grid gap-4"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              await connect.mutateAsync(apiKey);
+              setApiKey("");
+              setOpen(false);
+            }}
+          >
+            <Field>
+              <FieldLabel htmlFor="settings-hevy-api-key">
+                Hevy API key
+              </FieldLabel>
+              <Input
+                id="settings-hevy-api-key"
+                className="h-11"
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                required
+              />
+            </Field>
+            <DialogFooter showCloseButton>
+              <Button type="submit" className="h-11" disabled={connect.isPending}>
+                {connect.isPending ? <Spinner /> : null}
+                {connect.isPending ? "Validating…" : "Connect Hevy"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -4,6 +4,7 @@ import { AppBrand } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -93,24 +94,31 @@ export function SettingsSection({
   id,
   title,
   description,
+  action,
   children,
   className,
+  contentClassName,
 }: {
   id?: string;
   title: string;
   description?: string;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
+  contentClassName?: string;
 }) {
   return (
-    <Card id={id} className={cn("gap-5", className)}>
-      <CardHeader>
+    <Card id={id} className={cn("gap-0 py-0", className)}>
+      <CardHeader className="border-b border-border/70 py-4 has-data-[slot=card-action]:grid-cols-[1fr_auto]">
         <CardTitle>
-          <h2 className="text-xl">{title}</h2>
+          <h2 className="text-[15px] font-bold">{title}</h2>
         </CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
+        {action ? <CardAction>{action}</CardAction> : null}
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className={cn("py-5", contentClassName)}>
+        {children}
+      </CardContent>
     </Card>
   );
 }
@@ -129,19 +137,22 @@ export function ConnectionStatus({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-16 items-center gap-3 rounded-xl border bg-background/60 px-3 py-2.5">
+    <div className="flex min-h-14 items-center gap-3.5 border-b border-border/50 py-3 last:border-b-0">
       <span
         className={cn(
           "size-2.5 shrink-0 rounded-full",
-          connected ? "bg-emerald-500" : "bg-muted-foreground/45",
+          connected ? "bg-success" : "bg-muted-foreground/45",
         )}
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">
-        <p className="font-semibold">{name}</p>
-        <p className="text-sm text-muted-foreground">{status}</p>
+        <p className="text-[14.5px] font-semibold">{name}</p>
+        <p className="font-mono text-xs text-muted-foreground">{status}</p>
         {meta ? (
-          <p className="truncate text-xs text-muted-foreground" title={meta}>
+          <p
+            className="truncate font-mono text-xs text-muted-foreground"
+            title={meta}
+          >
             {meta}
           </p>
         ) : null}

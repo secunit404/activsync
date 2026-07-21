@@ -11,8 +11,7 @@ function Empty({ className, ...props }: React.ComponentProps<"div">) {
         // title and description. `border` supplies the width; the dashed
         // *style* alone (Tailwind's `border-dashed`) renders nothing without
         // it, so this bakes the border in rather than relying on every
-        // caller to add it (they used to — see settings-hevy-tools.tsx and
-        // activities.tsx before this restyle).
+        // caller to add it (they used to, before this restyle).
         "flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center text-balance",
         className
       )}

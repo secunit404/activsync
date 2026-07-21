@@ -1,11 +1,9 @@
-import { useState } from "react";
+import { CheckIcon } from "lucide-react";
+import { Link } from "react-router";
 
-import { ConnectionStatus, SettingsSection } from "@/components/settings-shell";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { SettingsSection } from "@/components/settings-shell";
 import {
   Field,
-  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -15,278 +13,275 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import { Spinner } from "@/components/ui/spinner";
-import { useSettingsAction } from "@/hooks/use-settings-action";
-import { HevyTools } from "@/components/settings-hevy-tools";
-import {
-  disconnectHevy,
-  saveHevyCredentials,
-  saveHevySettings,
-  type SettingsState,
-} from "@/lib/api";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import type { HevyDraft } from "@/lib/hevy-draft";
+import type { SettingsState } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-export function HevySettings({ state }: { state: SettingsState }) {
-  const [apiKey, setApiKey] = useState("");
-  const [enabled, setEnabled] = useState(state.hevy.enabled);
-  const [strategy, setStrategy] = useState(state.hevy.watchStrategy);
-  const [graceMinutes, setGraceMinutes] = useState(state.hevy.graceMinutes);
-  const [pollInterval, setPollInterval] = useState(state.hevy.pollIntervalMinutes);
-  const [identity, setIdentity] = useState({
-    manufacturer: nullableString(state.hevy.identity.manufacturer),
-    product: nullableString(state.hevy.identity.product),
-    serial: nullableString(state.hevy.identity.serial),
-  });
-  const [profile, setProfile] = useState({
-    weightKg: nullableString(state.hevy.profileOverride.weightKg),
-    birthYear: nullableString(state.hevy.profileOverride.birthYear),
-    vo2max: nullableString(state.hevy.profileOverride.vo2max),
-    sex: state.hevy.profileOverride.sex ?? "",
-  });
-  const connect = useSettingsAction(saveHevyCredentials);
-  const save = useSettingsAction(saveHevySettings);
-  const disconnect = useSettingsAction(disconnectHevy);
+const STRATEGIES: Array<{
+  value: SettingsState["hevy"]["watchStrategy"];
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "replace",
+    label: "Replace",
+    description:
+      "Overwrites the Garmin activity's exercise data with the Hevy workout. Best when Hevy is your source of truth for lifts.",
+  },
+  {
+    value: "merge",
+    label: "Merge",
+    description:
+      "Keeps existing Garmin data and adds only exercises that Hevy has and Garmin is missing.",
+  },
+  {
+    value: "describe",
+    label: "Describe",
+    description:
+      "Leaves Garmin untouched and just appends a text summary of the Hevy workout to the description.",
+  },
+];
+
+/**
+ * Hevy *configuration* only — connect/disconnect lives in the Connections
+ * section (settings-connections.tsx) since that's the account-credential
+ * concern. Operations (sync queue, exercise mapping, backfill) moved out of
+ * Settings entirely to the /hevy hub (Tasks 14-16); this section links
+ * there rather than embedding them, matching the IA change for Task 12.
+ */
+export function HevySettings({
+  state,
+  draft,
+  onChange,
+}: {
+  state: SettingsState;
+  draft: HevyDraft;
+  onChange: (next: HevyDraft) => void;
+}) {
+  function update(patch: Partial<HevyDraft>) {
+    onChange({ ...draft, ...patch });
+  }
 
   return (
     <SettingsSection
       id="hevy"
-      title="Hevy"
+      title="Hevy integration"
       description="Bring strength workouts from Hevy into Garmin, then publish the reviewed result to Strava."
+      action={
+        state.hevy.connected ? (
+          <span className="flex items-center gap-2.5">
+            <span className="font-mono text-xs text-primary">
+              {draft.enabled ? "ENABLED" : "DISABLED"}
+            </span>
+            <Switch
+              id="hevy-enabled"
+              aria-label="Enable Hevy sync"
+              checked={draft.enabled}
+              onCheckedChange={(checked) => update({ enabled: checked === true })}
+            />
+          </span>
+        ) : undefined
+      }
     >
-      <div className="grid gap-6">
-        <ConnectionStatus
-          name="Hevy"
-          connected={state.hevy.connected}
-          status={state.hevy.status}
-        />
-        {!state.hevy.connected ? (
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              connect.mutate(apiKey);
-            }}
-          >
+      {!state.hevy.connected ? (
+        <p className="rounded-lg border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
+          Connect Hevy from Connections above to configure watch strategy and
+          sync behavior.
+        </p>
+      ) : (
+        <div className="grid gap-6">
+          <div className="grid gap-2.5">
+            <p
+              id="hevy-strategy-label"
+              className="font-mono text-xs font-semibold tracking-[.06em] text-muted-foreground uppercase"
+            >
+              Watch strategy
+            </p>
+            <RadioGroup
+              aria-labelledby="hevy-strategy-label"
+              className="grid gap-2.5 sm:grid-cols-3"
+              value={draft.watchStrategy}
+              onValueChange={(value) =>
+                update({
+                  watchStrategy: value as SettingsState["hevy"]["watchStrategy"],
+                })
+              }
+            >
+              {STRATEGIES.map((strategy) => {
+                const active = draft.watchStrategy === strategy.value;
+                return (
+                  <RadioGroupItem
+                    key={strategy.value}
+                    value={strategy.value}
+                    aria-label={strategy.label}
+                    className={cn(
+                      "flex flex-col gap-1.5 border p-3.5",
+                      active
+                        ? "border-primary/60 bg-primary/[0.06]"
+                        : "border-border/70",
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span
+                        className={cn(
+                          "text-sm font-bold",
+                          active ? "text-primary" : "text-foreground",
+                        )}
+                      >
+                        {strategy.label}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "grid size-4 shrink-0 place-items-center rounded-full",
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "border border-input",
+                        )}
+                      >
+                        {active ? <CheckIcon className="size-2.5" /> : null}
+                      </span>
+                    </span>
+                    <span className="text-xs leading-relaxed text-muted-foreground">
+                      {strategy.description}
+                    </span>
+                  </RadioGroupItem>
+                );
+              })}
+            </RadioGroup>
+          </div>
+
+          <FieldGroup className="grid gap-5 sm:grid-cols-2 sm:max-w-md">
             <Field>
-              <FieldLabel htmlFor="hevy-api-key">Hevy API key</FieldLabel>
+              <FieldLabel htmlFor="hevy-grace">Grace period (min)</FieldLabel>
               <Input
-                id="hevy-api-key"
+                id="hevy-grace"
                 className="h-11"
-                type="password"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
+                type="number"
+                min={0}
+                max={1440}
+                value={draft.graceMinutes}
+                onChange={(event) =>
+                  update({ graceMinutes: event.target.valueAsNumber })
+                }
                 required
               />
-              <FieldDescription>
-                Requires Hevy Pro. The key is validated before it is saved.
-              </FieldDescription>
             </Field>
-            <Button
-              type="submit"
-              className="h-11 sm:w-fit"
-              disabled={connect.isPending}
-            >
-              {connect.isPending ? <Spinner /> : null}
-              {connect.isPending ? "Validating…" : "Connect Hevy"}
-            </Button>
-          </form>
-        ) : (
-          <form
-            className="grid gap-6"
-            onSubmit={(event) => {
-              event.preventDefault();
-              save.mutate({
-                enabled,
-                watchStrategy: strategy,
-                graceMinutes,
-                pollIntervalMinutes: pollInterval,
-                identity: {
-                  manufacturer: parseNullableNumber(identity.manufacturer),
-                  product: parseNullableNumber(identity.product),
-                  serial: parseNullableNumber(identity.serial),
-                },
-                profileOverride: {
-                  weightKg: parseNullableNumber(profile.weightKg),
-                  birthYear: parseNullableNumber(profile.birthYear),
-                  vo2max: parseNullableNumber(profile.vo2max),
-                  sex: profile.sex === "male" || profile.sex === "female"
-                    ? profile.sex
-                    : null,
-                },
-              });
-            }}
-          >
-            <Field orientation="horizontal">
-              <Checkbox
-                id="hevy-enabled"
-                checked={enabled}
-                onCheckedChange={(checked) => setEnabled(checked === true)}
+            <Field>
+              <FieldLabel htmlFor="hevy-poll">Poll interval (min)</FieldLabel>
+              <Input
+                id="hevy-poll"
+                className="h-11"
+                type="number"
+                min={1}
+                max={120}
+                value={draft.pollIntervalMinutes}
+                onChange={(event) =>
+                  update({ pollIntervalMinutes: event.target.valueAsNumber })
+                }
+                required
               />
-              <FieldContent>
-                <FieldLabel htmlFor="hevy-enabled">
-                  Enable Hevy sync
-                </FieldLabel>
-                <FieldDescription>
-                  Poll Hevy for new workouts and reconcile them with Garmin.
-                </FieldDescription>
-              </FieldContent>
             </Field>
-            <FieldGroup className="grid gap-5 md:grid-cols-3">
-              <Field>
-                <FieldLabel htmlFor="hevy-strategy">
-                  Watch activity strategy
-                </FieldLabel>
-                <NativeSelect
-                  id="hevy-strategy"
-                  className="w-full"
-                  value={strategy}
-                  onChange={(event) =>
-                    setStrategy(
-                      event.target.value as SettingsState["hevy"]["watchStrategy"],
-                    )
-                  }
-                >
-                  <NativeSelectOption value="replace">Replace</NativeSelectOption>
-                  <NativeSelectOption value="merge">Merge</NativeSelectOption>
-                  <NativeSelectOption value="describe">Describe</NativeSelectOption>
-                </NativeSelect>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="hevy-grace">Grace period (min)</FieldLabel>
-                <Input
-                  id="hevy-grace"
-                  className="h-11"
-                  type="number"
-                  min={0}
-                  max={1440}
-                  value={graceMinutes}
-                  onChange={(event) => setGraceMinutes(event.target.valueAsNumber)}
-                  required
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="hevy-poll">Poll interval (min)</FieldLabel>
-                <Input
-                  id="hevy-poll"
-                  className="h-11"
-                  type="number"
-                  min={1}
-                  max={120}
-                  value={pollInterval}
-                  onChange={(event) => setPollInterval(event.target.valueAsNumber)}
-                  required
-                />
-              </Field>
-            </FieldGroup>
-            <details className="rounded-xl border bg-muted/20 p-4">
-              <summary className="min-h-8 cursor-pointer font-semibold">
-                Device and profile overrides
-              </summary>
-              <div className="mt-5 grid gap-6">
-                <div className="grid gap-2">
-                  <p className="text-sm font-medium">Device identity</p>
-                  <p className="text-sm text-muted-foreground">
-                    {state.hevy.identityDisplay}. Enter all three values or leave
-                    all blank for automatic detection.
-                  </p>
-                  <FieldGroup className="grid gap-4 sm:grid-cols-3">
-                    {(["manufacturer", "product", "serial"] as const).map((key) => (
-                      <Field key={key}>
-                        <FieldLabel htmlFor={"identity-" + key}>
-                          {capitalize(key)}
-                        </FieldLabel>
-                        <Input
-                          id={"identity-" + key}
-                          className="h-11"
-                          type="number"
-                          value={identity[key]}
-                          onChange={(event) =>
-                            setIdentity((current) => ({
-                              ...current,
-                              [key]: event.target.value,
-                            }))
-                          }
-                        />
-                      </Field>
-                    ))}
-                  </FieldGroup>
-                </div>
-                <div className="grid gap-2">
-                  <p className="text-sm font-medium">Profile override</p>
-                  <FieldGroup className="grid gap-4 sm:grid-cols-2">
-                    <OptionalNumber
-                      id="profile-weight"
-                      label="Weight (kg)"
-                      value={profile.weightKg}
-                      onChange={(value) =>
-                        setProfile((current) => ({ ...current, weightKg: value }))
-                      }
-                    />
-                    <OptionalNumber
-                      id="profile-birth"
-                      label="Birth year"
-                      value={profile.birthYear}
-                      onChange={(value) =>
-                        setProfile((current) => ({ ...current, birthYear: value }))
-                      }
-                    />
-                    <OptionalNumber
-                      id="profile-vo2"
-                      label="VO₂ max"
-                      value={profile.vo2max}
-                      onChange={(value) =>
-                        setProfile((current) => ({ ...current, vo2max: value }))
-                      }
-                    />
-                    <Field>
-                      <FieldLabel htmlFor="profile-sex">Sex</FieldLabel>
-                      <NativeSelect
-                        id="profile-sex"
-                        className="w-full"
-                        value={profile.sex}
+          </FieldGroup>
+
+          <details className="rounded-xl border border-border/70 bg-muted/20 p-4">
+            <summary className="min-h-8 cursor-pointer font-semibold">
+              Device and profile overrides
+            </summary>
+            <div className="mt-5 grid gap-6">
+              <div className="grid gap-2">
+                <p className="text-sm font-medium">Device identity</p>
+                <p className="text-sm text-muted-foreground">
+                  {state.hevy.identityDisplay}. Enter all three values or leave
+                  all blank for automatic detection.
+                </p>
+                <FieldGroup className="grid gap-4 sm:grid-cols-3">
+                  {(["manufacturer", "product", "serial"] as const).map((key) => (
+                    <Field key={key}>
+                      <FieldLabel htmlFor={"identity-" + key}>
+                        {capitalize(key)}
+                      </FieldLabel>
+                      <Input
+                        id={"identity-" + key}
+                        className="h-11"
+                        type="number"
+                        value={draft.identity[key]}
                         onChange={(event) =>
-                          setProfile((current) => ({
-                            ...current,
-                            sex: event.target.value,
-                          }))
+                          update({
+                            identity: {
+                              ...draft.identity,
+                              [key]: event.target.value,
+                            },
+                          })
                         }
-                      >
-                        <NativeSelectOption value="">Automatic</NativeSelectOption>
-                        <NativeSelectOption value="female">Female</NativeSelectOption>
-                        <NativeSelectOption value="male">Male</NativeSelectOption>
-                      </NativeSelect>
+                      />
                     </Field>
-                  </FieldGroup>
-                </div>
+                  ))}
+                </FieldGroup>
               </div>
-            </details>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                type="submit"
-                className="h-11"
-                disabled={save.isPending || disconnect.isPending}
-              >
-                {save.isPending ? <Spinner /> : null}
-                {save.isPending ? "Saving…" : "Save Hevy settings"}
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                className="h-11"
-                disabled={save.isPending || disconnect.isPending}
-                onClick={() => {
-                  if (window.confirm("Disconnect Hevy and pause Hevy sync?")) {
-                    disconnect.mutate();
-                  }
-                }}
-              >
-                {disconnect.isPending ? <Spinner /> : null}
-                {disconnect.isPending ? "Disconnecting…" : "Disconnect Hevy"}
-              </Button>
+              <div className="grid gap-2">
+                <p className="text-sm font-medium">Profile override</p>
+                <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                  <OptionalNumber
+                    id="profile-weight"
+                    label="Weight (kg)"
+                    value={draft.profile.weightKg}
+                    onChange={(value) =>
+                      update({ profile: { ...draft.profile, weightKg: value } })
+                    }
+                  />
+                  <OptionalNumber
+                    id="profile-birth"
+                    label="Birth year"
+                    value={draft.profile.birthYear}
+                    onChange={(value) =>
+                      update({ profile: { ...draft.profile, birthYear: value } })
+                    }
+                  />
+                  <OptionalNumber
+                    id="profile-vo2"
+                    label="VO₂ max"
+                    value={draft.profile.vo2max}
+                    onChange={(value) =>
+                      update({ profile: { ...draft.profile, vo2max: value } })
+                    }
+                  />
+                  <Field>
+                    <FieldLabel htmlFor="profile-sex">Sex</FieldLabel>
+                    <NativeSelect
+                      id="profile-sex"
+                      className="w-full"
+                      value={draft.profile.sex}
+                      onChange={(event) =>
+                        update({
+                          profile: {
+                            ...draft.profile,
+                            sex: event.target.value as HevyDraft["profile"]["sex"],
+                          },
+                        })
+                      }
+                    >
+                      <NativeSelectOption value="">Automatic</NativeSelectOption>
+                      <NativeSelectOption value="female">Female</NativeSelectOption>
+                      <NativeSelectOption value="male">Male</NativeSelectOption>
+                    </NativeSelect>
+                  </Field>
+                </FieldGroup>
+              </div>
             </div>
-          </form>
-        )}
-        {state.hevy.connected ? <HevyTools /> : null}
-      </div>
+          </details>
+
+          <FieldDescription>
+            Sync queue, exercise mapping and backfill moved to{" "}
+            <Link to="/hevy" className="underline underline-offset-4">
+              the Hevy hub
+            </Link>
+            .
+          </FieldDescription>
+        </div>
+      )}
     </SettingsSection>
   );
 }
@@ -314,14 +309,6 @@ function OptionalNumber({
       />
     </Field>
   );
-}
-
-function nullableString(value: number | null) {
-  return value === null ? "" : String(value);
-}
-
-function parseNullableNumber(value: string) {
-  return value.trim() ? Number(value) : null;
 }
 
 function capitalize(value: string) {

@@ -1,7 +1,4 @@
-import { useState } from "react";
-
 import { SettingsSection } from "@/components/settings-shell";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -15,13 +12,27 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import { Spinner } from "@/components/ui/spinner";
-import { useSettingsAction } from "@/hooks/use-settings-action";
-import { savePreferences, type SettingsState } from "@/lib/api";
+import type { SettingsState } from "@/lib/api";
 
-export function PreferencesSettings({ state }: { state: SettingsState }) {
-  const [preferences, setPreferences] = useState(state.preferences);
-  const save = useSettingsAction(savePreferences);
+type PreferencesDraft = SettingsState["preferences"];
+
+/**
+ * Presentational — the draft lives in the Settings route (settings.tsx),
+ * which owns dirty-tracking and the Discard/Save footer shared across every
+ * section. This component just renders the fields and reports edits up.
+ */
+export function PreferencesSettings({
+  state,
+  draft,
+  onChange,
+}: {
+  state: SettingsState;
+  draft: PreferencesDraft;
+  onChange: (next: PreferencesDraft) => void;
+}) {
+  function update(patch: Partial<PreferencesDraft>) {
+    onChange({ ...draft, ...patch });
+  }
 
   return (
     <SettingsSection
@@ -29,61 +40,37 @@ export function PreferencesSettings({ state }: { state: SettingsState }) {
       title="Preferences"
       description="Control polling, history, timezone, and hevy2garmin compatibility."
     >
-      <form
-        className="grid gap-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          save.mutate(preferences);
-        }}
-      >
-        <FieldGroup className="grid gap-5 md:grid-cols-2">
+      <div className="grid gap-6">
+        <FieldGroup className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           <NumberField
             id="garmin-poll"
             label="Garmin sync interval (min)"
             description="How often ActivSync checks Garmin. Recommended minimum: 10."
-            value={preferences.garminPollIntervalMinutes}
-            onChange={(value) =>
-              setPreferences((current) => ({
-                ...current,
-                garminPollIntervalMinutes: value,
-              }))
-            }
+            value={draft.garminPollIntervalMinutes}
+            onChange={(value) => update({ garminPollIntervalMinutes: value })}
           />
           <NumberField
             id="strava-poll"
             label="Strava sync interval (min)"
             description="How often ActivSync checks Strava. Recommended minimum: 2."
-            value={preferences.stravaPollIntervalMinutes}
-            onChange={(value) =>
-              setPreferences((current) => ({
-                ...current,
-                stravaPollIntervalMinutes: value,
-              }))
-            }
+            value={draft.stravaPollIntervalMinutes}
+            onChange={(value) => update({ stravaPollIntervalMinutes: value })}
           />
           <NumberField
             id="history-window"
             label="Activity history window (days)"
             description="How far back Garmin sync searches for activities."
-            value={preferences.lookbackDays}
-            onChange={(value) =>
-              setPreferences((current) => ({
-                ...current,
-                lookbackDays: value,
-              }))
-            }
+            value={draft.lookbackDays}
+            onChange={(value) => update({ lookbackDays: value })}
           />
           <Field>
             <FieldLabel htmlFor="display-timezone">Display timezone</FieldLabel>
             <NativeSelect
               id="display-timezone"
               className="w-full"
-              value={preferences.displayTimezone}
+              value={draft.displayTimezone}
               onChange={(event) =>
-                setPreferences((current) => ({
-                  ...current,
-                  displayTimezone: event.target.value,
-                }))
+                update({ displayTimezone: event.target.value })
               }
             >
               {state.timezones.map((timezone) => (
@@ -95,16 +82,13 @@ export function PreferencesSettings({ state }: { state: SettingsState }) {
           </Field>
         </FieldGroup>
 
-        <div className="grid gap-4 rounded-xl border bg-muted/25 p-4">
+        <div className="grid gap-4 rounded-xl border border-border/70 bg-muted/25 p-4">
           <Field orientation="horizontal">
             <Checkbox
               id="hevy-marker-enabled"
-              checked={preferences.hevy2garminMarkerEnabled}
+              checked={draft.hevy2garminMarkerEnabled}
               onCheckedChange={(checked) =>
-                setPreferences((current) => ({
-                  ...current,
-                  hevy2garminMarkerEnabled: checked === true,
-                }))
+                update({ hevy2garminMarkerEnabled: checked === true })
               }
             />
             <FieldContent>
@@ -117,33 +101,21 @@ export function PreferencesSettings({ state }: { state: SettingsState }) {
               </FieldDescription>
             </FieldContent>
           </Field>
-          <Field data-disabled={!preferences.hevy2garminMarkerEnabled}>
+          <Field data-disabled={!draft.hevy2garminMarkerEnabled}>
             <FieldLabel htmlFor="hevy-marker">Marker text</FieldLabel>
             <Input
               id="hevy-marker"
               className="h-11"
-              value={preferences.hevy2garminMarker}
-              disabled={!preferences.hevy2garminMarkerEnabled}
+              value={draft.hevy2garminMarker}
+              disabled={!draft.hevy2garminMarkerEnabled}
               onChange={(event) =>
-                setPreferences((current) => ({
-                  ...current,
-                  hevy2garminMarker: event.target.value,
-                }))
+                update({ hevy2garminMarker: event.target.value })
               }
               required
             />
           </Field>
         </div>
-
-        <Button
-          type="submit"
-          className="h-11 sm:w-fit"
-          disabled={save.isPending}
-        >
-          {save.isPending ? <Spinner /> : null}
-          {save.isPending ? "Saving…" : "Save preferences"}
-        </Button>
-      </form>
+      </div>
     </SettingsSection>
   );
 }
