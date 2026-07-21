@@ -237,23 +237,24 @@ def create_router(
                 status_code=422,
                 detail="pageSize must be one of 10, 20, 50, or 100",
             )
-        all_activities = view.activities_view(conn, sort_order=sort)
         tz_name = config.load_config(conn)["display_timezone"]
+        all_activities = view.activities_view(conn, sort_order=sort, tz_name=tz_name)
         now_local = timeutil.to_local_now(tz_name)
         week_start = (now_local - timedelta(days=now_local.weekday())).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
+        week_end = week_start + timedelta(days=7)
         counts: dict[PublishStatus, int] = {
             publish_status: 0 for publish_status in PUBLISH_STATUSES
         }
-        week_seconds = 0
+        week_seconds = 0.0
         for activity in all_activities:
             counts[activity["publish_status"]] += 1
             if activity["publish_status"] == "excluded":
                 continue
             local_start = timeutil.to_local(activity["start_time"], tz_name)
-            if local_start >= week_start:
-                week_seconds += int(activity["duration_seconds"] or 0)
+            if week_start <= local_start < week_end:
+                week_seconds += activity["duration_seconds"] or 0
 
         filtered = (
             [activity for activity in all_activities if activity["publish_status"] == status]
@@ -286,8 +287,8 @@ def create_router(
             status=status,
             counts=counts,
             week_total=WeekTotal(
-                seconds=week_seconds,
-                display=view._fmt_duration_coarse(week_seconds),
+                seconds=round(week_seconds),
+                display=view.fmt_duration_coarse(week_seconds),
             ),
             pagination=PaginationState(
                 page=current_page,

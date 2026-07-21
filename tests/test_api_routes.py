@@ -299,6 +299,141 @@ def test_activities_week_total_uses_configured_timezone_for_week_boundary(
     assert week_total_seconds_for("Pacific/Honolulu") == 0
 
 
+def test_activities_week_total_sums_float_durations_without_per_row_truncation(
+    tmp_path, monkeypatch
+):
+    """Each duration must be summed as a float and rounded once at the end,
+    not truncated per-row -- three rows each losing 0.9s to int() truncation
+    would previously drift the total low by 2s (2.7s rounds to 3s lost)."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    cfg = config.load_config(conn)
+    cfg["display_timezone"] = "UTC"
+    config.save_config(conn, cfg)
+
+    fixed_now = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        api_routes.timeutil,
+        "to_local_now",
+        lambda tz_name: fixed_now.astimezone(ZoneInfo(tz_name)),
+    )
+
+    monday = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
+
+    def add(activity_id, seconds):
+        db.insert_activity(
+            conn,
+            activity_id,
+            "running",
+            f"Run {activity_id}",
+            "",
+            monday.strftime("%Y-%m-%d %H:%M:%S"),
+            f"hash-{activity_id}",
+            "pending",
+            monday,
+            garmin_data=f'{{"duration": {seconds}}}',
+        )
+
+    add(1, 100.9)
+    add(2, 100.9)
+    add(3, 100.9)
+
+    response = TestClient(create_app(conn)).get("/api/v1/activities")
+
+    assert response.status_code == 200
+    # 100.9 * 3 == 302.7 -> rounds to 303, not 300 (3 x int(100.9)).
+    assert response.json()["weekTotal"]["seconds"] == 303
+
+
+def test_activities_week_total_excludes_future_dated_activity(tmp_path, monkeypatch):
+    """dev_seed.py routinely seeds rows dated later in the current month, so
+    a bare "forward with no end" fold would pull next week's activities into
+    this week's tile. The window must be exclusive at week_start + 7 days."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    cfg = config.load_config(conn)
+    cfg["display_timezone"] = "UTC"
+    config.save_config(conn, cfg)
+
+    # Wednesday, so the current week's Monday (2026-07-20) is unambiguous.
+    fixed_now = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        api_routes.timeutil,
+        "to_local_now",
+        lambda tz_name: fixed_now.astimezone(ZoneInfo(tz_name)),
+    )
+
+    this_week = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
+    next_week = datetime(2026, 7, 27, 9, 0, tzinfo=timezone.utc)  # beyond week_end
+
+    def add(activity_id, start, seconds):
+        db.insert_activity(
+            conn,
+            activity_id,
+            "running",
+            f"Run {activity_id}",
+            "",
+            start.strftime("%Y-%m-%d %H:%M:%S"),
+            f"hash-{activity_id}",
+            "pending",
+            start,
+            garmin_data=f'{{"duration": {seconds}}}',
+        )
+
+    add(1, this_week, 30 * 60)
+    add(2, next_week, 45 * 60)  # future-dated, must not count
+
+    response = TestClient(create_app(conn)).get("/api/v1/activities")
+
+    assert response.status_code == 200
+    assert response.json()["weekTotal"] == {"seconds": 1800, "display": "30m"}
+
+
+def test_activities_week_total_spans_dst_spring_forward_transition(
+    tmp_path, monkeypatch
+):
+    """America/New_York springs forward on 2026-03-08. The current week
+    (Mon 2026-03-09, already in EDT) must exclude an activity from the prior
+    week (Fri 2026-03-06, still in EST) even though the wall-clock week
+    boundary itself crosses the UTC-offset change."""
+    conn = db.connect(str(tmp_path / "test.db"))
+    cfg = config.load_config(conn)
+    cfg["display_timezone"] = "America/New_York"
+    config.save_config(conn, cfg)
+
+    tz = ZoneInfo("America/New_York")
+    fixed_now = datetime(2026, 3, 11, 12, 0, tzinfo=tz)  # Wednesday, post-transition
+    monkeypatch.setattr(
+        api_routes.timeutil,
+        "to_local_now",
+        lambda tz_name: fixed_now.astimezone(ZoneInfo(tz_name)),
+    )
+
+    this_monday = datetime(2026, 3, 9, 9, 0, tzinfo=tz)  # EDT
+    last_friday = datetime(2026, 3, 6, 9, 0, tzinfo=tz)  # EST, prior week
+
+    def add(activity_id, start_local, seconds):
+        start_utc = start_local.astimezone(timezone.utc)
+        db.insert_activity(
+            conn,
+            activity_id,
+            "running",
+            f"Run {activity_id}",
+            "",
+            start_utc.strftime("%Y-%m-%d %H:%M:%S"),
+            f"hash-{activity_id}",
+            "pending",
+            start_utc,
+            garmin_data=f'{{"duration": {seconds}}}',
+        )
+
+    add(1, this_monday, 40 * 60)
+    add(2, last_friday, 60 * 60)  # prior week, must not count
+
+    response = TestClient(create_app(conn)).get("/api/v1/activities")
+
+    assert response.status_code == 200
+    assert response.json()["weekTotal"] == {"seconds": 2400, "display": "40m"}
+
+
 def test_activities_page_rejects_unknown_status_and_page_size(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     client = TestClient(create_app(conn))

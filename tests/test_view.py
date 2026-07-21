@@ -68,16 +68,16 @@ def test_activities_view_duration_seconds_none_when_missing(conn):
 
 
 def test_fmt_duration_coarse_drops_seconds():
-    assert view._fmt_duration_coarse(27720) == "7h 42m"
+    assert view.fmt_duration_coarse(27720) == "7h 42m"
 
 
 def test_fmt_duration_coarse_under_an_hour():
-    assert view._fmt_duration_coarse(2520) == "42m"
+    assert view.fmt_duration_coarse(2520) == "42m"
 
 
 def test_fmt_duration_coarse_empty_week():
-    assert view._fmt_duration_coarse(0) == "0m"
-    assert view._fmt_duration_coarse(None) == "0m"
+    assert view.fmt_duration_coarse(0) == "0m"
+    assert view.fmt_duration_coarse(None) == "0m"
 
 
 def test_garmin_status_not_synced_when_never_attempted(conn):

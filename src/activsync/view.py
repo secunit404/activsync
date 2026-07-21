@@ -31,7 +31,7 @@ def _fmt_duration(seconds: float | None) -> str:
     return f"{m}m {s:02d}s"
 
 
-def _fmt_duration_coarse(seconds: float | None) -> str:
+def fmt_duration_coarse(seconds: float | None) -> str:
     """Whole-minute duration for summary tiles: '7h 42m', '42m', '0m'."""
     total = int(seconds or 0)
     h, m = divmod(total // 60, 60)
@@ -101,10 +101,16 @@ def activities_view(
     conn: sqlite3.Connection,
     sort_order: str = "newest",
     status_filter: str = "",
+    tz_name: str | None = None,
 ) -> list[dict]:
-    """Activity rows augmented with display-only fields."""
-    cfg = config.load_config(conn)
-    tz_name = cfg["display_timezone"]
+    """Activity rows augmented with display-only fields.
+
+    ``tz_name`` lets a caller that already loaded config for the same
+    request pass the display timezone through instead of triggering a
+    second ``config.load_config`` call.
+    """
+    if tz_name is None:
+        tz_name = config.load_config(conn)["display_timezone"]
     rows = db.list_activities(
         conn,
         status=status_filter or None,
