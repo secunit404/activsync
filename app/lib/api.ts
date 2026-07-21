@@ -440,10 +440,10 @@ export function previewHevyBackfill(since: string) {
   );
 }
 
-export function runHevyBackfill(since: string) {
+export function runHevyBackfill(since: string, hevyIds: string[]) {
   return requestJson<BackfillResult>("/api/v1/settings/hevy/backfill/run", {
     method: "POST",
-    body: JSON.stringify({ since }),
+    body: JSON.stringify({ since, hevyIds }),
   });
 }
 

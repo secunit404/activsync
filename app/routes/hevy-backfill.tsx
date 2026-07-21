@@ -34,13 +34,12 @@ function defaultSince(): string {
  * `<Outlet />`, so this issues no fetch of its own for connection state; it
  * only reads/writes through `previewHevyBackfill`/`runHevyBackfill`.
  *
- * `previewHevyBackfill`/`runHevyBackfill` both take only `since` — there is
- * no per-item "import just these" parameter on the wire. So the checkboxes
- * here are a *review* surface (what will happen, and a count to confirm
- * against) rather than a true partial-import filter: Import always re-runs
- * the full `since`-derived backfill server-side, identically to Preview.
- * Deselecting a row doesn't exclude it from the run — there is no endpoint
- * that would let it. See the Task 16 report for the fuller rationale.
+ * `previewHevyBackfill` takes only `since` — Preview always re-scans the
+ * full since-derived window. `runHevyBackfill` additionally takes the
+ * ticked selection (`hevyIds`): only those workouts are ingested. Locked
+ * (`needs_mapping`) rows are excluded from `selection` at the source — see
+ * `isSelectable` — but the server enforces the same rule independently, so
+ * a locked id can never be imported even if one somehow reached this call.
  */
 export default function HevyBackfill() {
   const navigate = useNavigate();
@@ -63,7 +62,7 @@ export default function HevyBackfill() {
   });
 
   const run = useMutation({
-    mutationFn: () => runHevyBackfill(since),
+    mutationFn: () => runHevyBackfill(since, Array.from(selection.selected)),
     onSuccess: (result) => {
       toast.success(result.message);
       setConfirmOpen(false);

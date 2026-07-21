@@ -196,12 +196,47 @@ test("importing calls runHevyBackfill with since and reports the result via toas
 
   await userEvent.click(await screen.findByRole("button", { name: "Import" }));
 
-  await waitFor(() => expect(runHevyBackfill).toHaveBeenCalledWith("2026-06-01"));
+  await waitFor(() =>
+    expect(runHevyBackfill).toHaveBeenCalledWith("2026-06-01", [
+      "hw-link",
+      "hw-create-1",
+      "hw-create-2",
+    ]),
+  );
   await waitFor(() =>
     expect(toastSuccess).toHaveBeenCalledWith(
       "Backfill complete: 4 workouts ingested, 1 linked to existing Garmin activities.",
     ),
   );
+});
+
+test("deselecting a row before importing excludes it from the sent ids, and locked rows never reach the selection", async () => {
+  previewHevyBackfill.mockResolvedValue(fourItemResult());
+  runHevyBackfill.mockResolvedValue({
+    message: "Backfill complete: 2 workouts ingested, 1 linked to existing Garmin activities.",
+    since: "2026-06-01",
+    ran: true,
+    linked: 1,
+    items: [],
+  });
+  renderBackfill();
+  fireEvent.change(screen.getByLabelText("Since"), { target: { value: "2026-06-01" } });
+  await preview();
+
+  // Select all 3 importable rows, then untick one — the locked row was
+  // never selectable to begin with, so this exercises both guardrails: a
+  // deliberate uncheck, and a checkbox that was disabled from the start.
+  await userEvent.click(await screen.findByRole("checkbox", { name: /select all importable/i }));
+  await userEvent.click(screen.getByRole("checkbox", { name: "Select Push A" }));
+  await userEvent.click(screen.getByRole("button", { name: "Import 2 selected" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Import" }));
+
+  await waitFor(() =>
+    expect(runHevyBackfill).toHaveBeenCalledWith("2026-06-01", ["hw-link", "hw-create-2"]),
+  );
+  const [, sentIds] = runHevyBackfill.mock.calls[0];
+  expect(sentIds).not.toContain("hw-create-1");
+  expect(sentIds).not.toContain("hw-locked");
 });
 
 test("a preview failure reports an error toast", async () => {
