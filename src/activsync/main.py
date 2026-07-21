@@ -15,11 +15,15 @@ from activsync.strava_client import StravaClient
 from activsync.update_check import UpdateChecker
 
 
-def _env_value(name: str, legacy_name: str) -> str | None:
+def _env_value(name: str, legacy_name: str = "") -> str | None:
     return os.environ.get(name) or os.environ.get(legacy_name)
 
 
 MOCK_MODE = (_env_value("ACTIVSYNC_DEV_MOCK_DATA", "G2S_DEV_MOCK_DATA") or "").lower() in ("1", "true", "yes")
+# Opt-in signal set only by the Playwright E2E server (npm run dev:e2e), never
+# by `make dev` / `make dev-fresh`, so a fresh mock DB can boot straight past
+# the first-run wizard for E2E specs while local dev still starts at it.
+E2E_SEED_ONBOARDED = (_env_value("ACTIVSYNC_DEV_E2E_ONBOARDED") or "").lower() in ("1", "true", "yes")
 
 
 def _default_db_path() -> str:
@@ -35,7 +39,9 @@ GARMIN_TOKEN_DIR = _env_value("ACTIVSYNC_GARMIN_TOKEN_DIR", "G2S_GARMIN_TOKEN_DI
 
 _conn = db.connect(DB_PATH)
 if MOCK_MODE:
-    seed_dev_data(_conn)
+    # mark_onboarded only ever applies inside this MOCK_MODE branch, so it is
+    # unreachable against a real database regardless of the env var's value.
+    seed_dev_data(_conn, mark_onboarded=E2E_SEED_ONBOARDED)
 
 
 def _resolve_log_timezone() -> str:

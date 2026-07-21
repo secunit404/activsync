@@ -41,6 +41,30 @@ def test_fresh_start_reports_garmin_setup_step(mock_env, seeded_conn):
     assert response.json()["setup"] == {"complete": False, "step": "garmin"}
 
 
+def test_seed_with_e2e_onboarded_flag_reports_setup_complete(mock_env, tmp_path):
+    """The E2E server (npm run dev:e2e) opts into this via mark_onboarded=True
+    so every spec lands on the activities dashboard, not the setup wizard."""
+    conn = db.connect(str(tmp_path / "e2e.db"))
+    seed_dev_data(conn, mark_onboarded=True)
+
+    response = _client(conn).get("/api/v1/app")
+
+    assert response.status_code == 200
+    assert response.json()["setup"] == {"complete": True, "step": None}
+
+
+def test_seed_without_e2e_onboarded_flag_stays_incomplete(mock_env, tmp_path):
+    """`make dev-fresh` must keep landing on the first-run wizard: seeding
+    without the flag (the default) must never mark setup complete."""
+    conn = db.connect(str(tmp_path / "dev-fresh.db"))
+    seed_dev_data(conn)
+
+    response = _client(conn).get("/api/v1/app")
+
+    assert response.status_code == 200
+    assert response.json()["setup"]["complete"] is False
+
+
 def test_full_setup_completes_end_to_end(mock_env, seeded_conn):
     conn = seeded_conn
     client = _client(conn)

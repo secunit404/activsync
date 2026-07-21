@@ -14,8 +14,17 @@ _HEVY_TABLES = ("hevy_workouts", "hevy_operations", "exercise_templates",
                 "exercise_mappings", "merge_backups", "hevy_events_seen")
 
 
-def seed(conn: sqlite3.Connection) -> None:
-    """Insert repeatable, multi-month activity data into the dev database."""
+def seed(conn: sqlite3.Connection, *, mark_onboarded: bool = False) -> None:
+    """Insert repeatable, multi-month activity data into the dev database.
+
+    ``mark_onboarded`` is applied every call, independent of the version-gate
+    below: the E2E dev DB persists across local runs, so if it was already
+    seeded (matching ``SEED_VERSION``) before the caller started asking for
+    onboarding to be marked complete, the early return must not skip that.
+    Applying it unconditionally is safe — it is idempotent.
+    """
+    if mark_onboarded:
+        _mark_onboarding_complete(conn)
     if db.get_config_value(conn, "dev_seed_version") == SEED_VERSION:
         return
     existing = db.list_activities(conn)
@@ -88,6 +97,20 @@ def seed(conn: sqlite3.Connection) -> None:
     # and a refreshed one show the same categories.
     db.set_config_value(conn, "garmin_activity_types", dev_mock.garmin_activity_types())
     db.set_config_value(conn, "dev_seed_version", SEED_VERSION)
+
+
+def _mark_onboarding_complete(conn: sqlite3.Connection) -> None:
+    """Skip the first-run wizard for a seeded dev DB.
+
+    ``onboarding.setup_step`` short-circuits to "onboarding complete" the
+    moment ``initial_sync_done`` is truthy, before it looks at Garmin/Strava
+    connection state or the Hevy step — see
+    ``src/activsync/onboarding.py::setup_step``. That single key is also
+    exactly what ``/api/v1/app`` reads into ``setup.complete``
+    (``src/activsync/api_routes.py``), so it is the only config key that
+    needs to be set here.
+    """
+    db.set_config_value(conn, "initial_sync_done", True)
 
 
 def _garmin_time(iso_time: str) -> str:

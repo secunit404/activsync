@@ -7,7 +7,7 @@
     "dev": "concurrently --kill-others --names api,web --prefix-colors blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "ACTIVSYNC_DEV_MOCK_DATA=1 ACTIVSYNC_DB_PATH=data/activsync-dev.db .venv/bin/uvicorn activsync.main:app --reload --reload-dir src --port 8383",
     "dev:web": "react-router dev --port 8382",
-    "dev:e2e": "npm run build && rm -rf src/activsync/web && cp -r build/client src/activsync/web && ACTIVSYNC_DEV_MOCK_DATA=1 ACTIVSYNC_DB_PATH=data/activsync-e2e.db .venv/bin/uvicorn activsync.main:app --port 8384",
+    "dev:e2e": "npm run build && rm -rf src/activsync/web && cp -r build/client src/activsync/web && ACTIVSYNC_DEV_MOCK_DATA=1 ACTIVSYNC_DEV_E2E_ONBOARDED=1 ACTIVSYNC_DB_PATH=data/activsync-e2e.db .venv/bin/uvicorn activsync.main:app --port 8384",
     "lint": "eslint app react-router.config.ts vite.config.ts vitest.config.ts playwright.config.ts e2e",
     "test": "vitest run",
     "test:watch": "vitest",
