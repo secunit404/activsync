@@ -1,4 +1,21 @@
+from datetime import datetime, timezone
+
 from activsync import timeutil
+
+
+def test_to_local_converts_utc_to_configured_timezone():
+    result = timeutil.to_local("2026-07-09 09:00:00", "Europe/Stockholm")
+    assert result.hour == 11
+
+
+def test_to_local_now_returns_current_time_in_target_zone():
+    before = datetime.now(timezone.utc)
+    result = timeutil.to_local_now("Europe/Stockholm")
+    after = datetime.now(timezone.utc)
+
+    assert before <= result.astimezone(timezone.utc) <= after
+    assert result.tzinfo is not None
+    assert result.utcoffset() != timezone.utc.utcoffset(None)
 
 
 def test_format_local_time_converts_to_stockholm_summer_time():

@@ -31,6 +31,15 @@ def _fmt_duration(seconds: float | None) -> str:
     return f"{m}m {s:02d}s"
 
 
+def _fmt_duration_coarse(seconds: float | None) -> str:
+    """Whole-minute duration for summary tiles: '7h 42m', '42m', '0m'."""
+    total = int(seconds or 0)
+    h, m = divmod(total // 60, 60)
+    if h:
+        return f"{h}h {m:02d}m"
+    return f"{m}m"
+
+
 def _fmt_distance(metres: float | None) -> str:
     if metres is None:
         return ""
@@ -109,6 +118,7 @@ def activities_view(
         distance = gd.get("distance")
         result.append({
             **row,
+            "duration_seconds": duration,
             "start_time_display": timeutil.format_local_time(row["start_time"], tz_name),
             "start_date_display": timeutil.format_local_date(row["start_time"], tz_name),
             "start_year_display": timeutil.format_local_year(row["start_time"], tz_name),

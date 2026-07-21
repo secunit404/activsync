@@ -97,6 +97,10 @@ const activities: ActivitiesPage = {
     missing: 0,
     excluded: 0,
   },
+  weekTotal: {
+    seconds: 0,
+    display: "0m",
+  },
   pagination: {
     page: 1,
     pageSize: 20,

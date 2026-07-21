@@ -46,6 +46,40 @@ def test_activities_view_does_not_mutate_db_rows(conn):
     assert "garmin_url" not in raw_row
 
 
+def test_activities_view_exposes_duration_seconds(conn):
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(
+        conn, 45, "running", "Run", "", "2026-07-09 09:00:00", "h", "pending", now,
+        garmin_data='{"duration": 1500}',
+    )
+
+    rows = view.activities_view(conn)
+
+    assert rows[0]["duration_seconds"] == 1500
+
+
+def test_activities_view_duration_seconds_none_when_missing(conn):
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    db.insert_activity(conn, 46, "running", "Run", "", "2026-07-09 09:00:00", "h", "pending", now)
+
+    rows = view.activities_view(conn)
+
+    assert rows[0]["duration_seconds"] is None
+
+
+def test_fmt_duration_coarse_drops_seconds():
+    assert view._fmt_duration_coarse(27720) == "7h 42m"
+
+
+def test_fmt_duration_coarse_under_an_hour():
+    assert view._fmt_duration_coarse(2520) == "42m"
+
+
+def test_fmt_duration_coarse_empty_week():
+    assert view._fmt_duration_coarse(0) == "0m"
+    assert view._fmt_duration_coarse(None) == "0m"
+
+
 def test_garmin_status_not_synced_when_never_attempted(conn):
     status = view.garmin_status(conn)
 

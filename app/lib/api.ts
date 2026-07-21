@@ -99,11 +99,17 @@ export type ActivityQuery = {
   pageSize: PageSize;
 };
 
+export type WeekTotal = {
+  seconds: number;
+  display: string;
+};
+
 export type ActivitiesPage = {
   items: Activity[];
   sort: SortOrder;
   status: PublishStatus | null;
   counts: Record<PublishStatus, number>;
+  weekTotal: WeekTotal;
   pagination: {
     page: number;
     pageSize: PageSize;

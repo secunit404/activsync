@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 
-from activsync import db, hevy_db
+from activsync import api_routes, config, db, hevy_db
 from activsync import server as server_module
 from activsync.server import create_app
 
@@ -215,6 +216,87 @@ def test_activities_page_clamps_to_last_page_and_builds_strava_link(tmp_path):
     assert payload["items"][0]["stravaUrl"].startswith(
         "https://www.strava.com/activities/"
     )
+
+
+def test_activities_week_total_sums_current_week_excluding_excluded(tmp_path, monkeypatch):
+    conn = db.connect(str(tmp_path / "test.db"))
+    cfg = config.load_config(conn)
+    cfg["display_timezone"] = "UTC"
+    config.save_config(conn, cfg)
+
+    # Wednesday, so the current week's Monday (2026-07-20) is unambiguous.
+    fixed_now = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        api_routes.timeutil,
+        "to_local_now",
+        lambda tz_name: fixed_now.astimezone(ZoneInfo(tz_name)),
+    )
+
+    monday = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
+    last_week = datetime(2026, 7, 17, 9, 0, tzinfo=timezone.utc)  # prior Friday
+
+    def add(activity_id, start, seconds, status):
+        db.insert_activity(
+            conn,
+            activity_id,
+            "running",
+            f"Run {activity_id}",
+            "",
+            start.strftime("%Y-%m-%d %H:%M:%S"),
+            f"hash-{activity_id}",
+            status,
+            start,
+            garmin_data=f'{{"duration": {seconds}}}',
+        )
+
+    add(1, monday, 42 * 60, "pending")
+    add(2, monday, 20 * 60, "published")
+    add(3, monday, 99 * 60, "excluded")    # must not count
+    add(4, last_week, 60 * 60, "pending")  # must not count
+
+    response = TestClient(create_app(conn)).get("/api/v1/activities")
+
+    assert response.status_code == 200
+    assert response.json()["weekTotal"] == {"seconds": 3720, "display": "1h 02m"}
+
+
+def test_activities_week_total_uses_configured_timezone_for_week_boundary(
+    tmp_path, monkeypatch
+):
+    # 2026-07-20 05:00 UTC is Monday morning in UTC but still Sunday night
+    # (prior week) in Honolulu (UTC-10) -- proves the week boundary is
+    # computed in the configured display_timezone, not defaulted to UTC.
+    boundary_start = datetime(2026, 7, 20, 5, 0, tzinfo=timezone.utc)
+    fixed_now = datetime(2026, 7, 22, 22, 0, tzinfo=timezone.utc)  # Wednesday
+
+    monkeypatch.setattr(
+        api_routes.timeutil,
+        "to_local_now",
+        lambda tz_name: fixed_now.astimezone(ZoneInfo(tz_name)),
+    )
+
+    def week_total_seconds_for(tz_name):
+        conn = db.connect(str(tmp_path / f"test-{tz_name.replace('/', '-')}.db"))
+        cfg = config.load_config(conn)
+        cfg["display_timezone"] = tz_name
+        config.save_config(conn, cfg)
+        db.insert_activity(
+            conn,
+            1,
+            "running",
+            "Run",
+            "",
+            boundary_start.strftime("%Y-%m-%d %H:%M:%S"),
+            "hash-1",
+            "pending",
+            boundary_start,
+            garmin_data='{"duration": 1800}',
+        )
+        response = TestClient(create_app(conn)).get("/api/v1/activities")
+        return response.json()["weekTotal"]["seconds"]
+
+    assert week_total_seconds_for("UTC") == 1800
+    assert week_total_seconds_for("Pacific/Honolulu") == 0
 
 
 def test_activities_page_rejects_unknown_status_and_page_size(tmp_path):

@@ -71,31 +71,39 @@ def parse_iso_utc(value: object) -> datetime | None:
 def format_local_time(start_time: str, tz_name: str) -> str:
     """Convert a Garmin UTC start_time string ("%Y-%m-%d %H:%M:%S") to a
     display string in tz_name, e.g. "2026-07-09 11:00"."""
-    local_dt = _to_local(start_time, tz_name)
+    local_dt = to_local(start_time, tz_name)
     return local_dt.strftime("%Y-%m-%d %H:%M")
 
 
-def _to_local(start_time: str, tz_name: str) -> datetime:
+def to_local(start_time: str, tz_name: str) -> datetime:
+    """Convert a Garmin UTC start_time string ("%Y-%m-%d %H:%M:%S") to an
+    aware datetime in tz_name."""
     dt_utc = datetime.strptime(start_time, GARMIN_TIME_FORMAT).replace(tzinfo=timezone.utc)
     return dt_utc.astimezone(ZoneInfo(tz_name))
 
 
+def to_local_now(tz_name: str) -> datetime:
+    """The current time, converted to tz_name. Used for period boundaries
+    (e.g. "this week") that must be computed in the display timezone."""
+    return datetime.now(timezone.utc).astimezone(ZoneInfo(tz_name))
+
+
 def format_local_date(start_time: str, tz_name: str) -> str:
     """Format the local activity date compactly, e.g. ``9 Jul``."""
-    local_dt = _to_local(start_time, tz_name)
+    local_dt = to_local(start_time, tz_name)
     return f"{local_dt.day} {local_dt.strftime('%b')}"
 
 
 def format_local_year(start_time: str, tz_name: str) -> str:
     """Format the local activity year."""
-    return str(_to_local(start_time, tz_name).year)
+    return str(to_local(start_time, tz_name).year)
 
 
 def format_local_month_year(start_time: str, tz_name: str) -> str:
     """Format the local activity month and year, e.g. ``July 2026``."""
-    return _to_local(start_time, tz_name).strftime("%B %Y")
+    return to_local(start_time, tz_name).strftime("%B %Y")
 
 
 def format_local_clock(start_time: str, tz_name: str) -> str:
     """Format the local activity time without its date, e.g. ``11:00``."""
-    return _to_local(start_time, tz_name).strftime("%H:%M")
+    return to_local(start_time, tz_name).strftime("%H:%M")
