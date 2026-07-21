@@ -1,15 +1,7 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router";
 
-import {
-  AppBrand,
-  AppFooter,
-  AppShell,
-  AppShellHeader,
-  AppShellMain,
-} from "@/components/app-shell";
+import { AppBrand } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -20,6 +12,13 @@ import {
 import { cn } from "@/lib/utils";
 import type { UpdateState } from "@/lib/api";
 
+/**
+ * Settings/setup page frame. This renders inside app-layout.tsx's <Outlet />
+ * (settings) or standalone (setup, which sits outside the rail layout), so
+ * it carries its own header/footer rather than the removed AppShell
+ * centered-column helpers — those were retired in Task 5 along with the
+ * old single-column route shell.
+ */
 export function SettingsShell({
   development,
   title,
@@ -36,17 +35,14 @@ export function SettingsShell({
   children: ReactNode;
 }) {
   return (
-    <AppShell>
-      <AppShellHeader>
+    <div className="mx-auto min-h-screen w-full max-w-6xl px-4 sm:px-6">
+      <header className="flex min-h-18 items-center justify-between gap-4 border-b border-border/70">
         <div className="flex items-center gap-3">
           <AppBrand />
           {development ? <Badge variant="outline">Mock data</Badge> : null}
         </div>
-        <Button asChild variant="ghost" className="h-11 px-3">
-          <Link to="/">Activities</Link>
-        </Button>
-      </AppShellHeader>
-      <AppShellMain className="grid gap-6">
+      </header>
+      <main className="grid gap-6 py-8 sm:py-12">
         <header className="grid gap-2">
           <p className="text-xs font-bold tracking-[0.14em] text-[var(--sync)] uppercase">
             ActivSync
@@ -57,9 +53,35 @@ export function SettingsShell({
           <p className="max-w-2xl text-muted-foreground">{description}</p>
         </header>
         {children}
-      </AppShellMain>
-      {version && update ? <AppFooter version={version} update={update} /> : null}
-    </AppShell>
+      </main>
+      {version && update ? (
+        <footer className="flex flex-wrap items-center justify-center gap-2 border-t py-6 text-xs text-muted-foreground">
+          <span>ActivSync v{version}</span>
+          <span aria-hidden="true">·</span>
+          <a
+            className="underline-offset-4 hover:text-foreground hover:underline"
+            href={update.repoUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub
+          </a>
+          {update.available && update.latest ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <a
+                className="font-medium text-[var(--sync)] underline-offset-4 hover:underline"
+                href={update.releaseUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Update available: {update.latest}
+              </a>
+            </>
+          ) : null}
+        </footer>
+      ) : null}
+    </div>
   );
 }
 
