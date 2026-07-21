@@ -128,7 +128,14 @@ export default function Activities() {
         // same-key background refetch (SSE/poll), which should stay silent.
         isRefetching={activities.isFetching && activities.isPlaceholderData}
       />
-      <Outlet />
+      {
+        // The activity detail route (Task 11) needs the current page's
+        // activities to resolve `:id` to an `Activity` without a second
+        // fetch — the list is already loaded and stays mounted behind the
+        // overlay. Threaded via `Outlet`'s `context` prop, same pattern
+        // AppLayout already uses one level up for tab-bar visibility.
+      }
+      <Outlet context={activities.data.items} />
     </>
   );
 }
