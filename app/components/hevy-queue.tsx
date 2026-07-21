@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import {
   runHevyQueueAction,
@@ -12,6 +14,27 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
+
+/** The two queue actions that ask for confirmation before running. */
+type ConfirmableAction = "skip" | "resync-fresh";
+
+const CONFIRM_COPY: Record<
+  ConfirmableAction,
+  { title: string; describe: (title: string) => string; confirmLabel: string; pendingLabel: string }
+> = {
+  skip: {
+    title: "Skip this workout?",
+    describe: (title) => `Skip ${title}?`,
+    confirmLabel: "Skip",
+    pendingLabel: "Skipping…",
+  },
+  "resync-fresh": {
+    title: "Re-sync this workout?",
+    describe: (title) => `Re-sync ${title} as a fresh Garmin upload?`,
+    confirmLabel: "Re-sync fresh",
+    pendingLabel: "Queuing…",
+  },
+};
 
 type QueueRowKind = "in-flight" | "problem" | "skipped";
 type Tone = "info" | "warning" | "destructive" | "muted";
@@ -32,6 +55,9 @@ const toneClasses: Record<Tone, { dot: string; badge: string }> = {
  */
 export function HevyQueue({ state }: { state: HevyQueueState }) {
   const queryClient = useQueryClient();
+  const [confirmTarget, setConfirmTarget] = useState<
+    { item: HevyQueueItem; action: ConfirmableAction } | null
+  >(null);
   const action = useMutation({
     mutationFn: ({ hevyId, action }: { hevyId: string; action: HevyQueueAction }) =>
       runHevyQueueAction(hevyId, action),
@@ -47,18 +73,17 @@ export function HevyQueue({ state }: { state: HevyQueueState }) {
   });
 
   const runAction = (item: HevyQueueItem, nextAction: HevyQueueAction) => {
-    if (
-      (nextAction === "skip" || nextAction === "resync-fresh") &&
-      !window.confirm(
-        nextAction === "skip"
-          ? `Skip ${item.title}?`
-          : `Re-sync ${item.title} as a fresh Garmin upload?`,
-      )
-    ) {
+    if (nextAction === "skip" || nextAction === "resync-fresh") {
+      setConfirmTarget({ item, action: nextAction });
       return;
     }
     action.mutate({ hevyId: item.hevyId, action: nextAction });
   };
+
+  const confirmPending =
+    confirmTarget !== null &&
+    action.isPending &&
+    action.variables?.hevyId === confirmTarget.item.hevyId;
 
   const rows: Array<{ item: HevyQueueItem; kind: QueueRowKind }> = [
     ...state.inFlight.map((item) => ({ item, kind: "in-flight" as const })),
@@ -98,6 +123,26 @@ export function HevyQueue({ state }: { state: HevyQueueState }) {
           </ul>
         )}
       </CardContent>
+      {confirmTarget && (
+        <ConfirmDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setConfirmTarget(null);
+          }}
+          title={CONFIRM_COPY[confirmTarget.action].title}
+          description={CONFIRM_COPY[confirmTarget.action].describe(confirmTarget.item.title)}
+          confirmLabel={CONFIRM_COPY[confirmTarget.action].confirmLabel}
+          pendingLabel={CONFIRM_COPY[confirmTarget.action].pendingLabel}
+          pending={confirmPending}
+          onConfirm={async () => {
+            await action.mutateAsync({
+              hevyId: confirmTarget.item.hevyId,
+              action: confirmTarget.action,
+            });
+            setConfirmTarget(null);
+          }}
+        />
+      )}
     </Card>
   );
 }

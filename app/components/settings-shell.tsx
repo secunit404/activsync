@@ -137,7 +137,10 @@ export function ConnectionStatus({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-14 items-center gap-3.5 border-b border-border/50 py-3 last:border-b-0">
+    <div
+      data-testid={`connection-status-${name.toLowerCase().replace(/\s+/g, "-")}`}
+      className="flex min-h-14 items-center gap-3.5 border-b border-border/50 py-3 last:border-b-0"
+    >
       <span
         className={cn(
           "size-2.5 shrink-0 rounded-full",

@@ -29,7 +29,18 @@ export type ResponsiveOverlayProps = {
    * focus yourself (e.g. to a form's first field) to override it.
    */
   onOpenAutoFocus?: (event: Event) => void;
-  children: ReactNode;
+  /**
+   * `"alertdialog"` for a destructive confirmation — it interrupts to ask
+   * for a decision, rather than presenting a plain content surface. Plain
+   * `"dialog"` (the default) covers every other consumer.
+   */
+  role?: "dialog" | "alertdialog";
+  /**
+   * Optional: a confirmation dialog has nothing to put here — the question
+   * lives in `title`/`description`. The scrolling body region (and its
+   * padding) is only rendered when this is given.
+   */
+  children?: ReactNode;
 };
 
 /**
@@ -61,6 +72,7 @@ export function ResponsiveOverlay({
   mobile = "cover",
   footer,
   onOpenAutoFocus,
+  role = "dialog",
   children,
 }: ResponsiveOverlayProps) {
   return (
@@ -79,6 +91,7 @@ export function ResponsiveOverlay({
           // passing the prop explicitly as undefined (it overrides the default
           // because our props spread last).
           {...(description ? {} : { "aria-describedby": undefined })}
+          role={role}
           onOpenAutoFocus={onOpenAutoFocus}
           className={cn(
             "fixed z-50 flex flex-col overflow-hidden border-border bg-card text-card-foreground outline-none",
@@ -113,12 +126,14 @@ export function ResponsiveOverlay({
               </Button>
             </DialogClose>
           </div>
-          <div
-            data-testid="responsive-overlay-body"
-            className="overlay-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-7 md:py-6"
-          >
-            {children}
-          </div>
+          {children != null && (
+            <div
+              data-testid="responsive-overlay-body"
+              className="overlay-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-7 md:py-6"
+            >
+              {children}
+            </div>
+          )}
           {footer && (
             <div
               data-testid="responsive-overlay-footer"

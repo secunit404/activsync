@@ -121,6 +121,28 @@ test("takes a bottom-sheet mobile presentation", () => {
   );
 });
 
+test("defaults to the dialog role", () => {
+  render(<Harness />);
+  expect(screen.getByRole("dialog", { name: "Details" })).toBeInTheDocument();
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+});
+
+test("takes an alertdialog role for destructive confirmations", () => {
+  render(
+    <ResponsiveOverlay open title="Details" onOpenChange={() => {}} role="alertdialog">
+      <p>Body</p>
+    </ResponsiveOverlay>,
+  );
+  expect(screen.getByRole("alertdialog", { name: "Details" })).toBeInTheDocument();
+});
+
+test("omits the scrolling body region entirely when no children are given", () => {
+  render(
+    <ResponsiveOverlay open title="Details" onOpenChange={() => {}} />,
+  );
+  expect(screen.queryByTestId("responsive-overlay-body")).not.toBeInTheDocument();
+});
+
 test("forwards onOpenAutoFocus so a consumer can redirect initial focus", () => {
   const onOpenAutoFocus = vi.fn((event: Event) => event.preventDefault());
   render(

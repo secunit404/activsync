@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { ConnectionStatus, SettingsSection } from "@/components/settings-shell";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogClose,
@@ -233,6 +234,7 @@ function GarminDialog({ state }: { state: SettingsState }) {
 
 function StravaDialog({ state }: { state: SettingsState }) {
   const [open, setOpen] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [clientId, setClientId] = useState(state.credentials.stravaClientId);
   const [clientSecret, setClientSecret] = useState("");
   const save = useSettingsAction(saveStravaCredentials);
@@ -302,17 +304,7 @@ function StravaDialog({ state }: { state: SettingsState }) {
                 variant="destructive"
                 className="h-11"
                 disabled={disconnect.isPending}
-                onClick={async () => {
-                  if (
-                    !window.confirm(
-                      "Disconnect Strava? Publishing pauses, but your activity list is kept.",
-                    )
-                  ) {
-                    return;
-                  }
-                  await disconnect.mutateAsync();
-                  setOpen(false);
-                }}
+                onClick={() => setConfirmDisconnect(true)}
               >
                 Disconnect
               </Button>
@@ -343,12 +335,27 @@ function StravaDialog({ state }: { state: SettingsState }) {
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onOpenChange={setConfirmDisconnect}
+        title="Disconnect Strava?"
+        description="Publishing pauses, but your activity list is kept."
+        confirmLabel="Disconnect"
+        pendingLabel="Disconnecting…"
+        pending={disconnect.isPending}
+        onConfirm={async () => {
+          await disconnect.mutateAsync();
+          setConfirmDisconnect(false);
+          setOpen(false);
+        }}
+      />
     </Dialog>
   );
 }
 
 function HevyDialog({ state }: { state: SettingsState }) {
   const [open, setOpen] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const connect = useSettingsAction(saveHevyCredentials);
   const disconnect = useSettingsAction(disconnectHevy);
@@ -375,13 +382,7 @@ function HevyDialog({ state }: { state: SettingsState }) {
               variant="destructive"
               className="h-11"
               disabled={disconnect.isPending}
-              onClick={async () => {
-                if (!window.confirm("Disconnect Hevy and pause Hevy sync?")) {
-                  return;
-                }
-                await disconnect.mutateAsync();
-                setOpen(false);
-              }}
+              onClick={() => setConfirmDisconnect(true)}
             >
               {disconnect.isPending ? <Spinner /> : null}
               {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
@@ -419,6 +420,20 @@ function HevyDialog({ state }: { state: SettingsState }) {
           </form>
         )}
       </DialogContent>
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onOpenChange={setConfirmDisconnect}
+        title="Disconnect Hevy?"
+        description="This also pauses Hevy sync."
+        confirmLabel="Disconnect"
+        pendingLabel="Disconnecting…"
+        pending={disconnect.isPending}
+        onConfirm={async () => {
+          await disconnect.mutateAsync();
+          setConfirmDisconnect(false);
+          setOpen(false);
+        }}
+      />
     </Dialog>
   );
 }

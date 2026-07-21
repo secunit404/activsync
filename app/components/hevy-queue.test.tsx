@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -92,8 +92,7 @@ test("retry calls the queue action and reports success via toast", async () => {
   await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Retry queued for Leg Day."));
 });
 
-test("skip asks for confirmation before acting, and does nothing when cancelled", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(false);
+test("skip opens a confirmation dialog with the real copy, and does nothing when cancelled", async () => {
   renderQueue(
     emptyQueue({
       counts: { inFlight: 0, problems: 1, skipped: 0 },
@@ -103,13 +102,16 @@ test("skip asks for confirmation before acting, and does nothing when cancelled"
 
   await userEvent.click(screen.getByRole("button", { name: "Skip" }));
 
-  expect(window.confirm).toHaveBeenCalledWith("Skip Leg Day?");
+  const dialog = screen.getByRole("alertdialog", { name: "Skip this workout?" });
+  expect(dialog).toHaveAccessibleDescription("Skip Leg Day?");
+
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   expect(runHevyQueueAction).not.toHaveBeenCalled();
-  vi.restoreAllMocks();
 });
 
-test("skip runs the action once confirmed", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
+test("skip runs the action once confirmed in the dialog", async () => {
   runHevyQueueAction.mockResolvedValue({ message: "Skipped Leg Day." });
   renderQueue(
     emptyQueue({
@@ -119,9 +121,11 @@ test("skip runs the action once confirmed", async () => {
   );
 
   await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+  const dialog = screen.getByRole("alertdialog", { name: "Skip this workout?" });
+  await userEvent.click(within(dialog).getByRole("button", { name: "Skip" }));
 
   await waitFor(() => expect(runHevyQueueAction).toHaveBeenCalledWith("hevy-1", "skip"));
-  vi.restoreAllMocks();
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
 });
 
 test("unskip is offered for skipped items and calls the unskip action", async () => {
@@ -139,7 +143,6 @@ test("unskip is offered for skipped items and calls the unskip action", async ()
 });
 
 test("resync-fresh is only offered when the item is resyncable, and asks for confirmation", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   runHevyQueueAction.mockResolvedValue({ message: "Fresh sync queued." });
   renderQueue(
     emptyQueue({
@@ -157,11 +160,16 @@ test("resync-fresh is only offered when the item is resyncable, and asks for con
 
   await userEvent.click(screen.getByRole("button", { name: "Re-sync fresh" }));
 
-  expect(window.confirm).toHaveBeenCalledWith("Re-sync Leg Day as a fresh Garmin upload?");
+  const dialog = screen.getByRole("alertdialog", { name: "Re-sync this workout?" });
+  expect(dialog).toHaveAccessibleDescription(
+    "Re-sync Leg Day as a fresh Garmin upload?",
+  );
+
+  await userEvent.click(within(dialog).getByRole("button", { name: "Re-sync fresh" }));
+
   await waitFor(() =>
     expect(runHevyQueueAction).toHaveBeenCalledWith("hevy-3", "resync-fresh"),
   );
-  vi.restoreAllMocks();
 });
 
 test("a needs-mapping problem is flagged inline rather than linking (no templateId to link to)", () => {
