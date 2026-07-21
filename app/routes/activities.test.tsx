@@ -4,17 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test, vi } from "vitest";
 
-import type { Activity, ActivitiesPage } from "@/lib/api";
+import type { Activity, ActivitiesPage, AppState } from "@/lib/api";
 import { ActivitiesView } from "./activities";
 
-const { publishActivities, excludeActivity } = vi.hoisted(() => ({
+const { publishActivities, excludeActivity, dismissCatchUpReport } = vi.hoisted(() => ({
   publishActivities: vi.fn(),
   excludeActivity: vi.fn(),
+  dismissCatchUpReport: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, publishActivities, excludeActivity };
+  return { ...actual, publishActivities, excludeActivity, dismissCatchUpReport };
 });
 
 // The stat strip renders two parallel layouts (tablet/desktop grid vs. the
@@ -98,10 +99,17 @@ const anotherActivity: Activity = {
   title: "Push Day",
 };
 
-function renderAt(path: string, data: ActivitiesPage = activities) {
+function renderAt(
+  path: string,
+  data: ActivitiesPage = activities,
+  appState?: Pick<AppState, "connections" | "catchUpReport">,
+) {
   const queryClient = new QueryClient();
   const router = createMemoryRouter(
-    [{ path: "*", element: <ActivitiesView data={data} /> }],
+    [
+      { path: "*", element: <ActivitiesView data={data} appState={appState} /> },
+      { path: "/settings", element: <div>Settings page</div> },
+    ],
     { initialEntries: [path] },
   );
   render(
@@ -165,9 +173,92 @@ test("selecting a filter resets the page to 1", () => {
   expect(search.has("page")).toBe(false);
 });
 
-test("renders an empty state when there are no activities", () => {
+test("renders an empty state when there are no activities at all", () => {
   renderAt("/");
   expect(screen.getByText("No activities found")).toBeInTheDocument();
+  // No status is applied (data.status is null) — the copy must say so is
+  // an onboarding/fresh-install state, not imply a filter is hiding rows.
+  expect(
+    screen.getByText("Activities will appear here after the first Garmin sync."),
+  ).toBeInTheDocument();
+});
+
+// A user who filters to Held and sees a bare "No activities found" would
+// think their data vanished — the description must name the active filter
+// so it reads as "nothing here yet for this filter", not "everything's gone".
+test("distinguishes an empty filtered view from a genuinely empty history", () => {
+  renderAt("/", { ...activities, status: "held", items: [] });
+  expect(screen.getByText("No activities found")).toBeInTheDocument();
+  expect(
+    screen.getByText("There are no held activities in the current sync history."),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText("Activities will appear here after the first Garmin sync."),
+  ).not.toBeInTheDocument();
+});
+
+test("renders an attention banner for each broken connection, naming each service", () => {
+  renderAt("/", activities, {
+    connections: {
+      garmin: { connected: false, status: "", meta: "", email: "" },
+      strava: { connected: false, status: "", meta: "" },
+      broken: ["garmin", "strava"],
+    },
+    catchUpReport: null,
+  });
+
+  const alerts = screen.getAllByRole("alert");
+  expect(alerts).toHaveLength(2);
+  expect(alerts.some((alert) => /Garmin/.test(alert.textContent ?? ""))).toBe(true);
+  expect(alerts.some((alert) => /Strava/.test(alert.textContent ?? ""))).toBe(true);
+});
+
+test("renders no attention banner when nothing is broken", () => {
+  renderAt("/", activities, {
+    connections: {
+      garmin: { connected: true, status: "", meta: "", email: "" },
+      strava: { connected: true, status: "", meta: "" },
+      broken: [],
+    },
+    catchUpReport: null,
+  });
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+test("clicking Reconnect on the attention banner navigates to Settings connections", async () => {
+  const router = renderAt("/", activities, {
+    connections: {
+      garmin: { connected: true, status: "", meta: "", email: "" },
+      strava: { connected: false, status: "", meta: "" },
+      broken: ["strava"],
+    },
+    catchUpReport: null,
+  });
+
+  await userEvent.click(screen.getByRole("button", { name: /reconnect/i }));
+
+  expect(router.state.location.pathname).toBe("/settings");
+  expect(router.state.location.hash).toBe("#connections");
+});
+
+test("renders the catch-up report and dismisses it", async () => {
+  dismissCatchUpReport.mockResolvedValue(undefined);
+  renderAt("/", activities, {
+    connections: { garmin: { connected: true, status: "", meta: "", email: "" }, strava: { connected: true, status: "", meta: "" }, broken: [] },
+    catchUpReport: { new: 12, held: 4, linked: 8, days: 30 },
+  });
+
+  expect(screen.getByText(/Reconnect catch-up complete/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(dismissCatchUpReport).toHaveBeenCalledOnce();
+});
+
+test("renders no catch-up report when there is nothing to report", () => {
+  renderAt("/", activities, {
+    connections: { garmin: { connected: true, status: "", meta: "", email: "" }, strava: { connected: true, status: "", meta: "" }, broken: [] },
+    catchUpReport: null,
+  });
+  expect(screen.queryByText(/Reconnect catch-up complete/)).not.toBeInTheDocument();
 });
 
 test("renders the pagination control from the pagination data", () => {

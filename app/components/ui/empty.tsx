@@ -7,7 +7,13 @@ function Empty({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty"
       className={cn(
-        "flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 rounded-xl border-dashed p-6 text-center text-balance",
+        // Frame `3b`'s "EMPTY" state: a dashed border card, centered icon,
+        // title and description. `border` supplies the width; the dashed
+        // *style* alone (Tailwind's `border-dashed`) renders nothing without
+        // it, so this bakes the border in rather than relying on every
+        // caller to add it (they used to — see settings-hevy-tools.tsx and
+        // activities.tsx before this restyle).
+        "flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center text-balance",
         className
       )}
       {...props}
@@ -31,7 +37,7 @@ const emptyMediaVariants = cva(
     variants: {
       variant: {
         default: "bg-transparent",
-        icon: "flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground [&_svg:not([class*='size-'])]:size-4",
+        icon: "flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground [&_svg:not([class*='size-'])]:size-4",
       },
     },
     defaultVariants: {

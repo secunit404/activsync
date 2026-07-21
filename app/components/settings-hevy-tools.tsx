@@ -95,7 +95,7 @@ function MappingTools({ state }: { state: HevyToolsState }) {
           ))}
         </div>
       ) : (
-        <Empty className="border">
+        <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <DumbbellIcon />

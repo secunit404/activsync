@@ -1,16 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
-import { ActivityIcon, CircleAlertIcon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ActivityIcon } from "lucide-react";
 import { useEffect } from "react";
-import { Navigate, Outlet, useOutletContext, useSearchParams } from "react-router";
+import { Navigate, Outlet, useNavigate, useOutletContext, useSearchParams } from "react-router";
 
 import { ActivitiesPagination } from "@/components/activities-pagination";
+import { ActivitiesSkeleton } from "@/components/activities-skeleton";
 import { ActivitiesTable } from "@/components/activities-table";
 import { ActivityCard } from "@/components/activity-card";
 import { ActivityFilterPills } from "@/components/activity-filter-pills";
+import { AttentionBanner } from "@/components/attention-banner";
 import { BulkActionBar } from "@/components/bulk-action-bar";
+import { CatchUpReport } from "@/components/catch-up-report";
+import { ConnectionError } from "@/components/connection-error";
 import { StatTile, statTileToneClass, type StatTileTone } from "@/components/stat-tile";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -18,15 +20,16 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useActivityActions } from "@/hooks/use-activity-actions";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { useSelection } from "@/hooks/use-selection";
 import {
+  dismissCatchUpReport,
   getActivities,
   getAppState,
   type ActivitiesPage,
   type ActivityQuery,
+  type AppState,
   type PageSize,
   type PublishStatus,
 } from "@/lib/api";
@@ -80,25 +83,14 @@ export default function Activities() {
   }
 
   if (appState.isError || activities.isError) {
-    const error = appState.error ?? activities.error;
     return (
-      <div className="grid gap-4 p-6 md:p-8">
-        <Alert variant="destructive" className="max-w-xl">
-          <CircleAlertIcon />
-          <AlertTitle>Couldn’t reach ActivSync</AlertTitle>
-          <AlertDescription>
-            {error?.message ?? "An unexpected request error occurred."}
-          </AlertDescription>
-        </Alert>
-        <Button
-          className="h-11 w-fit"
-          onClick={() => {
+      <div className="p-6 md:p-8">
+        <ConnectionError
+          onRetry={() => {
             appState.refetch();
             activities.refetch();
           }}
-        >
-          Try again
-        </Button>
+        />
       </div>
     );
   }
@@ -109,7 +101,11 @@ export default function Activities() {
 
   return (
     <>
-      <ActivitiesView data={activities.data} onTabBarHiddenChange={setTabBarHidden} />
+      <ActivitiesView
+        data={activities.data}
+        appState={appState.data}
+        onTabBarHiddenChange={setTabBarHidden}
+      />
       <Outlet />
     </>
   );
@@ -117,19 +113,31 @@ export default function Activities() {
 
 export function ActivitiesView({
   data,
+  appState,
   onTabBarHiddenChange,
 }: {
   data: ActivitiesPage;
   /**
    * Optional so `ActivitiesView` stays directly renderable in tests without
-   * an `AppLayout`/`Outlet` ancestor (see activities.test.tsx). In the real
-   * app this is always `AppLayout`'s `setTabBarHidden`.
+   * an `AppLayout`/`Outlet` ancestor (see activities.test.tsx), and without
+   * every test needing a full `AppState` fixture when the attention banner
+   * and catch-up report are irrelevant to what's being tested — defaults to
+   * "nothing broken, nothing to catch up on".
    */
+  appState?: Pick<AppState, "connections" | "catchUpReport">;
   onTabBarHiddenChange?: TabBarVisibilityContext;
 }) {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const selection = useSelection();
   const activityActions = useActivityActions();
+  const dismissCatchUp = useMutation({
+    mutationFn: dismissCatchUpReport,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.appState }),
+  });
+  const broken = appState?.connections.broken ?? [];
+  const catchUpReport = appState?.catchUpReport ?? null;
 
   // Selection must not survive a filter or page change — a stale id from a
   // page the user has since left would publish/exclude something they can
@@ -171,6 +179,8 @@ export function ActivitiesView({
     );
   };
 
+  const handleReconnect = () => navigate("/settings#connections");
+
   return (
     <div
       className={cn(
@@ -190,6 +200,17 @@ export function ActivitiesView({
           Review your Garmin sync history before it reaches Strava.
         </p>
       </header>
+
+      {
+        // One banner per broken service — `broken` can hold both "garmin"
+        // and "strava" at once, and each needs its own reconnect copy (see
+        // AttentionBanner), so this maps rather than picking just the first.
+        broken.map((service) => (
+          <AttentionBanner key={service} service={service} onReconnect={handleReconnect} />
+        ))
+      }
+
+      <CatchUpReport report={catchUpReport} onDismiss={() => dismissCatchUp.mutate()} />
 
       <StatStrip data={data} />
 
@@ -224,7 +245,7 @@ export function ActivitiesView({
           </div>
         </>
       ) : (
-        <Empty className="min-h-64 border">
+        <Empty className="min-h-64">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <ActivityIcon />
@@ -299,24 +320,6 @@ function StatStrip({ data }: { data: ActivitiesPage }) {
         ))}
       </div>
     </section>
-  );
-}
-
-function ActivitiesSkeleton() {
-  return (
-    <div className="grid gap-6 p-6 md:gap-7 md:p-8">
-      <div className="grid gap-2">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-4 w-72" />
-      </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-24 w-full" />
-        ))}
-      </div>
-      <Skeleton className="h-12 w-full" />
-      <Skeleton className="h-64 w-full" />
-    </div>
   );
 }
 

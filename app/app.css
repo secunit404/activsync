@@ -147,6 +147,21 @@ a {
   }
 }
 
+/*
+ * `ui/skeleton.tsx`'s `animate-pulse` is a continuous, indefinite animation —
+ * exactly what `prefers-reduced-motion` exists to suppress (unlike the
+ * one-shot overlay enter/exit above, which is why this drops the animation
+ * entirely rather than neutralising a transform). Unlayered for the same
+ * reason as the overlay rule: Tailwind v4 puts `animate-pulse` in
+ * `@layer utilities`, which always loses to an unlayered author rule
+ * regardless of selector specificity or source order.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="skeleton"] {
+    animation: none;
+  }
+}
+
 @theme inline {
   --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
