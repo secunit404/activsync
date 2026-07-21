@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActivityIcon } from "lucide-react";
 import { useEffect } from "react";
 import { Navigate, Outlet, useNavigate, useOutletContext, useSearchParams } from "react-router";
@@ -20,10 +20,12 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 import { useActivityActions } from "@/hooks/use-activity-actions";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { useSelection } from "@/hooks/use-selection";
 import {
+  ApiError,
   dismissCatchUpReport,
   getActivities,
   getAppState,
@@ -76,6 +78,13 @@ export default function Activities() {
   const activities = useQuery({
     queryKey: queryKeys.activities(query),
     queryFn: ({ signal }) => getActivities(query, signal),
+    // Keep showing the previous page/filter's rows while the new query key's
+    // data loads, instead of unmounting the whole page to a skeleton on
+    // every click. With this, `isPending` (no data at all yet) only stays
+    // true for the genuine first load — a filter/page change instead flips
+    // `isFetching` while `data` keeps the last-known rows, which the view
+    // reflects with a subtle indicator rather than the full skeleton.
+    placeholderData: keepPreviousData,
   });
 
   if (appState.isPending || activities.isPending) {
@@ -83,9 +92,17 @@ export default function Activities() {
   }
 
   if (appState.isError || activities.isError) {
+    // Either query's error can be an ApiError (the backend responded with a
+    // non-2xx status and a `detail`) or a plain fetch failure (the request
+    // never reached the backend at all) — ConnectionError needs to tell
+    // those apart rather than always claiming the server didn't respond.
+    const error = appState.error ?? activities.error;
+    const apiError = error instanceof ApiError ? error : undefined;
     return (
       <div className="p-6 md:p-8">
         <ConnectionError
+          status={apiError?.status}
+          detail={apiError?.message}
           onRetry={() => {
             appState.refetch();
             activities.refetch();
@@ -105,6 +122,11 @@ export default function Activities() {
         data={activities.data}
         appState={appState.data}
         onTabBarHiddenChange={setTabBarHidden}
+        // True only for a background refetch of a *new* query key (filter/
+        // page change) that's still resolving behind the kept-previous data
+        // — not for the initial load (already handled above) and not for a
+        // same-key background refetch (SSE/poll), which should stay silent.
+        isRefetching={activities.isFetching && activities.isPlaceholderData}
       />
       <Outlet />
     </>
@@ -115,6 +137,7 @@ export function ActivitiesView({
   data,
   appState,
   onTabBarHiddenChange,
+  isRefetching = false,
 }: {
   data: ActivitiesPage;
   /**
@@ -126,6 +149,8 @@ export function ActivitiesView({
    */
   appState?: Pick<AppState, "connections" | "catchUpReport">;
   onTabBarHiddenChange?: TabBarVisibilityContext;
+  /** True while a filter/page change is loading behind the kept-previous data. */
+  isRefetching?: boolean;
 }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -149,32 +174,42 @@ export function ActivitiesView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
-  // Tell AppLayout to hide the mobile tab bar for as long as the bar is
-  // occupying its slot, and restore it on unmount (navigating to another
-  // top-level route) so it never gets stuck hidden.
-  useEffect(() => {
-    onTabBarHiddenChange?.(selection.count > 0);
-    return () => onTabBarHiddenChange?.(false);
-  }, [selection.count, onTabBarHiddenChange]);
-
   const toggleAll = () => {
     selection.toggleAll(data.items.map((activity) => activity.garminActivityId));
   };
 
+  // Everything downstream — the bulk action ids, the displayed count, the
+  // tab-bar/padding "is the bar showing" state — derives from this filtered
+  // list, not the raw `selection.selected` id set. `selection.selected` can
+  // outlive its row: an SSE-driven background refetch can reclassify an
+  // activity out of the current filter while its id is still selected
+  // (selection only clears on a filter/page change, see the effect above),
+  // and a bulk action must never fire on an id for a row the user can no
+  // longer see.
   const selectedActivities = data.items.filter((activity) =>
     selection.selected.has(activity.garminActivityId),
   );
+  const selectedActivityIds = selectedActivities.map((activity) => activity.garminActivityId);
+  const selectedCount = selectedActivities.length;
+
+  // Tell AppLayout to hide the mobile tab bar for as long as the bar is
+  // occupying its slot, and restore it on unmount (navigating to another
+  // top-level route) so it never gets stuck hidden.
+  useEffect(() => {
+    onTabBarHiddenChange?.(selectedCount > 0);
+    return () => onTabBarHiddenChange?.(false);
+  }, [selectedCount, onTabBarHiddenChange]);
 
   const handlePublish = () => {
     activityActions.mutate(
-      { type: "publish-many", activityIds: Array.from(selection.selected) },
+      { type: "publish-many", activityIds: selectedActivityIds },
       { onSuccess: () => selection.clear() },
     );
   };
 
   const handleExclude = () => {
     activityActions.mutate(
-      { type: "exclude-many", activityIds: Array.from(selection.selected) },
+      { type: "exclude-many", activityIds: selectedActivityIds },
       { onSuccess: () => selection.clear() },
     );
   };
@@ -189,12 +224,18 @@ export function ActivitiesView({
         // (which AppLayout already reserves 74px for); give the page a
         // little extra clearance only while it's actually showing, so the
         // last table row/card isn't tucked underneath it.
-        selection.count > 0 && "pb-32 md:pb-8",
+        selectedCount > 0 && "pb-32 md:pb-8",
       )}
     >
       <header className="grid gap-1">
-        <h1 className="text-2xl font-extrabold tracking-[-0.02em] sm:text-[26px]">
+        <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-[-0.02em] sm:text-[26px]">
           Activities
+          {isRefetching ? (
+            <Spinner
+              aria-label="Loading activities"
+              className="size-4 text-muted-foreground"
+            />
+          ) : null}
         </h1>
         <p className="text-sm text-muted-foreground">
           Review your Garmin sync history before it reaches Strava.
@@ -217,12 +258,17 @@ export function ActivitiesView({
       <ActivityFilterPills counts={data.counts} />
 
       <BulkActionBar
-        count={selection.count}
+        count={selectedCount}
         names={selectedActivities.map((activity) => activity.title)}
         onClear={selection.clear}
         onExclude={handleExclude}
         onPublish={handlePublish}
         busy={activityActions.isPending}
+        // Only a broken Strava connection pauses publishing (see
+        // AttentionBanner's copy: a broken Garmin connection still lets
+        // publishing continue for activities already synced). Exclude is a
+        // purely local write, so it stays enabled either way.
+        publishDisabled={broken.includes("strava")}
       />
 
       {data.items.length > 0 ? (

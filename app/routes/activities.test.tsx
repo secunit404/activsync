@@ -153,10 +153,10 @@ test("renders the mobile compact strip with the same data", () => {
 test("renders the filter pills wired to the same counts", () => {
   renderAt("/");
   expect(
-    screen.getByRole("tablist", { name: "Filter activities by status" }),
+    screen.getByRole("group", { name: "Filter activities by status" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: /^All/ })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: /Missing/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^All/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Missing/ })).toBeInTheDocument();
 });
 
 // Ported from the deleted home.test.tsx ("reports activity filter changes
@@ -166,7 +166,7 @@ test("renders the filter pills wired to the same counts", () => {
 test("selecting a filter resets the page to 1", () => {
   const router = renderAt("/?status=published&page=4");
 
-  fireEvent.click(screen.getByRole("tab", { name: /Held/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Held/ }));
 
   const search = new URLSearchParams(router.state.location.search);
   expect(search.get("status")).toBe("held");
@@ -290,12 +290,57 @@ test("checking a row reveals the bulk action bar with the right count", async ()
   expect(within(bar).getAllByText("1 selected").length).toBeGreaterThan(0);
 });
 
+// The now-deleted dashboard disabled Publish while a connection was broken;
+// the redesigned BulkActionBar must keep doing so, or a user sees the
+// AttentionBanner saying publishing is paused directly above an enabled
+// Publish button. Exclude is a purely local write, unaffected by Strava
+// being reachable, so it must stay enabled.
+test("disables Publish (not Exclude) when Strava is broken", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] }, {
+    connections: {
+      garmin: { connected: true, status: "", meta: "", email: "" },
+      strava: { connected: false, status: "", meta: "" },
+      broken: ["strava"],
+    },
+    catchUpReport: null,
+  });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+
+  // Not /Publish/ — that also matches the "Published 10" filter pill.
+  for (const button of screen.getAllByRole("button", { name: /Publish 1/ })) {
+    expect(button).toBeDisabled();
+  }
+  for (const button of screen.getAllByRole("button", { name: "Exclude" })) {
+    expect(button).not.toBeDisabled();
+  }
+});
+
+// A broken Garmin connection alone does not pause publishing (see
+// AttentionBanner's copy: "Strava publishing continues for activities
+// already synced").
+test("keeps Publish enabled when only Garmin is broken", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] }, {
+    connections: {
+      garmin: { connected: false, status: "", meta: "", email: "" },
+      strava: { connected: true, status: "", meta: "" },
+      broken: ["garmin"],
+    },
+    catchUpReport: null,
+  });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+
+  // Not /Publish/ — that also matches the "Published 10" filter pill.
+  for (const button of screen.getAllByRole("button", { name: /Publish 1/ })) {
+    expect(button).not.toBeDisabled();
+  }
+});
+
 test("selecting a filter clears the selection", async () => {
   renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
   await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
   expect(screen.getAllByTestId("bulk-action-bar").length).toBeGreaterThan(0);
 
-  fireEvent.click(screen.getByRole("tab", { name: /Held/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Held/ }));
 
   expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
 });

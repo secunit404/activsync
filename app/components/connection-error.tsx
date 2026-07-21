@@ -4,6 +4,17 @@ import { Button } from "@/components/ui/button";
 
 type ConnectionErrorProps = {
   onRetry: () => void;
+  /**
+   * HTTP status of the failed request, when the failure was an `ApiError`
+   * (the server responded, just with an error) rather than the request
+   * never reaching it at all (network failure, container down). Presence of
+   * a status is what distinguishes the two — see `activities.tsx`, which is
+   * the only caller and routes both kinds of failure here.
+   */
+  status?: number;
+  /** The backend's `detail` message for an `ApiError`, shown as a secondary
+   * line so a 500 (say) is diagnosable instead of just "couldn't reach". */
+  detail?: string;
 };
 
 /**
@@ -14,7 +25,7 @@ type ConnectionErrorProps = {
  * Layout-agnostic (no page padding baked in) so the caller controls
  * placement; see `activities.tsx`.
  */
-export function ConnectionError({ onRetry }: ConnectionErrorProps) {
+export function ConnectionError({ onRetry, status, detail }: ConnectionErrorProps) {
   return (
     <div role="alert" className="grid max-w-sm gap-3 rounded-xl border border-destructive/30 p-6">
       <span
@@ -26,8 +37,13 @@ export function ConnectionError({ onRetry }: ConnectionErrorProps) {
       <div className="grid gap-1">
         <p className="text-[15px] font-bold">Couldn’t reach ActivSync</p>
         <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-          The server didn’t respond. Check that the container is running.
+          {status
+            ? `The server responded with an error (${status}).`
+            : "The server didn’t respond. Check that the container is running."}
         </p>
+        {detail ? (
+          <p className="text-[12.5px] leading-relaxed text-muted-foreground/80">{detail}</p>
+        ) : null}
       </div>
       <Button className="h-10 w-fit" onClick={onRetry}>
         Try again

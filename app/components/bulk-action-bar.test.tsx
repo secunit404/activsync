@@ -76,3 +76,25 @@ test("disables Exclude and Publish while busy", () => {
     expect(button).toBeDisabled();
   }
 });
+
+// A broken Strava connection means Publish would fail immediately on
+// submit (see AttentionBanner's copy) — Exclude is a purely local write and
+// stays clickable regardless.
+test("publishDisabled disables only Publish, with an explanatory title", () => {
+  renderBar({ publishDisabled: true });
+  for (const button of screen.getAllByRole("button", { name: "Exclude" })) {
+    expect(button).not.toBeDisabled();
+  }
+  for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Reconnect Strava to resume publishing.");
+  }
+});
+
+test("publishDisabled is false by default, so Publish stays enabled", () => {
+  renderBar();
+  for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
+    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute("title");
+  }
+});

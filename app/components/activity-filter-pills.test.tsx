@@ -24,33 +24,33 @@ function renderAt(path: string) {
 
 test("marks the status matching the URL as selected", () => {
   renderAt("/?status=held");
-  expect(screen.getByRole("tab", { name: /Held/ })).toHaveAttribute(
-    "aria-selected",
+  expect(screen.getByRole("button", { name: /Held/ })).toHaveAttribute(
+    "aria-pressed",
     "true",
   );
-  expect(screen.getByRole("tab", { name: /^All/ })).toHaveAttribute(
-    "aria-selected",
+  expect(screen.getByRole("button", { name: /^All/ })).toHaveAttribute(
+    "aria-pressed",
     "false",
   );
 });
 
 test("defaults to All when there is no status param", () => {
   renderAt("/");
-  expect(screen.getByRole("tab", { name: /^All/ })).toHaveAttribute(
-    "aria-selected",
+  expect(screen.getByRole("button", { name: /^All/ })).toHaveAttribute(
+    "aria-pressed",
     "true",
   );
 });
 
 test("does not render an Excluded pill", () => {
   renderAt("/");
-  expect(screen.queryByRole("tab", { name: /Excluded/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Excluded/ })).not.toBeInTheDocument();
 });
 
 test("selecting a filter writes the status param and resets the page", () => {
   const router = renderAt("/?status=published&page=4");
 
-  fireEvent.click(screen.getByRole("tab", { name: /Pending/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Pending/ }));
 
   const search = new URLSearchParams(router.state.location.search);
   expect(search.get("status")).toBe("pending");
@@ -60,7 +60,7 @@ test("selecting a filter writes the status param and resets the page", () => {
 test("selecting All removes the status param", () => {
   const router = renderAt("/?status=held");
 
-  fireEvent.click(screen.getByRole("tab", { name: /^All/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^All/ }));
 
   const search = new URLSearchParams(router.state.location.search);
   expect(search.has("status")).toBe(false);

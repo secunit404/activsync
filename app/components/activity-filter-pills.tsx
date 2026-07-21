@@ -41,7 +41,7 @@ export function ActivityFilterPills({ counts }: ActivityFilterPillsProps) {
 
   return (
     <div
-      role="tablist"
+      role="group"
       aria-label="Filter activities by status"
       className="flex flex-nowrap gap-1 rounded-xl border border-border bg-muted/30 p-1.5 md:flex-wrap md:gap-1.5"
     >
@@ -52,8 +52,7 @@ export function ActivityFilterPills({ counts }: ActivityFilterPillsProps) {
           <button
             key={option.label}
             type="button"
-            role="tab"
-            aria-selected={isActive}
+            aria-pressed={isActive}
             className={cn(
               "flex-1 rounded-lg px-2 py-1.5 text-center text-[11.5px] font-medium whitespace-nowrap transition-colors md:flex-none md:px-3.5 md:py-2 md:text-[13px]",
               isActive

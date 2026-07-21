@@ -9,7 +9,16 @@ type BulkActionBarProps = {
   onExclude: () => void;
   onPublish: () => void;
   busy: boolean;
+  /**
+   * True while the Strava connection is broken (see `AppState.connections
+   * .broken`) — Publish would otherwise error immediately on submit.
+   * Exclude is unaffected: it is a purely local status change, not a call
+   * to Strava, so it stays enabled.
+   */
+  publishDisabled?: boolean;
 };
+
+const publishDisabledReason = "Reconnect Strava to resume publishing.";
 
 /**
  * Contextual action bar for the Activities screen's bulk selection (handoff
@@ -34,12 +43,14 @@ export function BulkActionBar({
   onExclude,
   onPublish,
   busy,
+  publishDisabled = false,
 }: BulkActionBarProps) {
   if (count <= 0) {
     return null;
   }
 
   const nameList = names.join(", ");
+  const publishBlocked = busy || publishDisabled;
 
   return (
     <div
@@ -73,7 +84,13 @@ export function BulkActionBar({
           >
             Exclude
           </Button>
-          <Button className="flex-[1.4]" onClick={onPublish} disabled={busy}>
+          <Button
+            className="flex-[1.4]"
+            onClick={onPublish}
+            disabled={publishBlocked}
+            title={publishDisabled ? publishDisabledReason : undefined}
+            aria-description={publishDisabled ? publishDisabledReason : undefined}
+          >
             {busy ? <Spinner /> : null}
             Publish {count}
           </Button>
@@ -94,7 +111,12 @@ export function BulkActionBar({
           <Button variant="outline" onClick={onExclude} disabled={busy}>
             Exclude
           </Button>
-          <Button onClick={onPublish} disabled={busy}>
+          <Button
+            onClick={onPublish}
+            disabled={publishBlocked}
+            title={publishDisabled ? publishDisabledReason : undefined}
+            aria-description={publishDisabled ? publishDisabledReason : undefined}
+          >
             {busy ? <Spinner /> : null}
             Publish {count}
           </Button>
