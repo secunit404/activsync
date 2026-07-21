@@ -13,6 +13,13 @@ test("mobile shows the tab bar and no rail", async ({ page }) => {
 });
 
 test("nav moves between destinations", async ({ page }) => {
-  await page.getByRole("link", { name: "Hevy" }).click();
+  // Scoped to the shell nav (rail or tab bar, whichever this viewport
+  // shows), not a bare role/name query — Task 8's activity list renders
+  // real <a> links for activity titles, and the seeded mock data includes
+  // one literally titled "Forgot the watch (Hevy)", which also matches an
+  // unscoped `getByRole("link", { name: "Hevy" })` substring query.
+  const isMobile = test.info().project.name === "mobile";
+  const nav = page.getByTestId(isMobile ? "app-tab-bar" : "app-rail");
+  await nav.getByRole("link", { name: "Hevy" }).click();
   await expect(page).toHaveURL(/\/hevy$/);
 });

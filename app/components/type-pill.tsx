@@ -15,6 +15,6 @@ export function TypePill({ type }: { type: string }) {
   );
 }
 
-function formatTypeLabel(type: string) {
+export function formatTypeLabel(type: string) {
   return type.replaceAll("_", " ").toUpperCase();
 }

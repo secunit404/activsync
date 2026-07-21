@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test } from "vitest";
 
-import type { ActivitiesPage } from "@/lib/api";
+import type { Activity, ActivitiesPage } from "@/lib/api";
 import { ActivitiesView } from "./activities";
 
 // The stat strip renders two parallel layouts (tablet/desktop grid vs. the
@@ -36,9 +36,53 @@ const activities: ActivitiesPage = {
   },
 };
 
-function renderAt(path: string) {
+const activityDetail: Activity["detail"] = {
+  description: "",
+  distance: "10.2 km",
+  duration: "52:14",
+  movingTime: "",
+  elapsedTime: "",
+  pace: "",
+  speed: "",
+  elevGain: "",
+  elevLoss: "",
+  calories: "",
+  avgHr: "156 bpm",
+  maxHr: "",
+  avgPower: "",
+  maxPower: "",
+  normPower: "",
+  aerobicTe: "",
+  anaerobicTe: "",
+  trainingLoad: "",
+  avgCadence: "",
+  maxCadence: "",
+  totalSets: "",
+  totalReps: "",
+  totalVolume: "",
+};
+
+const oneActivity: Activity = {
+  garminActivityId: 12345,
+  activityType: "running",
+  title: "Morning run",
+  description: "",
+  startTime: "2026-07-21 06:42:00",
+  publishStatus: "pending",
+  stravaActivityId: null,
+  holdReason: null,
+  startDateDisplay: "21 Jul",
+  startMonthYearDisplay: "July 2026",
+  startClockDisplay: "06:42",
+  garminUrl: "https://connect.garmin.com/modern/activity/12345",
+  stravaUrl: null,
+  hevyBadge: null,
+  detail: activityDetail,
+};
+
+function renderAt(path: string, data: ActivitiesPage = activities) {
   const router = createMemoryRouter(
-    [{ path: "*", element: <ActivitiesView data={activities} /> }],
+    [{ path: "*", element: <ActivitiesView data={data} /> }],
     { initialEntries: [path] },
   );
   render(<RouterProvider router={router} />);
@@ -98,7 +142,23 @@ test("selecting a filter resets the page to 1", () => {
   expect(search.has("page")).toBe(false);
 });
 
-test("leaves a slot for the Task 8 activity table", () => {
+test("renders an empty state when there are no activities", () => {
   renderAt("/");
-  expect(screen.getByTestId("activities-table-slot")).toBeInTheDocument();
+  expect(screen.getByText("No activities found")).toBeInTheDocument();
+});
+
+test("renders the pagination control from the pagination data", () => {
+  renderAt("/");
+  expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+});
+
+test("renders a table row (desktop) and a card (mobile) for each activity", () => {
+  renderAt("/", { ...activities, items: [oneActivity] });
+  expect(
+    within(screen.getByRole("table")).getByRole("row", { name: /Morning run/ }),
+  ).toBeInTheDocument();
+  // Both the table row and the mobile card render "Morning run" — the two
+  // layouts are switched by CSS breakpoint only (never JS), so jsdom keeps
+  // both subtrees in the DOM regardless of viewport, same as the stat strip.
+  expect(screen.getAllByText("Morning run")).toHaveLength(2);
 });

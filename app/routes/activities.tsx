@@ -1,11 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
-import { CircleAlertIcon } from "lucide-react";
+import { ActivityIcon, CircleAlertIcon } from "lucide-react";
+import { useState } from "react";
 import { Navigate, Outlet, useSearchParams } from "react-router";
 
+import { ActivitiesPagination } from "@/components/activities-pagination";
+import { ActivitiesTable } from "@/components/activities-table";
+import { ActivityCard } from "@/components/activity-card";
 import { ActivityFilterPills } from "@/components/activity-filter-pills";
 import { StatTile, statTileToneClass, type StatTileTone } from "@/components/stat-tile";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import {
@@ -98,6 +109,33 @@ export default function Activities() {
 }
 
 export function ActivitiesView({ data }: { data: ActivitiesPage }) {
+  // Placeholder selection state so ActivitiesTable/ActivityCard's
+  // selected/onToggle/onToggleAll contract has something to bind to. Task 9
+  // owns the real `useSelection` hook (and the bulk-action bar it drives) —
+  // this local, immutable-Set implementation is a stand-in with the exact
+  // same shape, kept here only so the checkboxes are interactive.
+  const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set());
+
+  const toggle = (id: number) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelected((current) =>
+      current.size === data.items.length
+        ? new Set()
+        : new Set(data.items.map((activity) => activity.garminActivityId)),
+    );
+  };
+
   return (
     <div className="grid gap-6 p-6 md:gap-7 md:p-8">
       <header className="grid gap-1">
@@ -113,12 +151,42 @@ export function ActivitiesView({ data }: { data: ActivitiesPage }) {
 
       <ActivityFilterPills counts={data.counts} />
 
-      <div
-        data-testid="activities-table-slot"
-        className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground"
-      >
-        Activity table — Task 8
-      </div>
+      {data.items.length > 0 ? (
+        <>
+          <ActivitiesTable
+            activities={data.items}
+            selected={selected}
+            onToggle={toggle}
+            onToggleAll={toggleAll}
+          />
+          <div data-testid="activities-cards" className="grid gap-3 md:hidden">
+            {data.items.map((activity) => (
+              <ActivityCard
+                key={activity.garminActivityId}
+                activity={activity}
+                selected={selected.has(activity.garminActivityId)}
+                onToggle={toggle}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <Empty className="min-h-64 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ActivityIcon />
+            </EmptyMedia>
+            <EmptyTitle>No activities found</EmptyTitle>
+            <EmptyDescription>
+              {data.status
+                ? `There are no ${data.status} activities in the current sync history.`
+                : "Activities will appear here after the first Garmin sync."}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+
+      <ActivitiesPagination page={data.pagination.page} pageCount={data.pagination.pageCount} />
     </div>
   );
 }
