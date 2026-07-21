@@ -15,56 +15,33 @@ from datetime import datetime
 # same moment reliably corrupted each other's reads: observed
 # `sqlite3.InterfaceError: bad parameter or other API misuse` and rows from
 # one query silently showing up in another's result under concurrent
-# requests (e.g. plain `curl` fired in parallel at /api/v1/app). An RLock
-# (not a plain Lock) is required because the stdlib's own `Connection.execute`
-# internally calls `self.cursor()` -> our overridden, also-locked `cursor()`
-# -> `_LockingCursor.execute()`, all on the same thread; a non-reentrant lock
-# would deadlock on that nesting.
-_DB_LOCK = threading.RLock()
-
-
-class _LockingCursor(sqlite3.Cursor):
-    """Cursor whose statement-issuing and row-fetching calls serialize
-    through `_DB_LOCK`, so a fetch on this thread can't interleave with a
-    concurrent execute on another. See `_LockingConnection` for the full
-    rationale."""
-
-    def execute(self, *args, **kwargs):
-        with _DB_LOCK:
-            return super().execute(*args, **kwargs)
-
-    def executemany(self, *args, **kwargs):
-        with _DB_LOCK:
-            return super().executemany(*args, **kwargs)
-
-    def fetchone(self, *args, **kwargs):
-        with _DB_LOCK:
-            return super().fetchone(*args, **kwargs)
-
-    def fetchall(self, *args, **kwargs):
-        with _DB_LOCK:
-            return super().fetchall(*args, **kwargs)
-
-    def fetchmany(self, *args, **kwargs):
-        with _DB_LOCK:
-            return super().fetchmany(*args, **kwargs)
-
-    def __next__(self):
-        with _DB_LOCK:
-            return super().__next__()
+# requests (e.g. plain `curl` fired in parallel at /api/v1/app).
+#
+# The actual corruption source was the stdlib's per-connection LRU cache of
+# *compiled statement objects* (keyed by SQL text) that `cached_statements=0`
+# below now disables — two concurrent calls executing the same SQL text with
+# different bind parameters could be handed the same not-thread-safe
+# statement object mid-bind/step. SQLite itself is compiled serialized
+# (`sqlite3.threadsafety == 3`), so with that cache gone, a plain per-call
+# lock around `execute`/`commit`/etc. is enough to keep single-statement
+# calls safe on this shared connection. Plain `Lock`, not `RLock`: nothing
+# here re-enters. (A previous version of this comment claimed
+# `Connection.execute` internally calls `self.cursor()`, requiring
+# reentrancy — that is false on CPython 3.14, verified by checking
+# `type(conn.execute(...))`, which is a plain `sqlite3.Cursor`, never our
+# subclass. `cursor()` and its own locked cursor subclass were dead code and
+# have been removed.)
+_DB_LOCK = threading.Lock()
 
 
 class _LockingConnection(sqlite3.Connection):
     """Serializes all statement execution and fetching against `_DB_LOCK` —
     see the module docstring above `_DB_LOCK` for why a shared, multi-thread
-    Connection needs this. Every call site in this codebase already goes
-    through `conn.execute(...)`/`conn.executemany(...)`/
-    `conn.executescript(...)`/`conn.commit()` (no call site holds its own
-    `.cursor()`), so overriding those four plus `cursor()` covers the whole
-    app without touching any of those call sites."""
-
-    def cursor(self, factory=None):
-        return super().cursor(factory or _LockingCursor)
+    Connection needs this. Every call site in this codebase goes through
+    `conn.execute(...)`/`conn.executemany(...)`/`conn.executescript(...)`/
+    `conn.commit()`/`conn.rollback()` (no call site holds its own
+    `.cursor()`), so overriding those five covers the whole app without
+    touching any of those call sites."""
 
     def execute(self, *args, **kwargs):
         with _DB_LOCK:
