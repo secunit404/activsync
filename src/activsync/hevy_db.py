@@ -14,6 +14,8 @@ import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
+from activsync import db
+
 STATUSES = (
     "needs_mapping",
     "waiting_watch",
@@ -490,14 +492,20 @@ def set_operation_outcome(
     Closing the operation before updating the workout can leave a closed
     journal behind an actionable ``syncing`` row if the process dies between
     commits. That row would be eligible to open and submit a second operation.
-    Both records therefore transition together or neither does.
+    Both records therefore transition together or neither does — guaranteed
+    by wrapping both statements in `db.transaction`, which holds the shared
+    connection's lock for the whole unit so a concurrent commit on another
+    thread can't land between them (see CRITICAL 2 in the checkpoint review:
+    with a connection shared across threads, per-statement commits are not
+    enough — one thread's unrelated `commit()` can flush another thread's
+    half-finished multi-statement unit).
     """
     if phase not in ("failed", "needs_review"):
         raise ValueError(f"invalid operation outcome phase: {phase!r}")
     if status not in STATUSES:
         raise ValueError(f"invalid workout status: {status!r}")
     now = _now_iso()
-    try:
+    with db.transaction(conn):
         op_cur = conn.execute(
             """UPDATE hevy_operations SET phase = ?, last_error = ?, updated_at = ?
                WHERE id = ? AND hevy_id = ?""",
@@ -512,10 +520,6 @@ def set_operation_outcome(
             raise ValueError(
                 f"operation outcome target missing: op={op_id}, hevy={hevy_id!r}"
             )
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
 
 
 def complete_operation(
@@ -529,10 +533,13 @@ def complete_operation(
 ) -> None:
     """The terminal transition, in ONE transaction: close the operation, link
     the target, set the terminal status, and record the applied revision.
-    Split across separate commits, a crash in between would leave a closed
-    journal with an unlinked replacement — a later tick would upload again."""
+    Split across separate commits, a crash — or a concurrent thread committing
+    between the two statements — would leave a closed journal with an
+    unlinked replacement, and a later tick would upload again. `db.transaction`
+    holds the shared connection's lock across both statements so neither can
+    become durable without the other."""
     now = _now_iso()
-    try:
+    with db.transaction(conn):
         conn.execute(
             "UPDATE hevy_operations SET phase = 'done', updated_at = ? WHERE id = ?",
             (now, op_id),
@@ -547,10 +554,6 @@ def complete_operation(
             (target_activity_id, applied_strategy, status, applied_updated_at,
              now, hevy_id),
         )
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
 
 
 def wake_needs_mapping(
@@ -589,20 +592,20 @@ def wake_needs_mapping(
     if not affected:
         return 0
     now = _now_iso()
-    conn.executemany(
-        """UPDATE hevy_workouts
-           SET status = CASE applied_strategy
-                   WHEN 'merge' THEN 'merged'
-                   WHEN 'describe' THEN 'described'
-                   WHEN 'replace' THEN 'replaced'
-                   WHEN 'passive' THEN 'uploaded_passive'
-                   ELSE 'waiting_watch'
-               END,
-               error = NULL, updated_at = ?
-           WHERE hevy_id = ? AND status = 'needs_mapping'""",
-        [(now, workout_id) for workout_id in affected],
-    )
-    conn.commit()
+    with db.transaction(conn):
+        conn.executemany(
+            """UPDATE hevy_workouts
+               SET status = CASE applied_strategy
+                       WHEN 'merge' THEN 'merged'
+                       WHEN 'describe' THEN 'described'
+                       WHEN 'replace' THEN 'replaced'
+                       WHEN 'passive' THEN 'uploaded_passive'
+                       ELSE 'waiting_watch'
+                   END,
+                   error = NULL, updated_at = ?
+               WHERE hevy_id = ? AND status = 'needs_mapping'""",
+            [(now, workout_id) for workout_id in affected],
+        )
     return len(affected)
 
 

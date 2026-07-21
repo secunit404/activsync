@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 
 # `check_same_thread=False` (below) only disables Python's ownership check —
@@ -24,14 +25,17 @@ from datetime import datetime
 # statement object mid-bind/step. SQLite itself is compiled serialized
 # (`sqlite3.threadsafety == 3`), so with that cache gone, a plain per-call
 # lock around `execute`/`commit`/etc. is enough to keep single-statement
-# calls safe on this shared connection. Plain `Lock`, not `RLock`: nothing
-# here re-enters. (A previous version of this comment claimed
-# `Connection.execute` internally calls `self.cursor()`, requiring
-# reentrancy — that is false on CPython 3.14, verified by checking
-# `type(conn.execute(...))`, which is a plain `sqlite3.Cursor`, never our
-# subclass. `cursor()` and its own locked cursor subclass were dead code and
-# have been removed.)
-_DB_LOCK = threading.Lock()
+# calls safe on this shared connection.
+#
+# It is an `RLock`, not a plain `Lock`, for a different reason than a stale
+# version of this comment used to claim: `Connection.execute` does NOT
+# internally call `self.cursor()` (verified against CPython 3.14 — it never
+# instantiates our old cursor subclass). The real reentrancy need comes from
+# `transaction()` below: it holds `_DB_LOCK` across an entire multi-statement
+# unit of work, including the `execute()`/`commit()` calls made from inside
+# that `with` block — and those calls independently re-acquire `_DB_LOCK` via
+# the overrides just below. A plain `Lock` would deadlock on that nesting.
+_DB_LOCK = threading.RLock()
 
 
 class _LockingConnection(sqlite3.Connection):
@@ -62,6 +66,39 @@ class _LockingConnection(sqlite3.Connection):
     def rollback(self):
         with _DB_LOCK:
             return super().rollback()
+
+
+@contextmanager
+def transaction(conn: sqlite3.Connection):
+    """Hold `_DB_LOCK` across an entire multi-statement unit of work, from
+    before its first statement through its final `commit()`/`rollback()`.
+
+    With `isolation_level=""` (the sqlite3 default we use), the implicit
+    `BEGIN` opened by the first write is connection-global. On a connection
+    shared across threads, a second thread's unrelated `commit()` landing
+    between two statements of a "single" logical unit commits that unit's
+    first statement early — the second thread didn't ask to commit someone
+    else's half-finished work, but `sqlite3.Connection.commit()` doesn't know
+    the difference. Per-call locking on `execute`/`commit` (above) doesn't
+    prevent this: each call takes and releases the lock individually, so
+    another thread can still slip a full execute+commit cycle of its own in
+    between two calls of the "atomic" unit.
+
+    Usage — replace the unit's own `commit()`/`rollback()` with this:
+
+        with db.transaction(conn):
+            conn.execute(...)
+            conn.execute(...)
+            # no manual commit() — this context manager commits on a clean
+            # exit and rolls back (then re-raises) on any exception.
+    """
+    with _DB_LOCK:
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 SCHEMA = """

@@ -1,11 +1,13 @@
 """Tests for the Hevy sync data model (hevy_db)."""
 
 import sqlite3
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from activsync import hevy_db
+from activsync import db, hevy_db
 
 
 def make_conn():
@@ -243,6 +245,101 @@ def test_operation_outcome_rolls_back_if_workout_transition_fails():
         "SELECT phase FROM hevy_operations WHERE id = ?", (op_id,)
     ).fetchone()
     assert op["phase"] == "preparing"
+
+
+def test_complete_operation_is_atomic_under_concurrent_commit(tmp_path):
+    """CRITICAL 2 regression test.
+
+    `complete_operation` issues two UPDATEs before its commit. With
+    `isolation_level=""`, the implicit BEGIN opened by the first UPDATE is
+    connection-global — so on the shared connection this app actually uses
+    (one Connection, many threads), an unrelated thread's `commit()` landing
+    between the two UPDATEs would flush the first one early, leaving
+    `hevy_operations.phase='done'` durable while `hevy_workouts
+    .garmin_activity_id` is still NULL. That torn state is exactly the
+    "closed journal with an unlinked replacement" that causes a duplicate
+    re-upload on the next poller tick.
+
+    This uses `db.connect` (not the bare in-memory `make_conn` helper used
+    elsewhere in this file) because the bug only reproduces on the real
+    shared, lock-guarded connection this app hands to both the poller and
+    the request thread pool.
+    """
+    conn = db.connect(str(tmp_path / "concurrency.db"))
+    now = datetime.now(timezone.utc)
+    hevy_db.upsert_workout(
+        conn, "w1", "Push Day", "2026-01-01 10:00:00", "2026-01-01 11:00:00",
+        now.isoformat(), {"exercises": []},
+    )
+    op_id = hevy_db.open_operation(conn, "w1", "replace", 111, [])
+    assert op_id is not None
+
+    first_statement_done = threading.Event()
+    observed = {}
+
+    real_execute = conn.execute
+
+    def spying_execute(sql, *args, **kwargs):
+        result = real_execute(sql, *args, **kwargs)
+        if "hevy_operations SET phase = 'done'" in sql:
+            # Simulate the window between complete_operation's two
+            # statements in which a concurrent thread could act.
+            first_statement_done.set()
+            time.sleep(0.3)
+        return result
+
+    conn.execute = spying_execute
+
+    def do_complete():
+        hevy_db.complete_operation(
+            conn, op_id, "w1", 999, "replace", "replaced", now.isoformat())
+
+    def do_unrelated_write():
+        assert first_statement_done.wait(timeout=2), "first statement never ran"
+        # An unrelated write+commit from another thread, exactly the kind
+        # that FastAPI's worker threadpool or the poller would issue.
+        hevy_db.upsert_workout(
+            conn, "w2", "Other", "2026-01-01 09:00:00", "2026-01-01 09:30:00",
+            now.isoformat(), {"exercises": []},
+        )
+        op_row = conn.execute(
+            "SELECT phase FROM hevy_operations WHERE id = ?", (op_id,)
+        ).fetchone()
+        workout_row = conn.execute(
+            "SELECT garmin_activity_id FROM hevy_workouts WHERE hevy_id = ?", ("w1",)
+        ).fetchone()
+        observed["phase"] = op_row["phase"]
+        observed["garmin_activity_id"] = workout_row["garmin_activity_id"]
+
+    t_complete = threading.Thread(target=do_complete)
+    t_other = threading.Thread(target=do_unrelated_write)
+    t_complete.start()
+    t_other.start()
+    t_complete.join(timeout=5)
+    t_other.join(timeout=5)
+    conn.execute = real_execute
+
+    assert not t_complete.is_alive() and not t_other.is_alive(), "threads did not finish"
+
+    # The torn state: the operation journal reads 'done' (closed) while the
+    # workout it should have linked is still unlinked. A crash at this exact
+    # moment is what produces the duplicate re-upload.
+    torn = observed["phase"] == "done" and observed["garmin_activity_id"] is None
+    assert not torn, (
+        "observed a torn transaction: hevy_operations.phase='done' became "
+        "durable before hevy_workouts.garmin_activity_id was set"
+    )
+
+    # Sanity: the operation itself still completes correctly once both
+    # threads are done.
+    final_op = conn.execute(
+        "SELECT phase FROM hevy_operations WHERE id = ?", (op_id,)
+    ).fetchone()
+    final_workout = conn.execute(
+        "SELECT garmin_activity_id FROM hevy_workouts WHERE hevy_id = ?", ("w1",)
+    ).fetchone()
+    assert final_op["phase"] == "done"
+    assert final_workout["garmin_activity_id"] == 999
 
 
 def test_pre_upload_ids_round_trip_as_list():
