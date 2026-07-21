@@ -339,3 +339,114 @@ def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
     assert run.status_code == 200
     assert run.json()["ran"] is True
     assert len(hevy_db.list_workouts(conn)) == 7
+    assert "7 workouts ingested" in run.json()["message"]
+
+
+def test_hevy_backfill_run_with_explicit_ids_imports_only_those(
+    tmp_path, monkeypatch
+):
+    """The backfill screen lets a user tick a subset of the preview and
+    press "Import N selected" — `hevyIds` on the run request is how that
+    selection reaches the server. Of the 7 fresh demo workouts, only the two
+    named here (both non-locked, see the preview-actions comment above) may
+    land in `hevy_workouts`; the other 5 must be left untouched even though
+    they were part of the same `since` window."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
+
+    run = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={
+            "since": "2020-01-01",
+            "hevyIds": [dev_mock.HEVY_DEV_MERGED_ID, dev_mock.HEVY_DEV_PASSIVE_ID],
+        },
+    )
+
+    assert run.status_code == 200
+    assert run.json()["ran"] is True
+    assert "2 workouts ingested" in run.json()["message"]
+    ingested_ids = {w["hevy_id"] for w in hevy_db.list_workouts(conn)}
+    assert ingested_ids == {dev_mock.HEVY_DEV_MERGED_ID, dev_mock.HEVY_DEV_PASSIVE_ID}
+
+
+def test_hevy_backfill_run_rejects_needs_mapping_ids_even_when_requested(
+    tmp_path, monkeypatch
+):
+    """Locked rows are disabled in the UI, but the server — not the client —
+    is the actual enforcement point: an id whose preview action is
+    `needs_mapping` must never be ingested, even if a request explicitly
+    names it alongside a valid one."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
+
+    run = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={
+            "since": "2020-01-01",
+            "hevyIds": [dev_mock.HEVY_DEV_UNMAPPED_ID, dev_mock.HEVY_DEV_MERGED_ID],
+        },
+    )
+
+    assert run.status_code == 200
+    assert "1 workout ingested" in run.json()["message"]
+    assert hevy_db.get_workout(conn, dev_mock.HEVY_DEV_UNMAPPED_ID) is None
+    assert hevy_db.get_workout(conn, dev_mock.HEVY_DEV_MERGED_ID) is not None
+
+
+def test_hevy_backfill_run_with_empty_id_list_imports_nothing(tmp_path, monkeypatch):
+    """`hevyIds: []` is an explicit selection of zero rows (e.g. every row
+    the user could pick was locked), distinct from omitting the field
+    entirely — it must not fall back to "import everything since the date"."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
+
+    run = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={"since": "2020-01-01", "hevyIds": []},
+    )
+
+    assert run.status_code == 200
+    assert "0 workouts ingested" in run.json()["message"]
+    assert hevy_db.list_workouts(conn) == []
+
+
+def test_hevy_backfill_run_ignores_unknown_ids_without_importing_anything_else(
+    tmp_path, monkeypatch
+):
+    """An id that doesn't match any item in the since-window preview (stale
+    client state, a typo, a workout that fell out of range) is dropped
+    silently rather than falling back to a wider import — the selection is
+    a ceiling, never a suggestion to import something else instead."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
+
+    run = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={"since": "2020-01-01", "hevyIds": ["hw-not-in-preview"]},
+    )
+
+    assert run.status_code == 200
+    assert "0 workouts ingested" in run.json()["message"]
+    assert hevy_db.list_workouts(conn) == []
+
+
+def test_hevy_backfill_run_without_ids_still_imports_everything(tmp_path, monkeypatch):
+    """Back-compat: omitting `hevyIds` (or sending it as null) must preserve
+    the original full since-derived import — existing callers, and the
+    preview/run pair, keep working unmodified."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
+
+    run = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={"since": "2020-01-01", "hevyIds": None},
+    )
+
+    assert run.status_code == 200
+    assert "7 workouts ingested" in run.json()["message"]
+    assert len(hevy_db.list_workouts(conn)) == 7

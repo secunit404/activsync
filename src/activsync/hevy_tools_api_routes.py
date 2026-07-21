@@ -58,6 +58,11 @@ class ToolActionResult(ApiModel):
 
 class BackfillRequest(ApiModel):
     since: str
+    # `None` (the default) means the field was omitted or sent as `null` —
+    # preserves the original "import everything the since-window preview
+    # surfaces" behavior for back-compatibility. A list, including `[]`,
+    # means "import exactly these ids" — see `_select_backfill_items`.
+    hevy_ids: list[str] | None = None
 
 
 class BackfillItem(ApiModel):
@@ -75,6 +80,42 @@ class BackfillResult(ApiModel):
     ran: bool
     linked: int
     items: list[BackfillItem]
+
+
+def _select_backfill_items(
+    raw_items: list[dict], hevy_ids: list[str] | None
+) -> list[dict]:
+    """Narrow a preview's raw items down to what `/backfill/run` should
+    actually ingest.
+
+    `hevy_ids is None` means the field was omitted (or sent `null`) on the
+    wire — return every item unfiltered, so a client that only ever sends
+    `since` keeps its original "import everything the preview surfaced"
+    behavior. Once a list is present, even an empty one, it is treated as an
+    explicit selection: `[]` deliberately imports nothing rather than
+    silently falling back to "import everything" — the backfill screen can
+    reach that state (every previewed row locked, none selected), and the
+    two readings mean opposite things.
+
+    Two guardrails apply to every explicit selection:
+    - Ids that don't match any item in `raw_items` (a stale client, a typo,
+      a workout that fell out of the since-window between preview and run)
+      are dropped rather than causing an error or a wider import — the
+      selection is a ceiling on what may be imported, never a trigger for
+      importing something else instead.
+    - Items whose preview action is `needs_mapping` are dropped even if
+      explicitly named. The backfill UI disables those checkboxes, but the
+      server is the actual enforcement point — a client could send one
+      anyway, and it must never park an unmapped workout in the sync queue.
+    """
+    if hevy_ids is None:
+        return raw_items
+    requested = set(hevy_ids)
+    return [
+        item
+        for item in raw_items
+        if item["workout"].get("id") in requested and item["action"] != "needs_mapping"
+    ]
 
 
 def create_router(
@@ -222,9 +263,13 @@ def create_router(
     @router.post("/backfill/run", response_model=BackfillResult)
     def run_backfill(payload: BackfillRequest) -> BackfillResult:
         raw_items, items = build_backfill(payload.since)
-        linked = hevy_backfill.run_items(conn, raw_items)
+        selected_items = _select_backfill_items(raw_items, payload.hevy_ids)
+        linked = hevy_backfill.run_items(conn, selected_items)
         events.bus.publish("refresh")
-        count = len(items)
+        # Reflects what was actually handed to `run_items`, not the full
+        # preview length — once the import is selective those two can
+        # differ, and the confirmation must not overstate the work done.
+        count = len(selected_items)
         return BackfillResult(
             message=(
                 f"Backfill complete: {count} workout"
