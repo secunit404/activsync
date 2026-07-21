@@ -8,16 +8,19 @@ import { test, expect } from "./fixtures";
 // key in mock mode (`dev_mock.MockHevyClient`), so this is a legitimate
 // user path, not a backdoor into the seeded data.
 //
-// This whole flow runs on the desktop project only. It performs a real,
-// persisted mutation (skip) against the shared e2e server/DB that every
-// viewport project points at; running it on tablet/mobile too would race
-// three copies of the same mutation against the same "Ring circuit (Hevy)"
-// row. One end-to-end pass is what the coverage requirement asks for.
+// This spec performs real, persisted mutations (connecting Hevy, then
+// skipping "Ring circuit (Hevy)") against the shared e2e server/DB every
+// project points at. Isolation is enforced by playwright.config.ts, not by
+// a project-name check here: this file is matched only by the dedicated
+// `hevy-queue` project, which runs alone — after the setup-* chain
+// confirms onboarding is stable, before `hevy-backfill`, and before the
+// three main viewport projects even start (they `testIgnore` this file
+// entirely). One end-to-end pass is what the coverage requirement asks
+// for, and running it under any other project would either duplicate the
+// mutation or race it against e2e/backfill.spec.ts's own Hevy-connect step.
 test("skip: cancelling leaves the workout queued, confirming skips it — via the real dialog, not window.confirm", async ({
   page,
 }) => {
-  test.skip(test.info().project.name !== "desktop", "single pass — avoids racing the shared mutation across viewport projects");
-
   await page.goto("/settings");
   await page
     .getByTestId("connection-status-hevy")

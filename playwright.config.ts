@@ -38,23 +38,60 @@ export default defineConfig({
       use: { ...devices["Pixel 7"] },
       dependencies: ["setup-tablet"],
     },
+    // e2e/hevy-queue.spec.ts, e2e/backfill.spec.ts, and
+    // e2e/strava-publish.spec.ts each perform real, persisted mutations
+    // against connection state (`hevy_api_key`, `strava_tokens`,
+    // `garmin_credentials_verified`) and/or the activities table that every
+    // other project's tests implicitly assume is stable for the run:
+    //   - e2e/toast.spec.ts and e2e/smoke.spec.ts pin specific rows/titles
+    //     ("Morning run #1") and rely on Strava staying disconnected
+    //     (`publishDisabled`) — a concurrent publish or Garmin catch-up
+    //     sync could reorder/relabel rows out from under them.
+    //   - e2e/bulk-select.spec.ts selects "the first row", which a
+    //     concurrent publish must not be allowed to reorder mid-test.
+    //   - e2e/hevy-queue.spec.ts and e2e/backfill.spec.ts both connect
+    //     Hevy through the same real Settings form and read/write the same
+    //     "Ring circuit (Hevy)" queue row.
+    // None of that is safe under `fullyParallel`, so — same pattern as the
+    // setup-* chain above — these three run alone, in strict serial order,
+    // after onboarding is confirmed stable (`setup-mobile`) and before any
+    // of the three main viewport projects (which now ignore all three
+    // files) are allowed to start.
     {
-      name: "desktop",
-      testIgnore: /setup\.spec\.ts$/,
+      name: "hevy-queue",
+      testMatch: /hevy-queue\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
       dependencies: ["setup-mobile"],
     },
     {
+      name: "hevy-backfill",
+      testMatch: /backfill\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      dependencies: ["hevy-queue"],
+    },
+    {
+      name: "strava-publish",
+      testMatch: /strava-publish\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      dependencies: ["hevy-backfill"],
+    },
+    {
+      name: "desktop",
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish)\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      dependencies: ["strava-publish"],
+    },
+    {
       name: "tablet",
-      testIgnore: /setup\.spec\.ts$/,
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish)\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 834, height: 1112 } },
-      dependencies: ["setup-mobile"],
+      dependencies: ["strava-publish"],
     },
     {
       name: "mobile",
-      testIgnore: /setup\.spec\.ts$/,
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish)\.spec\.ts$/,
       use: { ...devices["Pixel 7"] },
-      dependencies: ["setup-mobile"],
+      dependencies: ["strava-publish"],
     },
   ],
   webServer: {

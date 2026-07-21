@@ -1,23 +1,20 @@
 import { test, expect } from "./fixtures";
 
 // Same "connect Hevy through the real Settings form" setup as
-// e2e/hevy-queue.spec.ts, and the same desktop-only guard — this spec's
-// "Connect Hevy" step writes to the shared e2e server/DB, and racing it
-// against the other viewport projects (or hevy-queue.spec.ts's own connect
-// step) buys nothing: one end-to-end pass is what the coverage requirement
-// asks for. Unlike hevy-queue.spec.ts's Skip flow, this spec never clicks
-// Import, so it never mutates `hevy_workouts` — Preview is read-only.
+// e2e/hevy-queue.spec.ts. This spec's "Connect Hevy" step writes to the
+// shared e2e server/DB, so it needs the same isolation: playwright.config.ts
+// matches this file only from the dedicated `hevy-backfill` project, which
+// depends on `hevy-queue` and therefore always runs after it — strictly
+// serial, never racing it or the three main viewport projects (which
+// `testIgnore` this file). One end-to-end pass is what the coverage
+// requirement asks for. Unlike hevy-queue.spec.ts's Skip flow, this spec
+// never clicks Import, so it never mutates `hevy_workouts` — Preview is
+// read-only.
 test("locked row navigates to the mapping editor and back", async ({ page }) => {
-  test.skip(
-    test.info().project.name !== "desktop",
-    "single pass — avoids racing shared Hevy-connect state across viewport projects",
-  );
-
-  // Guarded, not unconditional: this spec and e2e/hevy-queue.spec.ts both
-  // run desktop-only against the same shared server/DB, and both connect
-  // Hevy through this same form — whichever runs first leaves it connected
-  // for the other, so "Connect" may already have become "Manage" by the
-  // time this runs.
+  // Guarded, not unconditional, even though ordering is now deterministic
+  // (hevy-queue always runs and connects first): this keeps the assertion
+  // correct if `hevy_api_key` is ever seeded directly, without coupling
+  // this spec to hevy-queue.spec.ts's internals.
   await page.goto("/settings");
   const hevyStatus = page.getByTestId("connection-status-hevy");
   await expect(hevyStatus).toBeVisible();
