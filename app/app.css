@@ -113,6 +113,40 @@ a {
   }
 }
 
+/*
+ * Scroll regions that keep their scrollability but hide the scrollbar chrome,
+ * per the design handoff. `display: none` on the WebKit scrollbar hides the
+ * track without disabling the scroll, and `scrollbar-width: none` is the
+ * standards-track equivalent for Firefox.
+ */
+.overlay-scroll {
+  scrollbar-width: none;
+}
+
+.overlay-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * ResponsiveOverlay's enter/exit is a slide (from the right for the mobile
+ * cover, up from the bottom for the sheet) driven by tw-animate-css custom
+ * properties. Under reduced motion we neutralise the movement and the zoom but
+ * keep the opacity fade, which is not motion. These rules sit outside every
+ * cascade layer on purpose so they win over the Tailwind utilities that set the
+ * same variables.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="responsive-overlay"],
+  [data-slot="responsive-overlay-backdrop"] {
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+    --tw-enter-scale: 1;
+    --tw-exit-scale: 1;
+  }
+}
+
 @theme inline {
   --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
