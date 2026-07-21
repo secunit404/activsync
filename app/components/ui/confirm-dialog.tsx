@@ -89,7 +89,7 @@ export function ConfirmDialog({
             disabled={pending}
             onClick={onConfirm}
           >
-            {pending ? <Spinner data-icon="inline-start" /> : null}
+            {pending ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
             {pending ? pendingLabel : confirmLabel}
           </Button>
         </div>
