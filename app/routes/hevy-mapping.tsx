@@ -10,6 +10,7 @@ import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
 import { getHevyTools, saveExerciseMapping, type HevyToolsState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
 type Mapping = HevyToolsState["mappings"][number];
 type Category = HevyToolsState["categories"][number];
@@ -75,7 +76,9 @@ export default function HevyMapping() {
       close();
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Could not save exercise mapping.");
+      toast.error(error instanceof Error ? error.message : "Could not save exercise mapping.", {
+        duration: ERROR_TOAST_DURATION_MS,
+      });
     },
   });
 

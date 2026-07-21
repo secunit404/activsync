@@ -10,6 +10,7 @@ import {
   type ActivityActionResult,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
 export type ActivityActionInput =
   | { type: "publish"; activityId: number }
@@ -46,7 +47,7 @@ export function useActivityActions() {
     },
     onError: (error, action) => {
       if (action.type !== "edit") {
-        toast.error(error.message);
+        toast.error(error.message, { duration: ERROR_TOAST_DURATION_MS });
       }
     },
     onSettled: async () => {

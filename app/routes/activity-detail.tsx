@@ -14,6 +14,7 @@ import { formatTypeLabel } from "@/components/type-pill";
 import { useActivityActions } from "@/hooks/use-activity-actions";
 import { getAppState, type Activity } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 import type { Route } from "./+types/activity-detail";
 
 // `:id` (see app/routes.ts) has no built-in way to constrain its shape to
@@ -138,7 +139,9 @@ export default function ActivityDetail() {
           exitEdit();
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Could not save activity");
+          toast.error(error instanceof Error ? error.message : "Could not save activity", {
+            duration: ERROR_TOAST_DURATION_MS,
+          });
         },
       },
     );

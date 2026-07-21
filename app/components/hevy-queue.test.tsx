@@ -208,7 +208,10 @@ test("reports a failed action via an error toast", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Retry" }));
 
   await waitFor(() =>
-    expect(toastError).toHaveBeenCalledWith("Workout is being processed right now."),
+    expect(toastError).toHaveBeenCalledWith(
+      "Workout is being processed right now.",
+      expect.objectContaining({ duration: expect.any(Number) }),
+    ),
   );
 });
 

@@ -62,7 +62,16 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <LiveRefreshSubscription />
       <Outlet />
-      <Toaster position="bottom-center" richColors closeButton />
+      {
+        // `position="bottom-right"` is the desktop layout the frame draws;
+        // sonner's own sub-600px CSS collapses it to the single, full-width
+        // mobile toast regardless of this value (see sonner.tsx's
+        // docstring). No `richColors` — the app's own success/info/warning/
+        // error palette is applied directly in app.css instead, keyed off
+        // sonner's `[data-type]` attribute, so the two systems don't need
+        // to agree.
+      }
+      <Toaster position="bottom-right" closeButton />
     </QueryClientProvider>
   );
 }

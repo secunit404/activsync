@@ -13,6 +13,7 @@ import {
   type HevyQueueState,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 import { cn } from "@/lib/utils";
 
 /** The two queue actions that ask for confirmation before running. */
@@ -62,7 +63,7 @@ export function HevyQueue({ state }: { state: HevyQueueState }) {
     mutationFn: ({ hevyId, action }: { hevyId: string; action: HevyQueueAction }) =>
       runHevyQueueAction(hevyId, action),
     onSuccess: (result) => toast.success(result.message),
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.error(error.message, { duration: ERROR_TOAST_DURATION_MS }),
     onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.hevyQueue }),

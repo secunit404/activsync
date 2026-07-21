@@ -38,6 +38,15 @@
   --info: #63b8ee;
   --shadow-frame: 0 40px 90px rgb(0 0 0 / 50%);
   --shadow-toast: 0 18px 40px rgb(0 0 0 / 45%);
+  /*
+   * Fallback for the mobile toast's bottom clearance (see `sonner.tsx`'s
+   * `mobileOffset`) — `AppTabBar`'s fixed 74px height (app-tab-bar.tsx),
+   * the same constant `AppLayout` reserves via `pb-[74px]`. `BulkActionBar`
+   * overwrites this to its own measured height for as long as it occupies
+   * that slot instead (see its docstring) and restores this default on
+   * unmount.
+   */
+  --bottom-bar-height: 74px;
 }
 
 * {
@@ -160,6 +169,77 @@ a {
   [data-slot="skeleton"] {
     animation: none;
   }
+}
+
+/*
+ * Toast restyle (design handoff frame `5b`). `sonner` self-injects its base
+ * stylesheet as a plain, unlayered `<style>` tag appended to `<head>` at
+ * module load (see `__insertCSS` in `sonner/dist/index.mjs`) — it lands
+ * after this file's own `<link>` in the document, and outside every
+ * Tailwind `@layer` entirely. `toastOptions.classNames` can only hand it
+ * Tailwind utility classes, which Tailwind puts in `@layer utilities`; an
+ * unlayered rule always wins over a layered one regardless of specificity
+ * or source order (same reasoning as the reduced-motion overrides above),
+ * so a `classNames`-only approach can't reliably beat sonner's own colors.
+ * These rules are written directly, unlayered, against sonner's public
+ * `[data-sonner-*]` attribute hooks instead — the same selectors its own
+ * shipped stylesheet uses, and the documented "vanilla CSS" customization
+ * surface for consumers not using their Tailwind plugin — with `!important`
+ * where a property needs to beat sonner's later-injected rule of equal
+ * selector specificity.
+ */
+[data-sonner-toast] {
+  align-items: flex-start !important;
+  gap: 12px !important;
+  padding: 14px 16px !important;
+  background: #171c23 !important;
+  border-color: #2a323d !important;
+  box-shadow: var(--shadow-toast) !important;
+}
+
+[data-sonner-toast][data-type="error"] {
+  background: #1a1310 !important;
+  border-color: #4a2f1e !important;
+}
+
+[data-sonner-toast] [data-icon] {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 22px !important;
+  height: 22px !important;
+  margin: 0 !important;
+  border-radius: 999px;
+}
+
+[data-sonner-toast] [data-title] {
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: var(--foreground) !important;
+}
+
+[data-sonner-toast] [data-description] {
+  font-size: 12px !important;
+  color: var(--muted-foreground) !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+  position: static !important;
+  transform: none !important;
+  order: 3;
+  align-self: flex-start;
+  flex-shrink: 0;
+  width: 16px !important;
+  height: 16px !important;
+  border: none !important;
+  background: transparent !important;
+  color: #5b636e !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--foreground) !important;
 }
 
 @theme inline {

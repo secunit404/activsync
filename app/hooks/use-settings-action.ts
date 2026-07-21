@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import type { SettingsActionResult } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
 export function useSettingsAction<
   TVariables = void,
@@ -24,7 +25,7 @@ export function useSettingsAction<
       toast.success(result.message);
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(error.message, { duration: ERROR_TOAST_DURATION_MS });
     },
   });
 }

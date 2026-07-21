@@ -245,7 +245,10 @@ test("a preview failure reports an error toast", async () => {
   await preview();
 
   await waitFor(() =>
-    expect(toastError).toHaveBeenCalledWith("Hevy rejected the stored API key."),
+    expect(toastError).toHaveBeenCalledWith(
+      "Hevy rejected the stored API key.",
+      expect.objectContaining({ duration: expect.any(Number) }),
+    ),
   );
 });
 

@@ -19,6 +19,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useSelection } from "@/hooks/use-selection";
 import { previewHevyBackfill, runHevyBackfill, type BackfillResult } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 import { cn } from "@/lib/utils";
 
 function defaultSince(): string {
@@ -57,7 +58,9 @@ export default function HevyBackfill() {
   const preview = useMutation({
     mutationFn: () => previewHevyBackfill(since),
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Could not preview the backfill.");
+      toast.error(error instanceof Error ? error.message : "Could not preview the backfill.", {
+        duration: ERROR_TOAST_DURATION_MS,
+      });
     },
   });
 
@@ -69,7 +72,9 @@ export default function HevyBackfill() {
       selection.clear();
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Could not run the backfill.");
+      toast.error(error instanceof Error ? error.message : "Could not run the backfill.", {
+        duration: ERROR_TOAST_DURATION_MS,
+      });
     },
     onSettled: async () => {
       await Promise.all([
