@@ -55,7 +55,11 @@ export function SettingsShell({
         {children}
       </main>
       {version && update ? (
-        <footer className="flex flex-wrap items-center justify-center gap-2 border-t py-6 text-xs text-muted-foreground">
+        // Mobile-only: the rail (app-rail.tsx, visible md: and up) renders
+        // its own AppVersionFooter whenever it's shown, so an unconditional
+        // footer here would duplicate the version at every width the rail
+        // is visible — leaving exactly one on screen at any given width.
+        <footer className="flex flex-wrap items-center justify-center gap-2 border-t py-6 text-xs text-muted-foreground md:hidden">
           <span>ActivSync v{version}</span>
           <span aria-hidden="true">·</span>
           <a

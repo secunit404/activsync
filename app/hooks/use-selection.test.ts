@@ -11,12 +11,22 @@ test("toggle adds then removes", () => {
   expect(result.current.count).toBe(0);
 });
 
-test("toggle does not mutate the previous set", () => {
+test("toggle's add path does not mutate the previous set", () => {
   const { result } = renderHook(() => useSelection());
   const before = result.current.selected;
   act(() => result.current.toggle(1));
   expect(before.has(1)).toBe(false);
   expect(result.current.selected).not.toBe(before);
+});
+
+test("toggle's delete path does not mutate the previous set", () => {
+  const { result } = renderHook(() => useSelection());
+  act(() => result.current.toggle(1));
+  const beforeRemoval = result.current.selected;
+  act(() => result.current.toggle(1));
+  expect(beforeRemoval.has(1)).toBe(true);
+  expect(result.current.selected).not.toBe(beforeRemoval);
+  expect(result.current.count).toBe(0);
 });
 
 test("toggleAll selects all then clears when already full", () => {
