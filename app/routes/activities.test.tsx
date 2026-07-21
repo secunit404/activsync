@@ -1,9 +1,21 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import type { Activity, ActivitiesPage } from "@/lib/api";
 import { ActivitiesView } from "./activities";
+
+const { publishActivities, excludeActivity } = vi.hoisted(() => ({
+  publishActivities: vi.fn(),
+  excludeActivity: vi.fn(),
+}));
+
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return { ...actual, publishActivities, excludeActivity };
+});
 
 // The stat strip renders two parallel layouts (tablet/desktop grid vs. the
 // mobile single-card strip) switched by CSS breakpoint, not JS — per the
@@ -80,12 +92,23 @@ const oneActivity: Activity = {
   detail: activityDetail,
 };
 
+const anotherActivity: Activity = {
+  ...oneActivity,
+  garminActivityId: 999,
+  title: "Push Day",
+};
+
 function renderAt(path: string, data: ActivitiesPage = activities) {
+  const queryClient = new QueryClient();
   const router = createMemoryRouter(
     [{ path: "*", element: <ActivitiesView data={data} /> }],
     { initialEntries: [path] },
   );
-  render(<RouterProvider router={router} />);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   return router;
 }
 
@@ -161,4 +184,68 @@ test("renders a table row (desktop) and a card (mobile) for each activity", () =
   // layouts are switched by CSS breakpoint only (never JS), so jsdom keeps
   // both subtrees in the DOM regardless of viewport, same as the stat strip.
   expect(screen.getAllByText("Morning run")).toHaveLength(2);
+});
+
+// Ported from the deleted home.test.tsx's "publishes selected activities in
+// bulk" case, scoped to Task 9's real useSelection/BulkActionBar wiring
+// rather than Task 8's local-state stand-in.
+test("checking a row reveals the bulk action bar with the right count", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+
+  const bar = screen.getByTestId("bulk-action-bar");
+  expect(within(bar).getAllByText("1 selected").length).toBeGreaterThan(0);
+});
+
+test("selecting a filter clears the selection", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+  expect(screen.getAllByTestId("bulk-action-bar").length).toBeGreaterThan(0);
+
+  fireEvent.click(screen.getByRole("tab", { name: /Held/ }));
+
+  expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+});
+
+test("publishing the selection clears it and calls publishActivities with the selected ids", async () => {
+  publishActivities.mockResolvedValue({
+    message: "Published 1 activity to Strava",
+    severity: "success",
+    publishedCount: 1,
+    failedCount: 0,
+    blockedCount: 0,
+  });
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+
+  await userEvent.click(screen.getAllByRole("button", { name: /Publish 1/ })[0]);
+
+  expect(publishActivities).toHaveBeenCalledWith([12345]);
+  await waitFor(() =>
+    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument(),
+  );
+});
+
+test("excluding the selection calls excludeActivity for each selected id and clears the selection", async () => {
+  excludeActivity.mockResolvedValue({
+    message: "Excluded",
+    severity: "success",
+    publishedCount: 0,
+    failedCount: 0,
+    blockedCount: 0,
+  });
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Push Day/ })[0]);
+
+  await userEvent.click(screen.getAllByRole("button", { name: "Exclude" })[0]);
+
+  await waitFor(() => expect(excludeActivity).toHaveBeenCalledTimes(2));
+  expect(excludeActivity).toHaveBeenCalledWith(12345);
+  expect(excludeActivity).toHaveBeenCalledWith(999);
+  await waitFor(() =>
+    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument(),
+  );
 });

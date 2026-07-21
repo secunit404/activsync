@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { ActivityIcon, CircleAlertIcon } from "lucide-react";
-import { useState } from "react";
-import { Navigate, Outlet, useSearchParams } from "react-router";
+import { useEffect } from "react";
+import { Navigate, Outlet, useOutletContext, useSearchParams } from "react-router";
 
 import { ActivitiesPagination } from "@/components/activities-pagination";
 import { ActivitiesTable } from "@/components/activities-table";
 import { ActivityCard } from "@/components/activity-card";
 import { ActivityFilterPills } from "@/components/activity-filter-pills";
+import { BulkActionBar } from "@/components/bulk-action-bar";
 import { StatTile, statTileToneClass, type StatTileTone } from "@/components/stat-tile";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,9 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useActivityActions } from "@/hooks/use-activity-actions";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
+import { useSelection } from "@/hooks/use-selection";
 import {
   getActivities,
   getAppState,
@@ -30,6 +33,9 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import type { Route } from "./+types/activities";
+
+/** Threaded down from `AppLayout` via `Outlet` context — see its docstring. */
+type TabBarVisibilityContext = (hidden: boolean) => void;
 
 const publishStatuses = new Set<PublishStatus>([
   "pending",
@@ -54,6 +60,7 @@ export default function Activities() {
   useLiveRefresh();
   const [searchParams] = useSearchParams();
   const query = activityQueryFrom(searchParams);
+  const setTabBarHidden = useOutletContext<TabBarVisibilityContext>();
 
   // appState is fetched here (not just in app-layout.tsx) so this route can
   // apply the same "redirect to /setup when incomplete" gate settings.tsx
@@ -102,42 +109,79 @@ export default function Activities() {
 
   return (
     <>
-      <ActivitiesView data={activities.data} />
+      <ActivitiesView data={activities.data} onTabBarHiddenChange={setTabBarHidden} />
       <Outlet />
     </>
   );
 }
 
-export function ActivitiesView({ data }: { data: ActivitiesPage }) {
-  // Placeholder selection state so ActivitiesTable/ActivityCard's
-  // selected/onToggle/onToggleAll contract has something to bind to. Task 9
-  // owns the real `useSelection` hook (and the bulk-action bar it drives) —
-  // this local, immutable-Set implementation is a stand-in with the exact
-  // same shape, kept here only so the checkboxes are interactive.
-  const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set());
+export function ActivitiesView({
+  data,
+  onTabBarHiddenChange,
+}: {
+  data: ActivitiesPage;
+  /**
+   * Optional so `ActivitiesView` stays directly renderable in tests without
+   * an `AppLayout`/`Outlet` ancestor (see activities.test.tsx). In the real
+   * app this is always `AppLayout`'s `setTabBarHidden`.
+   */
+  onTabBarHiddenChange?: TabBarVisibilityContext;
+}) {
+  const [searchParams] = useSearchParams();
+  const selection = useSelection();
+  const activityActions = useActivityActions();
 
-  const toggle = (id: number) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
+  // Selection must not survive a filter or page change — a stale id from a
+  // page the user has since left would publish/exclude something they can
+  // no longer see. Keyed on the search-param string (not `data`), so a
+  // same-query background refetch (live-refresh SSE, a poll) does not clear
+  // an in-progress selection out from under the user.
+  useEffect(() => {
+    selection.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
+
+  // Tell AppLayout to hide the mobile tab bar for as long as the bar is
+  // occupying its slot, and restore it on unmount (navigating to another
+  // top-level route) so it never gets stuck hidden.
+  useEffect(() => {
+    onTabBarHiddenChange?.(selection.count > 0);
+    return () => onTabBarHiddenChange?.(false);
+  }, [selection.count, onTabBarHiddenChange]);
 
   const toggleAll = () => {
-    setSelected((current) =>
-      current.size === data.items.length
-        ? new Set()
-        : new Set(data.items.map((activity) => activity.garminActivityId)),
+    selection.toggleAll(data.items.map((activity) => activity.garminActivityId));
+  };
+
+  const selectedActivities = data.items.filter((activity) =>
+    selection.selected.has(activity.garminActivityId),
+  );
+
+  const handlePublish = () => {
+    activityActions.mutate(
+      { type: "publish-many", activityIds: Array.from(selection.selected) },
+      { onSuccess: () => selection.clear() },
+    );
+  };
+
+  const handleExclude = () => {
+    activityActions.mutate(
+      { type: "exclude-many", activityIds: Array.from(selection.selected) },
+      { onSuccess: () => selection.clear() },
     );
   };
 
   return (
-    <div className="grid gap-6 p-6 md:gap-7 md:p-8">
+    <div
+      className={cn(
+        "grid gap-6 p-6 md:gap-7 md:p-8",
+        // The mobile bulk bar is fixed-bottom, same slot as the tab bar
+        // (which AppLayout already reserves 74px for); give the page a
+        // little extra clearance only while it's actually showing, so the
+        // last table row/card isn't tucked underneath it.
+        selection.count > 0 && "pb-32 md:pb-8",
+      )}
+    >
       <header className="grid gap-1">
         <h1 className="text-2xl font-extrabold tracking-[-0.02em] sm:text-[26px]">
           Activities
@@ -151,12 +195,21 @@ export function ActivitiesView({ data }: { data: ActivitiesPage }) {
 
       <ActivityFilterPills counts={data.counts} />
 
+      <BulkActionBar
+        count={selection.count}
+        names={selectedActivities.map((activity) => activity.title)}
+        onClear={selection.clear}
+        onExclude={handleExclude}
+        onPublish={handlePublish}
+        busy={activityActions.isPending}
+      />
+
       {data.items.length > 0 ? (
         <>
           <ActivitiesTable
             activities={data.items}
-            selected={selected}
-            onToggle={toggle}
+            selected={selection.selected}
+            onToggle={selection.toggle}
             onToggleAll={toggleAll}
           />
           <div data-testid="activities-cards" className="grid gap-3 md:hidden">
@@ -164,8 +217,8 @@ export function ActivitiesView({ data }: { data: ActivitiesPage }) {
               <ActivityCard
                 key={activity.garminActivityId}
                 activity={activity}
-                selected={selected.has(activity.garminActivityId)}
-                onToggle={toggle}
+                selected={selection.selected.has(activity.garminActivityId)}
+                onToggle={selection.toggle}
               />
             ))}
           </div>

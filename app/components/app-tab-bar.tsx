@@ -1,6 +1,8 @@
 import { Activity, Dumbbell, Settings, type LucideIcon } from "lucide-react";
 import { NavLink } from "react-router";
 
+import { cn } from "@/lib/utils";
+
 type TabDestination = {
   to: string;
   label: string;
@@ -13,17 +15,38 @@ const destinations: TabDestination[] = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
+type AppTabBarProps = {
+  /**
+   * True while the Activities screen's bulk-action bar occupies this same
+   * fixed-bottom slot (one or more rows selected). `AppLayout` is the one
+   * source of truth for this — it owns the `hidden` state and threads it
+   * down from the Activities route via `Outlet` context, since the tab bar
+   * and the bulk bar live in different parts of the component tree but
+   * must never both be visible at once.
+   */
+  hidden?: boolean;
+};
+
 /**
- * Mobile bottom tab bar. Nav only — no data props. Sits above content and
- * yields to the bulk-action bar (Task 9), which replaces it while rows are
- * selected.
+ * Mobile bottom tab bar. Nav only — no data props besides `hidden`. Sits
+ * above content and yields to the bulk-action bar while rows are selected.
  */
-export function AppTabBar() {
+export function AppTabBar({ hidden = false }: AppTabBarProps) {
   return (
     <nav
       data-testid="app-tab-bar"
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-20 flex h-[74px] border-t border-border bg-rail md:hidden"
+      hidden={hidden}
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-20 h-[74px] border-t border-border bg-rail md:hidden",
+        // `flex`/`hidden` must stay mutually exclusive: Tailwind utilities
+        // share one specificity tier, so having both present and letting
+        // the `hidden` *attribute* (a separate, lower-priority UA-stylesheet
+        // rule) fight a `flex` *class* would not reliably hide this — the
+        // class wins regardless of the attribute. Only one of the two
+        // classes below is ever applied.
+        hidden ? "hidden" : "flex",
+      )}
     >
       {destinations.map(({ to, label, icon: Icon }) => (
         <NavLink
