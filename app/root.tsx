@@ -18,21 +18,14 @@ export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.ico" },
 ];
 
-const themeScript = `(() => {
-  const saved = localStorage.getItem("activsync-theme");
-  const dark = saved === "dark" || (saved !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", dark);
-})()`;
-
 export function Layout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
         {children}
