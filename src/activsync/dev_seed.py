@@ -17,22 +17,27 @@ _HEVY_TABLES = ("hevy_workouts", "hevy_operations", "exercise_templates",
 def seed(conn: sqlite3.Connection, *, mark_onboarded: bool = False) -> None:
     """Insert repeatable, multi-month activity data into the dev database.
 
-    ``mark_onboarded`` is applied every call, independent of the version-gate
-    below: the E2E dev DB persists across local runs, so if it was already
-    seeded (matching ``SEED_VERSION``) before the caller started asking for
-    onboarding to be marked complete, the early return must not skip that.
-    Applying it unconditionally is safe — it is idempotent.
+    ``mark_onboarded`` is applied on every call that clears the non-dev-database
+    guard below, independent of the version-gate that follows it: the E2E dev
+    DB persists across local runs, so if it was already seeded (matching
+    ``SEED_VERSION``) before the caller started asking for onboarding to be
+    marked complete, the early return must not skip that. Applying it there is
+    safe — it is idempotent.
     """
+    existing = db.list_activities(conn)
+    if existing and not all(
+        str(row["content_hash"]).startswith("dev-") for row in existing
+    ):
+        # Never touch a database containing non-dev activity IDs — including
+        # via mark_onboarded, which must be refused on the same terms as
+        # every other seed write.
+        return
     if mark_onboarded:
         _mark_onboarding_complete(conn)
     if db.get_config_value(conn, "dev_seed_version") == SEED_VERSION:
         return
-    existing = db.list_activities(conn)
     if existing:
-        # Rebuild an older version of this generated-only database if needed;
-        # never touch a database containing non-dev activity IDs.
-        if not all(str(row["content_hash"]).startswith("dev-") for row in existing):
-            return
+        # Rebuild an older version of this generated-only database.
         conn.execute("DELETE FROM activities")
         for table in _HEVY_TABLES:
             conn.execute(f"DELETE FROM {table}")

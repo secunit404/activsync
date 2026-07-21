@@ -39,8 +39,10 @@ GARMIN_TOKEN_DIR = _env_value("ACTIVSYNC_GARMIN_TOKEN_DIR", "G2S_GARMIN_TOKEN_DI
 
 _conn = db.connect(DB_PATH)
 if MOCK_MODE:
-    # mark_onboarded only ever applies inside this MOCK_MODE branch, so it is
-    # unreachable against a real database regardless of the env var's value.
+    # mark_onboarded only ever applies inside this MOCK_MODE branch, so the
+    # env var alone can't reach a real database. seed_dev_data's own guard
+    # (never touch a DB holding non-dev activity IDs) is what protects a real
+    # database pointed at by ACTIVSYNC_DB_PATH if MOCK_MODE is set against it.
     seed_dev_data(_conn, mark_onboarded=E2E_SEED_ONBOARDED)
 
 

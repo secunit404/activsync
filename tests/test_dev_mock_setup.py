@@ -1,5 +1,7 @@
 """End-to-end first-run setup through the typed API in mock mode."""
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -62,6 +64,26 @@ def test_seed_without_e2e_onboarded_flag_stays_incomplete(mock_env, tmp_path):
     response = _client(conn).get("/api/v1/app")
 
     assert response.status_code == 200
+    assert response.json()["setup"]["complete"] is False
+
+
+def test_seed_never_marks_onboarded_on_a_database_with_real_activity_ids(
+    mock_env, tmp_path
+):
+    """A database holding non-dev activity IDs must be refused on the same
+    terms whether the write is the seed data or the mark_onboarded flag --
+    even with ACTIVSYNC_DEV_MOCK_DATA=1 and the E2E onboarded flag set, a
+    real database mid-onboarding must not have its wizard silently skipped."""
+    conn = db.connect(str(tmp_path / "real-looking.db"))
+    db.insert_activity(
+        conn, 1, "running", "Real run", "", "2026-07-01 08:00:00",
+        "not-a-dev-hash", "pending", datetime.now(timezone.utc), garmin_data="{}",
+    )
+
+    seed_dev_data(conn, mark_onboarded=True)
+
+    assert db.get_config_value(conn, "initial_sync_done") is None
+    response = _client(conn).get("/api/v1/app")
     assert response.json()["setup"]["complete"] is False
 
 
