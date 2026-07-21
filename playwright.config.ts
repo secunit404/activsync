@@ -20,6 +20,6 @@ export default defineConfig({
     command: "npm run dev:e2e",
     url: "http://127.0.0.1:8384",
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 240_000,
   },
 });

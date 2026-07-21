@@ -28,7 +28,6 @@ data/
 /test-results/
 /playwright-report/
 /blob-report/
-data/activsync-e2e.db
 
 # OS / editor
 .DS_Store
