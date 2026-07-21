@@ -1,16 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import {
   runHevyQueueAction,
@@ -19,29 +11,30 @@ import {
   type HevyQueueState,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { cn } from "@/lib/utils";
 
+type QueueRowKind = "in-flight" | "problem" | "skipped";
+type Tone = "info" | "warning" | "destructive" | "muted";
+
+const toneClasses: Record<Tone, { dot: string; badge: string }> = {
+  info: { dot: "bg-info", badge: "bg-info/12 text-info" },
+  warning: { dot: "bg-warning", badge: "bg-warning/12 text-warning" },
+  destructive: { dot: "bg-destructive", badge: "bg-destructive/12 text-destructive" },
+  muted: { dot: "bg-muted-foreground/50", badge: "bg-muted text-muted-foreground" },
+};
+
+/**
+ * Frame `3a`'s "Sync queue" card. Restyled from the Task-5 scaffold (which
+ * grouped rows under "Needs attention"/"In flight"/"Skipped" subheadings) to
+ * the handoff's flat, dot-indicated list — the count badges in the header
+ * already say what each row is. Orphaned since Task 5 (nothing imported it);
+ * this is the first task to wire it into a route.
+ */
 export function HevyQueue({ state }: { state: HevyQueueState }) {
-  if (
-    state.counts.inFlight === 0 &&
-    state.counts.problems === 0 &&
-    state.counts.skipped === 0
-  ) {
-    return null;
-  }
-
-  return <HevyQueueContent state={state} />;
-}
-
-function HevyQueueContent({ state }: { state: HevyQueueState }) {
   const queryClient = useQueryClient();
   const action = useMutation({
-    mutationFn: ({
-      hevyId,
-      action,
-    }: {
-      hevyId: string;
-      action: HevyQueueAction;
-    }) => runHevyQueueAction(hevyId, action),
+    mutationFn: ({ hevyId, action }: { hevyId: string; action: HevyQueueAction }) =>
+      runHevyQueueAction(hevyId, action),
     onSuccess: (result) => toast.success(result.message),
     onError: (error) => toast.error(error.message),
     onSettled: async () => {
@@ -67,148 +60,199 @@ function HevyQueueContent({ state }: { state: HevyQueueState }) {
     action.mutate({ hevyId: item.hevyId, action: nextAction });
   };
 
+  const rows: Array<{ item: HevyQueueItem; kind: QueueRowKind }> = [
+    ...state.inFlight.map((item) => ({ item, kind: "in-flight" as const })),
+    ...state.problems.map((item) => ({ item, kind: "problem" as const })),
+    ...state.skipped.map((item) => ({ item, kind: "skipped" as const })),
+  ];
+
   return (
-    <Card aria-labelledby="hevy-queue-title">
-      <CardHeader>
-        <CardTitle>
-          <h2 id="hevy-queue-title">Hevy sync</h2>
+    <Card className="gap-0 py-0" aria-labelledby="hevy-queue-title">
+      <CardHeader className="border-b border-border/70 py-4">
+        <CardTitle className="flex flex-wrap items-center gap-2.5">
+          <h2 id="hevy-queue-title" className="text-[15px] font-bold">
+            Sync queue
+          </h2>
+          <QueueCountBadge count={state.counts.inFlight} label="in flight" tone="info" />
+          <QueueCountBadge count={state.counts.problems} label="problem" tone="warning" />
+          <QueueCountBadge count={state.counts.skipped} label="skipped" tone="muted" />
         </CardTitle>
-        <CardDescription>
-          Workouts currently being reconciled or waiting for your attention.
-        </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-6">
-        {state.problems.length > 0 ? (
-          <QueueSection title="Needs attention">
-            {state.problems.map((item) => (
+      <CardContent className="p-0">
+        {rows.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-muted-foreground">
+            Nothing in the queue — Hevy workouts sync automatically as they come in.
+          </p>
+        ) : (
+          <ul>
+            {rows.map(({ item, kind }) => (
               <QueueRow
                 key={item.hevyId}
                 item={item}
+                kind={kind}
+                busy={action.isPending}
                 pending={action.isPending && action.variables?.hevyId === item.hevyId}
-              >
-                {item.needsMapping ? (
-                  <Button asChild variant="outline" size="sm">
-                    <Link to="/settings#hevy-mappings">Map exercises</Link>
-                  </Button>
-                ) : null}
-                {item.resyncable ? (
-                  <ActionButton
-                    label="Re-sync fresh"
-                    busy="Queuing…"
-                    disabled={action.isPending}
-                    pending={action.isPending && action.variables?.hevyId === item.hevyId}
-                    onClick={() => runAction(item, "resync-fresh")}
-                  />
-                ) : null}
-                <ActionButton
-                  label="Retry"
-                  busy="Queuing…"
-                  disabled={action.isPending}
-                  pending={action.isPending && action.variables?.hevyId === item.hevyId}
-                  onClick={() => runAction(item, "retry")}
-                />
-                {!item.hasOpenOperation ? (
-                  <ActionButton
-                    label="Skip"
-                    busy="Skipping…"
-                    disabled={action.isPending}
-                    pending={action.isPending && action.variables?.hevyId === item.hevyId}
-                    onClick={() => runAction(item, "skip")}
-                  />
-                ) : null}
-              </QueueRow>
+                onAction={(nextAction) => runAction(item, nextAction)}
+              />
             ))}
-          </QueueSection>
-        ) : null}
-
-        {state.inFlight.length > 0 ? (
-          <QueueSection title="In flight">
-            {state.inFlight.map((item) => (
-              <QueueRow key={item.hevyId} item={item} pending={false} />
-            ))}
-          </QueueSection>
-        ) : null}
-
-        {state.skipped.length > 0 ? (
-          <QueueSection title={`Skipped (${state.skipped.length})`}>
-            {state.skipped.map((item) => (
-              <QueueRow
-                key={item.hevyId}
-                item={item}
-                pending={action.isPending && action.variables?.hevyId === item.hevyId}
-              >
-                <ActionButton
-                  label="Unskip"
-                  busy="Restoring…"
-                  disabled={action.isPending}
-                  pending={action.isPending && action.variables?.hevyId === item.hevyId}
-                  onClick={() => runAction(item, "unskip")}
-                />
-              </QueueRow>
-            ))}
-          </QueueSection>
-        ) : null}
+          </ul>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function QueueSection({
-  title,
-  children,
+function QueueCountBadge({
+  count,
+  label,
+  tone,
 }: {
-  title: string;
-  children: React.ReactNode;
+  count: number;
+  label: string;
+  tone: Tone;
 }) {
+  if (count === 0) {
+    return null;
+  }
+  // Compact status-pill copy, not a sentence — the design handoff keeps
+  // these singular regardless of count ("2 IN FLIGHT", "1 PROBLEM").
   return (
-    <section className="grid gap-3">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <div className="grid gap-2">{children}</div>
-    </section>
+    <span
+      className={cn(
+        "rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap uppercase",
+        toneClasses[tone].badge,
+      )}
+    >
+      {count} {label}
+    </span>
   );
+}
+
+function toneFor(kind: QueueRowKind, item: HevyQueueItem): Tone {
+  if (kind === "in-flight") return "info";
+  if (kind === "skipped") return "muted";
+  return item.status === "failed" ? "destructive" : "warning";
 }
 
 function QueueRow({
   item,
+  kind,
+  busy,
   pending,
-  children,
+  onAction,
 }: {
   item: HevyQueueItem;
+  kind: QueueRowKind;
+  busy: boolean;
   pending: boolean;
-  children?: React.ReactNode;
+  onAction: (action: HevyQueueAction) => void;
 }) {
+  const tone = toneFor(kind, item);
+
   return (
-    <article className="grid gap-3 rounded-xl border bg-background/60 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h4 className="truncate font-medium">{item.title}</h4>
-          <Badge variant={item.error ? "destructive" : "secondary"}>
-            {item.status.replaceAll("_", " ")}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground">{item.startDisplay}</p>
-        {item.error ? (
-          <p className="mt-1 text-sm text-destructive">{item.error}</p>
+    <li
+      className={cn(
+        "flex items-center gap-3.5 border-b border-border/50 px-5 py-3.5 last:border-b-0",
+        kind === "problem" && "bg-warning/[0.04]",
+      )}
+    >
+      <span
+        className={cn("size-2 shrink-0 rounded-full", toneClasses[tone].dot)}
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            "truncate text-[14.5px] font-semibold",
+            kind === "skipped" && "text-muted-foreground",
+          )}
+        >
+          {item.title}
+        </p>
+        <p
+          className={cn(
+            "truncate font-mono text-xs",
+            kind === "problem" ? "text-warning/90" : "text-muted-foreground",
+          )}
+        >
+          {item.startDisplay} · {item.error ?? item.status.replaceAll("_", " ")}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2" aria-busy={pending}>
+        {kind === "in-flight" ? (
+          <span
+            className={cn(
+              "rounded-md px-2.5 py-1 font-mono text-[11px] whitespace-nowrap",
+              toneClasses.info.badge,
+            )}
+          >
+            {item.status.replaceAll("_", " ").toUpperCase()}
+          </span>
+        ) : null}
+        {kind === "problem" ? (
+          <>
+            {item.needsMapping ? (
+              // Not a link: `HevyQueueItem` has no `templateId`, so this
+              // can't deep-link to a specific mapping editor entry the way
+              // the Exercise mapping card's rows can — that card is the
+              // actionable surface for mapping. This is informational only,
+              // pointing at where to go without duplicating that link (and
+              // without an ambiguous second "map" accessible name on the
+              // page).
+              <span className="rounded-md bg-warning/12 px-2.5 py-1 font-mono text-[11px] text-warning uppercase">
+                Needs mapping — see below
+              </span>
+            ) : null}
+            {item.resyncable ? (
+              <ActionButton
+                label="Re-sync fresh"
+                busyLabel="Queuing…"
+                disabled={busy}
+                pending={pending}
+                onClick={() => onAction("resync-fresh")}
+              />
+            ) : null}
+            <ActionButton
+              label="Retry"
+              busyLabel="Queuing…"
+              disabled={busy}
+              pending={pending}
+              onClick={() => onAction("retry")}
+            />
+            {!item.hasOpenOperation ? (
+              <ActionButton
+                label="Skip"
+                busyLabel="Skipping…"
+                disabled={busy}
+                pending={pending}
+                onClick={() => onAction("skip")}
+              />
+            ) : null}
+          </>
+        ) : null}
+        {kind === "skipped" ? (
+          <ActionButton
+            label="Unskip"
+            busyLabel="Restoring…"
+            disabled={busy}
+            pending={pending}
+            onClick={() => onAction("unskip")}
+          />
         ) : null}
       </div>
-      {children ? (
-        <div className="flex flex-wrap gap-2" aria-busy={pending}>
-          {children}
-        </div>
-      ) : null}
-    </article>
+    </li>
   );
 }
 
 function ActionButton({
   label,
-  busy,
+  busyLabel,
   disabled,
   pending,
   onClick,
 }: {
   label: string;
-  busy: string;
+  busyLabel: string;
   disabled: boolean;
   pending: boolean;
   onClick: () => void;
@@ -216,7 +260,7 @@ function ActionButton({
   return (
     <Button variant="outline" size="sm" disabled={disabled} onClick={onClick}>
       {pending ? <Spinner data-icon="inline-start" /> : null}
-      {pending ? busy : label}
+      {pending ? busyLabel : label}
     </Button>
   );
 }

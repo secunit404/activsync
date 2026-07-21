@@ -1,0 +1,85 @@
+import { Link } from "react-router";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { HevyToolsState } from "@/lib/api";
+
+type MappingRowData = HevyToolsState["mappings"][number];
+
+/**
+ * Frame `3a`'s "Exercise mapping" card, condensed to a summary per the Task
+ * 14 brief: a needs-mapping count with inline links into the mapping editor
+ * (`/hevy/mapping/:templateId`, built in Task 15). `getHevyTools` already
+ * only returns rows a user can act on — built-in exercises Garmin resolves
+ * on its own never appear (see `view.hevy_mappings_view`) — so this only has
+ * to split those rows into "needs a mapping" versus "already configured".
+ */
+export function HevyMappingSummary({ tools }: { tools: HevyToolsState }) {
+  const needsAction = tools.mappings.filter(
+    (mapping) => mapping.unmapped || mapping.garminRejected,
+  );
+
+  return (
+    <Card id="hevy-mapping" className="gap-0 py-0" aria-labelledby="hevy-mapping-title">
+      <CardHeader className="border-b border-border/70 py-4">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="hevy-mapping-title" className="text-[15px] font-bold">
+            Exercise mapping
+          </h2>
+          {needsAction.length > 0 ? (
+            <Badge
+              variant="outline"
+              className="border-warning/30 bg-warning/12 font-mono text-[11px] text-warning uppercase"
+            >
+              {needsAction.length} need mapping
+            </Badge>
+          ) : null}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {needsAction.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-muted-foreground">
+            Every Hevy exercise Garmin can't resolve on its own has a mapping.
+          </p>
+        ) : (
+          <ul>
+            {needsAction.map((mapping) => (
+              <MappingRow key={mapping.templateId} mapping={mapping} />
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MappingRow({ mapping }: { mapping: MappingRowData }) {
+  const verb = mapping.garminRejected ? "Remap" : "Map";
+  return (
+    <li className="flex items-center gap-3.5 border-b border-border/50 px-5 py-3.5 last:border-b-0">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[14px] font-semibold">
+          {mapping.title}
+          {mapping.isCustom ? (
+            <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 align-middle font-mono text-[10px] text-muted-foreground">
+              CUSTOM
+            </span>
+          ) : null}
+        </p>
+        <p className="truncate font-mono text-xs text-warning/90">
+          {mapping.garminRejected ? "Rejected by Garmin" : "Unmapped"}
+          {mapping.muscleGroup ? ` · ${mapping.muscleGroup}` : ""}
+        </p>
+      </div>
+      <Button asChild variant="secondary" size="sm" className="shrink-0">
+        <Link
+          to={`/hevy/mapping/${encodeURIComponent(mapping.templateId)}`}
+          aria-label={`${verb} ${mapping.title}`}
+        >
+          {verb} →
+        </Link>
+      </Button>
+    </li>
+  );
+}
