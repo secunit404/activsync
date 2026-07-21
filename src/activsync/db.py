@@ -4,7 +4,88 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime
+
+# `check_same_thread=False` (below) only disables Python's ownership check —
+# it does NOT make the sqlite3 module safe for concurrent use of one
+# Connection from multiple threads. FastAPI runs every sync route handler in
+# a worker thread pool, and this app shares a single Connection across all of
+# them (see main.py's module-level `_conn`), so two requests landing at the
+# same moment reliably corrupted each other's reads: observed
+# `sqlite3.InterfaceError: bad parameter or other API misuse` and rows from
+# one query silently showing up in another's result under concurrent
+# requests (e.g. plain `curl` fired in parallel at /api/v1/app). An RLock
+# (not a plain Lock) is required because the stdlib's own `Connection.execute`
+# internally calls `self.cursor()` -> our overridden, also-locked `cursor()`
+# -> `_LockingCursor.execute()`, all on the same thread; a non-reentrant lock
+# would deadlock on that nesting.
+_DB_LOCK = threading.RLock()
+
+
+class _LockingCursor(sqlite3.Cursor):
+    """Cursor whose statement-issuing and row-fetching calls serialize
+    through `_DB_LOCK`, so a fetch on this thread can't interleave with a
+    concurrent execute on another. See `_LockingConnection` for the full
+    rationale."""
+
+    def execute(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().execute(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().executemany(*args, **kwargs)
+
+    def fetchone(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().fetchone(*args, **kwargs)
+
+    def fetchall(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().fetchall(*args, **kwargs)
+
+    def fetchmany(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().fetchmany(*args, **kwargs)
+
+    def __next__(self):
+        with _DB_LOCK:
+            return super().__next__()
+
+
+class _LockingConnection(sqlite3.Connection):
+    """Serializes all statement execution and fetching against `_DB_LOCK` —
+    see the module docstring above `_DB_LOCK` for why a shared, multi-thread
+    Connection needs this. Every call site in this codebase already goes
+    through `conn.execute(...)`/`conn.executemany(...)`/
+    `conn.executescript(...)`/`conn.commit()` (no call site holds its own
+    `.cursor()`), so overriding those four plus `cursor()` covers the whole
+    app without touching any of those call sites."""
+
+    def cursor(self, factory=None):
+        return super().cursor(factory or _LockingCursor)
+
+    def execute(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().execute(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().executemany(*args, **kwargs)
+
+    def executescript(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().executescript(*args, **kwargs)
+
+    def commit(self):
+        with _DB_LOCK:
+            return super().commit()
+
+    def rollback(self):
+        with _DB_LOCK:
+            return super().rollback()
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS activities (
@@ -31,7 +112,22 @@ CREATE TABLE IF NOT EXISTS app_config (
 
 
 def connect(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False)
+    # cached_statements=0: the stdlib sqlite3 module keeps a per-connection
+    # LRU cache of *compiled statement objects* keyed by SQL text, reused
+    # across calls that pass the same SQL string (e.g. every
+    # `get_config_value` call executes the identical
+    # "SELECT value FROM app_config WHERE key = ?"). Two concurrent
+    # get_config_value calls for *different keys* could be handed that same
+    # shared, not-thread-safe statement object mid-bind/step, mixing one
+    # call's row into the other's — this is what actually produced the
+    # `sqlite3.InterfaceError`s and cross-contaminated config reads under
+    # concurrent requests (SQLite itself is compiled serialized/thread-safe
+    # here — `sqlite3.threadsafety == 3` — so the corruption was in this
+    # Python-level cache, not the C library). Disabling the cache forces a
+    # fresh compile per call, which is fine at this app's request volume.
+    conn = sqlite3.connect(
+        path, check_same_thread=False, cached_statements=0, factory=_LockingConnection
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
