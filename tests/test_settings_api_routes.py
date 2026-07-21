@@ -321,9 +321,15 @@ def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
         json={"since": "2020-01-01"},
     )
 
+    # `dev_mock.dev_hevy_workouts()` ships 7 canned workouts: the original 5
+    # demo scenarios, plus 2 added for Task 16 (`HEVY_DEV_BACKFILL_UNMAPPED_ID`
+    # / `HEVY_DEV_BACKFILL_UNMAPPABLE_ID`) so the backfill screen has a
+    # reachable `needs_mapping` row to preview and link out of — this test's
+    # `conn` has none of them pre-seeded into `hevy_workouts` (unlike
+    # `dev_seed._seed_hevy`), so all 7 come back fresh.
     assert preview.status_code == 200
     assert preview.json()["ran"] is False
-    assert len(preview.json()["items"]) == 5
+    assert len(preview.json()["items"]) == 7
     assert hevy_db.list_workouts(conn) == []
 
     run = client.post(
@@ -332,4 +338,4 @@ def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
     )
     assert run.status_code == 200
     assert run.json()["ran"] is True
-    assert len(hevy_db.list_workouts(conn)) == 5
+    assert len(hevy_db.list_workouts(conn)) == 7

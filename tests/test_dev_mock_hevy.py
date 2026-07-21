@@ -180,14 +180,24 @@ def test_preview_reports_missing_template_ids_for_unmapped_exercise(conn):
     assert locked["action"] == "needs_mapping"
     assert locked["missing_template_ids"] == [dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID]
 
+    # HEVY_DEV_BACKFILL_UNMAPPED_ID (Task 16's dev fixture, so the backfill
+    # screen has a reachable locked row) shares the same unmapped custom
+    # template and so reports the same non-empty list — it joins `locked` in
+    # being excluded from the "everything else stays empty" check below.
+    still_locked_ids = {dev_mock.HEVY_DEV_UNMAPPED_ID, dev_mock.HEVY_DEV_BACKFILL_UNMAPPED_ID}
+    assert next(
+        item for item in items
+        if item["workout"]["id"] == dev_mock.HEVY_DEV_BACKFILL_UNMAPPED_ID
+    )["missing_template_ids"] == [dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID]
+
     # Every other workout never reaches the mapping-miss branch and must
     # still get a bound (empty) list, not a value leaked from a prior
     # iteration of the loop.
     others = [
         item for item in items
-        if item["workout"]["id"] != dev_mock.HEVY_DEV_UNMAPPED_ID
+        if item["workout"]["id"] not in still_locked_ids
     ]
-    assert others, "expected other demo workouts alongside the unmapped one"
+    assert others, "expected other demo workouts alongside the unmapped ones"
     assert all(item["missing_template_ids"] == [] for item in others)
 
 
@@ -273,8 +283,25 @@ def test_preview_reports_no_missing_templates_once_exercise_is_mapped(conn):
 
     items = hevy_backfill.preview_items(conn, client, since_dt)
 
-    assert all(item["missing_template_ids"] == [] for item in items)
-    assert all(item["action"] != "needs_mapping" for item in items)
+    # HEVY_DEV_BACKFILL_UNMAPPABLE_ID (Task 16's dev fixture for the "locked
+    # but nothing to map" edge case) has no template id at all, so no saved
+    # mapping can ever resolve it — it stays needs_mapping regardless.
+    # Every other workout uses the now-mapped custom template or a built-in
+    # exercise and must clear.
+    resolvable = [
+        item for item in items
+        if item["workout"]["id"] != dev_mock.HEVY_DEV_BACKFILL_UNMAPPABLE_ID
+    ]
+    assert resolvable, "expected other demo workouts alongside the unmappable one"
+    assert all(item["missing_template_ids"] == [] for item in resolvable)
+    assert all(item["action"] != "needs_mapping" for item in resolvable)
+
+    unmappable = next(
+        item for item in items
+        if item["workout"]["id"] == dev_mock.HEVY_DEV_BACKFILL_UNMAPPABLE_ID
+    )
+    assert unmappable["action"] == "needs_mapping"
+    assert unmappable["missing_template_ids"] == []
 
 
 def test_preview_describe_strategy_reports_missing_template_ids(conn):

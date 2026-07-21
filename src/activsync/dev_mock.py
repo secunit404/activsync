@@ -48,6 +48,27 @@ HEVY_DEV_MIDNIGHT_ID = "hw-dev-midnight"
 HEVY_DEV_SYNCING_ID = "hw-dev-syncing"
 HEVY_DEV_CUSTOM_TEMPLATE_ID = "tpl-dev-custom"
 
+# Two more, added for Task 16 (backfill). The five above are all seeded into
+# `hevy_workouts` by `dev_seed._seed_hevy` (looked up there by id, one at a
+# time — see that function), so `hevy_backfill.preview_items` short-circuits
+# every one of them to `"already tracked"` before it ever reaches the
+# mapping-miss check. That leaves no reachable `needs_mapping` (locked) row
+# for the backfill screen to demo or for `e2e/backfill.spec.ts` to click
+# through — these two exist to fix that, and are deliberately left OUT of
+# `dev_seed._seed_hevy` (which only looks up the five ids above by name) so
+# they stay "unseen" and land in a backfill preview as fresh workouts.
+# - UNMAPPED reuses the same custom exercise/template as HEVY_DEV_UNMAPPED_ID
+#   above, so `missing_template_ids` comes back non-empty: `["tpl-dev-custom"]`.
+# - UNMAPPABLE's exercise has no `exercise_template_id` at all (Hevy sends a
+#   falsy one for some entries) *and* a title with no built-in name mapping,
+#   so it also fails to resolve — but `missing_template_ids` stays empty,
+#   since `hevy_backfill.preview_items` only appends a template id when one
+#   exists. This is the "locked with nothing to link" edge case Task 4 added
+#   (`missingTemplateIds` can disagree with `action`) — without this fixture
+#   that path is untestable in a real browser, unit tests only.
+HEVY_DEV_BACKFILL_UNMAPPED_ID = "hw-dev-backfill-unmapped"
+HEVY_DEV_BACKFILL_UNMAPPABLE_ID = "hw-dev-backfill-unmappable"
+
 # Watch/upload activity ids the seeded scenarios link against.
 HEVY_DEV_MERGED_ACTIVITY_ID = 910001
 HEVY_DEV_SYNCING_ACTIVITY_ID = 910002
@@ -131,6 +152,30 @@ def dev_hevy_workouts(now: datetime | None = None) -> list[dict]:
             "exercises": [{
                 "title": "Bench Press (Barbell)",
                 "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_BACKFILL_UNMAPPED_ID,
+            "title": "Old ring circuit (Hevy)",
+            "start_time": _iso(now - timedelta(days=5, minutes=17)),
+            "end_time": _iso(now - timedelta(days=5, minutes=17) + timedelta(hours=1)),
+            "updated_at": _iso(now - timedelta(days=5, minutes=17) + timedelta(hours=1)),
+            "exercises": [{
+                "title": "Bulgarian Ring Row",
+                "exercise_template_id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_BACKFILL_UNMAPPABLE_ID,
+            "title": "Old mystery session (Hevy)",
+            "start_time": _iso(now - timedelta(days=6, minutes=23)),
+            "end_time": _iso(now - timedelta(days=6, minutes=23) + timedelta(hours=1)),
+            "updated_at": _iso(now - timedelta(days=6, minutes=23) + timedelta(hours=1)),
+            "exercises": [{
+                "title": "Mystery Movement",
+                "exercise_template_id": None,
                 "sets": _bench_sets(),
             }],
         },

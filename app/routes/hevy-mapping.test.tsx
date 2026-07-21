@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { createMemoryRouter, Link, Outlet, RouterProvider } from "react-router";
 import { expect, test, vi } from "vitest";
 
 import type { HevyToolsState } from "@/lib/api";
@@ -190,6 +190,43 @@ test("Cancel navigates back to the hub without saving", async () => {
   await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
   expect(saveExerciseMapping).not.toHaveBeenCalled();
   await waitFor(() => expect(router.state.location.pathname).toBe("/hevy"));
+});
+
+test("Cancel returns to the page that linked here, when reached by an in-app navigation rather than a direct link", async () => {
+  // `/hevy/mapping/:templateId` is a sibling of `/hevy/backfill`, not a
+  // child of it (both nest under `/hevy`) — Task 16's locked backfill rows
+  // link here, and Cancel must land back on `/hevy/backfill`, not the hub.
+  // Regression coverage for that cross-route case (see `close()`'s
+  // `location.key` comment in hevy-mapping.tsx); the "direct link → hub"
+  // case stays covered by the test above.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  client.setQueryData(queryKeys.hevyTools, toolsState);
+
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/hevy",
+        element: <Outlet />,
+        children: [
+          { path: "backfill", element: <Link to="/hevy/mapping/tmpl-unmapped">Map →</Link> },
+          { path: "mapping/:templateId", element: <HevyMapping /> },
+        ],
+      },
+    ],
+    { initialEntries: ["/hevy/backfill"] },
+  );
+
+  render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+
+  await userEvent.click(screen.getByRole("link", { name: "Map →" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/hevy/backfill"));
 });
 
 test("Escape navigates back to the hub", async () => {

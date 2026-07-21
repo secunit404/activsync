@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -34,13 +34,31 @@ type Category = HevyToolsState["categories"][number];
 export default function HevyMapping() {
   const { templateId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const tools = useQuery({
     queryKey: queryKeys.hevyTools,
     queryFn: ({ signal }) => getHevyTools(signal),
   });
 
-  const close = () => navigate("..");
+  // This route is a sibling of `/hevy/backfill` (both nested under `/hevy`),
+  // not a child of it — so a "Map →" link from a locked backfill row is a
+  // sibling-route navigation, and closing must return to wherever the user
+  // actually came from (the hub, or the backfill screen), not always to the
+  // hub. `location.key` is the documented signal for that: React Router sets
+  // it to the literal string `"default"` only for a router's first/initial
+  // entry (a direct load or a test harness with a single `initialEntries`
+  // item) — every entry reached by an actual navigation (a `Link` click, a
+  // `navigate()` call) gets a unique key instead. So: a real prior entry to
+  // go back to → `navigate(-1)`; no prior entry (deep link, direct load) →
+  // fall back to the relative `".."`, which always resolves to the hub.
+  const close = () => {
+    if (location.key === "default") {
+      navigate("..");
+    } else {
+      navigate(-1);
+    }
+  };
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       close();
