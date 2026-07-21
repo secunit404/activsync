@@ -211,6 +211,50 @@ def test_mock_setup_can_complete_through_json_contract(tmp_path, monkeypatch):
     assert db.get_config_value(conn, "initial_sync_done") is True
 
 
+def test_dev_onboarding_state_reopens_and_restores_the_wizard_gate(
+    tmp_path, monkeypatch
+):
+    """The shared E2E dev-mock server always seeds onboarded (see
+    ``main.py``'s ``ACTIVSYNC_DEV_E2E_ONBOARDED``), so `/setup` alone shows
+    the "you're all set" screen and `POST /setup/garmin` 409s. This
+    mock-only endpoint is what `e2e/setup.spec.ts` uses to reach the wizard
+    without disturbing every other spec that assumes onboarding is done.
+    """
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    assert client.get("/api/v1/settings").json()["setup"]["complete"] is True
+
+    reset = client.post("/api/v1/dev/onboarding-state", json={"complete": False})
+    assert reset.status_code == 200
+    assert db.get_config_value(conn, "initial_sync_done") is False
+
+    restore = client.post("/api/v1/dev/onboarding-state", json={"complete": True})
+    assert restore.status_code == 200
+    assert db.get_config_value(conn, "initial_sync_done") is True
+
+
+def test_dev_onboarding_state_also_clears_a_pending_mfa_session(
+    tmp_path, monkeypatch
+):
+    conn, client = _client(tmp_path, monkeypatch)
+    started = client.post(
+        "/api/v1/setup/garmin",
+        json={"email": "athlete@example.com", "password": "mfa"},
+    )
+    assert started.json()["mfaRequired"] is True
+
+    client.post("/api/v1/dev/onboarding-state", json={"complete": True})
+
+    settings = client.get("/api/v1/settings").json()
+    assert settings["setup"]["mfaRequired"] is False
+
+
+def test_dev_onboarding_state_is_404_outside_mock_mode(tmp_path, monkeypatch):
+    _conn, client = _client(tmp_path, monkeypatch, mock=False)
+    response = client.post("/api/v1/dev/onboarding-state", json={"complete": False})
+    assert response.status_code == 404
+
+
 def test_hevy_mapping_tools_save_remove_and_wake_waiting_workouts(
     tmp_path, monkeypatch
 ):

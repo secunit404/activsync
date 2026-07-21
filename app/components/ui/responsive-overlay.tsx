@@ -23,6 +23,12 @@ export type ResponsiveOverlayProps = {
   mobile?: "cover" | "sheet";
   /** Pinned to the bottom of the panel, above the scrolling body. */
   footer?: ReactNode;
+  /**
+   * Radix focuses the first focusable element on open — the close button,
+   * by default — before this fires. Call `event.preventDefault()` and move
+   * focus yourself (e.g. to a form's first field) to override it.
+   */
+  onOpenAutoFocus?: (event: Event) => void;
   children: ReactNode;
 };
 
@@ -54,6 +60,7 @@ export function ResponsiveOverlay({
   description,
   mobile = "cover",
   footer,
+  onOpenAutoFocus,
   children,
 }: ResponsiveOverlayProps) {
   return (
@@ -72,6 +79,7 @@ export function ResponsiveOverlay({
           // passing the prop explicitly as undefined (it overrides the default
           // because our props spread last).
           {...(description ? {} : { "aria-describedby": undefined })}
+          onOpenAutoFocus={onOpenAutoFocus}
           className={cn(
             "fixed z-50 flex flex-col overflow-hidden border-border bg-card text-card-foreground outline-none",
             "duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",

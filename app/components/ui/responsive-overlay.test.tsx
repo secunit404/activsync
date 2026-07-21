@@ -120,3 +120,18 @@ test("takes a bottom-sheet mobile presentation", () => {
     "sheet",
   );
 });
+
+test("forwards onOpenAutoFocus so a consumer can redirect initial focus", () => {
+  const onOpenAutoFocus = vi.fn((event: Event) => event.preventDefault());
+  render(
+    <ResponsiveOverlay
+      open
+      title="Details"
+      onOpenChange={() => {}}
+      onOpenAutoFocus={onOpenAutoFocus}
+    >
+      <p>Body</p>
+    </ResponsiveOverlay>,
+  );
+  expect(onOpenAutoFocus).toHaveBeenCalled();
+});

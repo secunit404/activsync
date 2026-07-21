@@ -148,6 +148,10 @@ class HevyCredentialsRequest(ApiModel):
     api_key: str
 
 
+class DevOnboardingStateRequest(ApiModel):
+    complete: bool
+
+
 class HevySettingsRequest(ApiModel):
     enabled: bool
     watch_strategy: HevyStrategy
@@ -590,5 +594,23 @@ def create_router(
         build_strava_client(conn).disconnect()
         events.bus.publish("refresh")
         return action("Strava disconnected. Publishing is paused.")
+
+    @router.post("/dev/onboarding-state", include_in_schema=False)
+    def set_dev_onboarding_state(payload: DevOnboardingStateRequest) -> dict:
+        """Mock-only: flip `initial_sync_done` so an E2E spec can reach the
+        setup wizard against the shared, already-onboarded dev-mock server.
+
+        404s outside mock mode, so this can never reach a real database.
+        Always clears any pending Garmin MFA session too — whichever
+        direction the flip goes, a stale `pending_garmin_mfa` entry would
+        otherwise leak into whatever test runs next and pop an unexpected
+        MFA prompt on the Settings page's own reconnect dialog.
+        """
+        if not mock_mode():
+            raise HTTPException(status_code=404, detail="Not found")
+        pending_garmin_mfa.pop("auth", None)
+        pending_garmin_mfa.pop("credentials", None)
+        db.set_config_value(conn, "initial_sync_done", payload.complete)
+        return {"ok": True}
 
     return router

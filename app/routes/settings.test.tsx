@@ -6,7 +6,6 @@ import { expect, test, vi } from "vitest";
 
 import type { SettingsState } from "@/lib/api";
 import { SettingsView } from "./settings";
-import { SetupView } from "./setup";
 
 // 152 uninteresting placeholders (all fall into the "Other" derived
 // category) plus two specifically-named, non-overlapping types so the
@@ -215,53 +214,4 @@ test("cancelling the disconnect confirmation leaves Hevy connected", async () =>
 
   expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
   vi.restoreAllMocks();
-});
-
-test("renders Garmin setup with the accepted history-window wording", () => {
-  renderWithProviders(
-    <SetupView
-      state={{
-        ...connectedState,
-        setup: { complete: false, step: "garmin", mfaRequired: false },
-        connections: {
-          ...connectedState.connections,
-          garmin: {
-            ...connectedState.connections.garmin,
-            connected: false,
-            status: "Disconnected — sync paused",
-          },
-          broken: ["garmin"],
-        },
-        credentials: {
-          ...connectedState.credentials,
-          garminEmail: "",
-          garminPasswordSaved: false,
-        },
-      }}
-    />,
-  );
-
-  expect(
-    screen.getByRole("heading", { name: "Connect Garmin" }),
-  ).toBeInTheDocument();
-  expect(
-    screen.getByLabelText("Activity history window (days)"),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Connect Garmin" })).toBeEnabled();
-});
-
-test("renders the Garmin MFA escape hatch", () => {
-  renderWithProviders(
-    <SetupView
-      state={{
-        ...connectedState,
-        setup: { complete: false, step: "garmin", mfaRequired: true },
-      }}
-    />,
-  );
-
-  expect(
-    screen.getByRole("heading", { name: "Verify Garmin" }),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
 });
