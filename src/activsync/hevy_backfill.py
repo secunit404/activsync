@@ -65,10 +65,16 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
     now = datetime.now(timezone.utc)
     items: list[dict] = []
     for workout in workouts_since(client, since_dt):
+        missing_ids: list[str] = []
         hevy_id = workout.get("id")
         if hevy_id and hevy_db.get_workout(conn, hevy_id) is not None:
             items.append(
-                {"workout": workout, "twin": None, "action": "already tracked"}
+                {
+                    "workout": workout,
+                    "twin": None,
+                    "action": "already tracked",
+                    "missing_template_ids": missing_ids,
+                }
             )
             continue
         twin = twin_activity(conn, workout)
@@ -85,7 +91,8 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
             strategy = cfg["hevy_watch_strategy"]
             exercises = workout.get("exercises", []) or []
 
-            def has_mapping_miss() -> bool:
+            def missing_template_ids() -> list[str]:
+                missing: list[str] = []
                 for exercise in exercises:
                     try:
                         lookup_exercise(
@@ -94,10 +101,12 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
                             exercise.get("exercise_template_id"),
                         )
                     except MappingMiss:
-                        return True
-                return False
+                        template_id = exercise.get("exercise_template_id")
+                        if template_id and template_id not in missing:
+                            missing.append(template_id)
+                return missing
 
-            missing_mapping = strategy != "describe" and has_mapping_miss()
+            missing_ids = [] if strategy == "describe" else missing_template_ids()
             match = hevy_sync.find_watch_match(
                 conn,
                 {
@@ -106,7 +115,7 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
                     "end_time": workout.get("end_time"),
                 },
             )
-            if missing_mapping:
+            if missing_ids:
                 action = "needs_mapping"
             elif isinstance(match, int):
                 action = strategy
@@ -117,11 +126,19 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
                 grace = timedelta(minutes=int(cfg["hevy_grace_minutes"]))
                 if end is not None and now - end < grace:
                     action = "waiting_watch"
-                elif strategy == "describe" and has_mapping_miss():
-                    action = "needs_mapping"
+                elif strategy == "describe":
+                    missing_ids = missing_template_ids()
+                    action = "needs_mapping" if missing_ids else "passive"
                 else:
                     action = "passive"
-        items.append({"workout": workout, "twin": twin, "action": action})
+        items.append(
+            {
+                "workout": workout,
+                "twin": twin,
+                "action": action,
+                "missing_template_ids": missing_ids,
+            }
+        )
     return items
 
 

@@ -66,6 +66,7 @@ class BackfillItem(ApiModel):
     start_time: str
     action: str
     twin_activity_id: int | None
+    missing_template_ids: list[str] = []
 
 
 class BackfillResult(ApiModel):
@@ -133,6 +134,7 @@ def create_router(
                     if item["twin"] is not None
                     else None
                 ),
+                missing_template_ids=item.get("missing_template_ids", []),
             )
             for item in raw_items
         ]

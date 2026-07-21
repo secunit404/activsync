@@ -1,11 +1,11 @@
 """Dev-mode Hevy fakes: MockHevyClient surface, FakeGarminClient scenario
 behaviour, and seeded demo rows."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from activsync import db, dev_mock, dev_seed, hevy_db, view
+from activsync import config, db, dev_mock, dev_seed, hevy_backfill, hevy_db, view
 from activsync.garmin_client import SubcategoryRejected
 from activsync.hevy_client import HevyClient
 
@@ -162,3 +162,70 @@ def test_dev_seed_is_idempotent_for_hevy_rows(conn):
 
     assert len([w for w in hevy_db.list_workouts(conn)
                 if w["hevy_id"] == dev_mock.HEVY_DEV_MERGED_ID]) == 1
+
+
+# -- preview_items missing template ids --------------------------------------
+
+
+def test_preview_reports_missing_template_ids_for_unmapped_exercise(conn):
+    client = dev_mock.MockHevyClient(conn)
+    since_dt = datetime.now(timezone.utc) - timedelta(days=7)
+
+    items = hevy_backfill.preview_items(conn, client, since_dt)
+
+    locked = next(
+        item for item in items
+        if item["workout"]["id"] == dev_mock.HEVY_DEV_UNMAPPED_ID
+    )
+    assert locked["action"] == "needs_mapping"
+    assert locked["missing_template_ids"] == [dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID]
+
+    # A workout whose exercise repeats the same unmapped template across
+    # several sets must not list that template repeatedly (de-duplicated).
+    assert len(locked["missing_template_ids"]) == len(
+        set(locked["missing_template_ids"])
+    )
+
+    # Every other workout never reaches the mapping-miss branch and must
+    # still get a bound (empty) list, not a value leaked from a prior
+    # iteration of the loop.
+    others = [
+        item for item in items
+        if item["workout"]["id"] != dev_mock.HEVY_DEV_UNMAPPED_ID
+    ]
+    assert others, "expected other demo workouts alongside the unmapped one"
+    assert all(item["missing_template_ids"] == [] for item in others)
+
+
+def test_preview_reports_no_missing_templates_once_exercise_is_mapped(conn):
+    # Map the previously-unmapped custom template to a valid Garmin
+    # category/subcategory pair, mirroring what saving a mapping in the UI
+    # does.
+    hevy_db.save_mapping(conn, dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID, 0, 1)
+    client = dev_mock.MockHevyClient(conn)
+    since_dt = datetime.now(timezone.utc) - timedelta(days=7)
+
+    items = hevy_backfill.preview_items(conn, client, since_dt)
+
+    assert all(item["missing_template_ids"] == [] for item in items)
+    assert all(item["action"] != "needs_mapping" for item in items)
+
+
+def test_preview_describe_strategy_reports_missing_template_ids(conn):
+    # The `describe` strategy short-circuits the first mapping check and
+    # only calls the collector a second time, further down the function —
+    # this exercises that second call site.
+    cfg = config.load_config(conn)
+    cfg["hevy_watch_strategy"] = "describe"
+    config.save_config(conn, cfg)
+    client = dev_mock.MockHevyClient(conn)
+    since_dt = datetime.now(timezone.utc) - timedelta(days=7)
+
+    items = hevy_backfill.preview_items(conn, client, since_dt)
+
+    locked = next(
+        item for item in items
+        if item["workout"]["id"] == dev_mock.HEVY_DEV_UNMAPPED_ID
+    )
+    assert locked["action"] == "needs_mapping"
+    assert locked["missing_template_ids"] == [dev_mock.HEVY_DEV_CUSTOM_TEMPLATE_ID]

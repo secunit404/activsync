@@ -220,6 +220,7 @@ export type BackfillResult = {
     startTime: string;
     action: string;
     twinActivityId: number | null;
+    missingTemplateIds: string[];
   }>;
 };
 
