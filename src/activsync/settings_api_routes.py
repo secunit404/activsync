@@ -29,12 +29,14 @@ from activsync import (
 from activsync.api_routes import ApiModel, Connections, UpdateState
 from activsync.garmin_client import GarminClient, MfaRequired
 from activsync.hevy_client import HevyAuthError, HevyClient
+from activsync.hevy_description import DEFAULT_TEMPLATE, validate_template
 from activsync.strava_client import StravaAuthError, StravaClient
 
 logger = logging.getLogger("activsync.settings_api_routes")
 
 SetupStep = onboarding.SetupStep
 HevyStrategy = Literal["replace", "merge", "describe"]
+HevyMatchMode = Literal["review", "automatic"]
 
 
 class SetupProgress(ApiModel):
@@ -55,8 +57,6 @@ class PreferenceState(ApiModel):
     garmin_poll_interval_minutes: int
     strava_poll_interval_minutes: int
     lookback_days: int
-    hevy2garmin_marker: str
-    hevy2garmin_marker_enabled: bool
 
 
 class ActivityTypeState(ApiModel):
@@ -84,6 +84,9 @@ class HevySettingsState(ApiModel):
     api_key_saved: bool
     enabled: bool
     watch_strategy: HevyStrategy
+    match_mode: HevyMatchMode
+    description_template: str
+    summary_on_structured: bool
     grace_minutes: int
     poll_interval_minutes: int
     identity: DeviceIdentity
@@ -136,8 +139,6 @@ class PreferencesRequest(ApiModel):
     garmin_poll_interval_minutes: int = Field(ge=1)
     strava_poll_interval_minutes: int = Field(ge=1)
     lookback_days: int = Field(ge=1)
-    hevy2garmin_marker: str
-    hevy2garmin_marker_enabled: bool
 
 
 class ActivityTypesRequest(ApiModel):
@@ -155,6 +156,11 @@ class DevOnboardingStateRequest(ApiModel):
 class HevySettingsRequest(ApiModel):
     enabled: bool
     watch_strategy: HevyStrategy
+    match_mode: HevyMatchMode
+    description_template: str = Field(
+        default=DEFAULT_TEMPLATE, min_length=1, max_length=4000
+    )
+    summary_on_structured: bool = True
     grace_minutes: int = Field(ge=0, le=1440)
     poll_interval_minutes: int = Field(ge=1, le=120)
     identity: DeviceIdentity = Field(default_factory=DeviceIdentity)
@@ -322,6 +328,9 @@ def create_router(
                 api_key_saved=hevy_view["api_key_saved"],
                 enabled=bool(cfg["hevy_enabled"]),
                 watch_strategy=cfg["hevy_watch_strategy"],
+                match_mode=cfg["hevy_match_mode"],
+                description_template=cfg["hevy_description_template"],
+                summary_on_structured=bool(cfg["hevy_summary_on_structured"]),
                 grace_minutes=int(cfg["hevy_grace_minutes"]),
                 poll_interval_minutes=int(cfg["hevy_poll_interval_minutes"]),
                 identity=DeviceIdentity.model_validate(hevy_view["identity"]),
@@ -549,6 +558,10 @@ def create_router(
 
     @router.put("/settings/hevy", response_model=ActionResult)
     def save_hevy_settings(payload: HevySettingsRequest) -> ActionResult:
+        try:
+            validate_template(payload.description_template)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         identity_values = payload.identity.model_dump()
         provided = [value for value in identity_values.values() if value is not None]
         if provided and len(provided) != 3:
@@ -561,6 +574,9 @@ def create_router(
             {
                 "hevy_enabled": payload.enabled,
                 "hevy_watch_strategy": payload.watch_strategy,
+                "hevy_match_mode": payload.match_mode,
+                "hevy_description_template": payload.description_template,
+                "hevy_summary_on_structured": payload.summary_on_structured,
                 "hevy_grace_minutes": payload.grace_minutes,
                 "hevy_poll_interval_minutes": payload.poll_interval_minutes,
                 "hevy_device_identity": identity_values if provided else None,

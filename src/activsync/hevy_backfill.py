@@ -13,6 +13,14 @@ from activsync.hevy_mapper import MappingMiss, lookup_exercise
 logger = logging.getLogger("activsync.hevy_backfill")
 
 
+def _is_published(activity: dict | None) -> bool:
+    return bool(
+        activity
+        and activity.get("publish_status") == "published"
+        and activity.get("strava_activity_id") is not None
+    )
+
+
 def parse_since(raw: str) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(raw.strip())
@@ -68,15 +76,10 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
         has_mapping_miss = False
         missing_ids: list[str] = []
         hevy_id = workout.get("id")
-        if hevy_id and hevy_db.get_workout(conn, hevy_id) is not None:
-            items.append(
-                {
-                    "workout": workout,
-                    "twin": None,
-                    "action": "already tracked",
-                    "missing_template_ids": missing_ids,
-                }
-            )
+        tracked = hevy_db.get_workout(conn, hevy_id) if hevy_id else None
+        if tracked is not None and tracked["status"] != "skipped":
+            # Once imported, the queue is the source of truth for this workout.
+            # A deliberate queue Skip releases it back to this picker.
             continue
         twin = twin_activity(conn, workout)
         if twin is not None:
@@ -87,7 +90,16 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
                    LIMIT 1""",
                 (twin["garmin_activity_id"], twin["garmin_activity_id"]),
             ).fetchone()
-            action = "needs_review" if owner else "linked_existing"
+            action = (
+                "needs_review"
+                if owner
+                else (
+                    "awaiting_match"
+                    if _is_published(twin)
+                    or cfg.get("hevy_match_mode") == "review"
+                    else cfg["hevy_watch_strategy"]
+                )
+            )
         else:
             strategy = cfg["hevy_watch_strategy"]
             exercises = workout.get("exercises", []) or []
@@ -114,10 +126,6 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
                             missing.append(template_id)
                 return any_miss, missing
 
-            if strategy == "describe":
-                has_mapping_miss, missing_ids = False, []
-            else:
-                has_mapping_miss, missing_ids = collect_mapping_misses()
             match = hevy_sync.find_watch_match(
                 conn,
                 {
@@ -126,13 +134,38 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
                     "end_time": workout.get("end_time"),
                 },
             )
-            if has_mapping_miss:
-                action = "needs_mapping"
-            elif isinstance(match, int):
-                action = strategy
+            if isinstance(match, int):
+                twin = db.get_activity(conn, match)
+                if _is_published(twin) or cfg.get("hevy_match_mode") == "review":
+                    # Review happens before the mapping gate: Description only
+                    # remains a valid choice even when structured sets cannot
+                    # yet be mapped.
+                    action = "awaiting_match"
+                else:
+                    has_mapping_miss, missing_ids = (
+                        (False, [])
+                        if strategy == "describe"
+                        else collect_mapping_misses()
+                    )
+                    action = "needs_mapping" if has_mapping_miss else strategy
             elif match in ("multiple", "claimed"):
                 action = "needs_review"
             else:
+                if strategy == "describe":
+                    has_mapping_miss, missing_ids = False, []
+                else:
+                    has_mapping_miss, missing_ids = collect_mapping_misses()
+                if has_mapping_miss:
+                    action = "needs_mapping"
+                    items.append(
+                        {
+                            "workout": workout,
+                            "twin": None,
+                            "action": action,
+                            "missing_template_ids": missing_ids,
+                        }
+                    )
+                    continue
                 end = _parse_ts(workout.get("end_time"))
                 grace = timedelta(minutes=int(cfg["hevy_grace_minutes"]))
                 if end is not None and now - end < grace:
@@ -154,16 +187,15 @@ def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[
 
 
 def run_items(conn: sqlite3.Connection, items: list[dict]) -> int:
-    """Ingest a preview, safely linking exact Garmin twins when unclaimed."""
-    linked = 0
+    """Ingest a preview and claim unique Garmin matches for processing."""
+    matched = 0
     for item in items:
         workout = item["workout"]
         hevy_id = workout.get("id")
         if not hevy_id:
             continue
-        if item["action"] == "already tracked" or hevy_db.get_workout(
-            conn, hevy_id
-        ) is not None:
+        existing = hevy_db.get_workout(conn, hevy_id)
+        if existing is not None and existing["status"] != "skipped":
             continue
         hevy_db.upsert_workout(
             conn,
@@ -175,8 +207,10 @@ def run_items(conn: sqlite3.Connection, items: list[dict]) -> int:
             workout,
         )
         if item["twin"] is None:
+            if existing is not None:
+                hevy_db.set_workout_status(conn, hevy_id, "waiting_watch")
             continue
-        if item["action"] != "linked_existing":
+        if item["action"] == "needs_review":
             hevy_db.set_workout_status(
                 conn,
                 hevy_id,
@@ -184,17 +218,31 @@ def run_items(conn: sqlite3.Connection, items: list[dict]) -> int:
                 error="backfill twin is already claimed by another workout",
             )
             continue
-        try:
-            hevy_db.link_target(
+        source_id = item["twin"]["garmin_activity_id"]
+        if not hevy_db.claim_source(conn, hevy_id, source_id):
+            logger.warning("backfill twin for %s already claimed", hevy_id)
+            hevy_db.set_workout_status(
                 conn,
                 hevy_id,
-                item["twin"]["garmin_activity_id"],
-                applied_strategy="external",
-                provenance="backfill",
+                "needs_review",
+                error="backfill match was claimed by another workout",
             )
-        except sqlite3.IntegrityError:
-            logger.warning("backfill twin for %s already claimed", hevy_id)
             continue
-        hevy_db.set_workout_status(conn, hevy_id, "linked_existing")
-        linked += 1
-    return linked
+        if item["action"] == "awaiting_match":
+            published = _is_published(item["twin"])
+            hevy_db.set_workout_status(
+                conn,
+                hevy_id,
+                "awaiting_match",
+                error=(
+                    "Already published to Strava. Choose Merge or Description only."
+                    if published
+                    else "Choose how to apply this Hevy workout."
+                ),
+            )
+        else:
+            # Automatic mode processes the durable source claim on the next
+            # Hevy pass; review mode above needs no polling handoff at all.
+            hevy_db.set_workout_status(conn, hevy_id, "waiting_watch")
+        matched += 1
+    return matched

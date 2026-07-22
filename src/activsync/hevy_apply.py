@@ -16,6 +16,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from activsync import db, hevy_db, hr_sources
+from activsync.hevy_description import generate_description
 from activsync.fit_builder import (
     Profile,
     ResolvedExercise,
@@ -208,79 +209,6 @@ def build_exercise_sets_payload(
     return {"exerciseSets": exercise_sets}
 
 
-# -- description (ported from upstream generate_description) -----------------
-
-
-def generate_description(workout: dict, calories: int | None = None,
-                         avg_hr: int | None = None) -> str:
-    lines: list[str] = []
-    title = workout.get("title", "Workout")
-    duration_s = 0
-    start_dt = _parse_ts(workout.get("start_time"))
-    end_dt = _parse_ts(workout.get("end_time"))
-    if start_dt and end_dt:
-        duration_s = int((end_dt - start_dt).total_seconds())
-
-    lines.append(f"\U0001F3CB️ {title}")
-    if duration_s > 0:
-        lines.append(f"⏱️ {duration_s // 60} min")
-    if calories:
-        lines.append(f"\U0001F525 {calories} kcal")
-    if avg_hr:
-        lines.append(f"❤️ avg {avg_hr} bpm")
-
-    exercises = workout.get("exercises", [])
-    if exercises:
-        lines.append("")
-        for ex in exercises:
-            name = ex.get("title") or ex.get("name", "Unknown")
-            all_sets = ex.get("sets", [])
-            warmup = [s for s in all_sets if s.get("type") == "warmup"]
-            working = [s for s in all_sets if s.get("type") != "warmup"]
-            if working:
-                n_label = "set" if len(working) == 1 else "sets"
-                has_distance = any(s.get("distance_meters") for s in working)
-                has_duration = any(s.get("duration_seconds") for s in working)
-                has_weight = any(s.get("weight_kg") or s.get("weight") for s in working)
-                if has_distance or (has_duration and not has_weight):
-                    total_dist = sum(s.get("distance_meters", 0) or 0 for s in working)
-                    total_dur = sum(s.get("duration_seconds", 0) or 0 for s in working)
-                    parts = [f"{len(working)} {n_label}"]
-                    if total_dist > 0:
-                        parts.append(f"{total_dist / 1000:.1f}km")
-                    if total_dur > 0:
-                        parts.append(f"{int(total_dur // 60)}min")
-                else:
-                    weights = [s.get("weight_kg") or s.get("weight", 0) for s in working]
-                    reps = [s.get("reps", 0) or 0 for s in working]
-                    top_weight = max(weights) if weights else 0
-                    top_reps = max(reps) if reps else 0
-                    parts = [f"{len(working)} {n_label}",
-                             f"{top_weight:.1f}kg × {top_reps}"]
-
-                if warmup:
-                    parts.append(f"{len(warmup)} warmup")
-                for set_type in ("dropset", "failure"):
-                    count = sum(s.get("type") == set_type for s in working)
-                    if count:
-                        parts.append(f"{count} {set_type}")
-                for key, label in (("rpe", "RPE"), ("custom_metric", "metric")):
-                    values = []
-                    for set_data in all_sets:
-                        value = set_data.get(key)
-                        if value is not None and value not in values:
-                            values.append(value)
-                    if values:
-                        parts.append(f"{label} {', '.join(str(v) for v in values)}")
-                lines.append(f"• {name}: {' · '.join(parts)}")
-            elif warmup:
-                s_label = "set" if len(warmup) == 1 else "sets"
-                lines.append(f"• {name}: {len(warmup)} warmup {s_label}")
-
-    lines.append("\n— synced by activsync")
-    return "\n".join(lines)
-
-
 # -- strategy execution ------------------------------------------------------
 
 
@@ -307,13 +235,29 @@ def _activity_window(conn: sqlite3.Connection, activity_id: int,
     return row["start_time"], duration
 
 
-def _apply_metadata(garmin: GarminClient, activity_id: int, row: dict) -> None:
+def _apply_metadata(
+    garmin: GarminClient,
+    activity_id: int,
+    row: dict,
+    cfg: dict,
+    *,
+    write_summary: bool,
+) -> None:
     payload = _payload_of(row)
     garmin.set_title(activity_id, row["title"] or payload.get("title", "Workout"))
-    garmin.set_description(activity_id, generate_description(payload))
+    if write_summary:
+        garmin.set_description(
+            activity_id,
+            generate_description(
+                payload,
+                template=cfg.get("hevy_description_template"),
+            ),
+        )
 
 
-def execute_merge(conn: sqlite3.Connection, garmin: GarminClient, row: dict) -> None:
+def execute_merge(
+    conn: sqlite3.Connection, garmin: GarminClient, row: dict, cfg: dict
+) -> None:
     source_id = row["source_garmin_activity_id"]
     resolved = resolve_exercises(conn, _payload_of(row))
     # Back up the activity's own sets before the atomic full replace.
@@ -339,16 +283,24 @@ def execute_merge(conn: sqlite3.Connection, garmin: GarminClient, row: dict) -> 
         hevy_db.set_workout_status(conn, row["hevy_id"], "needs_review",
                                    error="watch activity deleted on Garmin")
         return
-    _apply_metadata(garmin, source_id, row)
+    _apply_metadata(
+        garmin,
+        source_id,
+        row,
+        cfg,
+        write_summary=bool(cfg.get("hevy_summary_on_structured", True)),
+    )
     hevy_db.link_target(conn, row["hevy_id"], source_id, "merge")
     hevy_db.set_workout_status(conn, row["hevy_id"], "merged")
     hevy_db.set_applied(conn, row["hevy_id"], "garmin", row["source_updated_at"])
 
 
-def execute_describe(conn: sqlite3.Connection, garmin: GarminClient, row: dict) -> None:
+def execute_describe(
+    conn: sqlite3.Connection, garmin: GarminClient, row: dict, cfg: dict
+) -> None:
     source_id = row["source_garmin_activity_id"]
     try:
-        _apply_metadata(garmin, source_id, row)
+        _apply_metadata(garmin, source_id, row, cfg, write_summary=True)
     except ActivityGone:
         hevy_db.set_workout_status(conn, row["hevy_id"], "needs_review",
                                    error="watch activity deleted on Garmin")
@@ -558,7 +510,16 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
             next_step = op["next_step"] or "metadata"
 
             if next_step == "metadata":
-                _apply_metadata(garmin, target, row)
+                _apply_metadata(
+                    garmin,
+                    target,
+                    row,
+                    cfg,
+                    write_summary=(
+                        kind != "replace"
+                        or bool(cfg.get("hevy_summary_on_structured", True))
+                    ),
+                )
                 hevy_db.update_operation(conn, op["id"], next_step="delete")
                 next_step = "delete"
 

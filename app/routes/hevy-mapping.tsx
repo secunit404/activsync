@@ -8,7 +8,12 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
-import { getHevyTools, saveExerciseMapping, type HevyToolsState } from "@/lib/api";
+import {
+  getHevyTools,
+  removeExerciseMapping,
+  saveExerciseMapping,
+  type HevyToolsState,
+} from "@/lib/api";
 import type { HevyOutletContext } from "./hevy";
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
@@ -72,6 +77,22 @@ export default function HevyMapping() {
     },
   });
 
+  const reset = useMutation({
+    mutationFn: () => removeExerciseMapping(templateId ?? ""),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.hevyTools });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.hevyQueue });
+      outletContext?.onMappingSaved();
+      close();
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not reset exercise mapping.", {
+        duration: ERROR_TOAST_DURATION_MS,
+      });
+    },
+  });
+
   if (tools.isPending) {
     return (
       <ResponsiveOverlay open onOpenChange={handleOpenChange} title="Loading…" mobile="sheet">
@@ -121,9 +142,11 @@ export default function HevyMapping() {
       mapping={mapping}
       categories={tools.data.categories}
       saving={save.isPending}
+      resetting={reset.isPending}
       onCancel={close}
       onOpenChange={handleOpenChange}
       onSave={(category, subcategory) => save.mutate({ category, subcategory })}
+      onReset={() => reset.mutate()}
     />
   );
 }
@@ -132,16 +155,20 @@ function ExerciseMappingForm({
   mapping,
   categories,
   saving,
+  resetting,
   onCancel,
   onOpenChange,
   onSave,
+  onReset,
 }: {
   mapping: Mapping;
   categories: Category[];
   saving: boolean;
+  resetting: boolean;
   onCancel: () => void;
   onOpenChange: (open: boolean) => void;
   onSave: (category: number, subcategory: number) => void;
+  onReset: () => void;
 }) {
   const [category, setCategory] = useState(
     mapping.category !== null ? String(mapping.category) : "",
@@ -165,9 +192,6 @@ function ExerciseMappingForm({
   }
 
   const selectedCategory = categories.find((option) => String(option.value) === category);
-  const selectedSubcategory = selectedCategory?.subcategories.find(
-    (option) => String(option.value) === subcategory,
-  );
 
   // Some Garmin categories (cycling, yoga, treadmill, …) carry zero
   // subcategories. Offering them is a dead end: the subcategory select would
@@ -200,21 +224,63 @@ function ExerciseMappingForm({
   }
 
   const canSave = category !== "" && subcategory !== "";
+  const hasPersistedOverride = mapping.source === "user";
+  const standardCategory =
+    mapping.standardCategory !== null ? String(mapping.standardCategory) : "";
+  const standardSubcategory =
+    mapping.standardSubcategory !== null ? String(mapping.standardSubcategory) : "";
+  const draftDiffersFromStandard =
+    mapping.hasStandardMapping &&
+    (category !== standardCategory || subcategory !== standardSubcategory);
+  const canReset =
+    mapping.hasStandardMapping && (hasPersistedOverride || draftDiffersFromStandard);
+  const busy = saving || resetting;
+
+  function handleReset() {
+    if (hasPersistedOverride) {
+      onReset();
+      return;
+    }
+    setCategory(standardCategory);
+    setSubcategory(standardSubcategory);
+  }
 
   return (
     <ResponsiveOverlay
       open
       onOpenChange={onOpenChange}
       title={mapping.title}
-      description={`${mapping.muscleGroup ? `${mapping.muscleGroup} · ` : ""}Choose where this exercise's sets and reps are recorded in Garmin.`}
+      description={
+        mapping.muscleGroup ? (
+          <span>
+            <span className="font-medium text-foreground">Muscle group:</span>{" "}
+            {formatMuscleGroup(mapping.muscleGroup)}
+          </span>
+        ) : undefined
+      }
       mobile="sheet"
       footer={
-        <div className="flex gap-2.5">
+        <div
+          data-testid="mapping-actions"
+          className="flex flex-wrap gap-2.5 md:justify-end"
+        >
+          {canReset ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-muted-foreground md:mr-auto md:w-auto"
+              disabled={busy}
+              onClick={handleReset}
+            >
+              {resetting ? <Spinner data-icon="inline-start" /> : null}
+              {resetting ? "Resetting…" : "Reset to standard"}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
             className="flex-1 md:flex-none"
-            disabled={saving}
+            disabled={busy}
             onClick={onCancel}
           >
             Cancel
@@ -222,7 +288,7 @@ function ExerciseMappingForm({
           <Button
             type="button"
             className="flex-1 md:flex-none"
-            disabled={!canSave || saving}
+            disabled={!canSave || busy}
             onClick={() => onSave(Number(category), Number(subcategory))}
           >
             {saving ? <Spinner data-icon="inline-start" /> : null}
@@ -232,23 +298,15 @@ function ExerciseMappingForm({
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="flex items-start gap-2.5 rounded-[10px] border border-warning/22 bg-warning/[0.06] px-3.5 py-2.5">
-          <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
-          <p className="text-[12.5px] leading-relaxed text-warning/90">
-            {
-              // Three states, not two: this editor is now reachable for any
-              // exercise, including the majority that already resolve.
-              mapping.garminRejected
-                ? "Garmin rejected the previous mapping — pick a different category and subcategory."
-                : mapping.source === "automatic"
-                  ? "ActivSync maps this automatically. Saving here replaces that with your own choice."
-                  : mapping.source === "user"
-                    ? "You set this mapping. Saving replaces it."
-                    : "Nothing maps this exercise yet. Pick where its sets and reps should be recorded."
-            }
-          </p>
-        </div>
-
+        {mapping.unmapped && mapping.suggested ? (
+          <div className="rounded-lg border border-warning/30 bg-warning/[0.06] p-3.5 text-sm">
+            <p className="font-semibold text-warning">Suggested mapping (not active yet)</p>
+            <p className="mt-1 leading-relaxed text-muted-foreground">
+              ActivSync preselected a best guess from the closest exercise name or muscle group.
+              Review it and press Save mapping before structured sets can sync.
+            </p>
+          </div>
+        ) : null}
         <Field>
           <FieldLabel
             htmlFor="mapping-category"
@@ -260,6 +318,7 @@ function ExerciseMappingForm({
             id="mapping-category"
             className="w-full"
             value={category}
+            disabled={busy}
             onChange={(event) => handleCategoryChange(event.target.value)}
           >
             <NativeSelectOption value="">Select a category…</NativeSelectOption>
@@ -282,7 +341,7 @@ function ExerciseMappingForm({
             id="mapping-subcategory"
             className="w-full"
             value={subcategory}
-            disabled={!selectedCategory}
+            disabled={!selectedCategory || busy}
             onChange={(event) => setSubcategory(event.target.value)}
           >
             <NativeSelectOption value="">
@@ -296,15 +355,12 @@ function ExerciseMappingForm({
           </NativeSelect>
         </Field>
 
-        <div className="flex items-center gap-2.5 rounded-[10px] border border-border bg-muted/20 px-3.5 py-2.5">
-          <span className="font-mono text-xs text-muted-foreground uppercase">Syncs as</span>
-          <span data-testid="syncs-as" className="font-mono text-[13.5px] font-semibold text-success">
-            {selectedCategory && selectedSubcategory
-              ? `${selectedCategory.label} › ${selectedSubcategory.label}`
-              : "Pick both fields to see the result"}
-          </span>
-        </div>
       </div>
     </ResponsiveOverlay>
   );
+}
+
+function formatMuscleGroup(value: string): string {
+  const label = value.replaceAll("_", " ").toLowerCase();
+  return label.slice(0, 1).toUpperCase() + label.slice(1);
 }

@@ -10,6 +10,26 @@ import sqlite3
 from activsync import config, db, timeutil
 
 GARMIN_ACTIVITY_URL = "https://connect.garmin.com/modern/activity/{}"
+STRAVA_ACTIVITY_URL = "https://www.strava.com/activities/{}"
+
+_GARMIN_EXERCISE_ACRONYMS = {"BOSU", "EZ", "GHD", "HIIT", "KBS", "RDL", "TRX"}
+
+
+def garmin_exercise_label(enum_name: str) -> str:
+    """Turn a Garmin FIT enum identifier into a sentence-case UI label.
+
+    The raw enum name must stay unchanged where it is sent back to Garmin.
+    FIT prefixes identifiers that begin with a number with ``N`` so they are
+    valid Python names (for example ``N45_DEGREE_PLANK``); that implementation
+    detail should not leak into the UI either.
+    """
+    words = enum_name.split("_")
+    if words and len(words[0]) > 1 and words[0][0] == "N" and words[0][1:].isdigit():
+        words[0] = words[0][1:]
+
+    words = [word if word in _GARMIN_EXERCISE_ACRONYMS else word.lower() for word in words]
+    label = " ".join(words)
+    return label[:1].upper() + label[1:]
 
 
 def _parse_garmin_data(row: dict) -> dict:
@@ -161,7 +181,7 @@ def activities_view(
     return result
 
 
-_HEVY_IN_FLIGHT = ("waiting_watch", "syncing")
+_HEVY_IN_FLIGHT = ("waiting_watch", "awaiting_match", "syncing")
 _HEVY_PROBLEMS = ("needs_mapping", "failed", "needs_review")
 
 
@@ -186,6 +206,11 @@ def hevy_summary(conn: sqlite3.Connection) -> dict:
         rows: list[dict] = []
         for status in statuses:
             for row in hevy_db.list_workouts(conn, status=status):
+                matched_activity = (
+                    db.get_activity(conn, row["source_garmin_activity_id"])
+                    if row["source_garmin_activity_id"] is not None
+                    else None
+                )
                 rows.append({
                     "hevy_id": row["hevy_id"],
                     "title": row["title"] or row["hevy_id"],
@@ -198,6 +223,26 @@ def hevy_summary(conn: sqlite3.Connection) -> dict:
                     # The 404-tombstone case gets the "re-sync as fresh upload"
                     # action; everything else retries in place.
                     "resyncable": "deleted on Garmin" in (row["error"] or ""),
+                    "awaiting_match": status == "awaiting_match",
+                    "matched_garmin_activity_id": row["source_garmin_activity_id"],
+                    "matched_garmin_title": (
+                        matched_activity["title"] if matched_activity else None
+                    ),
+                    "matched_strava_activity_id": (
+                        matched_activity["strava_activity_id"]
+                        if matched_activity
+                        and matched_activity.get("publish_status") == "published"
+                        else None
+                    ),
+                    "matched_strava_url": (
+                        STRAVA_ACTIVITY_URL.format(
+                            matched_activity["strava_activity_id"]
+                        )
+                        if matched_activity
+                        and matched_activity.get("publish_status") == "published"
+                        and matched_activity.get("strava_activity_id") is not None
+                        else None
+                    ),
                 })
         return rows
 
@@ -284,6 +329,7 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
         SUBCATEGORY_NAMES,
         MappingMiss,
         lookup_exercise,
+        lookup_standard_mapping,
         suggest_mapping,
     )
 
@@ -292,13 +338,13 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
     for template in hevy_db.list_templates(conn):
         template_id = template["exercise_template_id"]
         mapping = mappings.get(template_id)
-        rejected = bool(mapping and mapping["garmin_rejected"])
+        standard_mapping = lookup_standard_mapping(
+            template["title"], template_id
+        )
 
         # Ask the resolver rather than reimplementing its precedence here —
         # it is the same call the sync path makes, so the screen can never
-        # disagree with what actually gets written. A rejected mapping is
-        # skipped by `lookup_exercise` itself, so such a row falls through to
-        # whatever the tables say, or to the miss branch.
+        # disagree with what actually gets written.
         try:
             category, subcategory, _ = lookup_exercise(
                 conn, template["title"], template_id
@@ -308,7 +354,7 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
             category = subcategory = None
             resolves = False
 
-        if resolves and mapping is not None and not rejected:
+        if resolves and mapping is not None:
             source = "user"
         elif resolves:
             source = "automatic"
@@ -330,21 +376,36 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
             "muscle_group": template.get("primary_muscle_group") or "",
             "mapped": resolves,
             "unmapped": not resolves,
-            "garmin_rejected": rejected,
             "suggested": suggestion is not None,
             "source": source,
+            "has_standard_mapping": standard_mapping is not None,
+            "standard_category": (
+                standard_mapping[0] if standard_mapping is not None else None
+            ),
+            "standard_subcategory": (
+                standard_mapping[1] if standard_mapping is not None else None
+            ),
             "category": category,
             "subcategory": subcategory,
-            "category_name": (CATEGORY_NAMES.get(category)
-                              if category is not None else None),
-            "subcategory_name": (SUBCATEGORY_NAMES.get(category, {}).get(subcategory)
-                                 if category is not None and subcategory is not None
-                                 else None),
+            "category_name": (
+                garmin_exercise_label(CATEGORY_NAMES[category])
+                if category is not None and category in CATEGORY_NAMES
+                else None
+            ),
+            "subcategory_name": (
+                garmin_exercise_label(SUBCATEGORY_NAMES[category][subcategory])
+                if (
+                    category is not None
+                    and subcategory is not None
+                    and subcategory in SUBCATEGORY_NAMES.get(category, {})
+                )
+                else None
+            ),
         })
     # What needs doing first, then custom exercises (the ones a user actually
     # invented), then alphabetical.
     rows.sort(key=lambda r: (
-        not (r["unmapped"] or r["garmin_rejected"]),
+        not r["unmapped"],
         not r["is_custom"],
         r["title"].lower(),
     ))

@@ -48,6 +48,14 @@ _SYNCED_STATUSES = {"merged", "described", "replaced", "uploaded_passive",
                     "linked_existing", "syncing", "needs_review"}
 
 
+def _is_published_activity(activity: dict | None) -> bool:
+    return bool(
+        activity
+        and activity.get("publish_status") == "published"
+        and activity.get("strava_activity_id") is not None
+    )
+
+
 # -- event ingestion --------------------------------------------------------
 
 
@@ -283,15 +291,24 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
     if not token:
         return
     try:
+        if (
+            row["status"] == "awaiting_match"
+            and (
+                cfg.get("hevy_match_mode", "automatic") == "review"
+                or _is_published_activity(
+                    db.get_activity(conn, row["source_garmin_activity_id"])
+                    if row.get("source_garmin_activity_id")
+                    else None
+                )
+            )
+        ):
+            return
         op = hevy_db.get_open_operation(conn, hevy_id)
         if op is not None:
             advance_operation(conn, garmin, row, op, cfg)
             return
 
         strategy = cfg.get("hevy_watch_strategy", "merge")
-        if not apply_mapping_gate(conn, row, strategy, hevy):
-            return
-
         match = find_watch_match(conn, row)
         if isinstance(match, int):
             if not hevy_db.claim_source(conn, hevy_id, match):
@@ -300,12 +317,34 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
                     error=f"watch activity {match} claim conflict")
                 return
             row = hevy_db.get_workout(conn, hevy_id)
+            matched_activity = db.get_activity(conn, match)
+            if _is_published_activity(matched_activity):
+                hevy_db.set_workout_status(
+                    conn,
+                    hevy_id,
+                    "awaiting_match",
+                    error=(
+                        "Already published to Strava. Choose Merge or "
+                        "Description only."
+                    ),
+                )
+                return
+            if cfg.get("hevy_match_mode", "automatic") == "review":
+                hevy_db.set_workout_status(
+                    conn,
+                    hevy_id,
+                    "awaiting_match",
+                    error="Choose how to apply this Hevy workout.",
+                )
+                return
+            if not apply_mapping_gate(conn, row, strategy, hevy):
+                return
             if strategy == "describe":
-                execute_describe(conn, garmin, row)
+                execute_describe(conn, garmin, row, cfg)
             elif strategy == "replace":
                 execute_replace(conn, garmin, row, cfg)
             else:
-                execute_merge(conn, garmin, row)
+                execute_merge(conn, garmin, row, cfg)
         elif match == "multiple":
             hevy_db.set_workout_status(conn, hevy_id, "needs_review",
                                        error="multiple matching watch activities")
@@ -334,13 +373,65 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
         hevy_db.release_lease(conn, hevy_id, token)
 
 
+def apply_match_choice(
+    conn: sqlite3.Connection,
+    garmin: GarminClient,
+    hevy: HevyClient,
+    hevy_id: str,
+    strategy: str,
+    cfg: dict,
+    now: datetime,
+) -> dict:
+    """Apply one explicit choice to a durably claimed watch match."""
+    if strategy not in ("merge", "replace", "describe"):
+        raise ValueError(f"unsupported Hevy match strategy: {strategy}")
+    token = hevy_db.acquire_lease(conn, hevy_id, now)
+    if not token:
+        raise RuntimeError("Workout is being processed right now.")
+    try:
+        row = hevy_db.get_workout(conn, hevy_id)
+        if row is None:
+            raise LookupError("Unknown Hevy workout.")
+        if row["status"] != "awaiting_match" or not row["source_garmin_activity_id"]:
+            raise ValueError("This workout is not waiting for a match decision.")
+        if hevy_db.get_open_operation(conn, hevy_id) is not None:
+            raise ValueError("This workout already has an operation in progress.")
+        source_activity = db.get_activity(conn, row["source_garmin_activity_id"])
+        if strategy == "replace" and _is_published_activity(source_activity):
+            raise ValueError(
+                "Replace is unavailable because this activity is already on Strava. "
+                "Choose Merge or Description only."
+            )
+        if not apply_mapping_gate(conn, row, strategy, hevy):
+            return hevy_db.get_workout(conn, hevy_id)
+        if strategy == "describe":
+            execute_describe(conn, garmin, row, cfg)
+        elif strategy == "replace":
+            execute_replace(conn, garmin, row, cfg)
+        else:
+            execute_merge(conn, garmin, row, cfg)
+        return hevy_db.get_workout(conn, hevy_id)
+    except HevyAuthError:
+        raise
+    except Exception as exc:
+        logger.exception("applying Hevy match choice for %s failed", hevy_id)
+        row = hevy_db.get_workout(conn, hevy_id)
+        status = "syncing" if hevy_db.get_open_operation(conn, hevy_id) else "failed"
+        if row is not None and row["status"] == "awaiting_match":
+            status = "awaiting_match"
+        hevy_db.set_workout_status(conn, hevy_id, status, error=str(exc))
+        raise
+    finally:
+        hevy_db.release_lease(conn, hevy_id, token)
+
+
 # -- post-sync edits ---------------------------------------------------------
 
 _TERMINAL_APPLIED = ("merged", "described", "replaced", "uploaded_passive")
 
 
 def _reapply(conn: sqlite3.Connection, garmin: GarminClient, hevy: HevyClient,
-             row: dict, now: datetime) -> None:
+             row: dict, cfg: dict, now: datetime) -> None:
     """A newer Hevy revision for an already-applied workout: re-apply
     following the ORIGINALLY applied strategy, never the current setting."""
     hevy_id = row["hevy_id"]
@@ -365,7 +456,18 @@ def _reapply(conn: sqlite3.Connection, garmin: GarminClient, hevy: HevyClient,
             payload = {**build_exercise_sets_payload(resolved, start, duration),
                        "activityId": target}
             garmin.put_exercise_sets(target, payload)
-        _apply_metadata(garmin, target, row)
+        strategy = row["applied_strategy"] or "merge"
+        _apply_metadata(
+            garmin,
+            target,
+            row,
+            cfg,
+            write_summary=(
+                strategy == "describe"
+                or strategy == "passive"
+                or bool(cfg.get("hevy_summary_on_structured", True))
+            ),
+        )
         hevy_db.set_applied(conn, hevy_id, "garmin", row["source_updated_at"])
     except ActivityGone:
         hevy_db.set_workout_status(
@@ -381,11 +483,9 @@ def _reapply(conn: sqlite3.Connection, garmin: GarminClient, hevy: HevyClient,
 # -- the leg -----------------------------------------------------------------
 
 # failed and needs_mapping are deliberately NOT here: a definite rejection
-# must not re-upload every tick, and a Garmin-rejected pair that still
-# resolves must not repeat the identical PUT. failed re-enters via the user's
-# explicit retry (Task 13); needs_mapping via hevy_db.wake_needs_mapping when
-# a mapping is saved.
-_ACTIONABLE = ("waiting_watch", "syncing")
+# must not re-upload every tick. failed re-enters via the user's explicit retry
+# (Task 13); needs_mapping via hevy_db.wake_needs_mapping when a mapping is saved.
+_ACTIONABLE = ("waiting_watch", "awaiting_match", "syncing")
 
 
 def _row_fingerprint(row: dict | None) -> tuple:
@@ -413,15 +513,15 @@ def run_hevy_leg(conn: sqlite3.Connection, garmin: GarminClient,
         for row in hevy_db.list_workouts(conn, status=status):
             applied = row["garmin_applied_updated_at"] or ""
             if row["source_updated_at"] and row["source_updated_at"] > applied:
-                _reapply(conn, garmin, hevy, row, now)
+                _reapply(conn, garmin, hevy, row, cfg, now)
                 changed = True
 
     if strava is not None:
-        changed = _strava_catchup(conn, strava) or changed
+        changed = _strava_catchup(conn, strava, cfg) or changed
     return changed
 
 
-def _strava_catchup(conn: sqlite3.Connection, strava) -> bool:
+def _strava_catchup(conn: sqlite3.Connection, strava, cfg: dict) -> bool:
     """Push edited titles/descriptions to already-published Strava copies.
 
     The Garmin and Strava sides are applied separately: the Garmin update can
@@ -439,11 +539,23 @@ def _strava_catchup(conn: sqlite3.Connection, strava) -> bool:
             if not activity or not activity.get("strava_activity_id"):
                 continue  # not published yet — publish carries current content
             payload = _payload_of(row)
+            strategy = row["applied_strategy"] or "merge"
+            write_summary = (
+                strategy in ("describe", "passive")
+                or bool(cfg.get("hevy_summary_on_structured", True))
+            )
             try:
                 strava.update_activity_metadata(
                     activity["strava_activity_id"],
                     row["title"] or payload.get("title", "Workout"),
-                    generate_description(payload))
+                    (
+                        generate_description(
+                            payload,
+                            template=cfg.get("hevy_description_template"),
+                        )
+                        if write_summary
+                        else activity.get("description", "")
+                    ))
             except Exception as exc:
                 logger.warning("strava catch-up failed for %s: %s",
                                row["hevy_id"], exc)

@@ -18,7 +18,7 @@ export type ResponsiveOverlayProps = {
   onOpenChange: (open: boolean) => void;
   /** Required: this is the dialog's accessible name as well as its visible heading. */
   title: string;
-  description?: string;
+  description?: ReactNode;
   /** How the overlay presents below `md` (768px). Desktop is always a centered modal. */
   mobile?: "cover" | "sheet";
   /**

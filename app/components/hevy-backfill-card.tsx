@@ -79,6 +79,9 @@ export function HevyBackfillCard({
       toast.success(result.message);
       setConfirmOpen(false);
       selection.clear();
+      // The queue now owns imported rows. Re-scan so they disappear from
+      // backfill immediately; a later queue Skip makes them eligible again.
+      preview.mutate();
     },
     onError: (error) => {
       toast.error(
@@ -116,13 +119,15 @@ export function HevyBackfillCard({
   // Keyed off object identity, not `since`: clicking Preview again for the
   // *same* since date still returns a new response object and must still
   // reset — the user is looking at a new snapshot, not the old one.
-  const items: BackfillItem[] = preview.data?.items ?? [];
+  const items: BackfillItem[] = (preview.data?.items ?? []).filter(
+    (item) => item.action !== "already_tracked",
+  );
   if (preview.data && preview.data !== appliedResult) {
     setAppliedResult(preview.data);
     selection.clear();
   }
 
-  // The selectable set is everything except locked (`needs_mapping`) rows —
+  // The selectable set excludes locked and already-tracked rows —
   // this is the one true definition "select all importable" and the footer
   // count both read from. Never `items.length`.
   const selectableIds = items.filter(isSelectable).map((item) => item.hevyId);
@@ -136,7 +141,7 @@ export function HevyBackfillCard({
       acc[kind] += 1;
       return acc;
     },
-    { locked: 0, link: 0, create: 0 },
+    { locked: 0, tracked: 0, match: 0, create: 0 },
   );
 
   return (
@@ -215,8 +220,8 @@ export function HevyBackfillCard({
                     className="bg-muted text-muted-foreground"
                   />
                   <CountBadge
-                    count={counts.link}
-                    label="linked"
+                    count={counts.match}
+                    label="matched"
                     className="bg-success/10 text-success"
                   />
                   <CountBadge
@@ -228,6 +233,11 @@ export function HevyBackfillCard({
                     count={counts.locked}
                     label="needs mapping"
                     className="bg-warning/12 text-warning"
+                  />
+                  <CountBadge
+                    count={counts.tracked}
+                    label="tracked"
+                    className="bg-muted text-muted-foreground"
                   />
                 </div>
                 <ul className="max-h-[360px] overflow-y-auto">
@@ -269,7 +279,7 @@ export function HevyBackfillCard({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Import these workouts?"
-        description={`Import ${selection.count} historical Hevy workout${selection.count === 1 ? "" : "s"}? Linked ones attach to their matching Garmin activity; the rest are queued to sync in.`}
+        description={`Import ${selection.count} historical Hevy workout${selection.count === 1 ? "" : "s"}? Matches go to your review queue; the rest are queued to sync in.`}
         confirmLabel="Import"
         pendingLabel="Importing…"
         pending={run.isPending}

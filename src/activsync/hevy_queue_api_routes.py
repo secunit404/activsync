@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
-from activsync import events, hevy_db, view
+from activsync import config, db, events, hevy_db, view
 from activsync.api_routes import ApiModel
+from activsync.hevy_client import HevyAuthError
+from activsync.hevy_workout_detail import HevyWorkoutDetail, workout_detail
+
+logger = logging.getLogger("activsync.hevy_queue_api_routes")
 
 TERMINAL_STATUSES = (
     "merged",
@@ -30,6 +37,11 @@ class HevyQueueItem(ApiModel):
     needs_mapping: bool
     has_open_operation: bool
     resyncable: bool
+    awaiting_match: bool
+    matched_garmin_activity_id: int | None
+    matched_garmin_title: str | None
+    matched_strava_activity_id: int | None
+    matched_strava_url: str | None
 
 
 class HevyQueueCounts(ApiModel):
@@ -50,12 +62,103 @@ class HevyQueueActionResult(ApiModel):
     message: str
 
 
-def create_router(conn: sqlite3.Connection) -> APIRouter:
+class HevyMatchRequest(BaseModel):
+    strategy: str
+
+
+def _workout_detail(conn: sqlite3.Connection, row: dict) -> dict:
+    raw_payload = row["payload"]
+    payload = json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
+    return workout_detail(
+        payload,
+        hevy_id=row["hevy_id"],
+        title=row["title"],
+        start_time=row["start_time"],
+        end_time=row["end_time"],
+        description_template=config.load_config(conn).get(
+            "hevy_description_template"
+        ),
+    )
+
+
+def create_router(
+    conn: sqlite3.Connection,
+    *,
+    apply_hevy_match: Callable[[str, str], str] | None = None,
+) -> APIRouter:
     router = APIRouter(prefix="/api/v1/hevy", tags=["frontend-hevy-queue"])
 
     @router.get("/queue", response_model=HevyQueueState)
     def queue_state() -> HevyQueueState:
         return HevyQueueState.model_validate(view.hevy_summary(conn))
+
+    @router.get("/{hevy_id}", response_model=HevyWorkoutDetail)
+    def workout_detail(hevy_id: str) -> HevyWorkoutDetail:
+        row = hevy_db.get_workout(conn, hevy_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Unknown Hevy workout.")
+        return HevyWorkoutDetail.model_validate(_workout_detail(conn, row))
+
+    @router.post("/{hevy_id}/match", response_model=HevyQueueActionResult)
+    def choose_match(
+        hevy_id: str, payload: HevyMatchRequest
+    ) -> HevyQueueActionResult:
+        if payload.strategy not in ("merge", "replace", "describe"):
+            raise HTTPException(status_code=400, detail="Unknown Hevy match strategy.")
+        row = hevy_db.get_workout(conn, hevy_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Unknown Hevy workout.")
+        if row["status"] != "awaiting_match":
+            raise HTTPException(
+                status_code=409,
+                detail="This workout is not waiting for a match decision.",
+            )
+        source_activity = (
+            db.get_activity(conn, row["source_garmin_activity_id"])
+            if row["source_garmin_activity_id"] is not None
+            else None
+        )
+        if (
+            payload.strategy == "replace"
+            and source_activity
+            and source_activity.get("publish_status") == "published"
+            and source_activity.get("strava_activity_id") is not None
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Replace is unavailable because this activity is already on "
+                    "Strava. Choose Merge or Description only."
+                ),
+            )
+        if apply_hevy_match is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Hevy match decisions are unavailable in this server process.",
+            )
+        try:
+            status = apply_hevy_match(hevy_id, payload.strategy)
+        except HevyAuthError as exc:
+            db.set_config_value(conn, "hevy_auth_ok", False)
+            raise HTTPException(
+                status_code=401,
+                detail="Hevy rejected the stored API key — reconnect Hevy.",
+            ) from exc
+        except Exception as exc:
+            logger.exception("Hevy match decision failed")
+            raise HTTPException(
+                status_code=502,
+                detail="Could not apply that Hevy match. Check the server log for details.",
+            ) from exc
+        events.bus.publish("refresh")
+        if status == "needs_mapping":
+            raise HTTPException(
+                status_code=409,
+                detail="Map the missing exercises before choosing Merge or Replace.",
+            )
+        labels = {"merged": "Merged", "replaced": "Replaced", "described": "Described"}
+        message = f"{labels.get(status, 'Updated')} {row['title'] or hevy_id}."
+        return HevyQueueActionResult(message=message)
 
     def with_lease(
         hevy_id: str,
@@ -130,6 +233,8 @@ def create_router(conn: sqlite3.Connection) -> APIRouter:
                         "retry it instead of skipping."
                     ),
                 )
+            if row["status"] == "awaiting_match":
+                hevy_db.reset_links(conn, hevy_id)
             hevy_db.set_workout_status(conn, hevy_id, "skipped")
             return f"Skipped {row['title'] or hevy_id}."
 

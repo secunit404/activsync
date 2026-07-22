@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from activsync import config, db, dev_mock, hevy_db
 
-SEED_VERSION = 9
+SEED_VERSION = 11
 
 _HEVY_TABLES = ("hevy_workouts", "hevy_operations", "exercise_templates",
                 "exercise_mappings", "merge_backups", "hevy_events_seen")
@@ -97,7 +97,11 @@ def seed(conn: sqlite3.Connection, *, mark_onboarded: bool = False) -> None:
 
     _seed_hevy(conn, now)
 
-    db.set_config_value(conn, "settings", config.DEFAULT_CONFIG)
+    db.set_config_value(
+        conn,
+        "settings",
+        {**config.DEFAULT_CONFIG, "hevy_match_mode": "review"},
+    )
     # One source of truth with the fake Garmin client, so a seeded dev DB
     # and a refreshed one show the same categories.
     db.set_config_value(conn, "garmin_activity_types", dev_mock.garmin_activity_types())
@@ -141,16 +145,14 @@ def _seed_hevy(conn: sqlite3.Connection, now: datetime) -> None:
         })
 
     # Two mapping states the ported tables cannot produce on their own, so the
-    # mapping screen shows all four shapes it has to render: table-resolved,
-    # user-overridden, Garmin-rejected, and never mapped.
+    # mapping screen shows the remaining shapes it has to render:
+    # table-resolved, user-overridden, and never mapped.
     #
     # "Triceps Pushdown (Cable)" has no entry in HEVY_TO_GARMIN, so without a
     # saved mapping it would read as needs-mapping rather than as an override.
     hevy_db.save_mapping(
         conn, dev_mock.HEVY_DEV_OVERRIDDEN_TEMPLATE_ID, 30, 3
     )
-    hevy_db.save_mapping(conn, dev_mock.HEVY_DEV_REJECTED_TEMPLATE_ID, 19, 43)
-    hevy_db.mark_mapping_rejected(conn, dev_mock.HEVY_DEV_REJECTED_TEMPLATE_ID)
 
     def seed_workout(workout: dict) -> None:
         hevy_db.upsert_workout(
@@ -199,11 +201,16 @@ def _seed_hevy(conn: sqlite3.Connection, now: datetime) -> None:
     # 4. Midnight-spanning workout still waiting for its watch activity.
     seed_workout(workouts[dev_mock.HEVY_DEV_MIDNIGHT_ID])
 
-    # 5. In-flight sync holding the interlock: the claimed watch activity is
-    #    unpublishable until the workout resolves.
+    # 5. Reviewed match holding the interlock: the claimed watch activity is
+    #    unpublishable until the user chooses merge, replace, or describe.
     syncing = workouts[dev_mock.HEVY_DEV_SYNCING_ID]
     seed_activity(dev_mock.HEVY_DEV_SYNCING_ACTIVITY_ID, "Strength (watch)",
                   syncing["start_time"], 3600, "pending")
     seed_workout(syncing)
     hevy_db.claim_source(conn, syncing["id"], dev_mock.HEVY_DEV_SYNCING_ACTIVITY_ID)
-    hevy_db.set_workout_status(conn, syncing["id"], "syncing")
+    hevy_db.set_workout_status(
+        conn,
+        syncing["id"],
+        "awaiting_match",
+        error="Choose how to apply this Hevy workout.",
+    )

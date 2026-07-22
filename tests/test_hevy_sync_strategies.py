@@ -155,6 +155,174 @@ def test_merge_happy_path():
     assert "synced by activsync" in garmin.called("set_description")[0][2]
 
 
+def test_merge_can_leave_the_existing_description_untouched():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+
+    result = process(
+        conn,
+        garmin,
+        row,
+        base_cfg(hevy_summary_on_structured=False),
+    )
+
+    assert result["status"] == "merged"
+    assert garmin.called("set_title")
+    assert garmin.called("set_description") == []
+
+
+def test_review_mode_claims_a_single_match_without_touching_garmin():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+
+    result = process(
+        conn,
+        garmin,
+        row,
+        base_cfg(hevy_match_mode="review"),
+    )
+
+    assert result["status"] == "awaiting_match"
+    assert result["source_garmin_activity_id"] == 111
+    assert result["garmin_activity_id"] is None
+    assert garmin.calls == []
+
+
+def test_reviewed_match_applies_the_selected_strategy():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    cfg = base_cfg(
+        hevy_match_mode="review",
+        hevy_summary_on_structured=False,
+    )
+    process(conn, garmin, row, cfg)
+
+    result = hevy_sync.apply_match_choice(
+        conn,
+        garmin,
+        NoHevy(),
+        "w1",
+        "merge",
+        cfg,
+        NOW,
+    )
+
+    assert result["status"] == "merged"
+    assert result["garmin_activity_id"] == 111
+    assert result["applied_strategy"] == "merge"
+
+
+def test_published_match_requires_safe_choice_and_rejects_replace():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    db.set_published(conn, 111, 222, NOW)
+    cfg = base_cfg(hevy_match_mode="automatic", hevy_watch_strategy="replace")
+
+    awaiting = process(conn, garmin, row, cfg)
+
+    assert awaiting["status"] == "awaiting_match"
+    assert "Already published to Strava" in awaiting["error"]
+    assert garmin.calls == []
+
+    with pytest.raises(ValueError, match="already on Strava"):
+        hevy_sync.apply_match_choice(
+            conn,
+            garmin,
+            NoHevy(),
+            "w1",
+            "replace",
+            cfg,
+            NOW,
+        )
+
+    assert hevy_db.get_workout(conn, "w1")["status"] == "awaiting_match"
+    assert hevy_db.get_open_operation(conn, "w1") is None
+
+
+def test_published_match_can_merge_into_same_activity_without_duplicate():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    db.set_published(conn, 111, 222, NOW)
+    cfg = base_cfg(hevy_match_mode="automatic", hevy_watch_strategy="replace")
+    process(conn, garmin, row, cfg)
+
+    result = hevy_sync.apply_match_choice(
+        conn,
+        garmin,
+        NoHevy(),
+        "w1",
+        "merge",
+        cfg,
+        NOW,
+    )
+
+    assert result["status"] == "merged"
+    assert result["garmin_activity_id"] == 111
+    assert [activity["garmin_activity_id"] for activity in db.list_activities(conn)] == [111]
+
+
+def test_switching_to_automatic_releases_an_existing_review_on_next_leg():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+    process(conn, garmin, row, base_cfg(hevy_match_mode="review"))
+
+    changed = hevy_sync.run_hevy_leg(
+        conn,
+        garmin,
+        NoHevy(),
+        base_cfg(hevy_match_mode="automatic", hevy_watch_strategy="merge"),
+        NOW,
+    )
+
+    assert changed is True
+    assert hevy_db.get_workout(conn, "w1")["status"] == "merged"
+
+
+def test_review_mode_can_choose_description_for_an_unmapped_workout():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(
+        conn,
+        exercises=[
+            {
+                "title": "Unknown movement",
+                "exercise_template_id": "unknown-template",
+                "sets": [],
+            }
+        ],
+    )
+    seed_activity(conn, 111)
+    cfg = base_cfg(hevy_match_mode="review")
+    awaiting = process(conn, garmin, row, cfg)
+
+    result = hevy_sync.apply_match_choice(
+        conn,
+        garmin,
+        NoHevy(),
+        "w1",
+        "describe",
+        cfg,
+        NOW,
+    )
+
+    assert awaiting["status"] == "awaiting_match"
+    assert result["status"] == "described"
+    assert garmin.called("put_exercise_sets") == []
+    assert garmin.called("set_description")
+
+
 def test_merge_subcategory_rejection_lists_candidates_without_blame():
     conn = make_conn()
     garmin = StubGarmin()
@@ -165,9 +333,8 @@ def test_merge_subcategory_rejection_lists_candidates_without_blame():
 
     assert result["status"] == "needs_mapping"
     assert "Bench Press (Barbell)" in result["error"]  # subcategory 1 != 0
-    # no single mapping was blamed
-    assert hevy_db.get_mapping(conn, "79D0BB3A") is None or \
-        hevy_db.get_mapping(conn, "79D0BB3A")["garmin_rejected"] == 0
+    # No single exercise mapping is blamed.
+    assert hevy_db.get_mapping(conn, "79D0BB3A") is None
 
 
 def test_merge_activity_gone_parks_needs_review():
@@ -238,6 +405,26 @@ def test_replace_happy_path():
     assert len(garmin.called("upload_fit")) == 1
     op = conn.execute("SELECT * FROM hevy_operations").fetchone()
     assert op["phase"] == "done"
+
+
+def test_replace_can_leave_the_existing_description_untouched():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = replace_setup(conn, garmin)
+
+    result = process(
+        conn,
+        garmin,
+        row,
+        base_cfg(
+            hevy_watch_strategy="replace",
+            hevy_summary_on_structured=False,
+        ),
+    )
+
+    assert result["status"] == "replaced"
+    assert garmin.called("set_title")
+    assert garmin.called("set_description") == []
 
 
 def test_replace_upgrades_generic_fallback_to_detected_watch_identity(monkeypatch):

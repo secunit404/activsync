@@ -388,21 +388,14 @@ def test_template_upsert_and_listing():
     assert hevy_db.get_template(conn, "t1")["title"] == "Bench Press (Barbell)"
 
 
-def test_mapping_crud_and_rejected_flag():
+def test_mapping_crud():
     conn = make_conn()
     hevy_db.save_mapping(conn, "t1", 0, 1)
     m = hevy_db.get_mapping(conn, "t1")
     assert (m["category"], m["subcategory"]) == (0, 1)
-    assert m["garmin_rejected"] == 0
-
-    hevy_db.mark_mapping_rejected(conn, "t1")
-    assert hevy_db.get_mapping(conn, "t1")["garmin_rejected"] == 1
-
-    # re-saving clears the rejected flag
     hevy_db.save_mapping(conn, "t1", 0, 2)
     m = hevy_db.get_mapping(conn, "t1")
     assert m["subcategory"] == 2
-    assert m["garmin_rejected"] == 0
 
     assert len(hevy_db.list_mappings(conn)) == 1
     hevy_db.delete_mapping(conn, "t1")
@@ -443,7 +436,7 @@ def test_record_event_seen_dedupes():
 
 def test_statuses_constant_matches_spec():
     assert set(hevy_db.STATUSES) == {
-        "needs_mapping", "waiting_watch", "syncing", "merged", "described",
+        "needs_mapping", "waiting_watch", "awaiting_match", "syncing", "merged", "described",
         "replaced", "uploaded_passive", "linked_existing", "failed",
         "needs_review", "skipped",
     }

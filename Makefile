@@ -1,4 +1,4 @@
-.PHONY: install dev dev-api dev-web dev-fresh test test-python test-web
+.PHONY: install dev dev-api dev-web dev-fresh dev-real dev-real-check test test-python test-web
 
 # Create the virtualenv and install the app with dev extras (editable).
 install:
@@ -22,6 +22,22 @@ dev-web:
 dev-fresh:
 	rm -f data/activsync-dev.db data/activsync-dev.db-shm data/activsync-dev.db-wal
 	$(MAKE) dev
+
+# Run the development branch against real account state. Garmin and Strava
+# polling stay disabled; the Hevy leg runs with matched workouts held for an
+# explicit per-workout strategy choice by default. The normal app must be
+# stopped so two instances cannot act on the same database/accounts.
+REAL_DB_PATH ?= data/activsync.db
+
+dev-real: dev-real-check
+	REAL_DB_PATH="$(REAL_DB_PATH)" npm run dev:real
+
+dev-real-check:
+	@test -f "$(REAL_DB_PATH)" || (echo "Refusing to start: real database not found at $(REAL_DB_PATH)"; exit 1)
+	@if curl -fsS --max-time 1 http://127.0.0.1:8381/health >/dev/null 2>&1; then \
+		echo "Refusing to start: ActivSync is already running on :8381. Stop it first to avoid two instances using your real accounts."; \
+		exit 1; \
+	fi
 
 # Run the test suite.
 test: test-python test-web

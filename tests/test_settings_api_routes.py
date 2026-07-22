@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 from activsync import config, db, dev_mock, hevy_db
@@ -156,8 +158,6 @@ def test_preferences_and_categories_save_through_json_api(tmp_path, monkeypatch)
             "garminPollIntervalMinutes": 30,
             "stravaPollIntervalMinutes": 8,
             "lookbackDays": 14,
-            "hevy2garminMarker": "— via hevy",
-            "hevy2garminMarkerEnabled": True,
         },
     )
     categories = client.put(
@@ -167,12 +167,91 @@ def test_preferences_and_categories_save_through_json_api(tmp_path, monkeypatch)
 
     assert preferences.status_code == 200
     assert categories.status_code == 200
+    state = client.get("/api/v1/settings").json()
+    assert "hevy2garminMarker" not in state["preferences"]
     cfg = config.load_config(conn)
     assert cfg["display_timezone"] == "Europe/Oslo"
     assert cfg["lookback_days"] == 14
-    assert cfg["hevy2garmin_marker_enabled"] is True
     assert cfg["held_activity_types"] == ["cycling"]
     assert timezone_updates == ["Europe/Oslo"]
+
+
+def test_dev_hevy_matching_defaults_to_review_but_can_be_saved_as_automatic(
+    tmp_path, monkeypatch
+):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    before = client.get("/api/v1/settings")
+    saved = client.put(
+        "/api/v1/settings/hevy",
+        json={
+            "enabled": False,
+            "watchStrategy": "replace",
+            "matchMode": "automatic",
+            "graceMinutes": 120,
+            "pollIntervalMinutes": 10,
+            "identity": {},
+            "profileOverride": {},
+        },
+    )
+    after = client.get("/api/v1/settings")
+
+    assert before.json()["hevy"]["matchMode"] == "review"
+    assert saved.status_code == 200
+    assert after.json()["hevy"]["matchMode"] == "automatic"
+
+
+def test_hevy_description_template_and_summary_preference_round_trip(
+    tmp_path, monkeypatch
+):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    saved = client.put(
+        "/api/v1/settings/hevy",
+        json={
+            "enabled": False,
+            "watchStrategy": "replace",
+            "matchMode": "review",
+            "descriptionTemplate": "{title}\n\n{exercises}\n\nCustom footer",
+            "summaryOnStructured": False,
+            "graceMinutes": 120,
+            "pollIntervalMinutes": 10,
+            "identity": {},
+            "profileOverride": {},
+        },
+    )
+    state = client.get("/api/v1/settings")
+
+    assert saved.status_code == 200
+    assert state.json()["hevy"]["descriptionTemplate"].endswith("Custom footer")
+    assert state.json()["hevy"]["summaryOnStructured"] is False
+
+
+def test_hevy_description_template_rejects_unknown_placeholder(
+    tmp_path, monkeypatch
+):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    response = client.put(
+        "/api/v1/settings/hevy",
+        json={
+            "enabled": False,
+            "watchStrategy": "replace",
+            "matchMode": "review",
+            "descriptionTemplate": "{title} {password}",
+            "summaryOnStructured": True,
+            "graceMinutes": 120,
+            "pollIntervalMinutes": 10,
+            "identity": {},
+            "profileOverride": {},
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Unknown description placeholder" in response.json()["detail"]
 
 
 def test_mock_setup_can_complete_through_json_contract(tmp_path, monkeypatch):
@@ -299,6 +378,17 @@ def test_hevy_mapping_tools_save_remove_and_wake_waiting_workouts(
 
     assert tools.status_code == 200
     assert tools.json()["mappings"][0]["templateId"] == "custom-1"
+    bench_press = next(
+        category
+        for category in tools.json()["categories"]
+        if category["value"] == 0
+    )
+    assert bench_press["label"] == "Bench press"
+    assert next(
+        subcategory["label"]
+        for subcategory in bench_press["subcategories"]
+        if subcategory["value"] == 1
+    ) == "Barbell bench press"
     assert saved.status_code == 200
     assert "1 waiting workout resumed" in saved.json()["message"]
     assert hevy_db.get_mapping(conn, "custom-1")["subcategory"] == 1
@@ -307,6 +397,38 @@ def test_hevy_mapping_tools_save_remove_and_wake_waiting_workouts(
     removed = client.delete("/api/v1/settings/hevy/mappings/custom-1")
     assert removed.status_code == 200
     assert hevy_db.get_mapping(conn, "custom-1") is None
+
+
+def test_hevy_mapping_tools_reset_override_to_standard_table(tmp_path, monkeypatch):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    hevy_db.upsert_template(
+        conn,
+        {
+            "exercise_template_id": "79D0BB3A",
+            "title": "Bench Press (Barbell)",
+            "primary_muscle_group": "chest",
+            "secondary_muscle_groups": [],
+            "equipment_category": "barbell",
+            "is_custom": False,
+        },
+    )
+    hevy_db.save_mapping(conn, "79D0BB3A", 24, 3)
+
+    before = client.get("/api/v1/settings/hevy/tools")
+    reset = client.delete("/api/v1/settings/hevy/mappings/79D0BB3A")
+    after = client.get("/api/v1/settings/hevy/tools")
+
+    assert before.status_code == 200
+    assert before.json()["mappings"][0]["source"] == "user"
+    assert before.json()["mappings"][0]["hasStandardMapping"] is True
+    assert before.json()["mappings"][0]["standardCategory"] == 0
+    assert before.json()["mappings"][0]["standardSubcategory"] == 1
+    assert reset.status_code == 200
+    assert reset.json()["message"] == "Standard mapping restored."
+    assert hevy_db.get_mapping(conn, "79D0BB3A") is None
+    assert after.json()["mappings"][0]["source"] == "automatic"
+    assert (after.json()["mappings"][0]["category"], after.json()["mappings"][0]["subcategory"]) == (0, 1)
 
 
 def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
@@ -411,6 +533,58 @@ def test_hevy_backfill_run_with_empty_id_list_imports_nothing(tmp_path, monkeypa
     assert run.status_code == 200
     assert "0 workouts ingested" in run.json()["message"]
     assert hevy_db.list_workouts(conn) == []
+
+
+def test_hevy_backfill_hides_tracked_workout_until_queue_skip(
+    tmp_path, monkeypatch
+):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
+    workout = dev_mock.dev_hevy_workouts(datetime.now(timezone.utc))[0]
+    hevy_db.upsert_workout(
+        conn,
+        workout["id"],
+        workout["title"],
+        workout["start_time"],
+        workout["end_time"],
+        workout["updated_at"],
+        workout,
+    )
+
+    preview = client.post(
+        "/api/v1/settings/hevy/backfill/preview",
+        json={"since": "2020-01-01"},
+    )
+    blocked_run = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={"since": "2020-01-01", "hevyIds": [workout["id"]]},
+    )
+
+    assert preview.status_code == 200
+    assert workout["id"] not in {item["hevyId"] for item in preview.json()["items"]}
+    assert blocked_run.status_code == 200
+    assert "0 workouts ingested" in blocked_run.json()["message"]
+
+    skipped = client.post(f"/api/v1/hevy/{workout['id']}/skip")
+    after_skip = client.post(
+        "/api/v1/settings/hevy/backfill/preview",
+        json={"since": "2020-01-01"},
+    )
+    reimported = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={"since": "2020-01-01", "hevyIds": [workout["id"]]},
+    )
+
+    assert skipped.status_code == 200
+    returned = next(
+        item for item in after_skip.json()["items"] if item["hevyId"] == workout["id"]
+    )
+    assert returned["workout"]["startTime"] == workout["start_time"]
+    assert "descriptionPreview" in returned["workout"]
+    assert reimported.status_code == 200
+    assert "1 workout ingested" in reimported.json()["message"]
+    assert hevy_db.get_workout(conn, workout["id"])["status"] != "skipped"
 
 
 def test_hevy_backfill_run_ignores_unknown_ids_without_importing_anything_else(

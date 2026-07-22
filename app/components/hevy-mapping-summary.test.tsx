@@ -15,8 +15,10 @@ function mapping(overrides: Partial<Mapping>): Mapping {
     muscleGroup: "Legs",
     mapped: false,
     unmapped: true,
-    garminRejected: false,
     suggested: false,
+    hasStandardMapping: false,
+    standardCategory: null,
+    standardSubcategory: null,
     source: "",
     category: null,
     subcategory: null,
@@ -38,23 +40,9 @@ test("shows a needs-mapping count and links each unmapped exercise to its editor
   renderSummary({ mappings: [mapping({})], categories: [] });
 
   expect(screen.getByText("1 need mapping")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /map bulgarian split squat/i })).toHaveAttribute(
-    "href",
-    "/hevy/mapping/tmpl-1",
-  );
-});
-
-test("labels a Garmin-rejected mapping as Remap, not Map", () => {
-  renderSummary({
-    mappings: [mapping({ templateId: "tmpl-2", mapped: true, unmapped: false, garminRejected: true })],
-    categories: [],
-  });
-
-  expect(screen.getByText(/rejected by garmin/i)).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /remap/i })).toHaveAttribute(
-    "href",
-    "/hevy/mapping/tmpl-2",
-  );
+  const map = screen.getByRole("link", { name: /map bulgarian split squat/i });
+  expect(map).toHaveAttribute("href", "/hevy/mapping/tmpl-1");
+  expect(map).toHaveAttribute("data-variant", "warning");
 });
 
 test("flags custom exercises inline", () => {
@@ -62,9 +50,30 @@ test("flags custom exercises inline", () => {
   expect(screen.getByText("CUSTOM")).toBeInTheDocument();
 });
 
+test("renders heuristic choices like every other unmapped row", () => {
+  renderSummary({
+    mappings: [
+      mapping({
+        suggested: true,
+        categoryName: "Squat",
+        subcategoryName: "Back squat",
+      }),
+    ],
+    categories: [],
+  });
+
+  expect(screen.getByText("Unmapped")).toBeVisible();
+  expect(screen.queryByText("Legs")).toBeNull();
+  expect(screen.queryByText("Suggestion ready")).toBeNull();
+  expect(screen.queryByText(/Workouts match Garmin activities by time/)).toBeNull();
+  const map = screen.getByRole("link", { name: /map bulgarian split squat/i });
+  expect(map).toBeVisible();
+  expect(map).toHaveAttribute("data-variant", "warning");
+});
+
 test("omits rows that are already mapped and not rejected", () => {
   renderSummary({
-    mappings: [mapping({ mapped: true, unmapped: false, garminRejected: false })],
+    mappings: [mapping({ mapped: true, unmapped: false })],
     categories: [],
   });
 

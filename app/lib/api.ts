@@ -128,6 +128,34 @@ export type ActivityActionResult = {
   blockedCount: number;
 };
 
+export type HevyWorkoutSetDetail = {
+  number: number;
+  setType: string;
+  reps: number | null;
+  weightKg: number | null;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+  rpe: number | null;
+  customMetric: string | number | null;
+};
+
+export type HevyWorkoutExerciseDetail = {
+  title: string;
+  notes: string | null;
+  templateId: string | null;
+  sets: HevyWorkoutSetDetail[];
+};
+
+export type HevyWorkoutDetail = {
+  hevyId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  notes: string | null;
+  exercises: HevyWorkoutExerciseDetail[];
+  descriptionPreview: string;
+};
+
 export type SettingsState = {
   version: string;
   update: UpdateState;
@@ -149,8 +177,6 @@ export type SettingsState = {
     garminPollIntervalMinutes: number;
     stravaPollIntervalMinutes: number;
     lookbackDays: number;
-    hevy2garminMarker: string;
-    hevy2garminMarkerEnabled: boolean;
   };
   timezones: string[];
   activityTypes: Array<{
@@ -164,6 +190,9 @@ export type SettingsState = {
     apiKeySaved: boolean;
     enabled: boolean;
     watchStrategy: "replace" | "merge" | "describe";
+    matchMode: "review" | "automatic";
+    descriptionTemplate: string;
+    summaryOnStructured: boolean;
     graceMinutes: number;
     pollIntervalMinutes: number;
     identity: {
@@ -195,13 +224,15 @@ export type HevyToolsState = {
     muscleGroup: string;
     mapped: boolean;
     unmapped: boolean;
-    garminRejected: boolean;
     suggested: boolean;
     /**
      * Who chose the Garmin pair: `"user"` for a saved override, `"automatic"`
      * for one the ported tables resolve, `""` when nothing resolves it yet.
      */
     source: "user" | "automatic" | "";
+    hasStandardMapping: boolean;
+    standardCategory: number | null;
+    standardSubcategory: number | null;
     category: number | null;
     subcategory: number | null;
     categoryName: string | null;
@@ -225,7 +256,11 @@ export type BackfillResult = {
     startTime: string;
     action: string;
     twinActivityId: number | null;
+    garminUrl: string | null;
+    stravaActivityId: number | null;
+    stravaUrl: string | null;
     missingTemplateIds: string[];
+    workout: HevyWorkoutDetail;
   }>;
 };
 
@@ -238,6 +273,11 @@ export type HevyQueueItem = {
   needsMapping: boolean;
   hasOpenOperation: boolean;
   resyncable: boolean;
+  awaitingMatch: boolean;
+  matchedGarminActivityId: number | null;
+  matchedGarminTitle: string | null;
+  matchedStravaActivityId: number | null;
+  matchedStravaUrl: string | null;
 };
 
 export type HevyQueueState = {
@@ -253,6 +293,7 @@ export type HevyQueueState = {
 };
 
 export type HevyQueueAction = "retry" | "skip" | "unskip" | "resync-fresh";
+export type HevyMatchStrategy = "merge" | "replace" | "describe";
 
 /** One entry in a FIT profile enum — the integer is what gets stored in
  *  `hevy_device_identity`; the label is display only. */
@@ -399,6 +440,9 @@ export function saveHevyCredentials(apiKey: string) {
 export function saveHevySettings(payload: {
   enabled: boolean;
   watchStrategy: SettingsState["hevy"]["watchStrategy"];
+  matchMode: SettingsState["hevy"]["matchMode"];
+  descriptionTemplate: string;
+  summaryOnStructured: boolean;
   graceMinutes: number;
   pollIntervalMinutes: number;
   identity: SettingsState["hevy"]["identity"];
@@ -471,10 +515,27 @@ export function getHevyQueue(signal?: AbortSignal): Promise<HevyQueueState> {
   return requestJson<HevyQueueState>("/api/v1/hevy/queue", { signal });
 }
 
+export function getHevyWorkout(
+  hevyId: string,
+  signal?: AbortSignal,
+): Promise<HevyWorkoutDetail> {
+  return requestJson<HevyWorkoutDetail>(
+    `/api/v1/hevy/${encodeURIComponent(hevyId)}`,
+    { signal },
+  );
+}
+
 export function runHevyQueueAction(hevyId: string, action: HevyQueueAction) {
   return requestJson<{ message: string }>(
     `/api/v1/hevy/${encodeURIComponent(hevyId)}/${action}`,
     { method: "POST" },
+  );
+}
+
+export function chooseHevyMatch(hevyId: string, strategy: HevyMatchStrategy) {
+  return requestJson<{ message: string }>(
+    `/api/v1/hevy/${encodeURIComponent(hevyId)}/match`,
+    { method: "POST", body: JSON.stringify({ strategy }) },
   );
 }
 

@@ -151,6 +151,16 @@ def _template(conn, template_id, title, *, is_custom=False, muscle="chest"):
     })
 
 
+def test_garmin_exercise_label_hides_enum_formatting():
+    assert view.garmin_exercise_label("SHOULDER_PRESS") == "Shoulder press"
+    assert (
+        view.garmin_exercise_label("BARBELL_BULGARIAN_SPLIT_SQUAT")
+        == "Barbell bulgarian split squat"
+    )
+    assert view.garmin_exercise_label("N45_DEGREE_PLANK") == "45 degree plank"
+    assert view.garmin_exercise_label("EZ_BAR_PREACHER_CURL") == "EZ bar preacher curl"
+
+
 def test_mappings_view_includes_exercises_garmin_resolves_on_its_own(conn):
     """Every Hevy exercise ends up somewhere in Garmin, so the list has to
     show every one — including built-ins resolved by the ported tables, which
@@ -164,11 +174,13 @@ def test_mappings_view_includes_exercises_garmin_resolves_on_its_own(conn):
     assert row["mapped"] is True
     assert row["unmapped"] is False
     assert row["source"] == "automatic"
+    assert row["has_standard_mapping"] is True
+    assert (row["standard_category"], row["standard_subcategory"]) == (0, 1)
     # It resolves to a real Garmin pair, and the view reports which.
     assert row["category"] is not None
     assert row["subcategory"] is not None
-    assert row["category_name"]
-    assert row["subcategory_name"]
+    assert row["category_name"] == "Bench press"
+    assert row["subcategory_name"] == "Barbell bench press"
 
 
 def test_mappings_view_marks_a_user_override_as_such(conn):
@@ -196,6 +208,9 @@ def test_mappings_view_still_flags_what_needs_action(conn):
     assert row["unmapped"] is True
     assert row["mapped"] is False
     assert row["source"] == ""
+    assert row["has_standard_mapping"] is False
+    assert row["standard_category"] is None
+    assert row["standard_subcategory"] is None
 
 
 def test_mappings_view_sorts_actionable_rows_first(conn):

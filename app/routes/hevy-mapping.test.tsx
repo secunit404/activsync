@@ -8,14 +8,15 @@ import type { HevyToolsState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import HevyMapping from "./hevy-mapping";
 
-const { getHevyTools, saveExerciseMapping } = vi.hoisted(() => ({
+const { getHevyTools, removeExerciseMapping, saveExerciseMapping } = vi.hoisted(() => ({
   getHevyTools: vi.fn(),
+  removeExerciseMapping: vi.fn(),
   saveExerciseMapping: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, getHevyTools, saveExerciseMapping };
+  return { ...actual, getHevyTools, removeExerciseMapping, saveExerciseMapping };
 });
 
 type Mapping = HevyToolsState["mappings"][number];
@@ -28,8 +29,10 @@ function mapping(overrides: Partial<Mapping>): Mapping {
     muscleGroup: "Legs",
     mapped: false,
     unmapped: true,
-    garminRejected: false,
     suggested: false,
+    hasStandardMapping: false,
+    standardCategory: null,
+    standardSubcategory: null,
     source: "",
     category: null,
     subcategory: null,
@@ -97,6 +100,9 @@ const toolsState: HevyToolsState = {
       mapped: true,
       unmapped: false,
       source: "automatic",
+      hasStandardMapping: true,
+      standardCategory: 12,
+      standardSubcategory: 120,
       category: 12,
       subcategory: 120,
       categoryName: "Squat",
@@ -108,21 +114,13 @@ const toolsState: HevyToolsState = {
       mapped: true,
       unmapped: false,
       source: "user",
+      hasStandardMapping: true,
+      standardCategory: 12,
+      standardSubcategory: 120,
       category: 12,
       subcategory: 121,
       categoryName: "Squat",
       subcategoryName: "Front Squat",
-    }),
-    mapping({
-      templateId: "tmpl-rejected",
-      title: "Ring Row",
-      mapped: false,
-      unmapped: false,
-      garminRejected: true,
-      category: 4,
-      subcategory: 1,
-      categoryName: "Bench Press",
-      subcategoryName: "Dumbbell",
     }),
   ],
   categories,
@@ -167,16 +165,29 @@ test("changing category resets the subcategory choice", async () => {
   expect(screen.getByLabelText("Subcategory")).toHaveValue("");
 });
 
-test("preview shows the resulting mapping", async () => {
+test("does not repeat the selected pair in a syncs-as summary", async () => {
   renderMapping("tmpl-unmapped");
   await userEvent.selectOptions(await screen.findByLabelText("Category"), "12");
   await userEvent.selectOptions(screen.getByLabelText("Subcategory"), "120");
-  expect(screen.getByTestId("syncs-as")).toHaveTextContent("Squat › Back Squat");
+  expect(screen.queryByText(/Syncs as/i)).toBeNull();
+});
+
+test("shows only the muscle group beneath the title", async () => {
+  renderMapping("tmpl-unmapped");
+  const muscleLabel = await screen.findByText("Muscle group:");
+  expect(muscleLabel.parentElement).toHaveTextContent("Muscle group: Legs");
+  expect(screen.queryByText(/Choose where/i)).toBeNull();
 });
 
 test("save is disabled until both levels are chosen", async () => {
   renderMapping("tmpl-unmapped");
   expect(await screen.findByRole("button", { name: "Save mapping" })).toBeDisabled();
+});
+
+test("right-aligns Cancel and Save mapping in the desktop footer", async () => {
+  renderMapping("tmpl-unmapped");
+  await screen.findByRole("button", { name: "Save mapping" });
+  expect(screen.getByTestId("mapping-actions")).toHaveClass("md:justify-end");
 });
 
 test("subcategory select is disabled until a category is chosen", async () => {
@@ -191,31 +202,67 @@ test("a mapped exercise pre-fills both selects and enables Save", async () => {
   expect(screen.getByRole("button", { name: "Save mapping" })).not.toBeDisabled();
 });
 
-test("a Garmin-rejected exercise explains why it needs a different pick", async () => {
-  renderMapping("tmpl-rejected");
-  expect(
-    await screen.findByText(/Garmin rejected the previous mapping/i),
-  ).toBeInTheDocument();
-});
-
-// The editor is reachable for every exercise now, not just the ones nothing
-// resolves, so the banner has to name which of the three states you are in
-// rather than always claiming no default exists.
-test("an unresolved exercise says nothing maps it yet", async () => {
+test("an unresolved exercise omits the old mapping description", async () => {
   renderMapping("tmpl-unmapped");
-  expect(await screen.findByText(/Nothing maps this exercise yet/i)).toBeInTheDocument();
+  await screen.findByRole("dialog");
+  expect(screen.queryByText(/Choose where/i)).toBeNull();
+  expect(screen.queryByText(/Nothing maps this exercise yet/i)).toBeNull();
 });
 
-test("an automatically mapped exercise says saving replaces the automatic pair", async () => {
+test("an unresolved suggestion explains that the preselection is not active", async () => {
+  renderMapping("tmpl-unmapped", {
+    ...toolsState,
+    mappings: [
+      mapping({
+        suggested: true,
+        category: 12,
+        subcategory: 120,
+        categoryName: "Squat",
+        subcategoryName: "Back Squat",
+      }),
+    ],
+  });
+
+  expect(await screen.findByText("Suggested mapping (not active yet)")).toBeVisible();
+  expect(screen.getByText(/press Save mapping before structured sets can sync/i)).toBeVisible();
+  expect(screen.getByLabelText("Category")).toHaveValue("12");
+  expect(screen.getByLabelText("Subcategory")).toHaveValue("120");
+});
+
+test("a standard-table mapping omits the old state description", async () => {
   renderMapping("tmpl-automatic");
-  expect(
-    await screen.findByText(/maps this automatically. Saving here replaces that/i),
-  ).toBeInTheDocument();
+  await screen.findByRole("dialog");
+  expect(screen.queryByText(/uses its standard mapping table/i)).toBeNull();
 });
 
-test("a user-set exercise says saving replaces their own choice", async () => {
+test("an override of a standard mapping offers reset guidance", async () => {
   renderMapping("tmpl-user");
-  expect(await screen.findByText(/You set this mapping/i)).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Reset to standard" })).toBeVisible();
+  expect(screen.queryByText(/You replaced/i)).toBeNull();
+});
+
+test("a custom mapping without a standard fallback does not offer reset", async () => {
+  renderMapping("tmpl-mapped");
+  await screen.findByRole("dialog");
+  expect(screen.queryByRole("button", { name: "Reset to standard" })).toBeNull();
+});
+
+test("changing a standard mapping immediately offers a local reset", async () => {
+  removeExerciseMapping.mockClear();
+  renderMapping("tmpl-automatic");
+
+  expect(await screen.findByLabelText("Category")).toHaveValue("12");
+  expect(screen.queryByRole("button", { name: "Reset to standard" })).toBeNull();
+
+  await userEvent.selectOptions(screen.getByLabelText("Category"), "18");
+  expect(screen.getByRole("button", { name: "Reset to standard" })).toBeVisible();
+
+  await userEvent.click(screen.getByRole("button", { name: "Reset to standard" }));
+
+  expect(screen.getByLabelText("Category")).toHaveValue("12");
+  expect(screen.getByLabelText("Subcategory")).toHaveValue("120");
+  expect(screen.queryByRole("button", { name: "Reset to standard" })).toBeNull();
+  expect(removeExerciseMapping).not.toHaveBeenCalled();
 });
 
 test("an unknown templateId shows a real message, not a blank overlay", async () => {
@@ -293,6 +340,17 @@ test("saving calls saveExerciseMapping with the chosen ids and returns to the hu
   await waitFor(() =>
     expect(saveExerciseMapping).toHaveBeenCalledWith("tmpl-unmapped", 12, 120),
   );
+  await waitFor(() => expect(router.state.location.pathname).toBe("/hevy"));
+});
+
+test("reset removes the override and returns to the standard mapping", async () => {
+  removeExerciseMapping.mockClear();
+  removeExerciseMapping.mockResolvedValue({ message: "Standard mapping restored." });
+  const { router } = renderMapping("tmpl-user");
+
+  await userEvent.click(await screen.findByRole("button", { name: "Reset to standard" }));
+
+  await waitFor(() => expect(removeExerciseMapping).toHaveBeenCalledWith("tmpl-user"));
   await waitFor(() => expect(router.state.location.pathname).toBe("/hevy"));
 });
 

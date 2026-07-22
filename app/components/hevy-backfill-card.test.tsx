@@ -39,7 +39,19 @@ function item(overrides: Partial<Item>): Item {
     startTime: "2026-06-03T10:00:00+00:00",
     action: "replace",
     twinActivityId: null,
+    garminUrl: null,
+    stravaActivityId: null,
+    stravaUrl: null,
     missingTemplateIds: [],
+    workout: {
+      hevyId: "hw-1",
+      title: "Leg Session",
+      startTime: "2026-06-03T10:00:00+00:00",
+      endTime: "2026-06-03T11:00:00+00:00",
+      notes: null,
+      exercises: [],
+      descriptionPreview: "Leg Session",
+    },
     ...overrides,
   };
 }
@@ -154,6 +166,27 @@ test("a locked row with no missing template id has no map link, but stays locked
   // Same control as the linkable case, disabled — not a second badge.
   expect(screen.queryByRole("link", { name: /map/i })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: /map/i })).toBeDisabled();
+});
+
+test("already-tracked workouts are omitted from stale preview responses", async () => {
+  previewHevyBackfill.mockResolvedValue(
+    fourItemResult({
+      items: [
+        item({
+          hevyId: "hw-tracked",
+          title: "Imported yesterday",
+          action: "already_tracked",
+        }),
+      ],
+    }),
+  );
+  renderBackfill();
+  await preview();
+
+  expect(await screen.findByText(/workouts found/i)).toBeInTheDocument();
+  expect(screen.queryByText("Imported yesterday")).not.toBeInTheDocument();
+  expect(screen.queryByText("1 created")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Import 0 selected/ })).not.toBeInTheDocument();
 });
 
 test("import button count and confirmation reflect only what's checked, not every scanned row", async () => {

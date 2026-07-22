@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, XIcon } from "lucide-react";
 import { Outlet } from "react-router";
 
 import { ConnectionError } from "@/components/connection-error";
+import { HevySectionNav } from "@/components/hevy-section-nav";
 import { MappingListRow } from "@/components/mapping-list-row";
 import { PageContainer, PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,10 +34,35 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
-/** An exercise needs action when it has no mapping, or Garmin rejected the
- *  one it has — the same rule `HevyMappingSummary` uses for its count. */
+/** An exercise needs action when it has no mapping — the same rule
+ *  `HevyMappingSummary` uses for its count. */
 function needsAction(mapping: Mapping): boolean {
-  return mapping.unmapped || mapping.garminRejected;
+  return mapping.unmapped;
+}
+
+function muscleGroupLabel(value: string): string {
+  if (!value.trim()) return "Other";
+  const label = value.replaceAll("_", " ").toLowerCase();
+  return label.slice(0, 1).toUpperCase() + label.slice(1);
+}
+
+function groupMappings(mappings: Mapping[]): Array<[string, Mapping[]]> {
+  const grouped = new Map<string, Mapping[]>();
+  mappings.forEach((mapping) => {
+    const label = muscleGroupLabel(mapping.muscleGroup);
+    grouped.set(label, [...(grouped.get(label) ?? []), mapping]);
+  });
+
+  return [...grouped.entries()]
+    .sort(([left], [right]) => {
+      if (left === "Other") return 1;
+      if (right === "Other") return -1;
+      return left.localeCompare(right);
+    })
+    .map(([label, rows]) => [
+      label,
+      [...rows].sort((left, right) => left.title.localeCompare(right.title)),
+    ]);
 }
 
 /**
@@ -53,6 +80,9 @@ function needsAction(mapping: Mapping): boolean {
 export default function HevyMappings() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<MappingFilter>("all");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
   const tools = useQuery({
     queryKey: queryKeys.hevyTools,
     queryFn: ({ signal }) => getHevyTools(signal),
@@ -85,6 +115,16 @@ export default function HevyMappings() {
     if (filter === "mapped" && needsAction(mapping)) return false;
     return term === "" || mapping.title.toLowerCase().includes(term);
   });
+  const groups = groupMappings(visible);
+
+  function toggleGroup(group: string) {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }
 
   return (
     <PageContainer className="grid gap-6 py-8 md:gap-7 md:py-10">
@@ -93,14 +133,28 @@ export default function HevyMappings() {
         description="Every Hevy exercise ActivSync tracks, and where its sets and reps land in Garmin."
       />
 
+      <HevySectionNav />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Input
-          aria-label="Search exercises"
-          placeholder="Search exercises…"
-          className="h-11 sm:max-w-xs"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <div className="relative w-full sm:max-w-xs">
+          <Input
+            aria-label="Search exercises"
+            placeholder="Search exercises…"
+            className="h-11 pr-10"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          {search ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground transition-colors hover:text-foreground focus-visible:rounded-r-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => setSearch("")}
+            >
+              <XIcon className="size-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
         <div
           role="group"
           aria-label="Filter exercises"
@@ -132,11 +186,50 @@ export default function HevyMappings() {
               No exercises match this search and filter.
             </p>
           ) : (
-            <ul>
-              {visible.map((mapping) => (
-                <MappingListRow key={mapping.templateId} mapping={mapping} />
-              ))}
-            </ul>
+            <div>
+              {groups.map(([group, mappings]) => {
+                const headingId = `muscle-${group.toLowerCase().replaceAll(" ", "-")}`;
+                const contentId = `${headingId}-exercises`;
+                // A search should never hide a matching exercise inside a
+                // collapsed group. Clearing it restores the user's choice.
+                const collapsed = term === "" && collapsedGroups.has(group);
+                return (
+                  <section key={group} aria-labelledby={headingId}>
+                    <div className="sticky top-0 z-10 border-b border-border bg-muted/60 backdrop-blur-sm">
+                      <button
+                        type="button"
+                        aria-expanded={!collapsed}
+                        aria-controls={contentId}
+                        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                        onClick={() => toggleGroup(group)}
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "size-4 shrink-0 text-muted-foreground transition-transform",
+                            collapsed ? "-rotate-90" : "rotate-0",
+                          )}
+                          aria-hidden="true"
+                        />
+                        <h2
+                          id={headingId}
+                          className="flex-1 font-mono text-xs font-bold tracking-[0.07em] text-foreground uppercase"
+                        >
+                          {group}
+                        </h2>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {mappings.length}
+                        </span>
+                      </button>
+                    </div>
+                    <ul id={contentId} hidden={collapsed}>
+                      {mappings.map((mapping) => (
+                        <MappingListRow key={mapping.templateId} mapping={mapping} />
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
-import { Link } from "react-router";
 
 import { SettingsSection } from "@/components/settings-shell";
 import {
@@ -16,7 +15,9 @@ import {
 } from "@/components/ui/native-select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import type { HevyDraft } from "@/lib/hevy-draft";
+import { renderDescriptionPreview } from "@/lib/hevy-description";
 import { getHevyDeviceOptions, type SettingsState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,25 @@ const STRATEGIES: Array<{
   },
 ];
 
+const MATCH_MODES: Array<{
+  value: SettingsState["hevy"]["matchMode"];
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "review",
+    label: "Review each match",
+    description:
+      "Pauses when a Hevy workout matches Garmin so you choose Merge, Replace, or Description only.",
+  },
+  {
+    value: "automatic",
+    label: "Automatic",
+    description:
+      "Applies the automatic strategy below as soon as ActivSync finds one Garmin match.",
+  },
+];
+
 /**
  * Hevy *configuration* only — connect/disconnect lives in the Connections
  * section (settings-connections.tsx) since that's the account-credential
@@ -65,6 +85,7 @@ export function HevySettings({
   function update(patch: Partial<HevyDraft>) {
     onChange({ ...draft, ...patch });
   }
+  const descriptionPreview = renderDescriptionPreview(draft.descriptionTemplate);
 
   // Reference data — no DB read and no Hevy key needed server-side, so it
   // is safe to fetch whenever this section renders. `staleTime: Infinity`
@@ -109,10 +130,71 @@ export function HevySettings({
         <div className="grid gap-6">
           <div className="grid gap-2.5">
             <p
+              id="hevy-match-mode-label"
+              className="font-mono text-xs font-semibold tracking-[.06em] text-muted-foreground uppercase"
+            >
+              Match handling
+            </p>
+            <RadioGroup
+              aria-labelledby="hevy-match-mode-label"
+              className="grid gap-2.5 sm:grid-cols-2"
+              value={draft.matchMode}
+              onValueChange={(value) =>
+                update({
+                  matchMode: value as SettingsState["hevy"]["matchMode"],
+                })
+              }
+            >
+              {MATCH_MODES.map((mode) => {
+                const active = draft.matchMode === mode.value;
+                return (
+                  <RadioGroupItem
+                    key={mode.value}
+                    value={mode.value}
+                    aria-label={mode.label}
+                    className={cn(
+                      "flex flex-col gap-1.5 border p-3.5",
+                      active
+                        ? "border-primary/60 bg-primary/[0.06]"
+                        : "border-border/70",
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span
+                        className={cn(
+                          "text-sm font-bold",
+                          active ? "text-primary" : "text-foreground",
+                        )}
+                      >
+                        {mode.label}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "grid size-4 shrink-0 place-items-center rounded-full",
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "border border-input",
+                        )}
+                      >
+                        {active ? <CheckIcon className="size-2.5" /> : null}
+                      </span>
+                    </span>
+                    <span className="text-xs leading-relaxed text-muted-foreground">
+                      {mode.description}
+                    </span>
+                  </RadioGroupItem>
+                );
+              })}
+            </RadioGroup>
+          </div>
+
+          <div className="grid gap-2.5">
+            <p
               id="hevy-strategy-label"
               className="font-mono text-xs font-semibold tracking-[.06em] text-muted-foreground uppercase"
             >
-              Watch strategy
+              Automatic match strategy
             </p>
             <RadioGroup
               aria-labelledby="hevy-strategy-label"
@@ -166,6 +248,89 @@ export function HevySettings({
                 );
               })}
             </RadioGroup>
+          </div>
+
+          <div className="grid gap-4 rounded-xl border border-border/70 bg-muted/20 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="grid gap-1">
+                <FieldLabel htmlFor="hevy-summary-on-structured">
+                  Write summary for Merge and Replace
+                </FieldLabel>
+                <FieldDescription>
+                  Description only always writes the summary. Turn this off to
+                  keep the Garmin description unchanged for structured matches.
+                </FieldDescription>
+              </div>
+              <Switch
+                id="hevy-summary-on-structured"
+                className="mt-0.5 shrink-0"
+                checked={draft.summaryOnStructured}
+                onCheckedChange={(checked) =>
+                  update({ summaryOnStructured: checked === true })
+                }
+              />
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+              <Field className="gap-2">
+                <div className="flex min-h-5 items-center">
+                  <FieldLabel htmlFor="hevy-description-template">
+                    Description template
+                  </FieldLabel>
+                </div>
+                <Textarea
+                  id="hevy-description-template"
+                  className="min-h-56 font-mono text-sm"
+                  value={draft.descriptionTemplate}
+                  maxLength={4000}
+                  aria-invalid={descriptionPreview.error ? true : undefined}
+                  onChange={(event) =>
+                    update({ descriptionTemplate: event.target.value })
+                  }
+                  required
+                />
+                <FieldDescription className="text-xs leading-relaxed">
+                  Available placeholders: {"{title}"}, {"{clean_title}"},{" "}
+                  {"{duration}"}, {"{calories}"}, {"{avg_hr}"}, {"{exercises}"},
+                  and {"{marker}"}. {"{clean_title}"} removes emoji from the Hevy title.
+                  Empty metrics are removed automatically. Use {"{{"} and {"}}"} for
+                  literal braces.
+                </FieldDescription>
+              </Field>
+
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-h-5 items-center justify-between gap-3">
+                  <h3
+                    id="hevy-description-preview-title"
+                    className="text-sm font-medium"
+                  >
+                    Plain-text preview
+                  </h3>
+                  <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground uppercase">
+                    Sample data
+                  </span>
+                </div>
+
+                <section
+                  aria-labelledby="hevy-description-preview-title"
+                  className="flex min-h-56 flex-col rounded-lg border border-border/70 bg-card p-4"
+                >
+                  {descriptionPreview.error ? (
+                    <p role="alert" className="mb-3 text-xs text-destructive">
+                      {descriptionPreview.error}
+                    </p>
+                  ) : null}
+                  <p className="flex-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                    {descriptionPreview.text || "The description is empty."}
+                  </p>
+                </section>
+
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Garmin and Strava treat this as plain text. Line breaks,
+                  emoji, Unicode symbols, and bullets work.
+                </p>
+              </div>
+            </div>
           </div>
 
           <FieldGroup className="grid gap-5 sm:grid-cols-2 sm:max-w-md">
@@ -325,13 +490,6 @@ export function HevySettings({
             </div>
           </details>
 
-          <FieldDescription>
-            Sync queue, exercise mapping and backfill moved to{" "}
-            <Link to="/hevy" className="underline underline-offset-4">
-              the Hevy hub
-            </Link>
-            .
-          </FieldDescription>
         </div>
       )}
     </SettingsSection>

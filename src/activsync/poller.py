@@ -30,6 +30,9 @@ class Poller:
         garmin_interval_seconds_override: float | None = None,
         strava_interval_seconds_override: float | None = None,
         hevy_interval_seconds_override: float | None = None,
+        garmin_polling_enabled: bool = True,
+        strava_polling_enabled: bool = True,
+        hevy_polling_enabled: bool = True,
     ):
         self._conn = conn
         self._garmin_factory = garmin_factory
@@ -39,6 +42,9 @@ class Poller:
         self._garmin_interval_seconds_override = garmin_interval_seconds_override
         self._strava_interval_seconds_override = strava_interval_seconds_override
         self._hevy_interval_seconds_override = hevy_interval_seconds_override
+        self._garmin_polling_enabled = garmin_polling_enabled
+        self._strava_polling_enabled = strava_polling_enabled
+        self._hevy_polling_enabled = hevy_polling_enabled
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_garmin_run: datetime | None = None
@@ -86,6 +92,27 @@ class Poller:
         # settlement hold in sync._publish_row.
         db.set_config_value(self._conn, "hevy_last_success_at", now.isoformat())
         return changed
+
+    def apply_hevy_match(self, hevy_id: str, strategy: str) -> str:
+        now = datetime.now(timezone.utc)
+        garmin = self._garmin_factory()
+        hevy = self._hevy_factory()
+        profile = hevy_profile.get_profile(self._conn, garmin, now)
+        cfg = config.load_config(self._conn)
+        cfg[hevy_profile.CACHE_KEY] = {
+            "weight_kg": profile.weight_kg,
+            "birth_year": profile.birth_year,
+            "vo2max": profile.vo2max,
+            "sex": profile.sex,
+        }
+        row = hevy_sync.apply_match_choice(
+            self._conn, garmin, hevy, hevy_id, strategy, cfg, now
+        )
+        status = row["status"]
+        if status in ("merged", "replaced", "described"):
+            self.run_garmin_once(now)
+        events.bus.publish("refresh")
+        return status
 
     def _garmin_interval_seconds(self) -> float:
         if self._garmin_interval_seconds_override is not None:
@@ -171,13 +198,14 @@ class Poller:
         # on Garmin, clearing _last_garmin_run makes the Garmin leg due THIS
         # tick, so the enriched activity flows into the Strava pipeline
         # immediately instead of after the Garmin interval.
-        if self._hevy_ready() and self._due(
+        if self._hevy_polling_enabled and self._hevy_ready() and self._due(
             self._last_hevy_run, now, self._hevy_interval_seconds()
         ):
             try:
                 if self.run_hevy_once(now):
                     changed = True
-                    self._last_garmin_run = None
+                    if self._garmin_polling_enabled:
+                        self._last_garmin_run = None
             except HevyAuthError:
                 db.set_config_value(self._conn, "hevy_auth_ok", False)
                 logger.warning(
@@ -190,7 +218,7 @@ class Poller:
         # _last_run. Advancing it would make a reconnect wait out a full
         # interval (up to an hour) before the first sync; leaving it stale means
         # the very next tick is due, so the list catches up within the minute.
-        if self._garmin_ready() and self._due(
+        if self._garmin_polling_enabled and self._garmin_ready() and self._due(
             self._last_garmin_run, now, self._garmin_interval_seconds()
         ):
             try:
@@ -200,7 +228,11 @@ class Poller:
                 )
                 if garmin_changed:
                     changed = True
-                    if self._strava_ready() and not self._strava_rate_limited(now):
+                    if (
+                        self._strava_polling_enabled
+                        and self._strava_ready()
+                        and not self._strava_rate_limited(now)
+                    ):
                         if self._run_strava_guarded(
                             now, "strava status check after garmin sync failed"
                         ):
@@ -212,7 +244,8 @@ class Poller:
             self._last_garmin_run = now
 
         if (
-            self._garmin_ready() and self._strava_ready()
+            self._strava_polling_enabled
+            and self._garmin_ready() and self._strava_ready()
             and not strava_ran_this_tick
             and not self._strava_rate_limited(now)
             and self._due(self._last_strava_run, now, self._strava_interval_seconds())

@@ -24,8 +24,10 @@ function mapping(overrides: Partial<Mapping> = {}): Mapping {
     muscleGroup: "",
     mapped: true,
     unmapped: false,
-    garminRejected: false,
     suggested: false,
+    hasStandardMapping: true,
+    standardCategory: 1,
+    standardSubcategory: 2,
     source: "automatic",
     category: 1,
     subcategory: 2,
@@ -37,17 +39,18 @@ function mapping(overrides: Partial<Mapping> = {}): Mapping {
 
 const toolsState: HevyToolsState = {
   mappings: [
-    mapping({ templateId: "tpl-1", title: "Landmine Press" }),
+    mapping({ templateId: "tpl-1", title: "Landmine Press", muscleGroup: "shoulders" }),
     mapping({
       templateId: "tpl-2",
       title: "Ring Dips",
+      muscleGroup: "triceps",
       mapped: false,
       unmapped: true,
       source: "",
       categoryName: null,
       subcategoryName: null,
     }),
-    mapping({ templateId: "tpl-3", title: "Sled Push" }),
+    mapping({ templateId: "tpl-3", title: "Sled Push", muscleGroup: "full_body" }),
   ],
   categories: [],
 };
@@ -101,6 +104,72 @@ test("search narrows by title, case-insensitively", async () => {
   await userEvent.type(screen.getByLabelText("Search exercises"), "sled");
   expect(screen.getByText("Sled Push")).toBeVisible();
   expect(screen.queryByText("Landmine Press")).toBeNull();
+});
+
+test("search has an inline clear action after typing", async () => {
+  renderMappings();
+  await screen.findByText("Landmine Press");
+  expect(screen.queryByRole("button", { name: "Clear search" })).toBeNull();
+
+  await userEvent.type(screen.getByLabelText("Search exercises"), "sled");
+  await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+  expect(screen.getByLabelText("Search exercises")).toHaveValue("");
+  expect(screen.getByText("Landmine Press")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Clear search" })).toBeNull();
+});
+
+test("groups exercises by primary muscle group without repeating it in rows", async () => {
+  renderMappings();
+  expect(await screen.findByRole("heading", { name: "Shoulders" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Triceps" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Full body" })).toBeVisible();
+  expect(screen.getAllByText("Shoulders")).toHaveLength(1);
+});
+
+test("muscle-group headers are distinct disclosure controls", async () => {
+  renderMappings();
+  const shoulders = await screen.findByRole("button", { name: /Shoulders/ });
+
+  expect(shoulders).toHaveAttribute("aria-expanded", "true");
+  expect(shoulders.parentElement).toHaveClass("bg-muted/60");
+  await userEvent.click(shoulders);
+
+  expect(shoulders).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByText("Landmine Press")).not.toBeVisible();
+
+  await userEvent.click(shoulders);
+  expect(screen.getByText("Landmine Press")).toBeVisible();
+});
+
+test("search temporarily reveals matches inside a collapsed group", async () => {
+  renderMappings();
+  const shoulders = await screen.findByRole("button", { name: /Shoulders/ });
+  await userEvent.click(shoulders);
+  expect(screen.getByText("Landmine Press")).not.toBeVisible();
+
+  await userEvent.type(screen.getByLabelText("Search exercises"), "landmine");
+  expect(screen.getByText("Landmine Press")).toBeVisible();
+
+  await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(screen.getByText("Landmine Press")).not.toBeVisible();
+});
+
+test("exposes the mapping catalog through persistent Hevy navigation", async () => {
+  renderMappings();
+  const navigation = await screen.findByRole("navigation", {
+    name: "Hevy sections",
+  });
+  expect(navigation).toBeVisible();
+  expect(navigation.firstElementChild).not.toHaveClass("overflow-x-auto");
+  expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
+    "href",
+    "/hevy",
+  );
+  expect(screen.getByRole("link", { name: "Exercise mappings" })).toHaveAttribute(
+    "href",
+    "/hevy/mappings",
+  );
 });
 
 test("search and filter compose rather than override each other", async () => {

@@ -10,6 +10,9 @@ import type { SettingsState } from "@/lib/api";
 export type HevyDraft = {
   enabled: boolean;
   watchStrategy: SettingsState["hevy"]["watchStrategy"];
+  matchMode: SettingsState["hevy"]["matchMode"];
+  descriptionTemplate: string;
+  summaryOnStructured: boolean;
   graceMinutes: number;
   pollIntervalMinutes: number;
   identity: { manufacturer: string; product: string; serial: string };
@@ -25,6 +28,9 @@ export function hevyDraftFromState(hevy: SettingsState["hevy"]): HevyDraft {
   return {
     enabled: hevy.enabled,
     watchStrategy: hevy.watchStrategy,
+    matchMode: hevy.matchMode,
+    descriptionTemplate: hevy.descriptionTemplate,
+    summaryOnStructured: hevy.summaryOnStructured,
     graceMinutes: hevy.graceMinutes,
     pollIntervalMinutes: hevy.pollIntervalMinutes,
     identity: {
@@ -49,6 +55,9 @@ export function hevyDraftToPayload(draft: HevyDraft) {
   return {
     enabled: draft.enabled,
     watchStrategy: draft.watchStrategy,
+    matchMode: draft.matchMode,
+    descriptionTemplate: draft.descriptionTemplate,
+    summaryOnStructured: draft.summaryOnStructured,
     graceMinutes: draft.graceMinutes,
     pollIntervalMinutes: draft.pollIntervalMinutes,
     identity: {

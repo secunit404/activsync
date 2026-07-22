@@ -1,8 +1,6 @@
 import { SettingsSection } from "@/components/settings-shell";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
-  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -38,7 +36,7 @@ export function PreferencesSettings({
     <SettingsSection
       id="preferences"
       title="Preferences"
-      description="Control polling, history, timezone, and hevy2garmin compatibility."
+      description="Control polling, history, and display timezone."
     >
       <div className="grid gap-6">
         <FieldGroup className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
@@ -82,39 +80,6 @@ export function PreferencesSettings({
           </Field>
         </FieldGroup>
 
-        <div className="grid gap-4 rounded-xl border border-border/70 bg-muted/25 p-4">
-          <Field orientation="horizontal">
-            <Checkbox
-              id="hevy-marker-enabled"
-              checked={draft.hevy2garminMarkerEnabled}
-              onCheckedChange={(checked) =>
-                update({ hevy2garminMarkerEnabled: checked === true })
-              }
-            />
-            <FieldContent>
-              <FieldLabel htmlFor="hevy-marker-enabled">
-                Auto-publish hevy2garmin imports held by category
-              </FieldLabel>
-              <FieldDescription>
-                Enable only if a separate hevy2garmin app tags Garmin activity
-                descriptions with the marker below.
-              </FieldDescription>
-            </FieldContent>
-          </Field>
-          <Field data-disabled={!draft.hevy2garminMarkerEnabled}>
-            <FieldLabel htmlFor="hevy-marker">Marker text</FieldLabel>
-            <Input
-              id="hevy-marker"
-              className="h-11"
-              value={draft.hevy2garminMarker}
-              disabled={!draft.hevy2garminMarkerEnabled}
-              onChange={(event) =>
-                update({ hevy2garminMarker: event.target.value })
-              }
-              required
-            />
-          </Field>
-        </div>
       </div>
     </SettingsSection>
   );

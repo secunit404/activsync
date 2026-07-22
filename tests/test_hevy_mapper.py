@@ -11,6 +11,7 @@ from activsync.hevy_mapper import (
     UNKNOWN_CATEGORY,
     MappingMiss,
     lookup_exercise,
+    lookup_standard_mapping,
     suggest_mapping,
 )
 
@@ -39,18 +40,18 @@ def test_user_mapping_overrides_template_map():
     assert (cat, sub) == (24, 3)
 
 
-def test_rejected_user_mapping_falls_through():
-    conn = make_conn()
-    hevy_db.save_mapping(conn, "79D0BB3A", 24, 3)
-    hevy_db.mark_mapping_rejected(conn, "79D0BB3A")
-    cat, sub, _ = lookup_exercise(conn, "Bench Press (Barbell)", "79D0BB3A")
-    assert (cat, sub) == (0, 1)  # falls back to the template map
-
-
 def test_name_table_hit_without_template_id():
     conn = make_conn()
     cat, sub, _ = lookup_exercise(conn, "Bench Press (Barbell)", None)
     assert (cat, sub) == (0, 1)
+
+
+def test_standard_mapping_ignores_user_override():
+    conn = make_conn()
+    hevy_db.save_mapping(conn, "79D0BB3A", 24, 3)
+
+    assert lookup_exercise(conn, "Bench Press (Barbell)", "79D0BB3A")[:2] == (24, 3)
+    assert lookup_standard_mapping("Bench Press (Barbell)", "79D0BB3A") == (0, 1)
 
 
 def test_miss_raises_mapping_miss():

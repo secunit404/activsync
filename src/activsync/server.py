@@ -7,6 +7,7 @@ import logging
 import os
 import secrets
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -97,6 +98,7 @@ def create_app(
     lifespan=None,
     *,
     web_dir: Path | None = None,
+    apply_hevy_match: Callable[[str, str], str] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="ActivSync", lifespan=lifespan)
     resolved_web_dir = web_dir or WEB_DIR
@@ -130,7 +132,12 @@ def create_app(
         )
     )
     app.include_router(hevy_tools_api_routes.create_router(conn, mock_mode=_mock_mode))
-    app.include_router(hevy_queue_api_routes.create_router(conn))
+    app.include_router(
+        hevy_queue_api_routes.create_router(
+            conn,
+            apply_hevy_match=apply_hevy_match,
+        )
+    )
 
     @app.get("/health")
     def health() -> dict:

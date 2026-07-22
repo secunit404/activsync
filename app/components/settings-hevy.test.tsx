@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -23,6 +23,9 @@ const hevyState: SettingsState["hevy"] = {
   apiKeySaved: true,
   enabled: true,
   watchStrategy: "replace",
+  matchMode: "automatic",
+  descriptionTemplate: "{title}\n{exercises}",
+  summaryOnStructured: true,
   graceMinutes: 120,
   pollIntervalMinutes: 10,
   identity: { manufacturer: null, product: null, serial: null },
@@ -59,6 +62,65 @@ function renderHevySettings(draft: HevyDraft = hevyDraftFromState(hevyState)) {
   );
   return { onChange };
 }
+
+test("lets the user switch between reviewed and automatic matching", async () => {
+  const { onChange } = renderHevySettings(
+    hevyDraftFromState({ ...hevyState, matchMode: "review" }),
+  );
+
+  expect(screen.getByRole("radio", { name: "Review each match" })).toBeChecked();
+  await userEvent.click(screen.getByRole("radio", { name: "Automatic" }));
+
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ matchMode: "automatic" }),
+  );
+});
+
+test("edits the description template and structured-summary preference", async () => {
+  const { onChange } = renderHevySettings();
+
+  expect(screen.getByLabelText("Write summary for Merge and Replace")).toBeChecked();
+  await userEvent.click(
+    screen.getByLabelText("Write summary for Merge and Replace"),
+  );
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ summaryOnStructured: false }),
+  );
+
+  fireEvent.change(screen.getByLabelText("Description template"), {
+    target: { value: "{title} — custom" },
+  });
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ descriptionTemplate: "{title} — custom" }),
+  );
+});
+
+test("shows a live plain-text sample beside the description template", () => {
+  renderHevySettings(
+    hevyDraftFromState({
+      ...hevyState,
+      descriptionTemplate: "**{title}**\n\n{exercises}",
+    }),
+  );
+
+  const preview = screen.getByRole("region", { name: "Plain-text preview" });
+  expect(preview).toHaveTextContent("**Afternoon workout 💪**");
+  expect(preview).toHaveTextContent("Chest Fly (Machine)");
+});
+
+test("documents and previews the emoji-free clean title placeholder", () => {
+  renderHevySettings(
+    hevyDraftFromState({
+      ...hevyState,
+      descriptionTemplate: "{clean_title}",
+    }),
+  );
+
+  expect(screen.getByText(/clean_title.*removes emoji/i)).toBeVisible();
+  expect(screen.getByRole("region", { name: "Plain-text preview" })).toHaveTextContent(
+    "Afternoon workout",
+  );
+});
 
 async function openOverrides() {
   await userEvent.click(screen.getByText("Device and profile overrides"));

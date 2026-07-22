@@ -60,8 +60,6 @@ const connectedState: SettingsState = {
     garminPollIntervalMinutes: 20,
     stravaPollIntervalMinutes: 5,
     lookbackDays: 7,
-    hevy2garminMarker: "— synced by hevy2garmin",
-    hevy2garminMarkerEnabled: false,
   },
   timezones: ["Europe/Stockholm", "Europe/Oslo"],
   activityTypes,
@@ -71,6 +69,9 @@ const connectedState: SettingsState = {
     apiKeySaved: true,
     enabled: true,
     watchStrategy: "replace",
+    matchMode: "automatic",
+    descriptionTemplate: "{title}\n{exercises}",
+    summaryOnStructured: true,
     graceMinutes: 120,
     pollIntervalMinutes: 10,
     identity: { manufacturer: null, product: null, serial: null },
@@ -135,6 +136,14 @@ test("save is disabled until a section is dirty", async () => {
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   await userEvent.click(await screen.findByRole("switch", { name: /Running/ }));
   expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+});
+
+test("omits the retired standalone hevy2garmin marker preferences", () => {
+  renderSettings();
+  expect(
+    screen.queryByText(/Auto-publish hevy2garmin imports held by category/i),
+  ).toBeNull();
+  expect(screen.queryByLabelText(/Marker text/i)).toBeNull();
 });
 
 test("renders every section, in the order the design specifies", () => {
@@ -209,11 +218,13 @@ test("discard also clears the auto-sync search and any toggles it drove", async 
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 });
 
-test("Hevy watch strategy is a real radio group, not clickable divs", () => {
+test("Hevy automatic strategy is a real radio group, not clickable divs", () => {
   renderSettings();
-  const group = screen.getByRole("radiogroup", { name: /watch strategy/i });
+  const group = screen.getByRole("radiogroup", {
+    name: /automatic match strategy/i,
+  });
   expect(group).toBeInTheDocument();
-  const options = screen.getAllByRole("radio");
+  const options = within(group).getAllByRole("radio");
   expect(options.map((option) => option.getAttribute("aria-label"))).toEqual([
     "Replace",
     "Merge",
@@ -225,12 +236,10 @@ test("Hevy watch strategy is a real radio group, not clickable divs", () => {
   );
 });
 
-test("Hevy integration links out to the Hevy hub for operations", () => {
+test("Hevy integration omits the obsolete moved-to-hub notice", () => {
   renderSettings();
-  expect(screen.getByRole("link", { name: /Hevy hub/i })).toHaveAttribute(
-    "href",
-    "/hevy",
-  );
+  expect(screen.queryByText(/moved to/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /Hevy hub/i })).not.toBeInTheDocument();
 });
 
 test("disconnect opens a real confirmation dialog with the preserved copy, and cancelling leaves Hevy connected", async () => {

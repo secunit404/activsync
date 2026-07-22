@@ -203,8 +203,6 @@ def sync_garmin(
     the table keeps whatever status the user left it in.
     """
     held_types = set(cfg["held_activity_types"])
-    marker = cfg["hevy2garmin_marker"]
-    marker_active = cfg["hevy2garmin_marker_enabled"] and bool(marker)
     lookback = cfg["lookback_days"] if lookback_days is None else lookback_days
     hold_cutoff = (
         None if hold_before is None
@@ -270,7 +268,7 @@ def sync_garmin(
         if (
             status == "held"
             and existing.get("hold_reason") != HOLD_BACKLOG
-            and (hevy_promotes or (marker_active and marker in act.description))
+            and hevy_promotes
         ):
             status = "pending"
         db.update_activity_content(
@@ -599,10 +597,8 @@ def exclude(conn: sqlite3.Connection, garmin_activity_id: int) -> None:
 def unexclude(conn: sqlite3.Connection, garmin_activity_id: int, cfg: dict) -> None:
     row = db.get_activity(conn, garmin_activity_id)
     held_types = set(cfg["held_activity_types"])
-    marker = cfg["hevy2garmin_marker"]
-    marker_active = cfg["hevy2garmin_marker_enabled"] and bool(marker)
 
-    if row["activity_type"] in held_types and not (marker_active and marker in row["description"]):
+    if row["activity_type"] in held_types:
         db.set_publish_status(conn, garmin_activity_id, "held", HOLD_CATEGORY)
     else:
         db.set_publish_status(conn, garmin_activity_id, "pending")

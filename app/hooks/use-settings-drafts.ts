@@ -82,9 +82,7 @@ function preferencesEqual(a: PreferencesDraft, b: PreferencesDraft): boolean {
     a.displayTimezone === b.displayTimezone &&
     a.garminPollIntervalMinutes === b.garminPollIntervalMinutes &&
     a.stravaPollIntervalMinutes === b.stravaPollIntervalMinutes &&
-    a.lookbackDays === b.lookbackDays &&
-    a.hevy2garminMarker === b.hevy2garminMarker &&
-    a.hevy2garminMarkerEnabled === b.hevy2garminMarkerEnabled
+    a.lookbackDays === b.lookbackDays
   );
 }
 

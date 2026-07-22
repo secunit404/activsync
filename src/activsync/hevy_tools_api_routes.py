@@ -12,6 +12,7 @@ from activsync import db, dev_mock, events, hevy_backfill, hevy_db, view
 from activsync.api_routes import ApiModel
 from activsync.hevy_client import HevyAuthError, HevyClient
 from activsync.hevy_mapper import CATEGORY_NAMES, SUBCATEGORY_NAMES
+from activsync.hevy_workout_detail import HevyWorkoutDetail, workout_detail
 
 logger = logging.getLogger("activsync.hevy_tools_api_routes")
 
@@ -34,10 +35,12 @@ class ExerciseMapping(ApiModel):
     muscle_group: str
     mapped: bool
     unmapped: bool
-    garmin_rejected: bool
     suggested: bool
     # "user" | "automatic" | "" — see view.hevy_mappings_view.
     source: str
+    has_standard_mapping: bool
+    standard_category: int | None
+    standard_subcategory: int | None
     category: int | None
     subcategory: int | None
     category_name: str | None
@@ -83,7 +86,11 @@ class BackfillItem(ApiModel):
     start_time: str
     action: str
     twin_activity_id: int | None
+    garmin_url: str | None
+    strava_activity_id: int | None
+    strava_url: str | None
     missing_template_ids: list[str] = []
+    workout: HevyWorkoutDetail
 
 
 class BackfillResult(ApiModel):
@@ -116,9 +123,8 @@ def _select_backfill_items(
       selection is a ceiling on what may be imported, never a trigger for
       importing something else instead.
     - Items whose preview action is `needs_mapping` are dropped even if
-      explicitly named. The backfill UI disables those checkboxes, but the
-      server is the actual enforcement point — a client could send one
-      anyway, and it must never park an unmapped workout in the sync queue.
+      explicitly named. The server is the actual enforcement point — a client
+      could send one anyway.
     """
     if hevy_ids is None:
         return raw_items
@@ -126,7 +132,8 @@ def _select_backfill_items(
     return [
         item
         for item in raw_items
-        if item["workout"].get("id") in requested and item["action"] != "needs_mapping"
+        if item["workout"].get("id") in requested
+        and item["action"] != "needs_mapping"
     ]
 
 
@@ -202,6 +209,7 @@ def create_router(
                 status_code=502,
                 detail=f"Could not fetch workouts from Hevy: {exc}",
             ) from exc
+        description_template = db.get_config_value(conn, "hevy_description_template")
         items = [
             BackfillItem(
                 hevy_id=item["workout"].get("id", ""),
@@ -217,7 +225,39 @@ def create_router(
                     if item["twin"] is not None
                     else None
                 ),
+                garmin_url=(
+                    view.GARMIN_ACTIVITY_URL.format(
+                        item["twin"]["garmin_activity_id"]
+                    )
+                    if item["twin"] is not None
+                    else None
+                ),
+                strava_activity_id=(
+                    item["twin"]["strava_activity_id"]
+                    if item["twin"] is not None
+                    and item["twin"].get("publish_status") == "published"
+                    else None
+                ),
+                strava_url=(
+                    view.STRAVA_ACTIVITY_URL.format(
+                        item["twin"]["strava_activity_id"]
+                    )
+                    if item["twin"] is not None
+                    and item["twin"].get("publish_status") == "published"
+                    and item["twin"].get("strava_activity_id") is not None
+                    else None
+                ),
                 missing_template_ids=item.get("missing_template_ids", []),
+                workout=HevyWorkoutDetail.model_validate(
+                    workout_detail(
+                        item["workout"],
+                        hevy_id=item["workout"].get("id", ""),
+                        title=item["workout"].get("title", ""),
+                        start_time=item["workout"].get("start_time", ""),
+                        end_time=item["workout"].get("end_time", ""),
+                        description_template=description_template,
+                    )
+                ),
             )
             for item in raw_items
         ]
@@ -256,9 +296,12 @@ def create_router(
         categories = [
             MappingCategory(
                 value=category,
-                label=label,
+                label=view.garmin_exercise_label(label),
                 subcategories=[
-                    MappingSubcategory(value=subcategory, label=subcategory_label)
+                    MappingSubcategory(
+                        value=subcategory,
+                        label=view.garmin_exercise_label(subcategory_label),
+                    )
                     for subcategory, subcategory_label in sorted(
                         SUBCATEGORY_NAMES.get(category, {}).items()
                     )
@@ -307,9 +350,32 @@ def create_router(
         response_model=ToolActionResult,
     )
     def delete_mapping(template_id: str) -> ToolActionResult:
+        mapping = next(
+            (
+                row
+                for row in view.hevy_mappings_view(conn)
+                if row["template_id"] == template_id
+            ),
+            None,
+        )
+        if mapping is None:
+            raise HTTPException(status_code=404, detail="Exercise template not found.")
         hevy_db.delete_mapping(conn, template_id)
+        restored_standard = bool(mapping["has_standard_mapping"])
+        woken = (
+            hevy_db.wake_needs_mapping(conn, template_id=template_id)
+            if restored_standard
+            else 0
+        )
         events.bus.publish("refresh")
-        return ToolActionResult(message="Exercise mapping removed.")
+        message = (
+            "Standard mapping restored."
+            if restored_standard
+            else "Exercise mapping removed."
+        )
+        if woken:
+            message += f" {woken} waiting workout{'s' if woken != 1 else ''} resumed."
+        return ToolActionResult(message=message)
 
     @router.post("/backfill/preview", response_model=BackfillResult)
     def preview_backfill(payload: BackfillRequest) -> BackfillResult:
@@ -333,7 +399,7 @@ def create_router(
     def run_backfill(payload: BackfillRequest) -> BackfillResult:
         raw_items, items = build_backfill(payload.since)
         selected_items = _select_backfill_items(raw_items, payload.hevy_ids)
-        linked = hevy_backfill.run_items(conn, selected_items)
+        matched = hevy_backfill.run_items(conn, selected_items)
         events.bus.publish("refresh")
         # Reflects what was actually handed to `run_items`, not the full
         # preview length — once the import is selective those two can
@@ -342,12 +408,12 @@ def create_router(
         return BackfillResult(
             message=(
                 f"Backfill complete: {count} workout"
-                f"{'s' if count != 1 else ''} ingested, {linked} linked "
-                "to existing Garmin activities."
+                f"{'s' if count != 1 else ''} ingested, {matched} matched "
+                "with existing Garmin activities."
             ),
             since=payload.since,
             ran=True,
-            linked=linked,
+            linked=matched,
             items=items,
         )
 

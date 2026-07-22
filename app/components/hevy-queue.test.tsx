@@ -11,13 +11,15 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const { runHevyQueueAction } = vi.hoisted(() => ({
+const { chooseHevyMatch, getHevyWorkout, runHevyQueueAction } = vi.hoisted(() => ({
+  chooseHevyMatch: vi.fn(),
+  getHevyWorkout: vi.fn(),
   runHevyQueueAction: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, runHevyQueueAction };
+  return { ...actual, chooseHevyMatch, getHevyWorkout, runHevyQueueAction };
 });
 
 const { toastSuccess, toastError } = vi.hoisted(() => ({
@@ -39,6 +41,11 @@ function item(overrides: Partial<HevyQueueItem>): HevyQueueItem {
     needsMapping: false,
     hasOpenOperation: false,
     resyncable: false,
+    awaitingMatch: false,
+    matchedGarminActivityId: null,
+    matchedGarminTitle: null,
+    matchedStravaActivityId: null,
+    matchedStravaUrl: null,
     ...overrides,
   };
 }
@@ -54,14 +61,14 @@ function emptyQueue(overrides: Partial<HevyQueueState> = {}): HevyQueueState {
   };
 }
 
-function renderQueue(state: HevyQueueState) {
+function renderQueue(state: HevyQueueState, onQueueChanged?: () => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <HevyQueue state={state} />
+        <HevyQueue state={state} onQueueChanged={onQueueChanged} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -69,10 +76,22 @@ function renderQueue(state: HevyQueueState) {
 
 test("shows a quiet empty message, not the header badges, when the queue is empty", () => {
   renderQueue(emptyQueue());
-  expect(screen.getByText(/nothing in the queue/i)).toBeInTheDocument();
-  expect(screen.queryByText(/in flight/i)).not.toBeInTheDocument();
-  expect(screen.queryByText(/problem/i)).not.toBeInTheDocument();
+  expect(screen.getByText(/nothing needs attention/i)).toBeInTheDocument();
+  expect(screen.queryByText(/pending/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/^\d+ needs attention$/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/skipped/i)).not.toBeInTheDocument();
+});
+
+test("uses user-facing names for the queue groups", () => {
+  renderQueue(
+    emptyQueue({
+      counts: { inFlight: 2, problems: 1, skipped: 1 },
+    }),
+  );
+
+  expect(screen.getByText("2 pending")).toBeInTheDocument();
+  expect(screen.getByText("1 needs attention")).toBeInTheDocument();
+  expect(screen.getByText("1 skipped")).toBeInTheDocument();
 });
 
 test("retry calls the queue action and reports success via toast", async () => {
@@ -90,6 +109,139 @@ test("retry calls the queue action and reports success via toast", async () => {
     expect(runHevyQueueAction).toHaveBeenCalledWith("hevy-1", "retry"),
   );
   await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Retry queued for Leg Day."));
+});
+
+test("an awaiting match offers per-workout strategies", () => {
+  renderQueue(
+    emptyQueue({
+      counts: { inFlight: 1, problems: 0, skipped: 0 },
+      inFlight: [
+        item({
+          status: "awaiting_match",
+          awaitingMatch: true,
+          matchedGarminActivityId: 123,
+          matchedGarminTitle: "Morning strength",
+        }),
+      ],
+    }),
+  );
+
+  expect(screen.getByText(/matched morning strength/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Merge" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Description only" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
+});
+
+test("loads and shows the actual Hevy workout only after opening details", async () => {
+  getHevyWorkout.mockResolvedValue({
+    hevyId: "hevy-1",
+    title: "Leg Day",
+    startTime: "2026-07-20T06:12:00Z",
+    endTime: "2026-07-20T07:20:00Z",
+    notes: "Controlled tempo\nFelt good",
+    exercises: [
+      {
+        title: "Back Squat (Barbell)",
+        notes: "Three-second descent",
+        templateId: "squat-1",
+        sets: [
+          {
+            number: 1,
+            setType: "normal",
+            reps: 8,
+            weightKg: 100,
+            distanceMeters: null,
+            durationSeconds: null,
+            rpe: 8,
+            customMetric: null,
+          },
+        ],
+      },
+    ],
+    descriptionPreview: "🏋️ Leg Day\n\n• Back Squat (Barbell): 1 set · 100.0kg × 8",
+  });
+  renderQueue(
+    emptyQueue({
+      counts: { inFlight: 1, problems: 0, skipped: 0 },
+      inFlight: [item({ status: "awaiting_match", awaitingMatch: true })],
+    }),
+  );
+
+  expect(getHevyWorkout).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "View workout" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "Leg Day" });
+  expect(getHevyWorkout).toHaveBeenCalledWith("hevy-1", expect.any(AbortSignal));
+  expect(within(dialog).getByText("Back Squat (Barbell)")).toBeInTheDocument();
+  expect(within(dialog).getByText("100 kg · 8 reps")).toBeInTheDocument();
+  expect(within(dialog).getByText("Controlled tempo", { exact: false })).toBeInTheDocument();
+  expect(within(dialog).getByText(/Description only always uses/i)).toBeInTheDocument();
+});
+
+test("merge applies the selected strategy to the awaiting workout", async () => {
+  chooseHevyMatch.mockResolvedValue({ message: "Merged Leg Day." });
+  renderQueue(
+    emptyQueue({
+      counts: { inFlight: 1, problems: 0, skipped: 0 },
+      inFlight: [item({ status: "awaiting_match", awaitingMatch: true })],
+    }),
+  );
+
+  await userEvent.click(screen.getByRole("button", { name: "Merge" }));
+
+  await waitFor(() =>
+    expect(chooseHevyMatch).toHaveBeenCalledWith("hevy-1", "merge"),
+  );
+});
+
+test("replace asks for confirmation before applying", async () => {
+  chooseHevyMatch.mockResolvedValue({ message: "Replaced Leg Day." });
+  renderQueue(
+    emptyQueue({
+      counts: { inFlight: 1, problems: 0, skipped: 0 },
+      inFlight: [item({ status: "awaiting_match", awaitingMatch: true })],
+    }),
+  );
+
+  await userEvent.click(screen.getByRole("button", { name: "Replace" }));
+  const dialog = screen.getByRole("alertdialog", {
+    name: "Replace this Garmin workout?",
+  });
+  await userEvent.click(
+    within(dialog).getByRole("button", { name: "Replace Garmin workout" }),
+  );
+
+  await waitFor(() =>
+    expect(chooseHevyMatch).toHaveBeenCalledWith("hevy-1", "replace"),
+  );
+});
+
+test("an already-published match links Strava and withholds Replace", () => {
+  renderQueue(
+    emptyQueue({
+      counts: { inFlight: 1, problems: 0, skipped: 0 },
+      inFlight: [
+        item({
+          status: "awaiting_match",
+          awaitingMatch: true,
+          matchedGarminActivityId: 111,
+          matchedGarminTitle: "Morning strength",
+          matchedStravaActivityId: 222,
+          matchedStravaUrl: "https://www.strava.com/activities/222",
+        }),
+      ],
+    }),
+  );
+
+  expect(screen.getByText(/Already on Strava/)).toBeVisible();
+  expect(screen.getByRole("link", { name: /Strava/ })).toHaveAttribute(
+    "href",
+    "https://www.strava.com/activities/222",
+  );
+  expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Merge" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Description only" })).toBeVisible();
 });
 
 test("skip opens a confirmation dialog with the real copy, and does nothing when cancelled", async () => {
@@ -113,11 +265,13 @@ test("skip opens a confirmation dialog with the real copy, and does nothing when
 
 test("skip runs the action once confirmed in the dialog", async () => {
   runHevyQueueAction.mockResolvedValue({ message: "Skipped Leg Day." });
+  const onQueueChanged = vi.fn();
   renderQueue(
     emptyQueue({
       counts: { inFlight: 0, problems: 1, skipped: 0 },
       problems: [item({ status: "failed", error: "Upload failed" })],
     }),
+    onQueueChanged,
   );
 
   await userEvent.click(screen.getByRole("button", { name: "Skip" }));
@@ -125,6 +279,7 @@ test("skip runs the action once confirmed in the dialog", async () => {
   await userEvent.click(within(dialog).getByRole("button", { name: "Skip" }));
 
   await waitFor(() => expect(runHevyQueueAction).toHaveBeenCalledWith("hevy-1", "skip"));
+  expect(onQueueChanged).toHaveBeenCalledOnce();
   await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
 });
 
@@ -215,7 +370,7 @@ test("reports a failed action via an error toast", async () => {
   );
 });
 
-test("in-flight items show their status but no actions", () => {
+test("in-flight items show their status and inspection but no mutation actions", () => {
   renderQueue(
     emptyQueue({
       counts: { inFlight: 1, problems: 0, skipped: 0 },
@@ -223,6 +378,8 @@ test("in-flight items show their status but no actions", () => {
     }),
   );
 
-  expect(screen.getByText("WAITING WATCH")).toBeInTheDocument();
-  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  expect(screen.getByText("WAITING FOR GARMIN")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "View workout" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
 });

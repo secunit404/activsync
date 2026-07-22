@@ -155,6 +155,20 @@ test("renders the stat grid, description and Garmin link in view mode", () => {
   );
 });
 
+test("preserves the description's saved line breaks", () => {
+  const multilineDescription = [
+    "🏋️ Afternoon workout 💪",
+    "",
+    "Chest Fly (Machine): 3 sets · 57.5kg × 9",
+    "Lat Pulldown (Cable): 3 sets · 50.0kg × 9",
+  ].join("\n");
+  renderDetail({ ...fixture, description: multilineDescription });
+
+  const description = screen.getByText("Description").nextElementSibling;
+  expect(description?.textContent).toBe(multilineDescription);
+  expect(description).toHaveClass("whitespace-pre-wrap", "break-words");
+});
+
 test("does not render a Strava link when stravaUrl is null", () => {
   renderDetail(fixture);
   expect(screen.queryByRole("link", { name: /Strava/ })).not.toBeInTheDocument();

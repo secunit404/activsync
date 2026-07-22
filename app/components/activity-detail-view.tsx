@@ -41,7 +41,7 @@ export function ActivityDetailView({ activity }: { activity: Activity }) {
 
       <div className="grid gap-2">
         <h4 className="text-[13px] font-semibold text-foreground/90">Description</h4>
-        <p className="text-sm leading-relaxed text-muted-foreground">
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
           {activity.description || "No description yet."}
         </p>
       </div>

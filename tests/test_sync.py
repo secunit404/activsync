@@ -99,23 +99,8 @@ def test_unexclude_returns_activity_to_pending_when_type_not_held(conn, cfg):
     assert db.get_activity(conn, 12)["publish_status"] == "pending"
 
 
-def test_unexclude_returns_held_activity_with_marker_to_pending(conn, cfg):
+def test_unexclude_keeps_legacy_import_marker_held_by_category(conn, cfg):
     cfg["held_activity_types"] = ["strength_training"]
-    cfg["hevy2garmin_marker_enabled"] = True
-    db.insert_activity(
-        conn, garmin_activity_id=13, activity_type="strength_training", title="Leg Day",
-        description="— synced by hevy2garmin", start_time="2026-07-09 09:00:00",
-        content_hash="h", publish_status="excluded", now=NOW,
-    )
-
-    sync.unexclude(conn, 13, cfg)
-
-    assert db.get_activity(conn, 13)["publish_status"] == "pending"
-
-
-def test_unexclude_keeps_held_activity_held_when_marker_override_disabled(conn, cfg):
-    cfg["held_activity_types"] = ["strength_training"]
-    cfg["hevy2garmin_marker_enabled"] = False
     db.insert_activity(
         conn, garmin_activity_id=15, activity_type="strength_training", title="Leg Day",
         description="— synced by hevy2garmin", start_time="2026-07-09 09:00:00",
@@ -193,29 +178,7 @@ def test_sync_garmin_new_strength_activity_is_pending_by_default(conn, cfg):
     assert stats.new == 1
 
 
-def test_sync_garmin_held_activity_flips_to_pending_when_marker_appears(conn, cfg):
-    cfg["hevy2garmin_marker_enabled"] = True
-    db.insert_activity(
-        conn, garmin_activity_id=103, activity_type="strength_training", title="Strength Training",
-        description="", start_time="2026-07-09 09:00:00",
-        content_hash=sync.compute_content_hash("Strength Training", "", "strength_training"),
-        publish_status="held", now=NOW - timedelta(hours=1),
-    )
-    updated = _record(
-        103, "strength_training", title="Leg Day",
-        description="Squats 5x5\n— synced by hevy2garmin",
-    )
-    garmin = _fake_garmin([updated])
-
-    stats = sync.sync_garmin(conn, garmin, cfg, NOW)
-
-    row = db.get_activity(conn, 103)
-    assert row["publish_status"] == "pending"
-    assert stats.updated == 1
-
-
-def test_sync_garmin_held_activity_stays_held_when_marker_override_disabled(conn, cfg):
-    cfg["hevy2garmin_marker_enabled"] = False
+def test_sync_garmin_legacy_import_marker_does_not_bypass_category_hold(conn, cfg):
     db.insert_activity(
         conn, garmin_activity_id=105, activity_type="strength_training", title="Strength Training",
         description="", start_time="2026-07-09 09:00:00",
@@ -585,11 +548,7 @@ def test_publishing_a_backlog_row_clears_its_hold_reason(conn, cfg):
     assert db.get_activity(conn, 408)["hold_reason"] is None
 
 
-def test_sync_garmin_marker_does_not_promote_a_backlog_held_row(conn, cfg):
-    # The Hevy marker rule promotes a category-held row to pending on update.
-    # A backlog-held row is held because it predates the normal window, not
-    # because of its category — an edit must not sneak it past the hold.
-    cfg["hevy2garmin_marker_enabled"] = True
+def test_sync_garmin_legacy_import_marker_does_not_promote_a_backlog_held_row(conn, cfg):
     db.insert_activity(
         conn, garmin_activity_id=409, activity_type="strength_training", title="Strength Training",
         description="", start_time="2026-06-20 09:00:00",

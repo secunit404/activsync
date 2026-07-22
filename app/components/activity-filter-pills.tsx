@@ -43,7 +43,7 @@ export function ActivityFilterPills({ counts }: ActivityFilterPillsProps) {
     <div
       role="group"
       aria-label="Filter activities by status"
-      className="flex flex-nowrap gap-1 rounded-xl border border-border bg-muted/30 p-1.5 md:flex-wrap md:gap-1.5"
+      className="inline-flex max-w-full flex-nowrap gap-1 rounded-xl border border-border bg-muted/30 p-1.5 md:flex-wrap md:gap-1.5"
     >
       {filterOptions.map((option) => {
         const isActive = option.value === activeStatus;
@@ -54,7 +54,7 @@ export function ActivityFilterPills({ counts }: ActivityFilterPillsProps) {
             type="button"
             aria-pressed={isActive}
             className={cn(
-              "flex-1 rounded-lg px-2 py-1.5 text-center text-[11.5px] font-medium whitespace-nowrap transition-colors md:flex-none md:px-3.5 md:py-2 md:text-[13px]",
+              "flex-none rounded-lg px-2 py-1.5 text-center text-[11.5px] font-medium whitespace-nowrap transition-colors md:px-3.5 md:py-2 md:text-[13px]",
               isActive
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:text-foreground",

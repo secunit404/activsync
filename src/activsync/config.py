@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 
 from activsync import db
+from activsync.hevy_description import DEFAULT_TEMPLATE
 
 DEFAULT_CONFIG = {
     "garmin_poll_interval_minutes": 20,
     "strava_poll_interval_minutes": 5,
     "lookback_days": 7,
     "display_timezone": "Europe/Stockholm",
-    "hevy2garmin_marker": "— synced by hevy2garmin",
-    "hevy2garmin_marker_enabled": False,
     "hevy_enabled": False,
+    "hevy_match_mode": "automatic",
+    "hevy_description_template": DEFAULT_TEMPLATE,
+    "hevy_summary_on_structured": True,
     # Task-1 spike gate: S1+S2+S3 passed, so replace is the default and all
     # three strategies are selectable.
     "hevy_watch_strategy": "replace",
@@ -29,8 +32,17 @@ DEFAULT_CONFIG = {
 def load_config(conn: sqlite3.Connection) -> dict:
     cfg = dict(DEFAULT_CONFIG)
     stored = db.get_config_value(conn, "settings", default={})
+    if "hevy_match_mode" not in stored and _development_mode():
+        cfg["hevy_match_mode"] = "review"
     cfg.update(stored)
     return cfg
+
+
+def _development_mode() -> bool:
+    for name in ("ACTIVSYNC_DEV_MOCK_DATA", "ACTIVSYNC_MANUAL_ONLY"):
+        if os.environ.get(name, "").lower() in ("1", "true", "yes"):
+            return True
+    return False
 
 
 def save_config(conn: sqlite3.Connection, cfg: dict) -> None:

@@ -47,6 +47,15 @@ test("does not render an Excluded pill", () => {
   expect(screen.queryByRole("button", { name: /Excluded/ })).not.toBeInTheDocument();
 });
 
+test("keeps the filter rail sized to its pills", () => {
+  renderAt("/");
+
+  expect(screen.getByRole("group", { name: "Filter activities by status" })).toHaveClass(
+    "inline-flex",
+  );
+  expect(screen.getByRole("button", { name: /^All/ })).toHaveClass("flex-none");
+});
+
 test("selecting a filter writes the status param and resets the page", () => {
   const router = renderAt("/?status=published&page=4");
 

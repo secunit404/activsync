@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import type { AppState, HevyQueueState, HevyToolsState } from "@/lib/api";
 import { HevyView } from "./hevy";
 
+
 const connectedAppState: Pick<AppState, "hevy"> = {
   hevy: { enabled: true, connected: true, status: "Connected" },
 };
@@ -27,6 +28,11 @@ const queueState: HevyQueueState = {
       needsMapping: false,
       hasOpenOperation: true,
       resyncable: false,
+      awaitingMatch: false,
+      matchedGarminActivityId: null,
+      matchedGarminTitle: null,
+      matchedStravaActivityId: null,
+      matchedStravaUrl: null,
     },
     {
       hevyId: "hevy-pull-day",
@@ -37,6 +43,11 @@ const queueState: HevyQueueState = {
       needsMapping: false,
       hasOpenOperation: false,
       resyncable: false,
+      awaitingMatch: false,
+      matchedGarminActivityId: null,
+      matchedGarminTitle: null,
+      matchedStravaActivityId: null,
+      matchedStravaUrl: null,
     },
   ],
   problems: [
@@ -49,6 +60,11 @@ const queueState: HevyQueueState = {
       needsMapping: true,
       hasOpenOperation: false,
       resyncable: false,
+      awaitingMatch: false,
+      matchedGarminActivityId: null,
+      matchedGarminTitle: null,
+      matchedStravaActivityId: null,
+      matchedStravaUrl: null,
     },
   ],
   skipped: [
@@ -61,6 +77,11 @@ const queueState: HevyQueueState = {
       needsMapping: false,
       hasOpenOperation: false,
       resyncable: false,
+      awaitingMatch: false,
+      matchedGarminActivityId: null,
+      matchedGarminTitle: null,
+      matchedStravaActivityId: null,
+      matchedStravaUrl: null,
     },
   ],
 };
@@ -82,8 +103,10 @@ const toolsState: HevyToolsState = {
       muscleGroup: "Legs",
       mapped: false,
       unmapped: true,
-      garminRejected: false,
       suggested: false,
+      hasStandardMapping: false,
+      standardCategory: null,
+      standardSubcategory: null,
       source: "",
       category: null,
       subcategory: null,
@@ -97,8 +120,10 @@ const toolsState: HevyToolsState = {
       muscleGroup: "Chest",
       mapped: true,
       unmapped: false,
-      garminRejected: false,
       suggested: false,
+      hasStandardMapping: true,
+      standardCategory: 4,
+      standardSubcategory: 0,
       source: "automatic",
       category: 4,
       subcategory: 0,
@@ -132,18 +157,19 @@ function renderHevy({
   );
 }
 
-test("hub shows in-flight and problem counts", async () => {
+test("hub shows pending and attention counts", async () => {
   renderHevy();
-  expect(await screen.findByText(/2 in flight/i)).toBeInTheDocument();
-  expect(screen.getByText(/1 problem/i)).toBeInTheDocument();
+  expect(await screen.findByText(/2 pending/i)).toBeInTheDocument();
+  expect(screen.getByText(/1 needs attention/i)).toBeInTheDocument();
 });
 
 test("mapping summary links to the editor for an unmapped exercise", async () => {
   renderHevy();
-  expect(await screen.findByRole("link", { name: /map/i })).toHaveAttribute(
-    "href",
-    "/hevy/mapping/tmpl-unmapped",
-  );
+  expect(screen.getByText("1 need mapping")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /view all/i })).not.toBeInTheDocument();
+  expect(
+    await screen.findByRole("link", { name: "Map Bulgarian Split Squat" }),
+  ).toHaveAttribute("href", "/hevy/mapping/tmpl-unmapped");
 });
 
 test("mapping summary omits exercises that are already mapped", () => {
@@ -180,7 +206,16 @@ test("shows an empty state pointing at Settings when Hevy is not connected", () 
 test("still renders the three cards when connected but the queue and mappings are empty", () => {
   renderHevy({ queue: emptyQueueState, tools: emptyToolsState });
   expect(screen.getByText("Sync queue")).toBeInTheDocument();
-  expect(screen.getByText(/nothing in the queue/i)).toBeInTheDocument();
-  expect(screen.getByText("Exercise mapping")).toBeInTheDocument();
+  expect(screen.getByText(/nothing needs attention/i)).toBeInTheDocument();
+  expect(screen.getByText("Exercises needing mapping")).toBeInTheDocument();
   expect(screen.getByText("Backfill older workouts")).toBeInTheDocument();
+});
+
+test("keeps the full mapping catalog discoverable when the summary is empty", () => {
+  renderHevy({ queue: emptyQueueState, tools: emptyToolsState });
+  expect(screen.getByRole("navigation", { name: "Hevy sections" })).toBeVisible();
+  expect(screen.getByRole("link", { name: "Exercise mappings" })).toHaveAttribute(
+    "href",
+    "/hevy/mappings",
+  );
 });

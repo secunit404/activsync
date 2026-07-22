@@ -59,6 +59,7 @@ and Garmin tokens) is persisted under `./data` (mounted at `/config`).
 | `ACTIVSYNC_DB_PATH` | `/config/activsync.db` | SQLite database path |
 | `ACTIVSYNC_GARMIN_TOKEN_DIR` | `/config/.garminconnect` | Garmin token storage |
 | `ACTIVSYNC_DEV_MOCK_DATA` | _(unset)_ | Dev only: seed fake data, no network |
+| `ACTIVSYNC_MANUAL_ONLY` | _(unset)_ | Disable Garmin/Strava polling; keep Hevy polling with reviewed matches |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Proxy IPs trusted to set `X-Forwarded-Proto` (see below) |
 
 The in-app **Settings → Preferences → display timezone** overrides `TZ` for log
@@ -97,6 +98,46 @@ wizard from a clean slate, use `make dev-fresh`.
 In mock mode the wizard is fully faked: any Garmin email/password connects (use
 password `mfa` to trigger the MFA modal; any code except `000000` is accepted);
 any Strava client ID/secret connects via a looped-back OAuth step.
+
+### Testing a branch with real accounts
+
+Stop the normal app on port 8381, then run:
+
+```sh
+make dev-real
+```
+
+This uses the real `data/activsync.db` and Garmin token directory, serves the
+hot-reloading UI at <http://localhost:8382>, and disables the Garmin, Strava,
+and update-check background jobs. The Hevy polling leg remains active so the
+queue receives new workouts. When one Hevy workout matches one Garmin workout,
+development modes default to pausing before any change and offering **Merge**,
+**Replace**, **Description only**, or **Skip** on the Hevy page. Settings can
+switch match handling to **Automatic** and choose its default strategy. A
+historical backfill that finds one overlapping Garmin activity now enters this
+same review state immediately instead of being labelled as a new activity and
+waiting for another Hevy poll.
+
+The Hevy description template is editable in Settings with placeholders for
+the workout title, duration, calories, average heart rate, exercise summary,
+and ActivSync marker. A live sample preview renders beside the editor. The
+shared Garmin/Strava format is plain text: line breaks, Unicode, emoji, and
+bullets are suitable, while Markdown and HTML markup remains literal text.
+**Description only** always writes the rendered summary;
+for **Merge** and **Replace**, writing it can be switched off while still
+applying the structured exercise sets. The queue's workout detail view shows
+the exact rendered preview before a match decision.
+
+An unmatched Hevy workout can still upload as a separate Garmin activity after
+the configured grace period. Matched workouts remain publish-blocked while
+waiting for your decision. The normal Strava publishing/status poll stays off,
+although the Hevy leg may refresh metadata on an already-linked Strava copy.
+The command refuses to start if the real database is missing or ActivSync is
+still responding on port 8381. To use the legacy database filename explicitly,
+run `make dev-real REAL_DB_PATH=data/garmin2strava.db`.
+
+This mode contacts real services and can change real account data. Keep mock
+`make dev` as the default for ordinary development and automated agent checks.
 
 ## Releases
 

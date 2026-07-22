@@ -12,8 +12,10 @@ function mapping(overrides: Partial<MappingRowData> = {}): MappingRowData {
     muscleGroup: "shoulders",
     mapped: true,
     unmapped: false,
-    garminRejected: false,
     suggested: false,
+    hasStandardMapping: false,
+    standardCategory: null,
+    standardSubcategory: null,
     source: "user",
     category: 3,
     subcategory: 7,
@@ -48,18 +50,18 @@ test("a mapped row shows where it syncs and offers Edit", () => {
 });
 
 // Most exercises are resolved by the ported tables rather than by the user.
-// The row has to say which, or an automatic pair looks like a deliberate
+// The row has to say which, or a standard pair looks like a deliberate
 // choice someone made.
-test("an automatically resolved row is labelled as automatic", () => {
+test("a table-resolved row shows only its Garmin destination", () => {
   renderRow(mapping({ source: "automatic" }));
   expect(screen.getByText("Strength › Shoulder Press")).toBeVisible();
-  expect(screen.getByText(/Automatic/i)).toBeVisible();
+  expect(screen.queryByText(/Standard mapping/i)).toBeNull();
 });
 
-test("a user override is labelled as such, not as automatic", () => {
+test("a user override is labelled as such, not as a standard mapping", () => {
   renderRow(mapping({ source: "user" }));
   expect(screen.getByText(/Your override/i)).toBeVisible();
-  expect(screen.queryByText(/Automatic/i)).toBeNull();
+  expect(screen.queryByText(/Standard mapping/i)).toBeNull();
 });
 
 test("an unmapped row says so and offers Map", () => {
@@ -76,10 +78,23 @@ test("an unmapped row says so and offers Map", () => {
   expect(screen.getByRole("link", { name: "Map Landmine Press" })).toBeVisible();
 });
 
-test("a Garmin-rejected row offers Remap and says why", () => {
-  renderRow(mapping({ garminRejected: true }));
-  expect(screen.getByText("Rejected by Garmin")).toBeVisible();
-  expect(screen.getByRole("link", { name: "Remap Landmine Press" })).toBeVisible();
+test("a suggested row looks like every other unmapped row", () => {
+  renderRow(
+    mapping({
+      mapped: false,
+      unmapped: true,
+      suggested: true,
+      source: "",
+      categoryName: "Squat",
+      subcategoryName: "Back squat",
+    }),
+  );
+  expect(screen.getByText("Unmapped")).toBeVisible();
+  expect(screen.queryByText("shoulders")).toBeNull();
+  expect(screen.queryByText("Suggestion ready")).toBeNull();
+  const map = screen.getByRole("link", { name: "Map Landmine Press" });
+  expect(map).toBeVisible();
+  expect(map).toHaveAttribute("data-variant", "warning");
 });
 
 test("a custom exercise is badged as such", () => {

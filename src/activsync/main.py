@@ -19,7 +19,12 @@ def _env_value(name: str, legacy_name: str = "") -> str | None:
     return os.environ.get(name) or os.environ.get(legacy_name)
 
 
-MOCK_MODE = (_env_value("ACTIVSYNC_DEV_MOCK_DATA", "G2S_DEV_MOCK_DATA") or "").lower() in ("1", "true", "yes")
+def _env_enabled(name: str, legacy_name: str = "") -> bool:
+    return (_env_value(name, legacy_name) or "").lower() in ("1", "true", "yes")
+
+
+MOCK_MODE = _env_enabled("ACTIVSYNC_DEV_MOCK_DATA", "G2S_DEV_MOCK_DATA")
+MANUAL_ONLY = _env_enabled("ACTIVSYNC_MANUAL_ONLY")
 # Opt-in signal set only by the Playwright E2E server (npm run dev:e2e), never
 # by `make dev` / `make dev-fresh`, so a fresh mock DB can boot straight past
 # the first-run wizard for E2E specs while local dev still starts at it.
@@ -87,21 +92,31 @@ _poller = Poller(
     garmin_factory=_garmin_factory,
     strava_factory=_strava_factory,
     hevy_factory=_hevy_factory,
+    garmin_polling_enabled=not MANUAL_ONLY,
+    strava_polling_enabled=not MANUAL_ONLY,
 )
 _update_checker = UpdateChecker()
 
 
 @asynccontextmanager
 async def _lifespan(app):
-    if not MOCK_MODE:
+    poller_enabled = not MOCK_MODE
+    update_checker_enabled = not MOCK_MODE and not MANUAL_ONLY
+    if poller_enabled:
         _poller.start()
+    if update_checker_enabled:
         _update_checker.start()
     try:
         yield
     finally:
-        if not MOCK_MODE:
+        if poller_enabled:
             _poller.stop()
+        if update_checker_enabled:
             _update_checker.stop()
 
 
-app = create_app(_conn, lifespan=_lifespan)
+app = create_app(
+    _conn,
+    lifespan=_lifespan,
+    apply_hevy_match=_poller.apply_hevy_match,
+)

@@ -200,15 +200,12 @@ _DEV_RESOLVING_TEMPLATES: list[tuple[str, str, str, str]] = [
 # Seeded with a saved user mapping (see dev_seed) so the mapping screen has a
 # row whose pair someone actually chose, not just table-resolved ones.
 HEVY_DEV_OVERRIDDEN_TEMPLATE_ID = "tpl-dev-pushdown"
-# Seeded with a mapping Garmin rejected, so the "needs action" path has a
-# second shape besides "never mapped".
-HEVY_DEV_REJECTED_TEMPLATE_ID = "tpl-dev-rejected"
 
 
 def dev_hevy_templates() -> list[dict]:
     """A realistic spread for the mapping screen: mostly built-ins the ported
-    tables resolve on their own, one the user overrode, one Garmin rejected,
-    and one custom exercise nothing can place."""
+    tables resolve on their own, one the user overrode, and one custom
+    exercise nothing can place."""
     templates = [
         {
             "id": template_id,
@@ -227,14 +224,6 @@ def dev_hevy_templates() -> list[dict]:
         "secondary_muscle_groups": [],
         "equipment_category": "cable",
         "is_custom": False,
-    })
-    templates.append({
-        "id": HEVY_DEV_REJECTED_TEMPLATE_ID,
-        "title": "Copenhagen Plank",
-        "primary_muscle_group": "abductors",
-        "secondary_muscle_groups": ["abdominals"],
-        "equipment_category": "none",
-        "is_custom": True,
     })
     templates.append({
         "id": HEVY_DEV_CUSTOM_TEMPLATE_ID,

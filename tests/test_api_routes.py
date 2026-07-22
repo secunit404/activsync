@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from activsync import api_routes, config, db, hevy_db
 from activsync import server as server_module
+from activsync.hevy_client import HevyAuthError
 from activsync.server import create_app
 
 
@@ -84,6 +85,230 @@ def test_app_state_exposes_and_dismisses_reconnect_report(tmp_path):
     assert before.json()["update"]["repoUrl"].endswith("/activsync")
     assert dismissed.status_code == 204
     assert after.json()["catchUpReport"] is None
+
+
+def _seed_awaiting_hevy_match(conn):
+    hevy_db.upsert_workout(
+        conn,
+        "hevy-match",
+        "Leg Day",
+        "2026-07-22T10:00:00Z",
+        "2026-07-22T11:00:00Z",
+        "2026-07-22T11:05:00Z",
+        {"exercises": []},
+    )
+    hevy_db.set_workout_status(conn, "hevy-match", "awaiting_match")
+
+
+def test_hevy_match_choice_runs_one_injected_strategy(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    _seed_awaiting_hevy_match(conn)
+    calls = []
+    client = TestClient(
+        create_app(
+            conn,
+            apply_hevy_match=lambda hevy_id, strategy: (
+                calls.append((hevy_id, strategy)) or "merged"
+            ),
+        )
+    )
+
+    response = client.post(
+        "/api/v1/hevy/hevy-match/match", json={"strategy": "merge"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Merged Leg Day."}
+    assert calls == [("hevy-match", "merge")]
+
+
+def test_hevy_workout_detail_exposes_stored_sets_and_description_preview(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    hevy_db.upsert_workout(
+        conn,
+        "hevy-detail",
+        "Upper body",
+        "2026-07-22T10:00:00Z",
+        "2026-07-22T11:05:00Z",
+        "2026-07-22T11:06:00Z",
+        {
+            "title": "Upper body",
+            "start_time": "2026-07-22T10:00:00Z",
+            "end_time": "2026-07-22T11:05:00Z",
+            "description": "Felt strong\nNo shoulder pain",
+            "exercises": [
+                {
+                    "title": "Bench Press (Barbell)",
+                    "exercise_template_id": "79D0BB3A",
+                    "notes": "Pause on chest",
+                    "sets": [
+                        {
+                            "type": "warmup",
+                            "reps": 10,
+                            "weight_kg": 40,
+                        },
+                        {
+                            "type": "normal",
+                            "reps": 8,
+                            "weight_kg": 80,
+                            "rpe": 8.5,
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+
+    response = TestClient(create_app(conn)).get("/api/v1/hevy/hevy-detail")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["notes"] == "Felt strong\nNo shoulder pain"
+    assert payload["exercises"] == [
+        {
+            "title": "Bench Press (Barbell)",
+            "notes": "Pause on chest",
+            "templateId": "79D0BB3A",
+            "sets": [
+                {
+                    "number": 1,
+                    "setType": "warmup",
+                    "reps": 10.0,
+                    "weightKg": 40.0,
+                    "distanceMeters": None,
+                    "durationSeconds": None,
+                    "rpe": None,
+                    "customMetric": None,
+                },
+                {
+                    "number": 2,
+                    "setType": "normal",
+                    "reps": 8.0,
+                    "weightKg": 80.0,
+                    "distanceMeters": None,
+                    "durationSeconds": None,
+                    "rpe": 8.5,
+                    "customMetric": None,
+                },
+            ],
+        }
+    ]
+    assert "Bench Press (Barbell)" in payload["descriptionPreview"]
+    assert "— synced by activsync" in payload["descriptionPreview"]
+
+
+def test_hevy_workout_detail_rejects_unknown_workout(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+
+    response = TestClient(create_app(conn)).get("/api/v1/hevy/missing")
+
+    assert response.status_code == 404
+
+
+def test_hevy_match_choice_rejects_unknown_strategy(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    _seed_awaiting_hevy_match(conn)
+    client = TestClient(create_app(conn, apply_hevy_match=lambda *_: "merged"))
+
+    response = client.post(
+        "/api/v1/hevy/hevy-match/match", json={"strategy": "erase"}
+    )
+
+    assert response.status_code == 400
+
+
+def test_hevy_match_choice_requires_awaiting_state(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    _seed_awaiting_hevy_match(conn)
+    hevy_db.set_workout_status(conn, "hevy-match", "merged")
+    client = TestClient(create_app(conn, apply_hevy_match=lambda *_: "merged"))
+
+    response = client.post(
+        "/api/v1/hevy/hevy-match/match", json={"strategy": "merge"}
+    )
+
+    assert response.status_code == 409
+
+
+def test_hevy_match_choice_rejects_replace_for_published_activity(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    _seed_awaiting_hevy_match(conn)
+    db.insert_activity(
+        conn,
+        123,
+        "strength_training",
+        "Published strength",
+        "",
+        "2026-07-22 10:00:00",
+        "hash",
+        "held",
+        datetime.now(timezone.utc),
+        garmin_data='{"duration": 3600}',
+    )
+    db.set_published(conn, 123, 456, datetime.now(timezone.utc))
+    assert hevy_db.claim_source(conn, "hevy-match", 123)
+    apply_match = MagicMock(return_value="replaced")
+    client = TestClient(create_app(conn, apply_hevy_match=apply_match))
+
+    response = client.post(
+        "/api/v1/hevy/hevy-match/match", json={"strategy": "replace"}
+    )
+
+    assert response.status_code == 409
+    assert "already on Strava" in response.json()["detail"]
+    apply_match.assert_not_called()
+
+
+def test_hevy_match_choice_marks_rejected_key_for_reconnect(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    _seed_awaiting_hevy_match(conn)
+
+    def reject_key(_hevy_id, _strategy):
+        raise HevyAuthError("bad key")
+
+    client = TestClient(create_app(conn, apply_hevy_match=reject_key))
+
+    response = client.post(
+        "/api/v1/hevy/hevy-match/match", json={"strategy": "describe"}
+    )
+
+    assert response.status_code == 401
+    assert "reconnect Hevy" in response.json()["detail"]
+    assert db.get_config_value(conn, "hevy_auth_ok") is False
+
+
+def test_skipping_an_awaiting_match_releases_its_garmin_claim(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    _seed_awaiting_hevy_match(conn)
+    db.insert_activity(
+        conn,
+        123,
+        "strength_training",
+        "Morning strength",
+        "",
+        "2026-07-22 10:00:00",
+        "hash",
+        "held",
+        datetime.now(timezone.utc),
+        garmin_data='{"duration": 3600}',
+    )
+    db.set_published(conn, 123, 456, datetime.now(timezone.utc))
+    assert hevy_db.claim_source(conn, "hevy-match", 123)
+    client = TestClient(create_app(conn))
+
+    queue = client.get("/api/v1/hevy/queue")
+    response = client.post("/api/v1/hevy/hevy-match/skip")
+
+    awaiting = queue.json()["inFlight"][0]
+    assert awaiting["awaitingMatch"] is True
+    assert awaiting["matchedGarminActivityId"] == 123
+    assert awaiting["matchedGarminTitle"] == "Morning strength"
+    assert awaiting["matchedStravaActivityId"] == 456
+    assert awaiting["matchedStravaUrl"] == "https://www.strava.com/activities/456"
+    assert response.status_code == 200
+    row = hevy_db.get_workout(conn, "hevy-match")
+    assert row["status"] == "skipped"
+    assert row["source_garmin_activity_id"] is None
 
 
 def test_hevy_queue_json_actions_preserve_workout_state_machine(tmp_path):

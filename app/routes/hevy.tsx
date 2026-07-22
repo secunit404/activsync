@@ -7,6 +7,7 @@ import { ConnectionError } from "@/components/connection-error";
 import { HevyBackfillCard } from "@/components/hevy-backfill-card";
 import { HevyMappingSummary } from "@/components/hevy-mapping-summary";
 import { HevyQueue } from "@/components/hevy-queue";
+import { HevySectionNav } from "@/components/hevy-section-nav";
 import { PageContainer, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,7 +122,7 @@ function HevyHub({
   queue: HevyQueueState;
   tools: HevyToolsState;
 }) {
-  const [mappingSavedToken, setMappingSavedToken] = useState(0);
+  const [backfillRefreshToken, setBackfillRefreshToken] = useState(0);
 
   return (
     <>
@@ -129,11 +130,12 @@ function HevyHub({
         appState={appState}
         queue={queue}
         tools={tools}
-        mappingSavedToken={mappingSavedToken}
+        backfillRefreshToken={backfillRefreshToken}
+        onQueueChanged={() => setBackfillRefreshToken((token) => token + 1)}
       />
       <Outlet
         context={{
-          onMappingSaved: () => setMappingSavedToken((token) => token + 1),
+          onMappingSaved: () => setBackfillRefreshToken((token) => token + 1),
         }}
       />
     </>
@@ -144,13 +146,15 @@ export function HevyView({
   appState,
   queue,
   tools,
-  mappingSavedToken = 0,
+  backfillRefreshToken = 0,
+  onQueueChanged,
 }: {
   appState: Pick<AppState, "hevy">;
   queue: HevyQueueState;
   tools: HevyToolsState;
   /** See `HevyHub` — bumped when the mapping editor saves. */
-  mappingSavedToken?: number;
+  backfillRefreshToken?: number;
+  onQueueChanged?: () => void;
 }) {
   const { connected, status } = appState.hevy;
 
@@ -175,11 +179,13 @@ export function HevyView({
         }
       />
 
+      <HevySectionNav />
+
       {connected ? (
         <>
-          <HevyQueue state={queue} />
+          <HevyQueue state={queue} onQueueChanged={onQueueChanged} />
           <HevyMappingSummary tools={tools} />
-          <HevyBackfillCard mappingSavedToken={mappingSavedToken} />
+          <HevyBackfillCard mappingSavedToken={backfillRefreshToken} />
         </>
       ) : (
         <Empty className="min-h-64">

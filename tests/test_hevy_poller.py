@@ -28,7 +28,13 @@ def _hevy_ready(conn):
     config.save_config(conn, cfg)
 
 
-def _make_poller(conn, monkeypatch, leg=None, garmin_interval=100000):
+def _make_poller(
+    conn,
+    monkeypatch,
+    leg=None,
+    garmin_interval=100000,
+    garmin_polling_enabled=True,
+):
     """Poller with stubbed sync legs; returns (poller, calls dict)."""
     calls = {"hevy": 0, "garmin": 0}
 
@@ -56,6 +62,7 @@ def _make_poller(conn, monkeypatch, leg=None, garmin_interval=100000):
         hevy_factory=lambda: MagicMock(),
         garmin_interval_seconds_override=garmin_interval,
         hevy_interval_seconds_override=0,
+        garmin_polling_enabled=garmin_polling_enabled,
     )
     return poller, calls
 
@@ -90,6 +97,38 @@ def test_hevy_change_triggers_garmin_leg_immediately(conn, monkeypatch):
 
     assert calls["hevy"] == 1
     assert calls["garmin"] == 1, "hevy change must hand off to the garmin leg"
+
+
+def test_hevy_only_poller_does_not_run_the_garmin_leg(conn, monkeypatch):
+    _hevy_ready(conn)
+    poller, calls = _make_poller(
+        conn,
+        monkeypatch,
+        leg=lambda *a, **k: True,
+        garmin_polling_enabled=False,
+    )
+
+    poller._loop_once(START)
+
+    assert calls["hevy"] == 1
+    assert calls["garmin"] == 0
+
+
+def test_explicit_match_choice_refreshes_local_garmin_state(conn, monkeypatch):
+    poller, calls = _make_poller(conn, monkeypatch)
+    choices = []
+    monkeypatch.setattr(
+        "activsync.poller.hevy_sync.apply_match_choice",
+        lambda _conn, _garmin, _hevy, hevy_id, strategy, _cfg, _now: (
+            choices.append((hevy_id, strategy)) or {"status": "merged"}
+        ),
+    )
+
+    status = poller.apply_hevy_match("hevy-1", "merge")
+
+    assert status == "merged"
+    assert choices == [("hevy-1", "merge")]
+    assert calls["garmin"] == 1
 
 
 def test_hevy_no_change_does_not_force_the_garmin_leg(conn, monkeypatch):

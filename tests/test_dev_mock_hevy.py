@@ -133,6 +133,8 @@ def test_fake_garmin_subcategory_rejection_seed(conn):
 def test_dev_seed_populates_the_hevy_demo_scenarios(conn):
     dev_seed.seed(conn)
 
+    assert config.load_config(conn)["hevy_match_mode"] == "review"
+
     merged = hevy_db.get_workout(conn, dev_mock.HEVY_DEV_MERGED_ID)
     assert merged["status"] == "merged"
     assert merged["garmin_activity_id"] is not None
@@ -151,6 +153,7 @@ def test_dev_seed_populates_the_hevy_demo_scenarios(conn):
 
     # Interlock demo: the claimed watch activity is publish-blocked.
     syncing = hevy_db.get_workout(conn, dev_mock.HEVY_DEV_SYNCING_ID)
+    assert syncing["status"] == "awaiting_match"
     blocked = hevy_db.blocking_workout_for_activity(
         conn, syncing["source_garmin_activity_id"])
     assert blocked is not None and blocked["hevy_id"] == dev_mock.HEVY_DEV_SYNCING_ID
@@ -212,6 +215,100 @@ class _StubHevyClient:
         if page > 1:
             return {"workouts": [], "page_count": 1}
         return {"workouts": self._workouts, "page_count": 1}
+
+
+def test_review_backfill_claims_an_overlapping_garmin_match_immediately(conn):
+    now = datetime.now(timezone.utc)
+    cfg = config.load_config(conn)
+    cfg["hevy_match_mode"] = "review"
+    config.save_config(conn, cfg)
+    db.insert_activity(
+        conn,
+        987654,
+        "strength_training",
+        "Watch strength",
+        "",
+        (now - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"),
+        "backfill-match",
+        "held",
+        now,
+        garmin_data='{"duration": 3600}',
+    )
+    workout = {
+        "id": "review-backfill",
+        "title": "Hevy strength",
+        "start_time": _iso(now - timedelta(hours=2, minutes=1)),
+        "end_time": _iso(now - timedelta(hours=1, minutes=1)),
+        "updated_at": _iso(now - timedelta(hours=1)),
+        "exercises": [{
+            "title": "Unmapped but describable",
+            "exercise_template_id": "unknown-review-template",
+            "sets": [],
+        }],
+    }
+
+    items = hevy_backfill.preview_items(
+        conn,
+        _StubHevyClient([workout]),
+        now - timedelta(days=1),
+    )
+    matched = hevy_backfill.run_items(conn, items)
+
+    assert items[0]["action"] == "awaiting_match"
+    assert items[0]["twin"]["garmin_activity_id"] == 987654
+    assert matched == 1
+    row = hevy_db.get_workout(conn, "review-backfill")
+    assert row["status"] == "awaiting_match"
+    assert row["source_garmin_activity_id"] == 987654
+
+
+def test_backfill_requires_review_when_match_is_already_published_to_strava(conn):
+    now = datetime.now(timezone.utc)
+    cfg = config.load_config(conn)
+    cfg["hevy_match_mode"] = "automatic"
+    cfg["hevy_watch_strategy"] = "replace"
+    config.save_config(conn, cfg)
+    db.insert_activity(
+        conn,
+        987655,
+        "strength_training",
+        "Published strength",
+        "",
+        (now - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"),
+        "published-backfill-match",
+        "held",
+        now,
+        garmin_data='{"duration": 3600}',
+    )
+    db.set_published(conn, 987655, 7654321, now)
+    workout = {
+        "id": "published-review-backfill",
+        "title": "Hevy strength",
+        "start_time": _iso(now - timedelta(hours=2, minutes=1)),
+        "end_time": _iso(now - timedelta(hours=1, minutes=1)),
+        "updated_at": _iso(now - timedelta(hours=1)),
+        "exercises": [
+            {
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "79D0BB3A",
+                "sets": [{"type": "normal", "reps": 8, "weight_kg": 80}],
+            }
+        ],
+    }
+
+    items = hevy_backfill.preview_items(
+        conn,
+        _StubHevyClient([workout]),
+        now - timedelta(days=1),
+    )
+    matched = hevy_backfill.run_items(conn, items)
+
+    assert items[0]["action"] == "awaiting_match"
+    assert items[0]["twin"]["strava_activity_id"] == 7654321
+    assert matched == 1
+    row = hevy_db.get_workout(conn, workout["id"])
+    assert row["status"] == "awaiting_match"
+    assert "Already published to Strava" in row["error"]
 
 
 def _iso(dt: datetime) -> str:

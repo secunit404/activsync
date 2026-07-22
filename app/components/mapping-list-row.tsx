@@ -11,14 +11,13 @@ export type MappingRowData = HevyToolsState["mappings"][number];
  * too: it names the current Garmin destination and offers Edit.
  */
 export function MappingListRow({ mapping }: { mapping: MappingRowData }) {
-  const verb = mapping.garminRejected ? "Remap" : mapping.mapped ? "Edit" : "Map";
+  const verb = mapping.mapped ? "Edit" : "Map";
   // Both names come from the same taxonomy lookup, so they are present or
   // absent together — but guard on both rather than render a bare "›".
   const destination =
     mapping.categoryName && mapping.subcategoryName
       ? `${mapping.categoryName} › ${mapping.subcategoryName}`
       : null;
-  const needsAction = mapping.unmapped || mapping.garminRejected;
 
   return (
     <li className="flex items-center gap-3.5 border-b border-border/50 px-5 py-3.5 last:border-b-0">
@@ -31,27 +30,23 @@ export function MappingListRow({ mapping }: { mapping: MappingRowData }) {
             </span>
           ) : null}
         </p>
-        {mapping.garminRejected ? (
-          <p className="truncate font-mono text-xs text-warning/90">Rejected by Garmin</p>
-        ) : mapping.unmapped ? (
-          <p className="truncate font-mono text-xs text-warning/90">
-            Unmapped{mapping.muscleGroup ? ` · ${mapping.muscleGroup}` : ""}
-          </p>
+        {mapping.unmapped ? (
+          <p className="truncate text-xs text-muted-foreground">Unmapped</p>
         ) : (
           <p className="truncate font-mono text-xs text-muted-foreground">
             {destination ?? "Mapped"}
             {/* Most exercises are resolved by the ported tables, not chosen
-                by anyone — without this an automatic pair reads as a
+                by anyone — without this a standard pair reads as a
                 deliberate decision the user made and forgot. */}
-            <span className="ml-1.5 text-muted-foreground/60">
-              {mapping.source === "user" ? "· Your override" : "· Automatic"}
-            </span>
+            {mapping.source === "user" ? (
+              <span className="ml-1.5 text-muted-foreground/60">· Your override</span>
+            ) : null}
           </p>
         )}
       </div>
       <Button
         asChild
-        variant={needsAction ? "warning" : "outline"}
+        variant={mapping.unmapped ? "warning" : "outline"}
         size="sm"
         className="shrink-0"
       >

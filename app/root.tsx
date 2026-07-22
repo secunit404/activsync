@@ -29,7 +29,9 @@ export function Layout({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
-        <ScrollRestoration />
+        <ScrollRestoration
+          getKey={(location) => `${location.pathname}${location.search}`}
+        />
         <Scripts />
       </body>
     </html>

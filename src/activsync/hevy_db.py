@@ -19,6 +19,7 @@ from activsync import db
 STATUSES = (
     "needs_mapping",
     "waiting_watch",
+    "awaiting_match",
     "syncing",
     "merged",
     "described",
@@ -92,7 +93,6 @@ CREATE TABLE IF NOT EXISTS exercise_mappings (
     exercise_template_id TEXT PRIMARY KEY,
     category INTEGER NOT NULL,
     subcategory INTEGER NOT NULL,
-    garmin_rejected INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -195,6 +195,7 @@ def list_workouts(conn: sqlite3.Connection, status: str | None = None) -> list[d
 _BLOCKING_STATUSES = (
     "needs_mapping",
     "waiting_watch",
+    "awaiting_match",
     "syncing",
     "failed",
     "needs_review",
@@ -566,7 +567,7 @@ def wake_needs_mapping(
 
     A saved mapping targets workouts containing that template; a newer Hevy
     revision targets its own workout. Waking every parked row would also retry
-    unrelated Garmin-rejected pairs whose mappings have not changed.
+    unrelated workouts whose mappings have not changed.
     """
     if (template_id is None) == (hevy_id is None):
         raise ValueError("provide exactly one of template_id or hevy_id")
@@ -690,18 +691,15 @@ def get_template(conn: sqlite3.Connection, template_id: str) -> dict | None:
 def save_mapping(
     conn: sqlite3.Connection, template_id: str, category: int, subcategory: int
 ) -> None:
-    """Create or replace a user mapping. Saving clears garmin_rejected — the
-    user has chosen a new pair to try."""
+    """Create or replace a user mapping."""
     now = _now_iso()
     conn.execute(
         """INSERT INTO exercise_mappings
-           (exercise_template_id, category, subcategory, garmin_rejected,
-            created_at, updated_at)
-           VALUES (?, ?, ?, 0, ?, ?)
+           (exercise_template_id, category, subcategory, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(exercise_template_id) DO UPDATE SET
                category = excluded.category,
                subcategory = excluded.subcategory,
-               garmin_rejected = 0,
                updated_at = excluded.updated_at""",
         (template_id, category, subcategory, now, now),
     )
@@ -726,15 +724,6 @@ def list_mappings(conn: sqlite3.Connection) -> list[dict]:
 def delete_mapping(conn: sqlite3.Connection, template_id: str) -> None:
     conn.execute(
         "DELETE FROM exercise_mappings WHERE exercise_template_id = ?", (template_id,)
-    )
-    conn.commit()
-
-
-def mark_mapping_rejected(conn: sqlite3.Connection, template_id: str) -> None:
-    conn.execute(
-        "UPDATE exercise_mappings SET garmin_rejected = 1, updated_at = ? "
-        "WHERE exercise_template_id = ?",
-        (_now_iso(), template_id),
     )
     conn.commit()
 

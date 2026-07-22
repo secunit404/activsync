@@ -680,8 +680,8 @@ def lookup_exercise(
 ) -> tuple[int, int, str]:
     """Resolve an exercise to (category, subcategory, display_name).
 
-    Order: user mapping (unless Garmin rejected that pair) -> generated
-    template-id table -> built-in English-name table. A miss raises
+    Order: user mapping -> generated template-id table -> built-in English-name
+    table. A miss raises
     MappingMiss; this function never returns the UNKNOWN sentinel.
     """
     # Both ported tables contain UNKNOWN (65534) entries — exercises even
@@ -689,16 +689,30 @@ def lookup_exercise(
     # sentinel behaves as a miss, so it can never reach Garmin.
     if template_id:
         user = hevy_db.get_mapping(conn, template_id)
-        if (user is not None and not user["garmin_rejected"]
-                and user["category"] != UNKNOWN_CATEGORY):
+        if user is not None and user["category"] != UNKNOWN_CATEGORY:
             return (user["category"], user["subcategory"], title)
-        pair = TEMPLATE_TO_GARMIN.get(template_id)
-        if pair is not None and pair[0] != UNKNOWN_CATEGORY:
-            return (pair[0], pair[1], title)
-    pair = HEVY_TO_GARMIN.get(title)
-    if pair is not None and pair[0] != UNKNOWN_CATEGORY:
+    pair = lookup_standard_mapping(title, template_id)
+    if pair is not None:
         return (pair[0], pair[1], title)
     raise MappingMiss(title, template_id)
+
+
+def lookup_standard_mapping(
+    title: str, template_id: str | None
+) -> tuple[int, int] | None:
+    """Return the ported standard-table pair, excluding the UNKNOWN sentinel.
+
+    This deliberately ignores saved user mappings. The mapping UI uses it to
+    decide whether an override can truthfully offer "Reset to standard".
+    """
+    if template_id:
+        pair = TEMPLATE_TO_GARMIN.get(template_id)
+        if pair is not None and pair[0] != UNKNOWN_CATEGORY:
+            return pair
+    pair = HEVY_TO_GARMIN.get(title)
+    if pair is not None and pair[0] != UNKNOWN_CATEGORY:
+        return pair
+    return None
 
 
 # --------------------------------------------------------------------------- #
