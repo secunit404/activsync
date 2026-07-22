@@ -7,7 +7,6 @@ import { BulkActionBar } from "./bulk-action-bar";
 function renderBar(overrides: Partial<React.ComponentProps<typeof BulkActionBar>> = {}) {
   const props = {
     count: 2,
-    names: ["Morning Run", "Push Day"],
     onClear: vi.fn(),
     onExclude: vi.fn(),
     onPublish: vi.fn(),
@@ -22,7 +21,6 @@ test("renders nothing when nothing is selected", () => {
   const { container } = render(
     <BulkActionBar
       count={0}
-      names={[]}
       onClear={vi.fn()}
       onExclude={vi.fn()}
       onPublish={vi.fn()}
@@ -32,10 +30,13 @@ test("renders nothing when nothing is selected", () => {
   expect(container).toBeEmptyDOMElement();
 });
 
-test("shows the count and the selected names", () => {
+// Names were removed deliberately: with a large selection the joined list
+// pushed the desktop bar to an unusable width. The count is the whole
+// summary now.
+test("shows the count and never lists the selected activity names", () => {
   renderBar();
   expect(screen.getAllByText("2 selected").length).toBeGreaterThan(0);
-  expect(screen.getAllByText("Morning Run, Push Day").length).toBeGreaterThan(0);
+  expect(screen.queryByText(/Morning Run/)).toBeNull();
 });
 
 // Only one element carries the testid the E2E spec queries with a single

@@ -272,7 +272,6 @@ export function ActivitiesView({
 
       <BulkActionBar
         count={selectedCount}
-        names={selectedActivities.map((activity) => activity.title)}
         onClear={selection.clear}
         onExclude={handleExclude}
         onPublish={handlePublish}

@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 
 type BulkActionBarProps = {
   count: number;
-  names: string[];
   onClear: () => void;
   onExclude: () => void;
   onPublish: () => void;
@@ -39,8 +38,8 @@ const publishDisabledReason = "Reconnect Strava to resume publishing.";
  * above the table from `md:` up.
  *
  * Below `md:`, this occupies the exact fixed-bottom slot `AppTabBar` leaves
- * behind — and, unlike the tab bar, its height isn't a fixed constant (a
- * name list can add or remove a wrapped line). The mobile toast (Task 17,
+ * behind — and, unlike the tab bar, its height isn't a fixed constant (the
+ * mobile layout can wrap its action row). The mobile toast (Task 17,
  * `sonner.tsx`) needs to sit above whichever of the two is actually
  * showing, so this keeps a shared `--bottom-bar-height` CSS custom
  * property (read by `sonner.tsx`'s `mobileOffset`, defaulted to
@@ -55,7 +54,6 @@ const publishDisabledReason = "Reconnect Strava to resume publishing.";
  */
 export function BulkActionBar({
   count,
-  names,
   onClear,
   onExclude,
   onPublish,
@@ -85,7 +83,6 @@ export function BulkActionBar({
     return null;
   }
 
-  const nameList = names.join(", ");
   const publishBlocked = busy || publishDisabled;
 
   return (
@@ -109,9 +106,6 @@ export function BulkActionBar({
             Clear
           </button>
         </div>
-        {nameList ? (
-          <span className="truncate text-xs text-muted-foreground">{nameList}</span>
-        ) : null}
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -136,11 +130,7 @@ export function BulkActionBar({
 
       {/* Desktop/tablet: single row, count + names on the left, actions on the right. */}
       <div className="hidden items-center justify-between gap-4 md:flex">
-        <div className="flex min-w-0 items-center gap-3">
-          <BulkCount count={count} />
-          <span className="h-5 w-px shrink-0 bg-primary/25" aria-hidden="true" />
-          <span className="truncate text-sm text-muted-foreground">{nameList}</span>
-        </div>
+        <BulkCount count={count} />
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="ghost" onClick={onClear}>
             Clear
