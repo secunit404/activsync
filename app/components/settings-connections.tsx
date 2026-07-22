@@ -376,18 +376,61 @@ function HevyDialog({ state }: { state: SettingsState }) {
           </DialogDescription>
         </DialogHeader>
         {state.hevy.connected ? (
-          <DialogFooter className="sm:flex-wrap">
-            <Button
-              type="button"
-              variant="destructive"
-              className="h-11"
-              disabled={disconnect.isPending}
-              onClick={() => setConfirmDisconnect(true)}
-            >
-              {disconnect.isPending ? <Spinner /> : null}
-              {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
-            </Button>
-          </DialogFooter>
+          // Connected, this dialog used to be a Disconnect button and
+          // nothing else — there was no way to rotate a key without
+          // disconnecting first. Replacing it reuses the same validated
+          // save path the connect form uses.
+          <form
+            className="grid gap-4"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              await connect.mutateAsync(apiKey);
+              setApiKey("");
+              setOpen(false);
+            }}
+          >
+            <p className="rounded-lg border border-border/70 bg-muted/25 p-3 font-mono text-xs text-muted-foreground">
+              API key saved · {state.hevy.status}
+            </p>
+            <Field>
+              <FieldLabel htmlFor="settings-hevy-replace-key">
+                Replace API key
+              </FieldLabel>
+              <Input
+                id="settings-hevy-replace-key"
+                className="h-11"
+                type="password"
+                autoComplete="new-password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="Leave blank to keep the saved key"
+              />
+              <FieldDescription>
+                The new key is validated against Hevy before it replaces the
+                saved one.
+              </FieldDescription>
+            </Field>
+            <DialogFooter className="sm:flex-wrap">
+              <Button
+                type="button"
+                variant="destructive"
+                size="xl"
+                disabled={disconnect.isPending}
+                onClick={() => setConfirmDisconnect(true)}
+              >
+                {disconnect.isPending ? <Spinner /> : null}
+                {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+              </Button>
+              <Button
+                type="submit"
+                size="xl"
+                disabled={!apiKey.trim() || connect.isPending}
+              >
+                {connect.isPending ? <Spinner /> : null}
+                {connect.isPending ? "Validating…" : "Save new key"}
+              </Button>
+            </DialogFooter>
+          </form>
         ) : (
           <form
             className="grid gap-4"
