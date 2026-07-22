@@ -75,23 +75,37 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
       dependencies: ["hevy-backfill"],
     },
+    // e2e/toast.spec.ts drives its toasts through bulk Exclude, which is a
+    // real persisted mutation. The three viewport projects below run
+    // concurrently with each other, so running this file in all three raced
+    // it against itself: one worker excluded the row another had just read
+    // as excludable, and Exclude — correctly — disables for a selection it
+    // cannot act on. Neither test is viewport-specific (the mobile toast's
+    // bottom offset is covered by bulk-select.spec.ts's tab-bar cases), so
+    // this runs once, alone, in the same serial chain as the specs above.
     {
-      name: "desktop",
-      testIgnore: /(setup|hevy-queue|backfill|strava-publish)\.spec\.ts$/,
+      name: "toast",
+      testMatch: /toast\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
       dependencies: ["strava-publish"],
     },
     {
+      name: "desktop",
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast)\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      dependencies: ["toast"],
+    },
+    {
       name: "tablet",
-      testIgnore: /(setup|hevy-queue|backfill|strava-publish)\.spec\.ts$/,
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast)\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 834, height: 1112 } },
-      dependencies: ["strava-publish"],
+      dependencies: ["toast"],
     },
     {
       name: "mobile",
-      testIgnore: /(setup|hevy-queue|backfill|strava-publish)\.spec\.ts$/,
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast)\.spec\.ts$/,
       use: { ...devices["Pixel 7"] },
-      dependencies: ["strava-publish"],
+      dependencies: ["toast"],
     },
   ],
   webServer: {

@@ -24,14 +24,36 @@ function toastRegion(page: import("@playwright/test").Page) {
   return page.getByRole("status", { name: /notifications/i });
 }
 
+// Tick a row that can actually be excluded, rather than "the first
+// checkbox". Every project in this suite shares one server and DB, and the
+// first test here excludes a row — so by the second test that row is already
+// excluded, and Exclude is (correctly) disabled for it. Selecting a PENDING
+// row keeps each test independent of what ran before it.
+//
+// This used to pass by accident: Exclude was enabled regardless of status,
+// the second click 409'd, and an *error* toast satisfied assertions that
+// only check a toast appeared and can be closed.
+async function selectPendingRow(page: import("@playwright/test").Page) {
+  // `:visible` because a CSS locator, unlike a role query, would otherwise
+  // match the display:none copy of the layout this viewport hides.
+  const row = page
+    .locator('tr:visible, [data-testid="activities-cards"] > div:visible')
+    .filter({ hasText: "PENDING" })
+    .first();
+  await row.getByRole("checkbox").check();
+  await expect(
+    bulkActionBar(page).getByRole("button", { name: /^Exclude [1-9]/ }),
+  ).toBeEnabled();
+}
+
 test("excluding an activity shows a success toast", async ({ page }) => {
-  await page.getByRole("checkbox").first().check();
+  await selectPendingRow(page);
   await bulkActionBar(page).getByRole("button", { name: /exclude/i }).click();
   await expect(toastRegion(page)).toContainText(/exclude/i);
 });
 
 test("toast can be dismissed manually", async ({ page }) => {
-  await page.getByRole("checkbox").first().check();
+  await selectPendingRow(page);
   await bulkActionBar(page).getByRole("button", { name: /exclude/i }).click();
   await page.getByRole("button", { name: /close/i }).click();
   await expect(toastRegion(page)).toBeHidden();
