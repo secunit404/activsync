@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
 import { Link } from "react-router";
 
@@ -16,7 +17,8 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import type { HevyDraft } from "@/lib/hevy-draft";
-import type { SettingsState } from "@/lib/api";
+import { getHevyDeviceOptions, type SettingsState } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 const STRATEGIES: Array<{
@@ -62,6 +64,19 @@ export function HevySettings({
 }) {
   function update(patch: Partial<HevyDraft>) {
     onChange({ ...draft, ...patch });
+  }
+
+  // Reference data — no DB read and no Hevy key needed server-side, so it
+  // is safe to fetch whenever this section renders. `staleTime: Infinity`
+  // because FIT profile enums cannot change without a redeploy.
+  const deviceOptions = useQuery({
+    queryKey: queryKeys.hevyDeviceOptions,
+    queryFn: ({ signal }) => getHevyDeviceOptions(signal),
+    staleTime: Infinity,
+  });
+
+  function updateIdentity(patch: Partial<HevyDraft["identity"]>) {
+    update({ identity: { ...draft.identity, ...patch } });
   }
 
   return (
@@ -198,27 +213,64 @@ export function HevySettings({
                   all blank for automatic detection.
                 </p>
                 <FieldGroup className="grid gap-4 sm:grid-cols-3">
-                  {(["manufacturer", "product", "serial"] as const).map((key) => (
-                    <Field key={key}>
-                      <FieldLabel htmlFor={"identity-" + key}>
-                        {capitalize(key)}
-                      </FieldLabel>
-                      <Input
-                        id={"identity-" + key}
-                        className="h-11"
-                        type="number"
-                        value={draft.identity[key]}
-                        onChange={(event) =>
-                          update({
-                            identity: {
-                              ...draft.identity,
-                              [key]: event.target.value,
-                            },
-                          })
-                        }
-                      />
-                    </Field>
-                  ))}
+                  <Field>
+                    <FieldLabel htmlFor="identity-manufacturer">
+                      Manufacturer
+                    </FieldLabel>
+                    <NativeSelect
+                      id="identity-manufacturer"
+                      className="w-full"
+                      value={draft.identity.manufacturer}
+                      onChange={(event) =>
+                        updateIdentity({ manufacturer: event.target.value })
+                      }
+                    >
+                      <NativeSelectOption value="">Automatic</NativeSelectOption>
+                      {(deviceOptions.data?.manufacturers ?? []).map((option) => (
+                        <NativeSelectOption
+                          key={option.value}
+                          value={String(option.value)}
+                        >
+                          {option.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="identity-product">Product</FieldLabel>
+                    <NativeSelect
+                      id="identity-product"
+                      className="w-full"
+                      value={draft.identity.product}
+                      onChange={(event) =>
+                        updateIdentity({ product: event.target.value })
+                      }
+                    >
+                      <NativeSelectOption value="">Automatic</NativeSelectOption>
+                      {(deviceOptions.data?.products ?? []).map((option) => (
+                        <NativeSelectOption
+                          key={option.value}
+                          value={String(option.value)}
+                        >
+                          {option.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="identity-serial">Serial</FieldLabel>
+                    {/* Per-device and unguessable — there is no list to
+                        offer, so this stays a manual entry. */}
+                    <Input
+                      id="identity-serial"
+                      className="h-11"
+                      type="number"
+                      value={draft.identity.serial}
+                      onChange={(event) =>
+                        updateIdentity({ serial: event.target.value })
+                      }
+                    />
+                  </Field>
                 </FieldGroup>
               </div>
               <div className="grid gap-2">
@@ -309,8 +361,4 @@ function OptionalNumber({
       />
     </Field>
   );
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }

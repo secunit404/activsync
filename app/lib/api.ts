@@ -249,6 +249,15 @@ export type HevyQueueState = {
 
 export type HevyQueueAction = "retry" | "skip" | "unskip" | "resync-fresh";
 
+/** One entry in a FIT profile enum — the integer is what gets stored in
+ *  `hevy_device_identity`; the label is display only. */
+export type DeviceOption = { value: number; label: string };
+
+export type DeviceOptions = {
+  manufacturers: DeviceOption[];
+  products: DeviceOption[];
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -410,6 +419,12 @@ export function disconnectStrava() {
 
 export function getHevyTools(signal?: AbortSignal): Promise<HevyToolsState> {
   return requestJson<HevyToolsState>("/api/v1/settings/hevy/tools", { signal });
+}
+
+export function getHevyDeviceOptions(signal?: AbortSignal): Promise<DeviceOptions> {
+  return requestJson<DeviceOptions>("/api/v1/settings/hevy/device-options", {
+    signal,
+  });
 }
 
 export function saveExerciseMapping(
