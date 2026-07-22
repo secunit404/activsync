@@ -229,11 +229,22 @@ def create_router(
         Read-only reference data straight out of `fit_tool`'s FIT profile
         enums — no DB access and no Hevy API key needed, so it stays
         available before Hevy is connected (the identity fields render in
-        Settings regardless)."""
+        Settings regardless).
+
+        Manufacturers are deliberately narrowed to Garmin. ActivSync writes
+        Garmin FIT files and uploads them to Garmin Connect; `fit_builder`'s
+        only real identity is GENERIC_GARMIN_IDENTITY, and the one other
+        constant there (DEVELOPMENT_IDENTITY, manufacturer 255) is documented
+        as reference/tests only. Offering `fit_tool`'s remaining 189
+        manufacturers would let a user pick one that cannot work."""
         from fit_tool.profile.profile_type import GarminProduct, Manufacturer
 
         return DeviceOptions(
-            manufacturers=_enum_options(Manufacturer),
+            manufacturers=[
+                option
+                for option in _enum_options(Manufacturer)
+                if option.value == Manufacturer.GARMIN.value
+            ],
             products=_enum_options(GarminProduct),
         )
 

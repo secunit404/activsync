@@ -35,10 +35,9 @@ const state = { hevy: hevyState } as SettingsState;
 beforeEach(() => {
   vi.clearAllMocks();
   getHevyDeviceOptions.mockResolvedValue({
-    manufacturers: [
-      { value: 1, label: "Garmin" },
-      { value: 255, label: "Development" },
-    ],
+    // Garmin is the only manufacturer the endpoint serves — ActivSync writes
+    // Garmin FIT files and nothing else. See the device-options route.
+    manufacturers: [{ value: 1, label: "Garmin" }],
     products: [
       { value: 2050, label: "Fenix3" },
       { value: 1482, label: "Fr10" },
@@ -82,6 +81,9 @@ test("each select offers Automatic plus the served options", async () => {
   const manufacturer = await screen.findByLabelText("Manufacturer");
   expect(within(manufacturer).getByRole("option", { name: "Automatic" })).toBeInTheDocument();
   expect(within(manufacturer).getByRole("option", { name: "Garmin" })).toBeInTheDocument();
+  // Automatic + Garmin and nothing else: the endpoint serves one
+  // manufacturer, so the picker must not imply others would work.
+  expect(within(manufacturer).getAllByRole("option")).toHaveLength(2);
   expect(
     within(screen.getByLabelText("Product")).getByRole("option", { name: "Fenix3" }),
   ).toBeInTheDocument();

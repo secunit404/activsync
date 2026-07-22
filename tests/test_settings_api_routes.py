@@ -452,10 +452,12 @@ def test_hevy_backfill_run_without_ids_still_imports_everything(tmp_path, monkey
     assert len(hevy_db.list_workouts(conn)) == 7
 
 
-def test_device_options_lists_manufacturers_and_garmin_products(tmp_path, monkeypatch):
-    """The Settings device-identity picker is fed from fit_tool's own FIT
-    profile enums rather than a hardcoded list, so it cannot drift from what
-    fit_builder can actually write."""
+def test_device_options_offers_garmin_as_the_only_manufacturer(tmp_path, monkeypatch):
+    """ActivSync writes Garmin FIT files and nothing else — `fit_builder`'s
+    only real identity is GENERIC_GARMIN_IDENTITY (manufacturer 1), and
+    DEVELOPMENT_IDENTITY is documented there as "reference/tests only, never
+    the default". Offering fit_tool's other 189 manufacturers would let a
+    user pick one that cannot work."""
     conn, client = _client(tmp_path, monkeypatch)
     _complete_setup(conn)
 
@@ -463,21 +465,23 @@ def test_device_options_lists_manufacturers_and_garmin_products(tmp_path, monkey
 
     assert response.status_code == 200
     body = response.json()
-    manufacturers = body["manufacturers"]
-    products = body["products"]
 
-    assert len(manufacturers) > 100
+    assert body["manufacturers"] == [{"value": 1, "label": "Garmin"}]
+
+
+def test_device_options_lists_garmin_products(tmp_path, monkeypatch):
+    """Products still come from fit_tool's own GarminProduct enum, so the
+    picker cannot drift from what Garmin actually recognises."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    products = client.get("/api/v1/settings/hevy/device-options").json()["products"]
+
     assert len(products) > 100
 
-    # The two identities fit_builder actually writes (GENERIC_GARMIN_IDENTITY
-    # and DEVELOPMENT_IDENTITY) must both be offerable.
-    by_value = {option["value"]: option["label"] for option in manufacturers}
-    assert by_value[1] == "Garmin"
-    assert by_value[255] == "Development"
-
     # Labels are humanised, not raw SCREAMING_SNAKE enum names.
-    assert all("_" not in option["label"] for option in manufacturers)
     assert {"value": 2050, "label": "Fenix3"} in products
+    assert all("_" not in option["label"] for option in products)
 
     # Sorted by label so the select is scannable.
     assert products == sorted(products, key=lambda option: option["label"])
