@@ -57,3 +57,23 @@ test("warning variant renders and is clickable", () => {
   render(<Button variant="warning">Map</Button>);
   expect(screen.getByRole("button", { name: "Map" })).toBeEnabled();
 });
+
+// app.css sets a base `a { color: var(--activ) }`. A variant that declares
+// no text colour of its own inherits it, so the same button rendered
+// `asChild` around a <Link> came out blue while its plain-<button> sibling
+// did not. Every variant must state its own colour.
+test("every variant declares its own text colour", () => {
+  // Only the variant's own classes, and only colour utilities — the shared
+  // base string carries `text-sm`, which would satisfy a bare /text-/ match
+  // without saying anything about colour.
+  const base = buttonVariants({ variant: null as never });
+  for (const variant of VARIANTS) {
+    const own = buttonVariants({ variant })
+      .split(/\s+/)
+      .filter((cls) => !base.split(/\s+/).includes(cls));
+    expect(
+      own.some((cls) => /^text-(?!xs$|sm$|base$|lg$|xl$|\[)/.test(cls)),
+      `variant "${variant}" sets no text colour (${own.join(" ")}), so an asChild <a> falls back to the base link colour`,
+    ).toBe(true);
+  }
+});

@@ -21,6 +21,15 @@
 
 :root {
   color-scheme: dark;
+  /*
+   * Always reserve the scrollbar gutter. Pages differ in length — Activities
+   * and Settings scroll, the Hevy hub usually does not — and without this the
+   * viewport is 15px wider on the short ones, shifting every centred
+   * `PageContainer` column sideways by ~7px as you move between tabs. Same
+   * width on every screen, so the only honest fix is to stop the available
+   * width changing.
+   */
+  scrollbar-gutter: stable;
   font-family: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
   background: var(--background);
   color: var(--foreground);
@@ -77,10 +86,20 @@ body {
     var(--background);
 }
 
-a {
-  color: var(--activ);
-  font-weight: 600;
-  text-underline-offset: 0.2em;
+/*
+ * In `@layer base` so utility classes win. Unlayered CSS beats anything in
+ * Tailwind's `@layer utilities` regardless of specificity, so as a bare rule
+ * this quietly repainted every link that carried its own colour — including
+ * `<Button asChild><Link/></Button>`, where a `warning` or `outline` button
+ * rendered its text in the blue brand colour instead of the variant's. The
+ * default still applies to any link that does not ask for something else.
+ */
+@layer base {
+  a {
+    color: var(--activ);
+    font-weight: 600;
+    text-underline-offset: 0.2em;
+  }
 }
 
 .brand {

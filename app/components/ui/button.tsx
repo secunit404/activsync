@@ -17,12 +17,23 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/20%),0_1px_2px_rgb(0_0_0/45%)] hover:bg-[color-mix(in_oklch,var(--primary),var(--foreground)_14%)] active:bg-[color-mix(in_oklch,var(--primary),black_8%)]",
         // Raised off --card rather than sunk to --background, so the button
         // reads as an affordance on every surface it sits on.
+        //
+        // `text-foreground` is explicit because this variant is often used
+        // via `asChild` around a `<Link>`: without a colour of its own the
+        // element inherits the base `a` rule and renders in the blue brand
+        // colour, so an outline button looked different depending on whether
+        // it navigated or not.
         outline:
-          "border-input bg-input/70 hover:border-[color-mix(in_oklch,var(--input),var(--foreground)_18%)] hover:bg-input aria-expanded:bg-input",
+          "border-input bg-input/70 text-foreground hover:border-[color-mix(in_oklch,var(--input),var(--foreground)_18%)] hover:bg-input aria-expanded:bg-input",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_10%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        // `text-inherit` rather than a fixed colour: ghost is meant to take
+        // its colour from whatever it sits in. But it still has to *declare*
+        // one, or an `asChild` <Link> would fall through to the base `a`
+        // rule and render blue. `inherit` wins the cascade against that base
+        // rule while preserving the adapt-to-context behaviour.
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
+          "text-inherit hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         destructive:
           "bg-destructive/12 text-destructive hover:bg-destructive/22 focus-visible:border-destructive/40 focus-visible:ring-destructive/20",
         // Tinted, never a solid --warning fill: #f2c14e behind near-black
