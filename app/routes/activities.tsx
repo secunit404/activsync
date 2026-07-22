@@ -14,6 +14,7 @@ import { BulkActionBar } from "@/components/bulk-action-bar";
 import { CatchUpReport } from "@/components/catch-up-report";
 import { ConnectionError } from "@/components/connection-error";
 import { StatTile, statTileToneClass, type StatTileTone } from "@/components/stat-tile";
+import { isExcludableStatus, isPublishableStatus } from "@/lib/activity-metrics";
 import {
   Empty,
   EmptyDescription,
@@ -197,8 +198,17 @@ export function ActivitiesView({
   const selectedActivities = data.items.filter((activity) =>
     selection.selected.has(activity.garminActivityId),
   );
-  const selectedActivityIds = selectedActivities.map((activity) => activity.garminActivityId);
   const selectedCount = selectedActivities.length;
+
+  // Bulk actions fire on the subset the server would accept, not the whole
+  // selection — mirrors `api_routes.py`'s per-activity status guards, so a
+  // mixed selection can no longer produce a 409 the user reads as failure.
+  const excludableIds = selectedActivities
+    .filter((activity) => isExcludableStatus(activity.publishStatus))
+    .map((activity) => activity.garminActivityId);
+  const publishableIds = selectedActivities
+    .filter((activity) => isPublishableStatus(activity.publishStatus))
+    .map((activity) => activity.garminActivityId);
 
   // Tell AppLayout to hide the mobile tab bar for as long as the bar is
   // occupying its slot, and restore it on unmount (navigating to another
@@ -210,14 +220,14 @@ export function ActivitiesView({
 
   const handlePublish = () => {
     activityActions.mutate(
-      { type: "publish-many", activityIds: selectedActivityIds },
+      { type: "publish-many", activityIds: publishableIds },
       { onSuccess: () => selection.clear() },
     );
   };
 
   const handleExclude = () => {
     activityActions.mutate(
-      { type: "exclude-many", activityIds: selectedActivityIds },
+      { type: "exclude-many", activityIds: excludableIds },
       { onSuccess: () => selection.clear() },
     );
   };
@@ -272,6 +282,8 @@ export function ActivitiesView({
 
       <BulkActionBar
         count={selectedCount}
+        excludableCount={excludableIds.length}
+        publishableCount={publishableIds.length}
         onClear={selection.clear}
         onExclude={handleExclude}
         onPublish={handlePublish}

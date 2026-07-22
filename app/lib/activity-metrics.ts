@@ -62,3 +62,17 @@ export function activityDetailMetrics(activity: Activity): Array<[string, string
 export function isPublishableStatus(status: PublishStatus): boolean {
   return status === "pending" || status === "held" || status === "missing";
 }
+
+/**
+ * Excludable per the server's own rule — `api_routes.py`'s exclude endpoint
+ * answers 409 "Only pending, held, or missing activities can be excluded"
+ * for anything else.
+ *
+ * This shares its predicate with `isPublishableStatus` today. It stays a
+ * separate function rather than an alias so that changing one rule later
+ * cannot silently move the other: they are different questions that happen
+ * to have the same answer.
+ */
+export function isExcludableStatus(status: PublishStatus): boolean {
+  return status === "pending" || status === "held" || status === "missing";
+}

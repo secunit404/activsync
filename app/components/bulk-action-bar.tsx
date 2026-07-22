@@ -5,7 +5,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 type BulkActionBarProps = {
+  /** Raw selection size — what "{n} selected" reports. */
   count: number;
+  /** How many of those the server would actually accept for exclusion. */
+  excludableCount: number;
+  /** How many of those are in a publishable state. */
+  publishableCount: number;
   onClear: () => void;
   onExclude: () => void;
   onPublish: () => void;
@@ -20,6 +25,7 @@ type BulkActionBarProps = {
 };
 
 const publishDisabledReason = "Reconnect Strava to resume publishing.";
+const nothingExcludableReason = "None of the selected activities can be excluded.";
 
 /**
  * Contextual action bar for the Activities screen's bulk selection (handoff
@@ -54,6 +60,8 @@ const publishDisabledReason = "Reconnect Strava to resume publishing.";
  */
 export function BulkActionBar({
   count,
+  excludableCount,
+  publishableCount,
   onClear,
   onExclude,
   onPublish,
@@ -83,7 +91,11 @@ export function BulkActionBar({
     return null;
   }
 
-  const publishBlocked = busy || publishDisabled;
+  // A mixed selection acts on the subset the server would accept, rather
+  // than blocking on one ineligible row. Each button disables only when its
+  // own eligible subset is empty.
+  const excludeBlocked = busy || excludableCount === 0;
+  const publishBlocked = busy || publishDisabled || publishableCount === 0;
 
   return (
     <div
@@ -94,7 +106,7 @@ export function BulkActionBar({
         "md:static md:inset-auto md:z-auto md:rounded-xl md:border md:border-primary/30 md:bg-primary/[0.06] md:px-4 md:py-3 md:shadow-[0_14px_40px_rgba(0,0,0,0.4)]",
       )}
     >
-      {/* Mobile: stacked rows — count/Clear, names, then the two actions. */}
+      {/* Mobile: stacked rows — count/Clear above the two actions. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         <div className="flex items-center justify-between gap-2">
           <BulkCount count={count} />
@@ -111,9 +123,10 @@ export function BulkActionBar({
             variant="outline"
             className="flex-1"
             onClick={onExclude}
-            disabled={busy}
+            disabled={excludeBlocked}
+            title={excludableCount === 0 ? nothingExcludableReason : undefined}
           >
-            Exclude
+            Exclude {excludableCount}
           </Button>
           <Button
             className="flex-[1.4]"
@@ -123,20 +136,25 @@ export function BulkActionBar({
             aria-description={publishDisabled ? publishDisabledReason : undefined}
           >
             {busy ? <Spinner /> : null}
-            Publish {count}
+            Publish {publishableCount}
           </Button>
         </div>
       </div>
 
-      {/* Desktop/tablet: single row, count + names on the left, actions on the right. */}
+      {/* Desktop/tablet: single row, count on the left, actions on the right. */}
       <div className="hidden items-center justify-between gap-4 md:flex">
         <BulkCount count={count} />
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="ghost" onClick={onClear}>
             Clear
           </Button>
-          <Button variant="outline" onClick={onExclude} disabled={busy}>
-            Exclude
+          <Button
+            variant="outline"
+            onClick={onExclude}
+            disabled={excludeBlocked}
+            title={excludableCount === 0 ? nothingExcludableReason : undefined}
+          >
+            Exclude {excludableCount}
           </Button>
           <Button
             onClick={onPublish}
@@ -145,7 +163,7 @@ export function BulkActionBar({
             aria-description={publishDisabled ? publishDisabledReason : undefined}
           >
             {busy ? <Spinner /> : null}
-            Publish {count}
+            Publish {publishableCount}
           </Button>
         </div>
       </div>

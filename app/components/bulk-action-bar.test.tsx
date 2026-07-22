@@ -7,6 +7,8 @@ import { BulkActionBar } from "./bulk-action-bar";
 function renderBar(overrides: Partial<React.ComponentProps<typeof BulkActionBar>> = {}) {
   const props = {
     count: 2,
+    excludableCount: 2,
+    publishableCount: 2,
     onClear: vi.fn(),
     onExclude: vi.fn(),
     onPublish: vi.fn(),
@@ -21,6 +23,8 @@ test("renders nothing when nothing is selected", () => {
   const { container } = render(
     <BulkActionBar
       count={0}
+      excludableCount={0}
+      publishableCount={0}
       onClear={vi.fn()}
       onExclude={vi.fn()}
       onPublish={vi.fn()}
@@ -56,7 +60,7 @@ test("Clear calls onClear", async () => {
 
 test("Exclude calls onExclude", async () => {
   const props = renderBar();
-  await userEvent.click(screen.getAllByRole("button", { name: "Exclude" })[0]);
+  await userEvent.click(screen.getAllByRole("button", { name: /Exclude/ })[0]);
   expect(props.onExclude).toHaveBeenCalledOnce();
 });
 
@@ -70,7 +74,7 @@ test("Publish shows the count and calls onPublish", async () => {
 
 test("disables Exclude and Publish while busy", () => {
   renderBar({ busy: true });
-  for (const button of screen.getAllByRole("button", { name: "Exclude" })) {
+  for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
     expect(button).toBeDisabled();
   }
   for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
@@ -83,12 +87,44 @@ test("disables Exclude and Publish while busy", () => {
 // stays clickable regardless.
 test("publishDisabled disables only Publish, with an explanatory title", () => {
   renderBar({ publishDisabled: true });
-  for (const button of screen.getAllByRole("button", { name: "Exclude" })) {
+  for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
     expect(button).not.toBeDisabled();
   }
   for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Reconnect Strava to resume publishing.");
+  }
+});
+
+// A mixed selection acts on the subset the server would accept rather than
+// blocking on one ineligible row — mirrors api_routes.py's status guards, so
+// the UI can no longer produce a 409 the user reads as a failed action.
+test("Exclude counts only the excludable rows in the selection", () => {
+  renderBar({ count: 5, excludableCount: 3, publishableCount: 3 });
+  expect(screen.getAllByRole("button", { name: "Exclude 3" }).length).toBeGreaterThan(0);
+  // The raw selection size still reads honestly.
+  expect(screen.getAllByText("5 selected").length).toBeGreaterThan(0);
+});
+
+test("Exclude is disabled when nothing selected can be excluded", () => {
+  renderBar({ count: 2, excludableCount: 0, publishableCount: 0 });
+  for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute(
+      "title",
+      "None of the selected activities can be excluded.",
+    );
+  }
+});
+
+test("Publish is disabled when nothing selected can be published", () => {
+  renderBar({ count: 2, excludableCount: 2, publishableCount: 0 });
+  for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
+    expect(button).toBeDisabled();
+  }
+  // Exclude is unaffected — the two subsets are independent.
+  for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
+    expect(button).not.toBeDisabled();
   }
 });
 

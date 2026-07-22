@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
 import type { Activity, ActivitiesPage, AppState } from "@/lib/api";
 import { ActivitiesView } from "./activities";
@@ -16,6 +16,13 @@ const { publishActivities, excludeActivity, dismissCatchUpReport } = vi.hoisted(
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return { ...actual, publishActivities, excludeActivity, dismissCatchUpReport };
+});
+
+// These spies are module-level, so call counts accumulate across tests
+// unless they are reset — an assertion like "called once" would otherwise
+// silently measure every preceding test too.
+beforeEach(() => {
+  vi.clearAllMocks();
 });
 
 // The stat strip renders two parallel layouts (tablet/desktop grid vs. the
@@ -310,7 +317,7 @@ test("disables Publish (not Exclude) when Strava is broken", async () => {
   for (const button of screen.getAllByRole("button", { name: /Publish 1/ })) {
     expect(button).toBeDisabled();
   }
-  for (const button of screen.getAllByRole("button", { name: "Exclude" })) {
+  for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
     expect(button).not.toBeDisabled();
   }
 });
@@ -376,7 +383,7 @@ test("excluding the selection calls excludeActivity for each selected id and cle
   await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
   await userEvent.click(screen.getAllByRole("checkbox", { name: /Push Day/ })[0]);
 
-  await userEvent.click(screen.getAllByRole("button", { name: "Exclude" })[0]);
+  await userEvent.click(screen.getAllByRole("button", { name: /Exclude/ })[0]);
 
   await waitFor(() => expect(excludeActivity).toHaveBeenCalledTimes(2));
   expect(excludeActivity).toHaveBeenCalledWith(12345);
@@ -384,4 +391,52 @@ test("excluding the selection calls excludeActivity for each selected id and cle
   await waitFor(() =>
     expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument(),
   );
+});
+
+// The reported bug: selecting an already-excluded row alongside eligible
+// ones left Exclude enabled, and the server answered 409 for the excluded
+// one — surfacing to the user as "it didn't work". Exclude now acts on the
+// eligible subset only, and says how many that is.
+test("a mixed selection excludes only the eligible rows", async () => {
+  excludeActivity.mockResolvedValue({
+    message: "Excluded",
+    severity: "success",
+    publishedCount: 0,
+    failedCount: 0,
+    blockedCount: 0,
+  });
+  const alreadyExcluded: Activity = {
+    ...oneActivity,
+    garminActivityId: 777,
+    title: "Already excluded",
+    publishStatus: "excluded",
+  };
+  renderAt("/", { ...activities, items: [oneActivity, alreadyExcluded] });
+
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Already excluded/ })[0]);
+
+  // Two selected, but only one of them can actually be excluded.
+  expect(screen.getAllByText("2 selected").length).toBeGreaterThan(0);
+  await userEvent.click(screen.getAllByRole("button", { name: "Exclude 1" })[0]);
+
+  await waitFor(() => expect(excludeActivity).toHaveBeenCalledTimes(1));
+  expect(excludeActivity).toHaveBeenCalledWith(12345);
+  expect(excludeActivity).not.toHaveBeenCalledWith(777);
+});
+
+test("Exclude is disabled when every selected row is already excluded", async () => {
+  const alreadyExcluded: Activity = {
+    ...oneActivity,
+    garminActivityId: 777,
+    title: "Already excluded",
+    publishStatus: "excluded",
+  };
+  renderAt("/", { ...activities, items: [alreadyExcluded] });
+
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Already excluded/ })[0]);
+
+  for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
+    expect(button).toBeDisabled();
+  }
 });
