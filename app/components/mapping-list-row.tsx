@@ -40,6 +40,12 @@ export function MappingListRow({ mapping }: { mapping: MappingRowData }) {
         ) : (
           <p className="truncate font-mono text-xs text-muted-foreground">
             {destination ?? "Mapped"}
+            {/* Most exercises are resolved by the ported tables, not chosen
+                by anyone — without this an automatic pair reads as a
+                deliberate decision the user made and forgot. */}
+            <span className="ml-1.5 text-muted-foreground/60">
+              {mapping.source === "user" ? "· Your override" : "· Automatic"}
+            </span>
           </p>
         )}
       </div>

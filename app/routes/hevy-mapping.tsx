@@ -212,7 +212,7 @@ function ExerciseMappingForm({
       open
       onOpenChange={onOpenChange}
       title={mapping.title}
-      description={`${mapping.muscleGroup ? `${mapping.muscleGroup} · ` : ""}Garmin applies a default mapping automatically when Hevy connects — this editor is only for the exercises it couldn't resolve on its own.`}
+      description={`${mapping.muscleGroup ? `${mapping.muscleGroup} · ` : ""}Choose where this exercise's sets and reps are recorded in Garmin.`}
       mobile="sheet"
       footer={
         <div className="flex gap-2.5">
@@ -241,9 +241,17 @@ function ExerciseMappingForm({
         <div className="flex items-start gap-2.5 rounded-[10px] border border-warning/22 bg-warning/[0.06] px-3.5 py-2.5">
           <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
           <p className="text-[12.5px] leading-relaxed text-warning/90">
-            {mapping.garminRejected
-              ? "Garmin rejected the previous mapping — pick a different category and subcategory."
-              : "No Garmin default exists for this exercise. Pick where its sets and reps should be recorded."}
+            {
+              // Three states, not two: this editor is now reachable for any
+              // exercise, including the majority that already resolve.
+              mapping.garminRejected
+                ? "Garmin rejected the previous mapping — pick a different category and subcategory."
+                : mapping.source === "automatic"
+                  ? "ActivSync maps this automatically. Saving here replaces that with your own choice."
+                  : mapping.source === "user"
+                    ? "You set this mapping. Saving replaces it."
+                    : "Nothing maps this exercise yet. Pick where its sets and reps should be recorded."
+            }
           </p>
         </div>
 

@@ -14,6 +14,7 @@ function mapping(overrides: Partial<MappingRowData> = {}): MappingRowData {
     unmapped: false,
     garminRejected: false,
     suggested: false,
+    source: "user",
     category: 3,
     subcategory: 7,
     categoryName: "Strength",
@@ -46,11 +47,27 @@ test("a mapped row shows where it syncs and offers Edit", () => {
   );
 });
 
+// Most exercises are resolved by the ported tables rather than by the user.
+// The row has to say which, or an automatic pair looks like a deliberate
+// choice someone made.
+test("an automatically resolved row is labelled as automatic", () => {
+  renderRow(mapping({ source: "automatic" }));
+  expect(screen.getByText("Strength › Shoulder Press")).toBeVisible();
+  expect(screen.getByText(/Automatic/i)).toBeVisible();
+});
+
+test("a user override is labelled as such, not as automatic", () => {
+  renderRow(mapping({ source: "user" }));
+  expect(screen.getByText(/Your override/i)).toBeVisible();
+  expect(screen.queryByText(/Automatic/i)).toBeNull();
+});
+
 test("an unmapped row says so and offers Map", () => {
   renderRow(
     mapping({
       mapped: false,
       unmapped: true,
+      source: "",
       categoryName: null,
       subcategoryName: null,
     }),

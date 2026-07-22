@@ -136,3 +136,74 @@ def test_connection_status_is_healthy_when_both_are_connected(conn):
     assert status["garmin"]["connected"] is True
     assert status["strava"]["connected"] is True
     assert status["broken"] == []
+
+
+def _template(conn, template_id, title, *, is_custom=False, muscle="chest"):
+    from activsync import hevy_db
+
+    hevy_db.upsert_template(conn, {
+        "exercise_template_id": template_id,
+        "title": title,
+        "primary_muscle_group": muscle,
+        "secondary_muscle_groups": [],
+        "equipment_category": "barbell",
+        "is_custom": is_custom,
+    })
+
+
+def test_mappings_view_includes_exercises_garmin_resolves_on_its_own(conn):
+    """Every Hevy exercise ends up somewhere in Garmin, so the list has to
+    show every one — including built-ins resolved by the ported tables, which
+    were previously skipped and so could never be inspected or overridden."""
+    _template(conn, "tpl-bench", "Bench Press (Barbell)")
+
+    rows = view.hevy_mappings_view(conn)
+
+    assert [row["template_id"] for row in rows] == ["tpl-bench"]
+    row = rows[0]
+    assert row["mapped"] is True
+    assert row["unmapped"] is False
+    assert row["source"] == "automatic"
+    # It resolves to a real Garmin pair, and the view reports which.
+    assert row["category"] is not None
+    assert row["subcategory"] is not None
+    assert row["category_name"]
+    assert row["subcategory_name"]
+
+
+def test_mappings_view_marks_a_user_override_as_such(conn):
+    """A saved mapping wins over the built-in table, and the row says so —
+    that distinction is what tells a user whether they set it or Garmin did."""
+    from activsync import hevy_db
+
+    _template(conn, "tpl-bench", "Bench Press (Barbell)")
+    hevy_db.save_mapping(conn, "tpl-bench", 0, 1)
+
+    row = next(r for r in view.hevy_mappings_view(conn) if r["template_id"] == "tpl-bench")
+
+    assert row["source"] == "user"
+    assert row["mapped"] is True
+    assert (row["category"], row["subcategory"]) == (0, 1)
+
+
+def test_mappings_view_still_flags_what_needs_action(conn):
+    """The needs-mapping case is unchanged: a custom exercise no table can
+    resolve stays unmapped, which is what the hub's summary counts."""
+    _template(conn, "tpl-odd", "Bulgarian Ring Row", is_custom=True, muscle="upper_back")
+
+    row = next(r for r in view.hevy_mappings_view(conn) if r["template_id"] == "tpl-odd")
+
+    assert row["unmapped"] is True
+    assert row["mapped"] is False
+    assert row["source"] == ""
+
+
+def test_mappings_view_sorts_actionable_rows_first(conn):
+    """The list opens on what needs doing, without needing the filter."""
+    _template(conn, "tpl-bench", "Bench Press (Barbell)")
+    _template(conn, "tpl-odd", "Bulgarian Ring Row", is_custom=True, muscle="upper_back")
+
+    rows = view.hevy_mappings_view(conn)
+
+    assert rows[0]["template_id"] == "tpl-odd"
+    assert rows[0]["unmapped"] is True

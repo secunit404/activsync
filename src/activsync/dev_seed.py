@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from activsync import config, db, dev_mock, hevy_db
 
-SEED_VERSION = 8
+SEED_VERSION = 9
 
 _HEVY_TABLES = ("hevy_workouts", "hevy_operations", "exercise_templates",
                 "exercise_mappings", "merge_backups", "hevy_events_seen")
@@ -139,6 +139,18 @@ def _seed_hevy(conn: sqlite3.Connection, now: datetime) -> None:
             "equipment_category": template["equipment_category"],
             "is_custom": template["is_custom"],
         })
+
+    # Two mapping states the ported tables cannot produce on their own, so the
+    # mapping screen shows all four shapes it has to render: table-resolved,
+    # user-overridden, Garmin-rejected, and never mapped.
+    #
+    # "Triceps Pushdown (Cable)" has no entry in HEVY_TO_GARMIN, so without a
+    # saved mapping it would read as needs-mapping rather than as an override.
+    hevy_db.save_mapping(
+        conn, dev_mock.HEVY_DEV_OVERRIDDEN_TEMPLATE_ID, 30, 3
+    )
+    hevy_db.save_mapping(conn, dev_mock.HEVY_DEV_REJECTED_TEMPLATE_ID, 19, 43)
+    hevy_db.mark_mapping_rejected(conn, dev_mock.HEVY_DEV_REJECTED_TEMPLATE_ID)
 
     def seed_workout(workout: dict) -> None:
         hevy_db.upsert_workout(

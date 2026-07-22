@@ -265,11 +265,19 @@ def hevy_settings_view(conn: sqlite3.Connection) -> dict:
 
 
 def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
-    """Exercise templates joined with user mappings for the mappings section.
+    """Every known exercise template, with where it lands in Garmin.
 
-    Only rows a user can act on: custom templates, templates with a user
-    mapping, and templates no built-in table resolves. Built-in templates that
-    already resolve have nothing to configure and would drown the list."""
+    The point of the integration is that every Hevy exercise maps to a Garmin
+    one, so this returns them all — including built-ins the ported tables
+    resolve without help. Those used to be skipped as "nothing to configure",
+    which also meant they could never be inspected or overridden; the mapping
+    screen's search and filter are what keep the longer list usable.
+
+    `source` says who decided the pair:
+      "user"      — a saved mapping (an override, or the answer to a miss)
+      "automatic" — resolved by the ported template/name tables
+      ""          — nothing resolves it yet; this is the needs-mapping case
+    """
     from activsync import hevy_db
     from activsync.hevy_mapper import (
         CATEGORY_NAMES,
@@ -284,30 +292,47 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
     for template in hevy_db.list_templates(conn):
         template_id = template["exercise_template_id"]
         mapping = mappings.get(template_id)
-        resolves = True
-        if mapping is None:
-            try:
-                lookup_exercise(conn, template["title"], template_id)
-            except MappingMiss:
-                resolves = False
-        if not template["is_custom"] and mapping is None and resolves:
-            continue
+        rejected = bool(mapping and mapping["garmin_rejected"])
 
-        suggestion = (suggest_mapping(template["title"], template)
-                      if mapping is None else None)
-        category = mapping["category"] if mapping else (
-            suggestion[0] if suggestion else None)
-        subcategory = mapping["subcategory"] if mapping else (
-            suggestion[1] if suggestion else None)
+        # Ask the resolver rather than reimplementing its precedence here —
+        # it is the same call the sync path makes, so the screen can never
+        # disagree with what actually gets written. A rejected mapping is
+        # skipped by `lookup_exercise` itself, so such a row falls through to
+        # whatever the tables say, or to the miss branch.
+        try:
+            category, subcategory, _ = lookup_exercise(
+                conn, template["title"], template_id
+            )
+            resolves = True
+        except MappingMiss:
+            category = subcategory = None
+            resolves = False
+
+        if resolves and mapping is not None and not rejected:
+            source = "user"
+        elif resolves:
+            source = "automatic"
+        else:
+            source = ""
+
+        # Only offer a suggestion where nothing resolves — it is a hint for
+        # filling the gap, not a competing answer.
+        suggestion = (
+            suggest_mapping(template["title"], template) if not resolves else None
+        )
+        if suggestion is not None:
+            category, subcategory = suggestion
+
         rows.append({
             "template_id": template_id,
             "title": template["title"],
             "is_custom": bool(template["is_custom"]),
             "muscle_group": template.get("primary_muscle_group") or "",
-            "mapped": mapping is not None,
-            "unmapped": mapping is None and not resolves,
-            "garmin_rejected": bool(mapping and mapping["garmin_rejected"]),
-            "suggested": mapping is None and suggestion is not None,
+            "mapped": resolves,
+            "unmapped": not resolves,
+            "garmin_rejected": rejected,
+            "suggested": suggestion is not None,
+            "source": source,
             "category": category,
             "subcategory": subcategory,
             "category_name": (CATEGORY_NAMES.get(category)
@@ -316,7 +341,13 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
                                  if category is not None and subcategory is not None
                                  else None),
         })
-    rows.sort(key=lambda r: (not r["is_custom"], r["mapped"], r["title"].lower()))
+    # What needs doing first, then custom exercises (the ones a user actually
+    # invented), then alphabetical.
+    rows.sort(key=lambda r: (
+        not (r["unmapped"] or r["garmin_rejected"]),
+        not r["is_custom"],
+        r["title"].lower(),
+    ))
     return rows
 
 

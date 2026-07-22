@@ -30,6 +30,7 @@ function mapping(overrides: Partial<Mapping>): Mapping {
     unmapped: true,
     garminRejected: false,
     suggested: false,
+    source: "",
     category: null,
     subcategory: null,
     categoryName: null,
@@ -82,10 +83,35 @@ const toolsState: HevyToolsState = {
       title: "Barbell Bench Press",
       mapped: true,
       unmapped: false,
+      source: "user",
       category: 4,
       subcategory: 0,
       categoryName: "Bench Press",
       subcategoryName: "Barbell",
+    }),
+    // The common case now that the list shows everything: resolved by the
+    // ported tables, nobody chose it.
+    mapping({
+      templateId: "tmpl-automatic",
+      title: "Back Squat",
+      mapped: true,
+      unmapped: false,
+      source: "automatic",
+      category: 12,
+      subcategory: 120,
+      categoryName: "Squat",
+      subcategoryName: "Back Squat",
+    }),
+    mapping({
+      templateId: "tmpl-user",
+      title: "Front Squat",
+      mapped: true,
+      unmapped: false,
+      source: "user",
+      category: 12,
+      subcategory: 121,
+      categoryName: "Squat",
+      subcategoryName: "Front Squat",
     }),
     mapping({
       templateId: "tmpl-rejected",
@@ -172,11 +198,24 @@ test("a Garmin-rejected exercise explains why it needs a different pick", async 
   ).toBeInTheDocument();
 });
 
-test("the description explains defaults are automatic and this editor is for exceptions", async () => {
+// The editor is reachable for every exercise now, not just the ones nothing
+// resolves, so the banner has to name which of the three states you are in
+// rather than always claiming no default exists.
+test("an unresolved exercise says nothing maps it yet", async () => {
   renderMapping("tmpl-unmapped");
+  expect(await screen.findByText(/Nothing maps this exercise yet/i)).toBeInTheDocument();
+});
+
+test("an automatically mapped exercise says saving replaces the automatic pair", async () => {
+  renderMapping("tmpl-automatic");
   expect(
-    await screen.findByText(/applies a default mapping automatically/i),
+    await screen.findByText(/maps this automatically. Saving here replaces that/i),
   ).toBeInTheDocument();
+});
+
+test("a user-set exercise says saving replaces their own choice", async () => {
+  renderMapping("tmpl-user");
+  expect(await screen.findByText(/You set this mapping/i)).toBeInTheDocument();
 });
 
 test("an unknown templateId shows a real message, not a blank overlay", async () => {

@@ -197,6 +197,11 @@ export type HevyToolsState = {
     unmapped: boolean;
     garminRejected: boolean;
     suggested: boolean;
+    /**
+     * Who chose the Garmin pair: `"user"` for a saved override, `"automatic"`
+     * for one the ported tables resolve, `""` when nothing resolves it yet.
+     */
+    source: "user" | "automatic" | "";
     category: number | null;
     subcategory: number | null;
     categoryName: string | null;

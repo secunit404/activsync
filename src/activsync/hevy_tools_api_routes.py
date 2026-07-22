@@ -36,6 +36,8 @@ class ExerciseMapping(ApiModel):
     unmapped: bool
     garmin_rejected: bool
     suggested: bool
+    # "user" | "automatic" | "" — see view.hevy_mappings_view.
+    source: str
     category: int | None
     subcategory: int | None
     category_name: str | None

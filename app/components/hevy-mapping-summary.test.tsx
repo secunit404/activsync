@@ -17,6 +17,7 @@ function mapping(overrides: Partial<Mapping>): Mapping {
     unmapped: true,
     garminRejected: false,
     suggested: false,
+    source: "",
     category: null,
     subcategory: null,
     categoryName: null,

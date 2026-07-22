@@ -182,25 +182,69 @@ def dev_hevy_workouts(now: datetime | None = None) -> list[dict]:
     ]
 
 
+# Titles here must match `hevy_mapper.HEVY_TO_GARMIN` keys exactly, or they
+# resolve to nothing and the mapping screen shows a wall of needs-mapping rows
+# instead of the realistic mix. Verified against that table.
+_DEV_RESOLVING_TEMPLATES: list[tuple[str, str, str, str]] = [
+    ("tpl-dev-bench", "Bench Press (Barbell)", "chest", "barbell"),
+    ("tpl-dev-squat", "Squat (Barbell)", "quadriceps", "barbell"),
+    ("tpl-dev-deadlift", "Deadlift (Barbell)", "hamstrings", "barbell"),
+    ("tpl-dev-curl", "Bicep Curl (Dumbbell)", "biceps", "dumbbell"),
+    ("tpl-dev-pulldown", "Lat Pulldown (Cable)", "lats", "cable"),
+    ("tpl-dev-ohp", "Overhead Press (Barbell)", "shoulders", "barbell"),
+    ("tpl-dev-plank", "Plank", "abdominals", "none"),
+    ("tpl-dev-pullup", "Pull Up", "lats", "none"),
+    ("tpl-dev-rdl", "Romanian Deadlift (Barbell)", "hamstrings", "barbell"),
+]
+
+# Seeded with a saved user mapping (see dev_seed) so the mapping screen has a
+# row whose pair someone actually chose, not just table-resolved ones.
+HEVY_DEV_OVERRIDDEN_TEMPLATE_ID = "tpl-dev-pushdown"
+# Seeded with a mapping Garmin rejected, so the "needs action" path has a
+# second shape besides "never mapped".
+HEVY_DEV_REJECTED_TEMPLATE_ID = "tpl-dev-rejected"
+
+
 def dev_hevy_templates() -> list[dict]:
-    return [
+    """A realistic spread for the mapping screen: mostly built-ins the ported
+    tables resolve on their own, one the user overrode, one Garmin rejected,
+    and one custom exercise nothing can place."""
+    templates = [
         {
-            "id": "tpl-dev-bench",
-            "title": "Bench Press (Barbell)",
-            "primary_muscle_group": "chest",
-            "secondary_muscle_groups": ["triceps"],
-            "equipment_category": "barbell",
+            "id": template_id,
+            "title": title,
+            "primary_muscle_group": muscle,
+            "secondary_muscle_groups": [],
+            "equipment_category": equipment,
             "is_custom": False,
-        },
-        {
-            "id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
-            "title": "Bulgarian Ring Row",
-            "primary_muscle_group": "upper_back",
-            "secondary_muscle_groups": ["biceps"],
-            "equipment_category": "other",
-            "is_custom": True,
-        },
+        }
+        for template_id, title, muscle, equipment in _DEV_RESOLVING_TEMPLATES
     ]
+    templates.append({
+        "id": HEVY_DEV_OVERRIDDEN_TEMPLATE_ID,
+        "title": "Triceps Pushdown (Cable)",
+        "primary_muscle_group": "triceps",
+        "secondary_muscle_groups": [],
+        "equipment_category": "cable",
+        "is_custom": False,
+    })
+    templates.append({
+        "id": HEVY_DEV_REJECTED_TEMPLATE_ID,
+        "title": "Copenhagen Plank",
+        "primary_muscle_group": "abductors",
+        "secondary_muscle_groups": ["abdominals"],
+        "equipment_category": "none",
+        "is_custom": True,
+    })
+    templates.append({
+        "id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
+        "title": "Bulgarian Ring Row",
+        "primary_muscle_group": "upper_back",
+        "secondary_muscle_groups": ["biceps"],
+        "equipment_category": "other",
+        "is_custom": True,
+    })
+    return templates
 
 # Keep the local publish request on screen long enough to exercise the button's
 # busy state. This fake is only wired in when mock mode is enabled.
