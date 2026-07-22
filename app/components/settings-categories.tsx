@@ -120,7 +120,7 @@ export function CategorySettings({
         </label>
         <Button
           variant="outline"
-          className="h-11"
+          size="xl"
           disabled={!state.connections.garmin.connected || refresh.isPending}
           onClick={() => refresh.mutate()}
         >

@@ -75,7 +75,7 @@ export function ConnectionsSettings({ state }: { state: SettingsState }) {
         <div className="grid grid-cols-2 gap-2 sm:flex">
           <Button
             variant="outline"
-            className="h-11"
+            size="xl"
             disabled={
               !state.connections.garmin.connected || syncGarmin.isPending
             }
@@ -86,7 +86,7 @@ export function ConnectionsSettings({ state }: { state: SettingsState }) {
           </Button>
           <Button
             variant="outline"
-            className="h-11"
+            size="xl"
             disabled={
               !state.connections.strava.connected || syncStrava.isPending
             }
@@ -114,7 +114,7 @@ function GarminDialog({ state }: { state: SettingsState }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="h-10">
+        <Button variant="outline" size="lg">
           {state.connections.garmin.connected ? "Manage" : "Reconnect"}
         </Button>
       </DialogTrigger>
@@ -155,7 +155,7 @@ function GarminDialog({ state }: { state: SettingsState }) {
               <Button
                 type="button"
                 variant="outline"
-                className="h-11"
+                size="xl"
                 disabled={pending}
                 onClick={async () => {
                   await cancelMfa.mutateAsync();
@@ -164,7 +164,7 @@ function GarminDialog({ state }: { state: SettingsState }) {
               >
                 Cancel verification
               </Button>
-              <Button type="submit" className="h-11" disabled={pending}>
+              <Button type="submit" size="xl" disabled={pending}>
                 {mfa.isPending ? <Spinner /> : null}
                 {mfa.isPending ? "Verifying…" : "Verify code"}
               </Button>
@@ -220,7 +220,7 @@ function GarminDialog({ state }: { state: SettingsState }) {
               </Field>
             </FieldGroup>
             <DialogFooter showCloseButton>
-              <Button type="submit" className="h-11" disabled={pending}>
+              <Button type="submit" size="xl" disabled={pending}>
                 {reconnect.isPending ? <Spinner /> : null}
                 {reconnect.isPending ? "Connecting…" : "Reconnect"}
               </Button>
@@ -245,7 +245,7 @@ function StravaDialog({ state }: { state: SettingsState }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="h-10">
+        <Button variant="outline" size="lg">
           {state.connections.strava.connected ? "Manage" : "Connect"}
         </Button>
       </DialogTrigger>
@@ -253,7 +253,7 @@ function StravaDialog({ state }: { state: SettingsState }) {
         <DialogHeader>
           <DialogTitle>Manage Strava</DialogTitle>
           <DialogDescription>
-            Save credentials first, then authorize. Leave the secret blank to
+            Saving takes you to Strava to authorize. Leave the secret blank to
             keep the saved one.
           </DialogDescription>
         </DialogHeader>
@@ -261,7 +261,11 @@ function StravaDialog({ state }: { state: SettingsState }) {
           className="grid gap-4"
           onSubmit={async (event) => {
             event.preventDefault();
+            // Save first, then hand off to Strava's OAuth screen. These were
+            // two separate buttons; they are one intent, and splitting them
+            // let a user authorize against credentials they hadn't saved.
             await save.mutateAsync({ clientId, clientSecret });
+            window.location.assign("/strava/connect");
           }}
         >
           <FieldGroup>
@@ -302,7 +306,7 @@ function StravaDialog({ state }: { state: SettingsState }) {
               <Button
                 type="button"
                 variant="destructive"
-                className="h-11"
+                size="xl"
                 disabled={disconnect.isPending}
                 onClick={() => setConfirmDisconnect(true)}
               >
@@ -310,27 +314,22 @@ function StravaDialog({ state }: { state: SettingsState }) {
               </Button>
             ) : (
               <DialogClose asChild>
-                <Button variant="outline" className="h-11">
+                <Button variant="outline" size="xl">
                   Cancel
                 </Button>
               </DialogClose>
             )}
             <Button
               type="submit"
-              variant="outline"
-              className="h-11"
-              disabled={save.isPending}
+              size="xl"
+              disabled={!canConnect || save.isPending}
             >
               {save.isPending ? <Spinner /> : null}
-              {save.isPending ? "Saving…" : "Save credentials"}
-            </Button>
-            <Button
-              type="button"
-              className="h-11"
-              disabled={!canConnect || save.isPending}
-              onClick={() => window.location.assign("/strava/connect")}
-            >
-              {state.connections.strava.connected ? "Reconnect" : "Connect"}
+              {save.isPending
+                ? "Saving…"
+                : state.connections.strava.connected
+                  ? "Save & reconnect"
+                  : "Save & connect"}
             </Button>
           </DialogFooter>
         </form>
@@ -363,7 +362,7 @@ function HevyDialog({ state }: { state: SettingsState }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="h-10">
+        <Button variant="outline" size="lg">
           {state.hevy.connected ? "Manage" : "Connect"}
         </Button>
       </DialogTrigger>
@@ -455,7 +454,7 @@ function HevyDialog({ state }: { state: SettingsState }) {
               />
             </Field>
             <DialogFooter showCloseButton>
-              <Button type="submit" className="h-11" disabled={connect.isPending}>
+              <Button type="submit" size="xl" disabled={connect.isPending}>
                 {connect.isPending ? <Spinner /> : null}
                 {connect.isPending ? "Validating…" : "Connect Hevy"}
               </Button>
