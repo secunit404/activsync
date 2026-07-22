@@ -6,6 +6,7 @@ import { ConnectionError } from "@/components/connection-error";
 import { HevyBackfillCard } from "@/components/hevy-backfill-card";
 import { HevyMappingSummary } from "@/components/hevy-mapping-summary";
 import { HevyQueue } from "@/components/hevy-queue";
+import { PageContainer, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -113,25 +114,25 @@ export function HevyView({
   const { connected, status } = appState.hevy;
 
   return (
-    <div className="grid gap-6 p-6 md:gap-7 md:p-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-extrabold tracking-[-0.02em] sm:text-[26px]">Hevy</h1>
-          <p className="text-sm text-muted-foreground">
-            Workouts flowing from Hevy into Garmin, then on to Strava.
-          </p>
-        </div>
-        <span className="flex items-center gap-2 rounded-[11px] border border-border bg-card px-3.5 py-2">
-          <span
-            className={cn(
-              "size-1.5 shrink-0 rounded-full",
-              connected ? "bg-success" : "bg-muted-foreground/50",
-            )}
-            aria-hidden="true"
-          />
-          <span className="font-mono text-xs text-muted-foreground uppercase">{status}</span>
-        </span>
-      </header>
+    <PageContainer className="grid gap-6 py-8 md:gap-7 md:py-10">
+      <PageHeader
+        title="Hevy"
+        description="Workouts flowing from Hevy into Garmin, then on to Strava."
+        action={
+          <span className="flex items-center gap-2 rounded-[11px] border border-border bg-card px-3.5 py-2">
+            <span
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                connected ? "bg-success" : "bg-muted-foreground/50",
+              )}
+              aria-hidden="true"
+            />
+            <span className="font-mono text-xs text-muted-foreground uppercase">
+              {status}
+            </span>
+          </span>
+        }
+      />
 
       {connected ? (
         <>
@@ -158,6 +159,6 @@ export function HevyView({
           </EmptyContent>
         </Empty>
       )}
-    </div>
+    </PageContainer>
   );
 }

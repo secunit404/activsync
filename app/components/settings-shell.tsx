@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { AppBrand } from "@/components/app-shell";
+import { PageContainer, PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -36,7 +37,7 @@ export function SettingsShell({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto min-h-screen w-full max-w-6xl px-4 sm:px-6">
+    <PageContainer className="min-h-screen">
       <header className="flex min-h-18 items-center justify-between gap-4 border-b border-border/70">
         <div className="flex items-center gap-3">
           <AppBrand />
@@ -44,15 +45,7 @@ export function SettingsShell({
         </div>
       </header>
       <main className="grid gap-6 py-8 sm:py-12">
-        <header className="grid gap-2">
-          <p className="text-xs font-bold tracking-[0.14em] text-[var(--sync)] uppercase">
-            ActivSync
-          </p>
-          <h1 className="text-4xl leading-none font-bold tracking-[-0.05em]">
-            {title}
-          </h1>
-          <p className="max-w-2xl text-muted-foreground">{description}</p>
-        </header>
+        <PageHeader title={title} description={description} />
         {children}
       </main>
       {version && update ? (
@@ -86,7 +79,7 @@ export function SettingsShell({
           ) : null}
         </footer>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }
 

@@ -13,6 +13,7 @@ import { AttentionBanner } from "@/components/attention-banner";
 import { BulkActionBar } from "@/components/bulk-action-bar";
 import { CatchUpReport } from "@/components/catch-up-report";
 import { ConnectionError } from "@/components/connection-error";
+import { PageContainer, PageHeader } from "@/components/page-header";
 import { StatTile, statTileToneClass, type StatTileTone } from "@/components/stat-tile";
 import { isExcludableStatus, isPublishableStatus } from "@/lib/activity-metrics";
 import {
@@ -235,30 +236,28 @@ export function ActivitiesView({
   const handleReconnect = () => navigate("/settings#connections");
 
   return (
-    <div
+    <PageContainer
       className={cn(
-        "grid gap-6 p-6 md:gap-7 md:p-8",
+        "grid gap-6 py-8 md:gap-7 md:py-10",
         // The mobile bulk bar is fixed-bottom, same slot as the tab bar
         // (which AppLayout already reserves 74px for); give the page a
         // little extra clearance only while it's actually showing, so the
         // last table row/card isn't tucked underneath it.
-        selectedCount > 0 && "pb-32 md:pb-8",
+        selectedCount > 0 && "pb-32 md:pb-10",
       )}
     >
-      <header className="grid gap-1">
-        <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-[-0.02em] sm:text-[26px]">
-          Activities
-          {isRefetching ? (
+      <PageHeader
+        title="Activities"
+        description="Review your Garmin sync history before it reaches Strava."
+        action={
+          isRefetching ? (
             <Spinner
               aria-label="Loading activities"
               className="size-4 text-muted-foreground"
             />
-          ) : null}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Review your Garmin sync history before it reaches Strava.
-        </p>
-      </header>
+          ) : undefined
+        }
+      />
 
       {
         // One banner per broken service — `broken` can hold both "garmin"
@@ -273,8 +272,14 @@ export function ActivitiesView({
 
       <StatStrip data={data} />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
+      {
+        // Stacked below `sm:` — the pill row is `flex-nowrap` on mobile (it
+        // never wraps, so every filter stays reachable), which means it will
+        // not yield width to a sibling. Side by side at 375px the select
+        // simply overlapped the last pill.
+      }
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="min-w-0 sm:flex-1">
           <ActivityFilterPills counts={data.counts} />
         </div>
         <ActivitySortSelect />
@@ -331,7 +336,7 @@ export function ActivitiesView({
       )}
 
       <ActivitiesPagination page={data.pagination.page} pageCount={data.pagination.pageCount} />
-    </div>
+    </PageContainer>
   );
 }
 
