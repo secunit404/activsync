@@ -99,6 +99,29 @@ function renderSettings(state: SettingsState = connectedState) {
   return renderWithProviders(<SettingsView state={state} />);
 }
 
+// Settings renders inside the rail, which already shows the brand mark —
+// a second one in the page frame was a duplicate. The setup wizard keeps
+// its own AppBrand (setup-step-dots.tsx); it has never used this shell.
+test("renders no brand bar of its own, since the rail supplies one", () => {
+  renderSettings();
+  // AppBrand splits its text across two spans, so match its aria-label —
+  // a text query for "ActivSync" would never match it and would pass here
+  // whether the brand bar were present or not.
+  expect(screen.queryByLabelText("ActivSync")).toBeNull();
+  // The page heading and its eyebrow are unaffected.
+  expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+});
+
+test("the mock-data badge survives in the page header", () => {
+  renderSettings({ ...connectedState, development: true });
+  expect(screen.getByText("Mock data")).toBeVisible();
+});
+
+test("no mock-data badge outside development", () => {
+  renderSettings({ ...connectedState, development: false });
+  expect(screen.queryByText("Mock data")).toBeNull();
+});
+
 test("auto-sync search filters the type list and reports the count", async () => {
   renderSettings();
   expect(await screen.findByText(/of 154/)).toBeInTheDocument();

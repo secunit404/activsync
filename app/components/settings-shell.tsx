@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { AppBrand } from "@/components/app-shell";
 import { PageContainer, PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,11 +14,14 @@ import { cn } from "@/lib/utils";
 import type { UpdateState } from "@/lib/api";
 
 /**
- * Settings/setup page frame. This renders inside app-layout.tsx's <Outlet />
- * (settings) or standalone (setup, which sits outside the rail layout), so
- * it carries its own header/footer rather than the removed AppShell
- * centered-column helpers — those were retired in Task 5 along with the
- * old single-column route shell.
+ * Settings page frame. Renders inside app-layout.tsx's `<Outlet />`, so the
+ * rail already supplies the brand mark — this deliberately carries no brand
+ * header of its own. The setup wizard, which does sit outside the rail, has
+ * its own frame in `setup-step-dots.tsx` and renders `AppBrand` there; it
+ * has never used this component.
+ *
+ * The `development` "Mock data" badge rides in the page header's action
+ * slot, the same slot Hevy uses for its connection chip.
  */
 export function SettingsShell({
   development,
@@ -38,14 +40,12 @@ export function SettingsShell({
 }) {
   return (
     <PageContainer className="min-h-screen">
-      <header className="flex min-h-18 items-center justify-between gap-4 border-b border-border/70">
-        <div className="flex items-center gap-3">
-          <AppBrand />
-          {development ? <Badge variant="outline">Mock data</Badge> : null}
-        </div>
-      </header>
-      <main className="grid gap-6 py-8 sm:py-12">
-        <PageHeader title={title} description={description} />
+      <main className="grid gap-6 py-8 md:py-10">
+        <PageHeader
+          title={title}
+          description={description}
+          action={development ? <Badge variant="outline">Mock data</Badge> : undefined}
+        />
         {children}
       </main>
       {version && update ? (
