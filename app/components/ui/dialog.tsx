@@ -113,7 +113,13 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          {/* size="xl" matches the 44px footer buttons every settings dialog
+              uses. Both current call sites (Garmin, Hevy) are settings
+              dialogs; a default-size Close beside them was the 32px-vs-44px
+              mismatch. */}
+          <Button variant="outline" size="xl">
+            Close
+          </Button>
         </DialogPrimitive.Close>
       )}
     </div>
