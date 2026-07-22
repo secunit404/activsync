@@ -35,7 +35,7 @@ function renderRow(value: BackfillItem) {
 test("a locked row with a linkable template offers an enabled Map action", () => {
   renderRow(item());
   const link = screen.getByRole("link", { name: /Map/ });
-  expect(link).toHaveAttribute("href", "/hevy/backfill/mapping/tpl-dev-custom");
+  expect(link).toHaveAttribute("href", "/hevy/mapping/tpl-dev-custom");
 });
 
 // The dead-end case: needs_mapping with no template id to link to. Same

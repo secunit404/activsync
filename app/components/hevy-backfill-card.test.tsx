@@ -1,26 +1,24 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { MemoryRouter } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import type { BackfillResult } from "@/lib/api";
-import HevyBackfill from "./hevy-backfill";
-import HevyMapping from "./hevy-mapping";
+import { HevyBackfillCard } from "./hevy-backfill-card";
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const { previewHevyBackfill, runHevyBackfill, getHevyTools } = vi.hoisted(() => ({
+const { previewHevyBackfill, runHevyBackfill } = vi.hoisted(() => ({
   previewHevyBackfill: vi.fn(),
   runHevyBackfill: vi.fn(),
-  getHevyTools: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, previewHevyBackfill, runHevyBackfill, getHevyTools };
+  return { ...actual, previewHevyBackfill, runHevyBackfill };
 });
 
 const { toastSuccess, toastError } = vi.hoisted(() => ({
@@ -74,38 +72,31 @@ function fourItemResult(overrides: Partial<BackfillResult> = {}): BackfillResult
   };
 }
 
-function renderBackfill() {
+function renderBackfill(mappingSavedToken = 0) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  const router = createMemoryRouter(
-    [
-      {
-        path: "/hevy",
-        element: <Outlet />,
-        children: [
-          { index: true, element: <div>Hub</div> },
-          {
-            path: "backfill",
-            element: <HevyBackfill />,
-            // Mirrors routes.ts: the editor is nested, so mounting it leaves
-            // HevyBackfill mounted and its preview state intact.
-            children: [{ path: "mapping/:templateId", element: <HevyMapping /> }],
-          },
-        ],
-      },
-    ],
-    { initialEntries: ["/hevy/backfill"] },
-  );
-
-  render(
+  const utils = render(
     <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
+      <MemoryRouter>
+        <HevyBackfillCard mappingSavedToken={mappingSavedToken} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 
-  return { router, client };
+  // Re-render with a bumped token to stand in for the mapping editor saving
+  // — in the app the hub owns that state and passes it down.
+  const saveMapping = (token: number) =>
+    utils.rerender(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <HevyBackfillCard mappingSavedToken={token} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+  return { client, saveMapping };
 }
 
 async function preview() {
@@ -130,15 +121,16 @@ test("select all importable ignores locked rows", async () => {
   expect(screen.getByRole("button", { name: /import 3 selected/i })).toBeEnabled();
 });
 
-// The editor is a CHILD of backfill, not a sibling — see routes.ts.
-test("locked row links to the nested mapping editor for its missing template", async () => {
+// An overlay over the hub, where this card lives — so opening it never
+// unmounts the scan.
+test("locked row links to the mapping editor for its missing template", async () => {
   previewHevyBackfill.mockResolvedValue(fourItemResult());
   renderBackfill();
   await preview();
 
   expect(await screen.findByRole("link", { name: /map/i })).toHaveAttribute(
     "href",
-    "/hevy/backfill/mapping/tmpl-unmapped",
+    "/hevy/mapping/tmpl-unmapped",
   );
 });
 
@@ -271,49 +263,28 @@ test("the Import footer is absent until a preview has run", () => {
 // this overlay mounted, so the preview result and the ticked selection
 // survive. As a sibling route it unmounted them, and Cancel returned the
 // user to an empty form.
-test("mapping a locked row keeps the backfill preview and selection alive", async () => {
+// Saving a mapping has to re-scan: the scan is a mutation, so no query
+// invalidation reaches it, and a row just mapped would otherwise keep showing
+// the previous scan's "needs mapping" verdict. The hub owns the token and
+// bumps it when the editor saves.
+test("a saved mapping re-scans, so a newly mapped row can unlock", async () => {
   previewHevyBackfill.mockResolvedValue(fourItemResult());
-  getHevyTools.mockResolvedValue({
-    mappings: [
-      {
-        templateId: "tmpl-unmapped",
-        title: "Landmine Press",
-        isCustom: true,
-        muscleGroup: "shoulders",
-        mapped: false,
-        unmapped: true,
-        garminRejected: false,
-        suggested: false,
-        category: null,
-        subcategory: null,
-        categoryName: null,
-        subcategoryName: null,
-      },
-    ],
-    categories: [
-      {
-        value: 3,
-        label: "Strength",
-        subcategories: [{ value: 7, label: "Shoulder Press" }],
-      },
-    ],
-  });
-  renderBackfill();
+  const { saveMapping } = renderBackfill();
   await preview();
+  await screen.findByText("Unmapped workout");
+  expect(previewHevyBackfill).toHaveBeenCalledTimes(1);
 
-  await userEvent.click(await screen.findByRole("checkbox", { name: "Select Full Body" }));
-  expect(screen.getByRole("button", { name: "Import 1 selected" })).toBeInTheDocument();
+  saveMapping(1);
 
-  await userEvent.click(screen.getByRole("link", { name: /map/i }));
+  await waitFor(() => expect(previewHevyBackfill).toHaveBeenCalledTimes(2));
+});
 
-  // Editor is open, and the backfill screen is still rendered behind it.
-  expect(await screen.findByText("Landmine Press")).toBeVisible();
-  expect(screen.getByText("Unmapped workout")).toBeInTheDocument();
+test("a saved mapping does not scan when nothing has been previewed yet", async () => {
+  const { saveMapping } = renderBackfill();
 
-  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  saveMapping(1);
 
-  // Back on backfill with the scan AND the tick still there — not a reset.
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Import 1 selected" })).toBeInTheDocument(),
-  );
+  // No scan was on screen, so re-running one would be a fetch the user never
+  // asked for.
+  await waitFor(() => expect(previewHevyBackfill).not.toHaveBeenCalled());
 });

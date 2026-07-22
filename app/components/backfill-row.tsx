@@ -80,11 +80,12 @@ export function BackfillRow({
 }) {
   const kind = backfillRowKind(item);
   const locked = kind === "locked";
-  // Nested under backfill (see routes.ts) so opening the editor leaves this
-  // overlay mounted — the preview result and the ticked selection survive.
+  // An overlay over the hub, where the backfill scan lives inline — so
+  // opening the editor never unmounts it and the preview and selection
+  // survive the round trip.
   const mappingHref =
     locked && item.missingTemplateIds.length > 0
-      ? `/hevy/backfill/mapping/${encodeURIComponent(item.missingTemplateIds[0])}`
+      ? `/hevy/mapping/${encodeURIComponent(item.missingTemplateIds[0])}`
       : null;
 
   return (

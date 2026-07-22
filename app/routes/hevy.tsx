@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dumbbell } from "lucide-react";
 import { Link, Navigate, Outlet } from "react-router";
@@ -29,6 +30,13 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import type { Route } from "./+types/hevy";
+
+/**
+ * Threaded to the mapping editor mounted in this route's `<Outlet />`, so a
+ * saved mapping can re-scan the inline backfill card — a just-mapped row
+ * must unlock in place rather than keep the previous scan's verdict.
+ */
+export type HevyOutletContext = { onMappingSaved: () => void };
 
 export function meta(): Route.MetaDescriptors {
   return [
@@ -94,10 +102,40 @@ export default function Hevy() {
     return <Navigate to="/setup" replace />;
   }
 
+  return <HevyHub appState={appState.data} queue={queue.data} tools={tools.data} />;
+}
+
+/**
+ * Wraps the view with the one piece of cross-route state the hub owns: a
+ * token bumped whenever the mapping editor (mounted in the `<Outlet />`
+ * below) saves. The inline backfill scan is a mutation, so no query
+ * invalidation can refresh it — without this, a row just mapped would keep
+ * showing the previous scan's "needs mapping" verdict.
+ */
+function HevyHub({
+  appState,
+  queue,
+  tools,
+}: {
+  appState: Pick<AppState, "hevy">;
+  queue: HevyQueueState;
+  tools: HevyToolsState;
+}) {
+  const [mappingSavedToken, setMappingSavedToken] = useState(0);
+
   return (
     <>
-      <HevyView appState={appState.data} queue={queue.data} tools={tools.data} />
-      <Outlet />
+      <HevyView
+        appState={appState}
+        queue={queue}
+        tools={tools}
+        mappingSavedToken={mappingSavedToken}
+      />
+      <Outlet
+        context={{
+          onMappingSaved: () => setMappingSavedToken((token) => token + 1),
+        }}
+      />
     </>
   );
 }
@@ -106,10 +144,13 @@ export function HevyView({
   appState,
   queue,
   tools,
+  mappingSavedToken = 0,
 }: {
   appState: Pick<AppState, "hevy">;
   queue: HevyQueueState;
   tools: HevyToolsState;
+  /** See `HevyHub` — bumped when the mapping editor saves. */
+  mappingSavedToken?: number;
 }) {
   const { connected, status } = appState.hevy;
 
@@ -138,7 +179,7 @@ export function HevyView({
         <>
           <HevyQueue state={queue} />
           <HevyMappingSummary tools={tools} />
-          <HevyBackfillCard />
+          <HevyBackfillCard mappingSavedToken={mappingSavedToken} />
         </>
       ) : (
         <Empty className="min-h-64">

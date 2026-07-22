@@ -9,7 +9,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
 import { getHevyTools, saveExerciseMapping, type HevyToolsState } from "@/lib/api";
-import type { BackfillOutletContext } from "./hevy-backfill";
+import type { HevyOutletContext } from "./hevy";
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
@@ -17,41 +17,35 @@ type Mapping = HevyToolsState["mappings"][number];
 type Category = HevyToolsState["categories"][number];
 
 /**
- * Exercise mapping editor (frame `4a`): the exceptions workflow for Hevy
- * exercises Garmin can't resolve on its own. Garmin applies a default
- * mapping automatically the moment Hevy connects (`hevy_mapper.py`'s
- * suggestion pass, run by `view.hevy_mappings_view`) — this overlay only
- * ever opens for the leftovers: exercises with no default, and ones Garmin
- * rejected after a prior save.
+ * Exercise mapping editor. Opens for any exercise, not just the unresolved
+ * ones — most are placed by the ported tables (see
+ * `view.hevy_mappings_view`), and this is where that choice can be inspected
+ * and overridden. The banner below names which of the three states applies.
  *
- * Nested under `/hevy` (Task 14's hub, whose own `<Outlet />` mounts this
- * route with no context — see that route's docstring), so this issues its
- * own `getHevyTools` query against the same `queryKeys.hevyTools` key the
+ * Mounted in `/hevy`'s `<Outlet />` as an overlay over the hub, so it issues
+ * its own `getHevyTools` query against the same `queryKeys.hevyTools` key the
  * hub already fetched. The hub gates its `<Outlet />` on that query
- * resolving, so by the time this route can mount the data is already
- * cached — the `isPending`/`isError` branches below exist for completeness
- * (a hot reload, a future consumer that doesn't gate the same way) rather
- * than a path normal navigation exercises.
+ * resolving, so by the time this route can mount the data is already cached —
+ * the `isPending`/`isError` branches below exist for completeness (a hot
+ * reload, a future consumer that doesn't gate the same way) rather than a
+ * path normal navigation exercises.
  */
 export default function HevyMapping() {
   const { templateId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  // `useOutletContext` returns undefined when this route is mounted directly
-  // under `/hevy` (the hub renders `<Outlet />` with no context), so this is
-  // optional by construction, not by defensive coding.
-  const outletContext = useOutletContext<BackfillOutletContext | undefined>();
+  // Optional so this component stays renderable in tests without the hub as
+  // an ancestor; in the app the hub always supplies it.
+  const outletContext = useOutletContext<HevyOutletContext | undefined>();
   const tools = useQuery({
     queryKey: queryKeys.hevyTools,
     queryFn: ({ signal }) => getHevyTools(signal),
   });
 
-  // Where Cancel/Save return to. This module is mounted at two paths — under
-  // `/hevy` (from the hub) and under `/hevy/backfill` (from a locked row) —
-  // and ".." resolves correctly for both: the parent route is exactly the
-  // screen the user came from. That replaces the old `location.key ===
-  // "default"` heuristic, which had to guess whether there was a history
-  // entry to go back to.
+  // Structural rather than inferred: the parent route IS the hub, which is
+  // the only screen this can be opened from now that backfill is inline
+  // there. Replaces an older `location.key === "default"` heuristic that had
+  // to guess whether there was a history entry worth going back to.
   const close = () => navigate("..");
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -66,8 +60,8 @@ export default function HevyMapping() {
       toast.success(result.message);
       void queryClient.invalidateQueries({ queryKey: queryKeys.hevyTools });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hevyQueue });
-      // Re-run the parent's preview when nested under backfill, so the row
-      // just mapped unlocks in place instead of showing stale scan data.
+      // Re-scan the hub's inline backfill card, so a row just mapped unlocks
+      // in place instead of keeping the previous scan's verdict.
       outletContext?.onMappingSaved();
       close();
     },

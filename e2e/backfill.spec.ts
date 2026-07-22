@@ -31,12 +31,13 @@ test("locked row navigates to the mapping editor and back", async ({ page }) => 
   // the hub's mapping-queue demo, timestamped 5 days ago — inside the
   // screen's default 30-day lookback, so Preview surfaces it with no need to
   // change the "since" field first.
-  await page.goto("/hevy/backfill");
+  // Backfill is inline on the hub — there is no separate route to visit.
+  await page.goto("/hevy");
   await page.getByRole("button", { name: "Preview" }).click();
 
-  // Tick an importable row first: the point of nesting the editor under
-  // backfill is that this overlay stays mounted, so the preview result AND
-  // this selection have to survive the round trip.
+  // Tick an importable row first: the scan AND this selection have to survive
+  // opening the mapping editor, which is what living on the hub buys — the
+  // card is never unmounted.
   // Exclude the header's "Select all importable" — it ticks every row, so
   // the count would not be 1. (Same trap as e2e/bulk-select.spec.ts.)
   const importable = page
@@ -45,17 +46,16 @@ test("locked row navigates to the mapping editor and back", async ({ page }) => 
   await importable.check();
   await expect(page.getByRole("button", { name: /^Import 1 selected$/ })).toBeVisible();
 
-  await page.getByRole("link", { name: /map/i }).first().click();
-  // Nested under backfill, not a sibling of it — see routes.ts.
-  await expect(page).toHaveURL(/\/hevy\/backfill\/mapping\//);
-  // The backfill overlay is still mounted behind the editor. Asserted with a
-  // CSS locator, not getByRole: Radix marks background content aria-hidden
-  // while a modal is open, so the button is correctly absent from the
-  // accessibility tree even though it is still in the DOM.
+  await page.getByRole("link", { name: /^Map/ }).first().click();
+  await expect(page).toHaveURL(/\/hevy\/mapping\//);
+  // The hub is still mounted behind the editor. Asserted with a CSS locator,
+  // not getByRole: Radix marks background content aria-hidden while a modal
+  // is open, so the button is correctly absent from the accessibility tree
+  // even though it is still in the DOM.
   await expect(page.locator("button", { hasText: /^Import 1 selected$/ })).toBeAttached();
 
   await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page).toHaveURL(/\/hevy\/backfill$/);
+  await expect(page).toHaveURL(/\/hevy$/);
 
   // Back on a populated screen, not a reset form.
   await expect(page.getByRole("button", { name: /^Import 1 selected$/ })).toBeVisible();

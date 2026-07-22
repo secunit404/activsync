@@ -151,12 +151,13 @@ test("mapping summary omits exercises that are already mapped", () => {
   expect(screen.queryByText("Barbell Bench Press")).not.toBeInTheDocument();
 });
 
-test("backfill card links to the backfill entry point", () => {
+// Backfill is inline on the hub now — the card that held nothing but a link
+// to an overlay was one surface too many for a single task.
+test("backfill is inline on the hub, not a link to somewhere else", () => {
   renderHevy();
-  expect(screen.getByRole("link", { name: /preview backfill/i })).toHaveAttribute(
-    "href",
-    "/hevy/backfill",
-  );
+  expect(screen.queryByRole("link", { name: /preview backfill/i })).toBeNull();
+  expect(screen.getByLabelText("Since")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Preview" })).toBeInTheDocument();
 });
 
 test("presents skipped queue items inline with an unskip action, not hidden", () => {
