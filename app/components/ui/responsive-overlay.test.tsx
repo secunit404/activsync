@@ -34,6 +34,28 @@ test("renders as a dialog with an accessible name", () => {
   expect(screen.getByRole("dialog", { name: "Details" })).toBeInTheDocument();
 });
 
+test("defaults to the 560px desktop width", () => {
+  render(
+    <ResponsiveOverlay open onOpenChange={vi.fn()} title="Narrow">
+      <p>Body</p>
+    </ResponsiveOverlay>,
+  );
+  expect(screen.getByRole("dialog").className).toContain("md:max-w-[560px]");
+});
+
+// Backfill lists scannable rows — checkbox, title, subtitle and an action.
+// At 560px every row truncated.
+test("size=wide opts into the 760px desktop width", () => {
+  render(
+    <ResponsiveOverlay open onOpenChange={vi.fn()} title="Wide" size="wide">
+      <p>Body</p>
+    </ResponsiveOverlay>,
+  );
+  const classes = screen.getByRole("dialog").className;
+  expect(classes).toContain("md:max-w-[760px]");
+  expect(classes).not.toContain("md:max-w-[560px]");
+});
+
 test("renders the sticky footer", () => {
   render(<Harness />);
   const footer = screen.getByTestId("responsive-overlay-footer");

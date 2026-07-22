@@ -131,6 +131,7 @@ export default function HevyBackfill() {
         title="Backfill older workouts"
         description="Scan Hevy workouts since a date and match them to Garmin. Preview first — nothing is written until you run it."
         mobile="sheet"
+        size="wide"
         footer={
           preview.data ? (
             <Button

@@ -21,6 +21,12 @@ export type ResponsiveOverlayProps = {
   description?: string;
   /** How the overlay presents below `md` (768px). Desktop is always a centered modal. */
   mobile?: "cover" | "sheet";
+  /**
+   * Desktop width. `wide` suits list-shaped bodies where the default 560px
+   * makes every row truncate. No effect on mobile, which is full-width in
+   * both presentations.
+   */
+  size?: keyof typeof DESKTOP_WIDTH_CLASS;
   /** Pinned to the bottom of the panel, above the scrolling body. */
   footer?: ReactNode;
   /**
@@ -49,7 +55,17 @@ export type ResponsiveOverlayProps = {
  * two shells never disagree about what "desktop" means.
  */
 const DESKTOP_CONTENT_CLASS =
-  "md:inset-auto md:top-1/2 md:bottom-auto md:left-1/2 md:h-auto md:max-h-[85vh] md:w-[calc(100%-2rem)] md:max-w-[560px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:shadow-[var(--shadow-frame)] md:data-open:zoom-in-95 md:data-closed:zoom-out-95 md:data-open:slide-in-from-right-0 md:data-open:slide-in-from-bottom-0 md:data-closed:slide-out-to-right-0 md:data-closed:slide-out-to-bottom-0";
+  "md:inset-auto md:top-1/2 md:bottom-auto md:left-1/2 md:h-auto md:max-h-[85vh] md:w-[calc(100%-2rem)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border md:shadow-[var(--shadow-frame)] md:data-open:zoom-in-95 md:data-closed:zoom-out-95 md:data-open:slide-in-from-right-0 md:data-open:slide-in-from-bottom-0 md:data-closed:slide-out-to-right-0 md:data-closed:slide-out-to-bottom-0";
+
+/**
+ * Desktop max width. Mobile is unaffected — both mobile presentations are
+ * full-width. `wide` exists for list-shaped bodies (the Hevy backfill
+ * preview), where 560px forced every row to truncate.
+ */
+const DESKTOP_WIDTH_CLASS = {
+  default: "md:max-w-[560px]",
+  wide: "md:max-w-[760px]",
+} as const;
 
 /**
  * Mobile presentation. `cover` is a full-screen push in from the right (frames
@@ -70,6 +86,7 @@ export function ResponsiveOverlay({
   title,
   description,
   mobile = "cover",
+  size = "default",
   footer,
   onOpenAutoFocus,
   role = "dialog",
@@ -97,6 +114,7 @@ export function ResponsiveOverlay({
             "fixed z-50 flex flex-col overflow-hidden border-border bg-card text-card-foreground outline-none",
             "duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
             MOBILE_CONTENT_CLASS[mobile],
+            DESKTOP_WIDTH_CLASS[size],
             DESKTOP_CONTENT_CLASS,
           )}
         >
