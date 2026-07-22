@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useNavigate, useOutletContext, useParams } from "react-router";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
 import { getHevyTools, saveExerciseMapping, type HevyToolsState } from "@/lib/api";
+import type { BackfillOutletContext } from "./hevy-backfill";
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
@@ -35,31 +36,23 @@ type Category = HevyToolsState["categories"][number];
 export default function HevyMapping() {
   const { templateId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
   const queryClient = useQueryClient();
+  // `useOutletContext` returns undefined when this route is mounted directly
+  // under `/hevy` (the hub renders `<Outlet />` with no context), so this is
+  // optional by construction, not by defensive coding.
+  const outletContext = useOutletContext<BackfillOutletContext | undefined>();
   const tools = useQuery({
     queryKey: queryKeys.hevyTools,
     queryFn: ({ signal }) => getHevyTools(signal),
   });
 
-  // This route is a sibling of `/hevy/backfill` (both nested under `/hevy`),
-  // not a child of it — so a "Map →" link from a locked backfill row is a
-  // sibling-route navigation, and closing must return to wherever the user
-  // actually came from (the hub, or the backfill screen), not always to the
-  // hub. `location.key` is the documented signal for that: React Router sets
-  // it to the literal string `"default"` only for a router's first/initial
-  // entry (a direct load or a test harness with a single `initialEntries`
-  // item) — every entry reached by an actual navigation (a `Link` click, a
-  // `navigate()` call) gets a unique key instead. So: a real prior entry to
-  // go back to → `navigate(-1)`; no prior entry (deep link, direct load) →
-  // fall back to the relative `".."`, which always resolves to the hub.
-  const close = () => {
-    if (location.key === "default") {
-      navigate("..");
-    } else {
-      navigate(-1);
-    }
-  };
+  // Where Cancel/Save return to. This module is mounted at two paths — under
+  // `/hevy` (from the hub) and under `/hevy/backfill` (from a locked row) —
+  // and ".." resolves correctly for both: the parent route is exactly the
+  // screen the user came from. That replaces the old `location.key ===
+  // "default"` heuristic, which had to guess whether there was a history
+  // entry to go back to.
+  const close = () => navigate("..");
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       close();
@@ -73,6 +66,9 @@ export default function HevyMapping() {
       toast.success(result.message);
       void queryClient.invalidateQueries({ queryKey: queryKeys.hevyTools });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hevyQueue });
+      // Re-run the parent's preview when nested under backfill, so the row
+      // just mapped unlocks in place instead of showing stale scan data.
+      outletContext?.onMappingSaved();
       close();
     },
     onError: (error) => {

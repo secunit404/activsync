@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { BackfillResult } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -79,9 +80,11 @@ export function BackfillRow({
 }) {
   const kind = backfillRowKind(item);
   const locked = kind === "locked";
+  // Nested under backfill (see routes.ts) so opening the editor leaves this
+  // overlay mounted — the preview result and the ticked selection survive.
   const mappingHref =
     locked && item.missingTemplateIds.length > 0
-      ? `/hevy/mapping/${encodeURIComponent(item.missingTemplateIds[0])}`
+      ? `/hevy/backfill/mapping/${encodeURIComponent(item.missingTemplateIds[0])}`
       : null;
 
   return (
@@ -120,21 +123,25 @@ export function BackfillRow({
           Create
         </span>
       ) : null}
-      {locked && mappingHref ? (
-        <Link
-          to={mappingHref}
-          className="shrink-0 rounded-md bg-warning px-3 py-1.5 font-mono text-[11px] font-semibold text-primary-foreground"
-        >
-          Map →
-        </Link>
-      ) : null}
-      {locked && !mappingHref ? (
-        <span
-          title="This exercise has no linkable template — it can't be fixed from here."
-          className="shrink-0 rounded-md bg-warning/15 px-3 py-1.5 font-mono text-[11px] font-semibold text-warning/80"
-        >
-          Needs mapping
-        </span>
+      {locked ? (
+        // One control for both locked cases. The dead end (no linkable
+        // template — Hevy reported none) is the same button disabled with an
+        // explanation, not a second differently-coloured badge.
+        mappingHref ? (
+          <Button asChild variant="warning" size="sm" className="shrink-0">
+            <Link to={mappingHref}>Map →</Link>
+          </Button>
+        ) : (
+          <Button
+            variant="warning"
+            size="sm"
+            className="shrink-0"
+            disabled
+            title="This exercise has no linkable template — it can't be fixed from here."
+          >
+            Map →
+          </Button>
+        )
       ) : null}
     </li>
   );

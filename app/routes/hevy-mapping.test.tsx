@@ -192,13 +192,12 @@ test("Cancel navigates back to the hub without saving", async () => {
   await waitFor(() => expect(router.state.location.pathname).toBe("/hevy"));
 });
 
-test("Cancel returns to the page that linked here, when reached by an in-app navigation rather than a direct link", async () => {
-  // `/hevy/mapping/:templateId` is a sibling of `/hevy/backfill`, not a
-  // child of it (both nest under `/hevy`) — Task 16's locked backfill rows
-  // link here, and Cancel must land back on `/hevy/backfill`, not the hub.
-  // Regression coverage for that cross-route case (see `close()`'s
-  // `location.key` comment in hevy-mapping.tsx); the "direct link → hub"
-  // case stays covered by the test above.
+test("Cancel returns to backfill when the editor is mounted underneath it", async () => {
+  // This module is mounted at two paths (see routes.ts): under `/hevy` from
+  // the hub, and under `/hevy/backfill` from a locked row. `close()` is a
+  // plain `navigate("..")`, so the return target is structural — the parent
+  // route IS the screen the user came from. This covers the nested mount;
+  // the test above covers the hub mount.
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -210,8 +209,16 @@ test("Cancel returns to the page that linked here, when reached by an in-app nav
         path: "/hevy",
         element: <Outlet />,
         children: [
-          { path: "backfill", element: <Link to="/hevy/mapping/tmpl-unmapped">Map →</Link> },
-          { path: "mapping/:templateId", element: <HevyMapping /> },
+          {
+            path: "backfill",
+            element: (
+              <>
+                <Link to="/hevy/backfill/mapping/tmpl-unmapped">Map →</Link>
+                <Outlet />
+              </>
+            ),
+            children: [{ path: "mapping/:templateId", element: <HevyMapping /> }],
+          },
         ],
       },
     ],

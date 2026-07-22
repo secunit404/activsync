@@ -6,19 +6,21 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 import type { BackfillResult } from "@/lib/api";
 import HevyBackfill from "./hevy-backfill";
+import HevyMapping from "./hevy-mapping";
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const { previewHevyBackfill, runHevyBackfill } = vi.hoisted(() => ({
+const { previewHevyBackfill, runHevyBackfill, getHevyTools } = vi.hoisted(() => ({
   previewHevyBackfill: vi.fn(),
   runHevyBackfill: vi.fn(),
+  getHevyTools: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, previewHevyBackfill, runHevyBackfill };
+  return { ...actual, previewHevyBackfill, runHevyBackfill, getHevyTools };
 });
 
 const { toastSuccess, toastError } = vi.hoisted(() => ({
@@ -84,7 +86,13 @@ function renderBackfill() {
         element: <Outlet />,
         children: [
           { index: true, element: <div>Hub</div> },
-          { path: "backfill", element: <HevyBackfill /> },
+          {
+            path: "backfill",
+            element: <HevyBackfill />,
+            // Mirrors routes.ts: the editor is nested, so mounting it leaves
+            // HevyBackfill mounted and its preview state intact.
+            children: [{ path: "mapping/:templateId", element: <HevyMapping /> }],
+          },
         ],
       },
     ],
@@ -122,14 +130,15 @@ test("select all importable ignores locked rows", async () => {
   expect(screen.getByRole("button", { name: /import 3 selected/i })).toBeEnabled();
 });
 
-test("locked row links to the mapping editor for its missing template", async () => {
+// The editor is a CHILD of backfill, not a sibling — see routes.ts.
+test("locked row links to the nested mapping editor for its missing template", async () => {
   previewHevyBackfill.mockResolvedValue(fourItemResult());
   renderBackfill();
   await preview();
 
   expect(await screen.findByRole("link", { name: /map/i })).toHaveAttribute(
     "href",
-    "/hevy/mapping/tmpl-unmapped",
+    "/hevy/backfill/mapping/tmpl-unmapped",
   );
 });
 
@@ -150,8 +159,9 @@ test("a locked row with no missing template id has no map link, but stays locked
   await preview();
 
   expect(await screen.findByRole("checkbox", { name: /Mystery session/i })).toBeDisabled();
+  // Same control as the linkable case, disabled — not a second badge.
   expect(screen.queryByRole("link", { name: /map/i })).not.toBeInTheDocument();
-  expect(screen.getByText("Needs mapping")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /map/i })).toBeDisabled();
 });
 
 test("import button count and confirmation reflect only what's checked, not every scanned row", async () => {
@@ -255,4 +265,55 @@ test("a preview failure reports an error toast", async () => {
 test("the Import footer is absent until a preview has run", () => {
   renderBackfill();
   expect(screen.queryByRole("button", { name: /import \d+ selected/i })).not.toBeInTheDocument();
+});
+
+// The whole point of nesting the editor under backfill: opening it leaves
+// this overlay mounted, so the preview result and the ticked selection
+// survive. As a sibling route it unmounted them, and Cancel returned the
+// user to an empty form.
+test("mapping a locked row keeps the backfill preview and selection alive", async () => {
+  previewHevyBackfill.mockResolvedValue(fourItemResult());
+  getHevyTools.mockResolvedValue({
+    mappings: [
+      {
+        templateId: "tmpl-unmapped",
+        title: "Landmine Press",
+        isCustom: true,
+        muscleGroup: "shoulders",
+        mapped: false,
+        unmapped: true,
+        garminRejected: false,
+        suggested: false,
+        category: null,
+        subcategory: null,
+        categoryName: null,
+        subcategoryName: null,
+      },
+    ],
+    categories: [
+      {
+        value: 3,
+        label: "Strength",
+        subcategories: [{ value: 7, label: "Shoulder Press" }],
+      },
+    ],
+  });
+  renderBackfill();
+  await preview();
+
+  await userEvent.click(await screen.findByRole("checkbox", { name: "Select Full Body" }));
+  expect(screen.getByRole("button", { name: "Import 1 selected" })).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("link", { name: /map/i }));
+
+  // Editor is open, and the backfill screen is still rendered behind it.
+  expect(await screen.findByText("Landmine Press")).toBeVisible();
+  expect(screen.getByText("Unmapped workout")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  // Back on backfill with the scan AND the tick still there — not a reset.
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Import 1 selected" })).toBeInTheDocument(),
+  );
 });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 
 import {
@@ -21,6 +21,13 @@ import { previewHevyBackfill, runHevyBackfill, type BackfillResult } from "@/lib
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 import { cn } from "@/lib/utils";
+
+/**
+ * Threaded to the nested mapping editor so a saved mapping can re-run the
+ * preview — a just-mapped row must unlock in place rather than stay locked
+ * against stale scan data.
+ */
+export type BackfillOutletContext = { onMappingSaved: () => void };
 
 function defaultSince(): string {
   const date = new Date();
@@ -217,6 +224,11 @@ export default function HevyBackfill() {
           )}
         </div>
       </ResponsiveOverlay>
+
+      {/* The nested mapping editor (`/hevy/backfill/mapping/:templateId`)
+          mounts here, on top of this overlay. This component stays mounted,
+          so `preview.data` and `selection` survive the round trip. */}
+      <Outlet context={{ onMappingSaved: () => preview.mutate() }} />
 
       <ConfirmDialog
         open={confirmOpen}

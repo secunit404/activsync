@@ -7,7 +7,15 @@ export default [
     ]),
     route("hevy", "./routes/hevy.tsx", [
       route("mapping/:templateId", "./routes/hevy-mapping.tsx"),
-      route("backfill", "./routes/hevy-backfill.tsx"),
+      route("mappings", "./routes/hevy-mappings.tsx"),
+      // Mapping nests UNDER backfill so the backfill overlay stays mounted
+      // beneath the editor — its preview result and selection are component
+      // state, and a sibling route would unmount them.
+      route("backfill", "./routes/hevy-backfill.tsx", [
+        route("mapping/:templateId", "./routes/hevy-mapping.tsx", {
+          id: "backfill-mapping",
+        }),
+      ]),
     ]),
     route("settings", "./routes/settings.tsx"),
   ]),
