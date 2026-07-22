@@ -27,14 +27,22 @@ export function HevyMappingSummary({ tools }: { tools: HevyToolsState }) {
           <h2 id="hevy-mapping-title" className="text-[15px] font-bold">
             Exercise mapping
           </h2>
-          {needsAction.length > 0 ? (
-            <Badge
-              variant="outline"
-              className="border-warning/30 bg-warning/12 font-mono text-[11px] text-warning uppercase"
-            >
-              {needsAction.length} need mapping
-            </Badge>
-          ) : null}
+          <span className="flex items-center gap-2">
+            {needsAction.length > 0 ? (
+              <Badge
+                variant="outline"
+                className="border-warning/30 bg-warning/12 font-mono text-[11px] text-warning uppercase"
+              >
+                {needsAction.length} need mapping
+              </Badge>
+            ) : null}
+            {/* This card stays a summary of what needs action; the full list
+                — including everything already mapped — lives at its own
+                route. */}
+            <Button asChild variant="outline" size="sm">
+              <Link to="/hevy/mappings">View all →</Link>
+            </Button>
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
