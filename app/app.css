@@ -4,6 +4,21 @@
 @import "@fontsource-variable/archivo";
 @import "@fontsource-variable/jetbrains-mono";
 
+/*
+ * This app is dark-only: the token values below ARE the dark theme, and
+ * `color-scheme: dark` tells the UA so. But Tailwind's stock `dark:` variant
+ * resolves to `@media (prefers-color-scheme: dark)`, which tracks the OS
+ * setting — so on a light-mode machine every `dark:` utility silently did
+ * nothing. That left shadcn primitives rendering their light-mode fallbacks
+ * on dark surfaces: `input`/`textarea`/`native-select` fell back to
+ * `bg-transparent`, and `checkbox` lost `data-checked:bg-primary` entirely.
+ *
+ * Binding the variant to "always on" makes `dark:` mean what it says in a
+ * single-theme app, and keeps future shadcn components correct as-pasted
+ * rather than needing each one hand-edited.
+ */
+@custom-variant dark (&);
+
 :root {
   color-scheme: dark;
   font-family: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
