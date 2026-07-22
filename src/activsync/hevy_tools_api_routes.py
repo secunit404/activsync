@@ -47,6 +47,16 @@ class HevyToolsState(ApiModel):
     categories: list[MappingCategory]
 
 
+class DeviceOption(ApiModel):
+    value: int
+    label: str
+
+
+class DeviceOptions(ApiModel):
+    manufacturers: list[DeviceOption]
+    products: list[DeviceOption]
+
+
 class MappingRequest(ApiModel):
     category: int
     subcategory: int
@@ -118,6 +128,36 @@ def _select_backfill_items(
     ]
 
 
+def _humanise_enum_name(name: str) -> str:
+    """`FENIX3` -> `Fenix3`, `FR945_LTE` -> `Fr945 Lte`.
+
+    Purely cosmetic: the integer value is what gets stored in
+    `hevy_device_identity`, so changing a label is never a data change."""
+    return name.replace("_", " ").title()
+
+
+def _enum_options(enum_class) -> list[DeviceOption]:
+    """Distinct value/label pairs from a FIT profile enum, sorted by label.
+
+    `fit_tool`'s profile enums contain aliases — several names can share one
+    integer value. Emitting each would look like duplicate devices in the
+    picker and would make the select's value ambiguous, so this keeps one
+    label per value. The shortest name wins: aliases are generally
+    qualified variants of a base name (`FENIX3` vs `FENIX3_CHINA` share no
+    value, but where they do collide the plain name is the useful one)."""
+    labels: dict[int, str] = {}
+    for member in enum_class:
+        value = int(member.value)
+        label = _humanise_enum_name(member.name)
+        current = labels.get(value)
+        if current is None or len(label) < len(current):
+            labels[value] = label
+    return sorted(
+        (DeviceOption(value=value, label=label) for value, label in labels.items()),
+        key=lambda option: option.label,
+    )
+
+
 def create_router(
     conn: sqlite3.Connection,
     *,
@@ -180,6 +220,22 @@ def create_router(
             for item in raw_items
         ]
         return raw_items, items
+
+    @router.get("/device-options", response_model=DeviceOptions)
+    def device_options() -> DeviceOptions:
+        """Manufacturer and Garmin product pickers for the device-identity
+        override in Settings.
+
+        Read-only reference data straight out of `fit_tool`'s FIT profile
+        enums — no DB access and no Hevy API key needed, so it stays
+        available before Hevy is connected (the identity fields render in
+        Settings regardless)."""
+        from fit_tool.profile.profile_type import GarminProduct, Manufacturer
+
+        return DeviceOptions(
+            manufacturers=_enum_options(Manufacturer),
+            products=_enum_options(GarminProduct),
+        )
 
     @router.get("/tools", response_model=HevyToolsState)
     def tools_state() -> HevyToolsState:

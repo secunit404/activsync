@@ -450,3 +450,58 @@ def test_hevy_backfill_run_without_ids_still_imports_everything(tmp_path, monkey
     assert run.status_code == 200
     assert "7 workouts ingested" in run.json()["message"]
     assert len(hevy_db.list_workouts(conn)) == 7
+
+
+def test_device_options_lists_manufacturers_and_garmin_products(tmp_path, monkeypatch):
+    """The Settings device-identity picker is fed from fit_tool's own FIT
+    profile enums rather than a hardcoded list, so it cannot drift from what
+    fit_builder can actually write."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    response = client.get("/api/v1/settings/hevy/device-options")
+
+    assert response.status_code == 200
+    body = response.json()
+    manufacturers = body["manufacturers"]
+    products = body["products"]
+
+    assert len(manufacturers) > 100
+    assert len(products) > 100
+
+    # The two identities fit_builder actually writes (GENERIC_GARMIN_IDENTITY
+    # and DEVELOPMENT_IDENTITY) must both be offerable.
+    by_value = {option["value"]: option["label"] for option in manufacturers}
+    assert by_value[1] == "Garmin"
+    assert by_value[255] == "Development"
+
+    # Labels are humanised, not raw SCREAMING_SNAKE enum names.
+    assert all("_" not in option["label"] for option in manufacturers)
+    assert {"value": 2050, "label": "Fenix3"} in products
+
+    # Sorted by label so the select is scannable.
+    assert products == sorted(products, key=lambda option: option["label"])
+
+
+def test_device_options_values_are_unique(tmp_path, monkeypatch):
+    """fit_tool's profile enums contain aliases — several names sharing one
+    integer value. Emitting each would look like duplicate devices in the
+    picker and would make the select's value ambiguous."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    body = client.get("/api/v1/settings/hevy/device-options").json()
+
+    for key in ("manufacturers", "products"):
+        values = [option["value"] for option in body[key]]
+        assert len(values) == len(set(values)), f"duplicate values in {key}"
+
+
+def test_device_options_needs_no_hevy_key(tmp_path, monkeypatch):
+    """Reference data, not account data — it must load before Hevy is
+    connected, since the identity fields render in Settings regardless."""
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "")
+
+    assert client.get("/api/v1/settings/hevy/device-options").status_code == 200
