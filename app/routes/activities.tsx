@@ -8,6 +8,7 @@ import { ActivitiesSkeleton } from "@/components/activities-skeleton";
 import { ActivitiesTable } from "@/components/activities-table";
 import { ActivityCard } from "@/components/activity-card";
 import { ActivityFilterPills } from "@/components/activity-filter-pills";
+import { ActivitySortSelect } from "@/components/activity-sort-select";
 import { AttentionBanner } from "@/components/attention-banner";
 import { BulkActionBar } from "@/components/bulk-action-bar";
 import { CatchUpReport } from "@/components/catch-up-report";
@@ -262,7 +263,12 @@ export function ActivitiesView({
 
       <StatStrip data={data} />
 
-      <ActivityFilterPills counts={data.counts} />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <ActivityFilterPills counts={data.counts} />
+        </div>
+        <ActivitySortSelect />
+      </div>
 
       <BulkActionBar
         count={selectedCount}
