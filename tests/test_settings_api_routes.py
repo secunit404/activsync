@@ -202,6 +202,38 @@ def test_dev_hevy_matching_defaults_to_review_but_can_be_saved_as_automatic(
     assert after.json()["hevy"]["matchMode"] == "automatic"
 
 
+def test_saving_blank_identity_keeps_the_detected_watch_identity(
+    tmp_path, monkeypatch
+):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    settings = db.get_config_value(conn, "settings", default={}) or {}
+    settings["hevy_device_identity"] = {
+        "manufacturer": 1, "product": 3121, "serial": 987}
+    db.set_config_value(conn, "settings", settings)
+
+    saved = client.put(
+        "/api/v1/settings/hevy",
+        json={
+            "enabled": False,
+            "watchStrategy": "replace",
+            "matchMode": "review",
+            "graceMinutes": 120,
+            "pollIntervalMinutes": 10,
+            "identity": {},
+            "profileOverride": {},
+        },
+    )
+    state = client.get("/api/v1/settings").json()["hevy"]
+
+    assert saved.status_code == 200
+    assert (db.get_config_value(conn, "settings")["hevy_device_identity"]
+            == {"manufacturer": 1, "product": 3121, "serial": 987})
+    assert "1/3121/987" in state["identityDisplay"]
+    assert state["identity"] == {
+        "manufacturer": None, "product": None, "serial": None}
+
+
 def test_hevy_description_template_and_summary_preference_round_trip(
     tmp_path, monkeypatch
 ):

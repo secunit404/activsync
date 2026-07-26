@@ -82,6 +82,13 @@ const connectedState: SettingsState = {
       vo2max: null,
       sex: null,
     },
+    profileBaseline: {
+      weightKg: 80,
+      birthYear: 1990,
+      vo2max: 45,
+      sex: "male",
+    },
+    profileFromGarmin: false,
   },
 };
 
@@ -125,7 +132,7 @@ test("no mock-data badge outside development", () => {
 
 test("auto-sync search filters the type list and reports the count", async () => {
   renderSettings();
-  expect(await screen.findByText(/of 154/)).toBeInTheDocument();
+  expect(await screen.findByText(/All 154/)).toBeInTheDocument();
   await userEvent.type(screen.getByRole("searchbox", { name: /search/i }), "run");
   expect(screen.getByText("Running")).toBeInTheDocument();
   expect(screen.queryByText("Swimming")).not.toBeInTheDocument();

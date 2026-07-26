@@ -78,6 +78,13 @@ class ProfileOverride(ApiModel):
     sex: Literal["male", "female"] | None = None
 
 
+class ProfileBaseline(ApiModel):
+    weight_kg: float
+    birth_year: int
+    vo2max: float
+    sex: str
+
+
 class HevySettingsState(ApiModel):
     connected: bool
     status: str
@@ -92,6 +99,9 @@ class HevySettingsState(ApiModel):
     identity: DeviceIdentity
     identity_display: str
     profile_override: ProfileOverride
+    # What a blank override field falls back to, and where that came from.
+    profile_baseline: ProfileBaseline
+    profile_from_garmin: bool
 
 
 class SettingsState(ApiModel):
@@ -338,6 +348,10 @@ def create_router(
                 profile_override=ProfileOverride.model_validate(
                     hevy_view["profile_override"]
                 ),
+                profile_baseline=ProfileBaseline.model_validate(
+                    hevy_view["profile_baseline"]
+                ),
+                profile_from_garmin=hevy_view["profile_from_garmin"],
             ),
         )
 
@@ -579,7 +593,10 @@ def create_router(
                 "hevy_summary_on_structured": payload.summary_on_structured,
                 "hevy_grace_minutes": payload.grace_minutes,
                 "hevy_poll_interval_minutes": payload.poll_interval_minutes,
-                "hevy_device_identity": identity_values if provided else None,
+                # Its own key: blanking the form must not wipe the identity
+                # detected from the watch (hevy_device_identity).
+                "hevy_device_identity_override": identity_values if provided
+                else None,
             }
         )
         profile = {

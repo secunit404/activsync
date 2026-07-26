@@ -250,7 +250,7 @@ export function HevySettings({
             </RadioGroup>
           </div>
 
-          <div className="grid gap-4 rounded-xl border border-border/70 bg-muted/20 p-4">
+          <div className="grid gap-4 rounded-xl border border-border/70 bg-muted p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="grid gap-1">
                 <FieldLabel htmlFor="hevy-summary-on-structured">
@@ -306,14 +306,14 @@ export function HevySettings({
                   >
                     Plain-text preview
                   </h3>
-                  <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground uppercase">
+                  <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground uppercase">
                     Sample data
                   </span>
                 </div>
 
                 <section
                   aria-labelledby="hevy-description-preview-title"
-                  className="flex min-h-56 flex-col rounded-lg border border-border/70 bg-card p-4"
+                  className="flex min-h-56 flex-col rounded-lg border border-border/70 bg-background p-4"
                 >
                   {descriptionPreview.error ? (
                     <p role="alert" className="mb-3 text-xs text-destructive">
@@ -366,16 +366,36 @@ export function HevySettings({
             </Field>
           </FieldGroup>
 
-          <details className="rounded-xl border border-border/70 bg-muted/20 p-4">
-            <summary className="min-h-8 cursor-pointer font-semibold">
+          {/* Padding lives on the summary and the content, not on the
+              `<details>`. With `p-4` on the container a closed panel was 64px
+              tall for one line of text, and the 16px band above and below the
+              summary was dead space — outside the summary, so it did not
+              toggle when clicked. Now the whole row is the target. */}
+          <details className="rounded-xl border border-border/70 bg-muted">
+            <summary className="flex cursor-pointer items-center gap-2.5 px-4 py-3 font-semibold">
               Device and profile overrides
+              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] font-normal tracking-[.06em] text-muted-foreground uppercase">
+                Advanced
+              </span>
             </summary>
-            <div className="mt-5 grid gap-6">
+            <div className="grid gap-6 px-4 pt-1 pb-4">
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                A Hevy workout becomes a FIT file that ActivSync uploads to
+                Garmin. These fields fill in the two things Hevy does not
+                provide: which device the file claims to come from, and the
+                body data used to estimate calories. Leave everything blank —
+                ActivSync fills both in on its own. Only change them if Garmin
+                rejects the upload or the estimated calories look wrong.
+              </p>
               <div className="grid gap-2">
                 <p className="text-sm font-medium">Device identity</p>
-                <p className="text-sm text-muted-foreground">
-                  {state.hevy.identityDisplay}. Enter all three values or leave
-                  all blank for automatic detection.
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Garmin only awards Training Effect and Training Load to files
+                  from a Garmin device. ActivSync copies the identity from the
+                  first watch activity it replaces, and uses a generic Garmin
+                  identity until then. Currently{" "}
+                  {state.hevy.identityDisplay}. Overriding needs all three
+                  values; leave all blank to keep automatic detection.
                 </p>
                 <FieldGroup className="grid gap-4 sm:grid-cols-3">
                   <Field>
@@ -440,10 +460,18 @@ export function HevySettings({
               </div>
               <div className="grid gap-2">
                 <p className="text-sm font-medium">Profile override</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Used to estimate the calories written into the FIT file.{" "}
+                  {state.hevy.profileFromGarmin
+                    ? "The values shown greyed out come from your Garmin profile and refresh daily."
+                    : "Your Garmin profile has not been read yet, so the greyed-out app defaults apply."}{" "}
+                  Fill a field in only to override that one value.
+                </p>
                 <FieldGroup className="grid gap-4 sm:grid-cols-2">
                   <OptionalNumber
                     id="profile-weight"
                     label="Weight (kg)"
+                    placeholder={String(state.hevy.profileBaseline.weightKg)}
                     value={draft.profile.weightKg}
                     onChange={(value) =>
                       update({ profile: { ...draft.profile, weightKg: value } })
@@ -452,6 +480,7 @@ export function HevySettings({
                   <OptionalNumber
                     id="profile-birth"
                     label="Birth year"
+                    placeholder={String(state.hevy.profileBaseline.birthYear)}
                     value={draft.profile.birthYear}
                     onChange={(value) =>
                       update({ profile: { ...draft.profile, birthYear: value } })
@@ -460,6 +489,7 @@ export function HevySettings({
                   <OptionalNumber
                     id="profile-vo2"
                     label="VO₂ max"
+                    placeholder={String(state.hevy.profileBaseline.vo2max)}
                     value={draft.profile.vo2max}
                     onChange={(value) =>
                       update({ profile: { ...draft.profile, vo2max: value } })
@@ -480,7 +510,9 @@ export function HevySettings({
                         })
                       }
                     >
-                      <NativeSelectOption value="">Automatic</NativeSelectOption>
+                      <NativeSelectOption value="">
+                        Automatic ({state.hevy.profileBaseline.sex})
+                      </NativeSelectOption>
                       <NativeSelectOption value="female">Female</NativeSelectOption>
                       <NativeSelectOption value="male">Male</NativeSelectOption>
                     </NativeSelect>
@@ -500,11 +532,13 @@ function OptionalNumber({
   id,
   label,
   value,
+  placeholder,
   onChange,
 }: {
   id: string;
   label: string;
   value: string;
+  placeholder?: string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -514,6 +548,7 @@ function OptionalNumber({
         id={id}
         className="h-11"
         type="number"
+        placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />

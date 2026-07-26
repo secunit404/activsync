@@ -82,17 +82,11 @@ export function CategorySettings({
       id="autosync"
       title="Auto-sync by type"
       description="On types publish to Strava automatically. Off types wait for manual review."
-      action={
-        <span
-          className="font-mono text-xs text-primary"
-          role="status"
-        >
-          {onCount} of {totalCount} on
-        </span>
-      }
       contentClassName="grid gap-4"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* `items-end`, not `items-center`: the search input sits under its own
+          label, so centring the row leaves the button half a label-line high. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <label className="grid flex-1 gap-1.5 text-sm font-medium">
           Search activity types
           <span className="relative flex items-center">
@@ -131,13 +125,13 @@ export function CategorySettings({
 
       <div role="group" aria-label="Filter by state" className="flex gap-1.5">
         <FilterPill active={mode === "all"} onClick={() => setMode("all")}>
-          All · {totalCount}
+          All {totalCount}
         </FilterPill>
         <FilterPill active={mode === "on"} onClick={() => setMode("on")}>
-          On · {onCount}
+          On {onCount}
         </FilterPill>
         <FilterPill active={mode === "off"} onClick={() => setMode("off")}>
-          Off · {offCount}
+          Off {offCount}
         </FilterPill>
       </div>
 
@@ -145,14 +139,18 @@ export function CategorySettings({
         {groups.length ? (
           groups.map(({ category, items }) => (
             <div key={category}>
-              <p className="sticky top-0 z-10 bg-card px-4 py-1.5 font-mono text-[10.5px] tracking-[.14em] text-muted-foreground uppercase">
+              {/* `muted`, not `card` — this band has to occlude the rows
+                  sliding under it, and the list it sits in is already `card`.
+                  Same treatment as the muscle-group headers in
+                  `routes/hevy-mappings.tsx`. */}
+              <p className="sticky top-0 z-10 bg-muted px-4 py-1.5 font-mono text-[10.5px] tracking-[.14em] text-muted-foreground uppercase">
                 {category.toUpperCase()}
               </p>
               {items.map((item) => (
                 <label
                   key={item.typeKey}
                   htmlFor={"type-toggle-" + item.typeKey}
-                  className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-b border-border/40 px-4 py-2 text-sm last:border-b-0 hover:bg-muted/40"
+                  className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-b border-border/40 px-4 py-2 text-sm last:border-b-0 hover:bg-foreground/[0.04]"
                 >
                   <span>{item.label}</span>
                   <Switch

@@ -276,20 +276,26 @@ def hevy_settings_view(conn: sqlite3.Connection) -> dict:
 
     cache = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={}) or {}
     override = settings.get(hevy_profile.OVERRIDE_KEY) or {}
-    profile = dict(hevy_profile.PROFILE_DEFAULTS)
-    for source in (cache, override):
-        for key in hevy_profile.PROFILE_DEFAULTS:
-            if source.get(key) is not None:
-                profile[key] = source[key]
+    # What applies when a field is left blank: Garmin's cached values, else
+    # the built-in defaults. The UI shows these as the inputs' placeholders.
+    baseline = dict(hevy_profile.PROFILE_DEFAULTS)
+    for key in hevy_profile.PROFILE_DEFAULTS:
+        if cache.get(key) is not None:
+            baseline[key] = cache[key]
+    from_garmin = any(cache.get(key) is not None
+                      for key in hevy_profile.PROFILE_DEFAULTS)
 
-    identity = settings.get("hevy_device_identity")
-    if identity:
-        numbers = "{}/{}/{}".format(identity.get("manufacturer"),
-                                    identity.get("product"),
-                                    identity.get("serial"))
+    # Two distinct things: what the app detected (or generated) for itself,
+    # and what the user pinned by hand. The detected value must survive a
+    # settings save that leaves the override blank.
+    detected = settings.get("hevy_device_identity") or {}
+    if detected:
+        numbers = "{}/{}/{}".format(detected.get("manufacturer"),
+                                    detected.get("product"),
+                                    detected.get("serial"))
         # product 0 is the generic-Garmin / per-install fallback shape; a real
         # watch FIT always carries a product number.
-        if identity.get("product"):
+        if detected.get("product"):
             identity_display = f"detected from your watch: {numbers}"
         else:
             identity_display = f"generic Garmin fallback: {numbers}"
@@ -300,10 +306,11 @@ def hevy_settings_view(conn: sqlite3.Connection) -> dict:
         "api_key_saved": bool(api_key),
         "connected": bool(api_key) and auth_ok is not False,
         "status": status,
-        "profile": profile,
+        "profile_baseline": baseline,
+        "profile_from_garmin": from_garmin,
         "profile_override": override,
         "profile_fetched_at": cache.get("fetched_at"),
-        "identity": identity or {},
+        "identity": settings.get("hevy_device_identity_override") or {},
         "identity_display": identity_display,
         "last_success_at": db.get_config_value(conn, "hevy_last_success_at"),
     }

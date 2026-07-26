@@ -31,6 +31,8 @@ const hevyState: SettingsState["hevy"] = {
   identity: { manufacturer: null, product: null, serial: null },
   identityDisplay: "not yet detected",
   profileOverride: { weightKg: null, birthYear: null, vo2max: null, sex: null },
+  profileBaseline: { weightKg: 80, birthYear: 1990, vo2max: 45, sex: "male" },
+  profileFromGarmin: false,
 };
 
 const state = { hevy: hevyState } as SettingsState;

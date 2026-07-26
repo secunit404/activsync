@@ -207,6 +207,13 @@ export type SettingsState = {
       vo2max: number | null;
       sex: "male" | "female" | null;
     };
+    profileBaseline: {
+      weightKg: number;
+      birthYear: number;
+      vo2max: number;
+      sex: string;
+    };
+    profileFromGarmin: boolean;
   };
 };
 

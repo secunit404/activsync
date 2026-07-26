@@ -104,11 +104,14 @@ def _persist_identity(conn: sqlite3.Connection, identity) -> None:
 
 
 def _identity_for_build(conn: sqlite3.Connection, cfg: dict):
-    """The per-install device identity: stored settings first (preparing may
-    have just persisted the watch identity), else a freshly generated
-    per-install fallback, persisted so it stays stable."""
-    stored = (db.get_config_value(conn, "settings", default={}) or {}).get(
-        "hevy_device_identity") or cfg.get("hevy_device_identity")
+    """The per-install device identity: the user's manual override first,
+    then the detected/stored one (preparing may have just persisted the watch
+    identity), else a freshly generated per-install fallback, persisted so it
+    stays stable."""
+    settings = db.get_config_value(conn, "settings", default={}) or {}
+    stored = (settings.get("hevy_device_identity_override")
+              or settings.get("hevy_device_identity")
+              or cfg.get("hevy_device_identity"))
     if stored:
         return identity_from_config({"hevy_device_identity": stored})
     identity = new_fallback_identity()
