@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import {
-  BackfillRow,
-  backfillRowKind,
-  isSelectable,
-  type BackfillItem,
-} from "@/components/backfill-row";
+import { BackfillRow, isSelectable, type BackfillItem } from "@/components/backfill-row";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +14,6 @@ import { useSelection } from "@/hooks/use-selection";
 import { previewHevyBackfill, runHevyBackfill, type BackfillResult } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
-import { cn } from "@/lib/utils";
 
 function defaultSince(): string {
   const date = new Date();
@@ -135,15 +129,6 @@ export function HevyBackfillCard({
     selectableIds.length > 0 && selectableIds.every((id) => selection.selected.has(id));
   const someSelected = selection.count > 0 && !allSelected;
 
-  const counts = items.reduce(
-    (acc, item) => {
-      const kind = backfillRowKind(item);
-      acc[kind] += 1;
-      return acc;
-    },
-    { locked: 0, tracked: 0, match: 0, create: 0 },
-  );
-
   return (
     <Card aria-labelledby="hevy-backfill-title" className="gap-0 py-0">
       <CardHeader className="border-b border-border/70 py-4">
@@ -210,37 +195,12 @@ export function HevyBackfillCard({
                       ({selectableIds.length} of {items.length})
                     </span>
                   </label>
-                  <span
-                    className="mx-1 hidden h-4.5 w-px bg-border sm:block"
-                    aria-hidden="true"
-                  />
-                  <CountBadge
-                    count={items.length}
-                    label="scanned"
-                    className="bg-muted text-muted-foreground"
-                  />
-                  <CountBadge
-                    count={counts.match}
-                    label="matched"
-                    className="bg-success/10 text-success"
-                  />
-                  <CountBadge
-                    count={counts.create}
-                    label="created"
-                    className="bg-primary/10 text-primary"
-                  />
-                  <CountBadge
-                    count={counts.locked}
-                    label="needs mapping"
-                    className="bg-warning/12 text-warning"
-                  />
-                  <CountBadge
-                    count={counts.tracked}
-                    label="tracked"
-                    className="bg-muted text-muted-foreground"
-                  />
                 </div>
-                <ul className="max-h-[360px] overflow-y-auto">
+                {/* No inner scroll box on mobile — a 360px scroll region
+                    inside an already-scrolling page is a trap on touch, and
+                    `overflow-y-auto` computes `overflow-x: auto`, which is
+                    what put a horizontal scrollbar under the rows. */}
+                <ul className="sm:max-h-[360px] sm:overflow-y-auto">
                   {items.map((item) => (
                     <BackfillRow
                       key={item.hevyId}
@@ -289,26 +249,3 @@ export function HevyBackfillCard({
   );
 }
 
-function CountBadge({
-  count,
-  label,
-  className,
-}: {
-  count: number;
-  label: string;
-  className: string;
-}) {
-  if (count === 0) {
-    return null;
-  }
-  return (
-    <span
-      className={cn(
-        "rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold whitespace-nowrap uppercase",
-        className,
-      )}
-    >
-      {count} {label}
-    </span>
-  );
-}

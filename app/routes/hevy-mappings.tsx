@@ -158,7 +158,7 @@ export default function HevyMappings() {
         <div
           role="group"
           aria-label="Filter exercises"
-          className="flex gap-1.5 rounded-xl border border-border bg-muted/30 p-1.5"
+          className="flex gap-1.5 rounded-xl border border-border p-1.5"
         >
           {FILTERS.map((option) => (
             <button
@@ -195,12 +195,12 @@ export default function HevyMappings() {
                 const collapsed = term === "" && collapsedGroups.has(group);
                 return (
                   <section key={group} aria-labelledby={headingId}>
-                    <div className="sticky top-0 z-10 border-b border-border bg-muted/60 backdrop-blur-sm">
+                    <div className="sticky top-0 z-10 border-b border-border bg-muted">
                       <button
                         type="button"
                         aria-expanded={!collapsed}
                         aria-controls={contentId}
-                        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
                         onClick={() => toggleGroup(group)}
                       >
                         <ChevronDown

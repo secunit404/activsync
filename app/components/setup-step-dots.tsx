@@ -90,7 +90,7 @@ export function SetupStepDots({ step }: { step: SetupStep | null }) {
               key={item.key}
               className={cn(
                 "h-1 flex-1 rounded-full",
-                index <= activeIndex ? "bg-primary" : "bg-muted",
+                index <= activeIndex ? "bg-primary" : "bg-secondary",
               )}
             />
           ))}

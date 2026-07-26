@@ -25,7 +25,7 @@ export function MappingListRow({ mapping }: { mapping: MappingRowData }) {
         <p className="truncate text-[14px] font-semibold">
           {mapping.title}
           {mapping.isCustom ? (
-            <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 align-middle font-mono text-[10px] text-muted-foreground">
+            <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 align-middle font-mono text-[10px] text-muted-foreground">
               CUSTOM
             </span>
           ) : null}

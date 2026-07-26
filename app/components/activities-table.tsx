@@ -99,7 +99,7 @@ function ActivityRow({
   return (
     <tr
       className={cn(
-        "cursor-pointer border-b border-border/60 last:border-b-0 hover:bg-muted/40",
+        "cursor-pointer border-b border-border/60 last:border-b-0 hover:bg-foreground/[0.04]",
         selected && "bg-primary/5",
       )}
       onClick={() => navigate(href)}

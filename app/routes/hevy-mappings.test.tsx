@@ -132,7 +132,7 @@ test("muscle-group headers are distinct disclosure controls", async () => {
   const shoulders = await screen.findByRole("button", { name: /Shoulders/ });
 
   expect(shoulders).toHaveAttribute("aria-expanded", "true");
-  expect(shoulders.parentElement).toHaveClass("bg-muted/60");
+  expect(shoulders.parentElement).toHaveClass("bg-muted");
   await userEvent.click(shoulders);
 
   expect(shoulders).toHaveAttribute("aria-expanded", "false");

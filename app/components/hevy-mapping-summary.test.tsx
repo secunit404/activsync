@@ -36,10 +36,12 @@ function renderSummary(tools: HevyToolsState) {
   );
 }
 
-test("shows a needs-mapping count and links each unmapped exercise to its editor", () => {
+test("links each unmapped exercise to its editor", () => {
   renderSummary({ mappings: [mapping({})], categories: [] });
 
-  expect(screen.getByText("1 need mapping")).toBeInTheDocument();
+  // No count badge in the header: the rows below it are the count, and the
+  // card only lists exercises that need mapping in the first place.
+  expect(screen.queryByText(/need mapping/i)).not.toBeInTheDocument();
   const map = screen.getByRole("link", { name: /map bulgarian split squat/i });
   expect(map).toHaveAttribute("href", "/hevy/mapping/tmpl-1");
   expect(map).toHaveAttribute("data-variant", "warning");
@@ -81,7 +83,7 @@ test("omits rows that are already mapped and not rejected", () => {
   expect(screen.queryByText(/need mapping/i)).not.toBeInTheDocument();
 });
 
-test("shows a quiet all-mapped message and no badge when nothing needs attention", () => {
+test("shows a quiet all-mapped message when nothing needs attention", () => {
   renderSummary({ mappings: [], categories: [] });
   expect(screen.getByText(/every hevy exercise/i)).toBeInTheDocument();
   expect(screen.queryByText(/need mapping/i)).not.toBeInTheDocument();

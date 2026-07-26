@@ -37,26 +37,62 @@
   text-rendering: optimizeLegibility;
   --activ: #5caadb;
   --sync: #fb8946;
-  --background: #111317;
+  /*
+   * Surface elevation ramp. Every surface below is one blue-grey family
+   * (oklch hue 254) stepped evenly in *perceptual* lightness — ~0.025 L per
+   * level, which is roughly where two dark surfaces stop reading as the same
+   * sheet. The previous values were spaced by eye in hex and landed inside a
+   * 1.5-point luminance band (background 0.65% -> input 2.16%), so a card on a
+   * page and a panel inside that card were physically distinct and visually
+   * identical. This spans 0.39% -> 5.16% instead.
+   *
+   * Each token owns exactly ONE job. Surfaces encode absolute elevation and
+   * nothing else:
+   *
+   *   rail        app chrome (rail, tab bar)
+   *   background  page canvas
+   *   card        primary container (cards, tables, overlays, stat tiles)
+   *   popover     floats above a card (dialogs, menus, rail active pill)
+   *   muted       nested panel inside a card — solid, never an opacity
+   *   secondary   objects sitting on a surface (pills, chips, badges)
+   *   input       control fills
+   *
+   * States are NOT surfaces. "One step lighter than whatever I happen to sit
+   * on" is not expressible as an absolute token, which is exactly why
+   * `bg-muted/40` got drafted into the hover role and ended up meaning both
+   * "clickable" and "nested section" in different files. Hover is a relative
+   * tint (`hover:bg-foreground/[0.04]`) so it composes on any level; `accent`
+   * stays the one selected/active fill.
+   *
+   * WELLS GO DOWN, NOT UP. A nested *panel* rises toward the viewer and takes
+   * `muted`. A *well* — a text editor, a preview of generated output, a
+   * segmented-control track, a mono readout — is a hole punched in the
+   * surface, and in a dark UI a hole is darker, not brighter. Wells take
+   * `background`, which already sits one step below `card`. Getting this
+   * backwards is what made every editor and preview box the brightest thing
+   * on screen: they were the deepest content but painted the highest level.
+   */
+  --rail: #090d11;
+  --background: #11161b;
+  --card: #1b2028;
+  --popover: #20272e;
+  --muted: #262c35;
+  --secondary: #2d343d;
+  /* Above every surface it divides, so it never disappears against one side. */
+  --border: #2f363f;
+  --accent: #333b44;
+  --input: #39414b;
   --foreground: #e7eaee;
-  --card: #131820;
   --card-foreground: #f1f3f6;
-  --popover: #171c23;
   --popover-foreground: #f1f3f6;
   --primary: #f26b38;
   --primary-foreground: #111317;
-  --secondary: #1a1f27;
   --secondary-foreground: #e7eaee;
-  --muted: #171c22;
-  --muted-foreground: #8a919c;
-  --accent: #1e242c;
+  --muted-foreground: #949cab;
   --accent-foreground: #f1f3f6;
   --destructive: #ff6b5e;
-  --border: #1e232b;
-  --input: #222932;
   --ring: #f26b38;
   --radius: 0.75rem;
-  --rail: #0a0c0f;
   --success: #7cd992;
   --warning: #f2c14e;
   --info: #63b8ee;
@@ -157,18 +193,22 @@ body {
 }
 
 /*
- * Scroll regions that keep their scrollability but hide the scrollbar chrome,
- * per the design handoff. `display: none` on the WebKit scrollbar hides the
- * track without disabling the scroll, and `scrollbar-width: none` is the
- * standards-track equivalent for Firefox.
+ * Overlay scroll regions. The handoff called for hiding the scrollbar chrome
+ * entirely, but that left no signal at all that a long body continued — and
+ * no signal of *how far*, which only a thumb's size and position convey. A
+ * thin, tinted scrollbar is the honest middle: it reads as chrome-less until
+ * there is something to say.
+ *
+ * This is the whole treatment. Scroll shadows at the edges were tried and
+ * removed: at an opacity low enough not to smear, they were invisible against
+ * a near-black --card, and at one high enough to see, they looked like a
+ * rendering fault.
  */
 .overlay-scroll {
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 50%) transparent;
 }
 
-.overlay-scroll::-webkit-scrollbar {
-  display: none;
-}
 
 /*
  * ResponsiveOverlay's enter/exit is a slide (from the right for the mobile
@@ -226,8 +266,12 @@ body {
   align-items: flex-start !important;
   gap: 12px !important;
   padding: 14px 16px !important;
-  background: #171c23 !important;
-  border-color: #2a323d !important;
+  /* A toast floats above everything, so it takes the `popover` level. Written
+     as literals rather than `var(--popover)` only because these rules must
+     stay unlayered to beat sonner's own injected stylesheet — keep them in
+     step with the ramp above. */
+  background: #20272e !important;
+  border-color: #39414b !important;
   box-shadow: var(--shadow-toast) !important;
 }
 
@@ -267,7 +311,7 @@ body {
   height: 16px !important;
   border: none !important;
   background: transparent !important;
-  color: #5b636e !important;
+  color: #7a838f !important;
 }
 
 [data-sonner-toast] [data-close-button]:hover {

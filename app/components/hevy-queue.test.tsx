@@ -82,16 +82,19 @@ test("shows a quiet empty message, not the header badges, when the queue is empt
   expect(screen.queryByText(/skipped/i)).not.toBeInTheDocument();
 });
 
-test("uses user-facing names for the queue groups", () => {
+// The header carries no counts: every row states its own status, so the
+// badges only restated what the list already said.
+test("the header is the title alone, with no count badges", () => {
   renderQueue(
     emptyQueue({
       counts: { inFlight: 2, problems: 1, skipped: 1 },
     }),
   );
 
-  expect(screen.getByText("2 pending")).toBeInTheDocument();
-  expect(screen.getByText("1 needs attention")).toBeInTheDocument();
-  expect(screen.getByText("1 skipped")).toBeInTheDocument();
+  expect(screen.getByText("Sync queue")).toBeInTheDocument();
+  expect(screen.queryByText("2 pending")).not.toBeInTheDocument();
+  expect(screen.queryByText("1 needs attention")).not.toBeInTheDocument();
+  expect(screen.queryByText("1 skipped")).not.toBeInTheDocument();
 });
 
 test("retry calls the queue action and reports success via toast", async () => {

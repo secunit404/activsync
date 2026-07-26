@@ -157,15 +157,8 @@ function renderHevy({
   );
 }
 
-test("hub shows pending and attention counts", async () => {
-  renderHevy();
-  expect(await screen.findByText(/2 pending/i)).toBeInTheDocument();
-  expect(screen.getByText(/1 needs attention/i)).toBeInTheDocument();
-});
-
 test("mapping summary links to the editor for an unmapped exercise", async () => {
   renderHevy();
-  expect(screen.getByText("1 need mapping")).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: /view all/i })).not.toBeInTheDocument();
   expect(
     await screen.findByRole("link", { name: "Map Bulgarian Split Squat" }),
@@ -189,7 +182,6 @@ test("backfill is inline on the hub, not a link to somewhere else", () => {
 test("presents skipped queue items inline with an unskip action, not hidden", () => {
   renderHevy();
   expect(screen.getByText("Mobility Flow")).toBeInTheDocument();
-  expect(screen.getByText(/1 skipped/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Unskip" })).toBeInTheDocument();
 });
 

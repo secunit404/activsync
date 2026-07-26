@@ -33,7 +33,7 @@ const buttonVariants = cva(
         // rule and render blue. `inherit` wins the cascade against that base
         // rule while preserving the adapt-to-context behaviour.
         ghost:
-          "text-inherit hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
+          "text-inherit hover:bg-foreground/[0.06] hover:text-foreground aria-expanded:bg-foreground/[0.06] aria-expanded:text-foreground",
         destructive:
           "bg-destructive/12 text-destructive hover:bg-destructive/22 focus-visible:border-destructive/40 focus-visible:ring-destructive/20",
         // Tinted, never a solid --warning fill: #f2c14e behind near-black

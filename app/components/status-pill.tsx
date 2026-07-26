@@ -12,7 +12,7 @@ const statusConfig: Record<PublishStatus, { label: string; className: string }> 
   held: { label: "HELD", className: "bg-warning/12 text-warning" },
   published: { label: "PUBLISHED", className: "bg-success/12 text-success" },
   missing: { label: "MISSING", className: "bg-destructive/12 text-destructive" },
-  excluded: { label: "EXCLUDED", className: "bg-muted text-muted-foreground" },
+  excluded: { label: "EXCLUDED", className: "bg-secondary text-muted-foreground" },
 };
 
 export function StatusPill({ status }: { status: PublishStatus }) {

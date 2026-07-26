@@ -1,6 +1,5 @@
 import { Link } from "react-router";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { HevyToolsState } from "@/lib/api";
@@ -21,18 +20,10 @@ export function HevyMappingSummary({ tools }: { tools: HevyToolsState }) {
   return (
     <Card id="hevy-mapping" className="gap-0 py-0" aria-labelledby="hevy-mapping-title">
       <CardHeader className="border-b border-border/70 py-4">
-        <CardTitle className="flex flex-wrap items-center gap-2.5">
+        <CardTitle>
           <h2 id="hevy-mapping-title" className="text-[15px] font-bold">
             Exercises needing mapping
           </h2>
-          {needsAction.length > 0 ? (
-            <Badge
-              variant="outline"
-              className="border-warning/30 bg-warning/12 font-mono text-[11px] text-warning uppercase"
-            >
-              {needsAction.length} need mapping
-            </Badge>
-          ) : null}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
@@ -60,7 +51,7 @@ function MappingRow({ mapping }: { mapping: MappingRowData }) {
         <p className="truncate text-[14px] font-semibold">
           {mapping.title}
           {mapping.isCustom ? (
-            <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 align-middle font-mono text-[10px] text-muted-foreground">
+            <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 align-middle font-mono text-[10px] text-muted-foreground">
               CUSTOM
             </span>
           ) : null}

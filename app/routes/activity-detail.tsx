@@ -35,7 +35,7 @@ type ActionType = "publish" | "exclude" | "restore" | "edit";
 
 /**
  * Activity detail — view (`2a`) and edit (`2b`), one `ResponsiveOverlay`
- * (`mobile="cover"`) whose `children`/`footer` swap between the two modes
+ * (`mobile="sheet"`) whose `children`/`footer` swap between the two modes
  * rather than mounting two overlays (see Task 6's guidance: swapping avoids
  * a remount, which would lose focus and replay the enter animation).
  *
@@ -97,7 +97,7 @@ export default function ActivityDetail() {
         open
         onOpenChange={handleOpenChange}
         title="Activity not found"
-        mobile="cover"
+        mobile="sheet"
       >
         <p className="text-sm text-muted-foreground">
           This activity isn&apos;t in the current list — it may be on a different page or filter.
@@ -160,7 +160,7 @@ export default function ActivityDetail() {
       onOpenChange={handleOpenChange}
       title={activity.title}
       description={eyebrow}
-      mobile="cover"
+      mobile="sheet"
       footer={
         editing ? (
           <ActivityDetailEditFooter

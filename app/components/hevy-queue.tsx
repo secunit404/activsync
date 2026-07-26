@@ -60,7 +60,7 @@ const toneClasses: Record<Tone, { dot: string; badge: string }> = {
   info: { dot: "bg-info", badge: "bg-info/12 text-info" },
   warning: { dot: "bg-warning", badge: "bg-warning/12 text-warning" },
   destructive: { dot: "bg-destructive", badge: "bg-destructive/12 text-destructive" },
-  muted: { dot: "bg-muted-foreground/50", badge: "bg-muted text-muted-foreground" },
+  muted: { dot: "bg-muted-foreground/50", badge: "bg-secondary text-muted-foreground" },
 };
 
 /**
@@ -127,17 +127,10 @@ export function HevyQueue({
   return (
     <Card className="gap-0 py-0" aria-labelledby="hevy-queue-title">
       <CardHeader className="border-b border-border/70 py-4">
-        <CardTitle className="flex flex-wrap items-center gap-2.5">
+        <CardTitle>
           <h2 id="hevy-queue-title" className="text-[15px] font-bold">
             Sync queue
           </h2>
-          <QueueCountBadge count={state.counts.inFlight} label="pending" tone="info" />
-          <QueueCountBadge
-            count={state.counts.problems}
-            label="needs attention"
-            tone="warning"
-          />
-          <QueueCountBadge count={state.counts.skipped} label="skipped" tone="muted" />
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
@@ -191,32 +184,6 @@ export function HevyQueue({
   );
 }
 
-function QueueCountBadge({
-  count,
-  label,
-  tone,
-}: {
-  count: number;
-  label: string;
-  tone: Tone;
-}) {
-  if (count === 0) {
-    return null;
-  }
-  // Compact status-pill copy, not a sentence. The labels describe what the
-  // user needs to know rather than exposing the backend state-machine groups.
-  return (
-    <span
-      className={cn(
-        "rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap uppercase",
-        toneClasses[tone].badge,
-      )}
-    >
-      {count} {label}
-    </span>
-  );
-}
-
 function toneFor(kind: QueueRowKind, item: HevyQueueItem): Tone {
   if (kind === "in-flight") return "info";
   if (kind === "skipped") return "muted";
@@ -255,18 +222,26 @@ function QueueRow({
   const tone = toneFor(kind, item);
 
   return (
+    // Two columns on mobile (dot | content) with the actions on their own row
+    // underneath, three on sm+. A wrapping flex row right-justified the
+    // buttons into a ragged stair-step; a grid gives them one left edge.
     <li
       className={cn(
-        "flex items-center gap-3.5 border-b border-border/50 px-5 py-3.5 last:border-b-0",
+        "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3.5 gap-y-3 border-b border-border/50 px-5 py-3.5 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center",
+        // Only the problem tint survives. `awaitingMatch` also carried a
+        // `bg-info/[0.04]` wash, but the surfaces are themselves blue-grey
+        // (oklch hue 254), so an info blue at 4% never read as a highlight —
+        // it read as a colour cast on the row. The dot and the badge already
+        // say the row is awaiting a match. Warning stays because orange is
+        // far enough off the surface hue to actually register as an alert.
         kind === "problem" && "bg-warning/[0.04]",
-        item.awaitingMatch && "flex-wrap bg-info/[0.04]",
       )}
     >
       <span
-        className={cn("size-2 shrink-0 rounded-full", toneClasses[tone].dot)}
+        className={cn("mt-1.5 size-2 shrink-0 rounded-full sm:mt-0", toneClasses[tone].dot)}
         aria-hidden="true"
       />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <p
           className={cn(
             "truncate text-[14.5px] font-semibold",
@@ -275,9 +250,11 @@ function QueueRow({
         >
           {item.title}
         </p>
+        {/* Wraps on mobile: which Garmin activity it matched is the reason
+            the row is asking for a decision. */}
         <p
           className={cn(
-            "truncate font-mono text-xs",
+            "font-mono text-xs break-words sm:truncate",
             kind === "problem" ? "text-warning/90" : "text-muted-foreground",
           )}
         >
@@ -288,10 +265,7 @@ function QueueRow({
         </p>
       </div>
       <div
-        className={cn(
-          "flex shrink-0 flex-wrap items-center justify-end gap-2",
-          item.awaitingMatch && "w-full sm:w-auto",
-        )}
+        className="col-start-2 flex flex-wrap items-center gap-2 sm:col-start-3 sm:row-start-1 sm:justify-end"
         aria-busy={pending}
       >
         <ActionButton
@@ -420,7 +394,7 @@ function WorkoutDetails({ item, onClose }: { item: HevyQueueItem; onClose: () =>
       }}
       title={item.title}
       description="Workout data recorded by Hevy"
-      mobile="cover"
+      mobile="sheet"
       size="wide"
     >
       {detail.isPending ? (

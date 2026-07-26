@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { XIcon } from "lucide-react";
 
@@ -76,9 +76,19 @@ const DESKTOP_WIDTH_CLASS = {
 const MOBILE_CONTENT_CLASS = {
   cover:
     "inset-0 h-full rounded-none data-open:slide-in-from-right data-closed:slide-out-to-right",
+  // `translate-y-(--sheet-drag)` is what the drag gesture below moves. It is
+  // 0px at rest, and `md:-translate-y-1/2` (from DESKTOP_CONTENT_CLASS) wins
+  // above the breakpoint, so the desktop centering is never affected.
   sheet:
-    "inset-x-0 bottom-0 max-h-[85vh] rounded-t-[20px] border-t data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
+    "inset-x-0 bottom-0 max-h-[85vh] translate-y-(--sheet-drag) rounded-t-[20px] border-t data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
 } as const;
+
+/**
+ * How far the sheet must be dragged down before release dismisses it rather
+ * than springing back. Roughly a thumb's travel — short enough to feel light,
+ * long enough that a stray swipe on the handle doesn't close the sheet.
+ */
+const SHEET_DISMISS_PX = 96;
 
 export function ResponsiveOverlay({
   open,
@@ -92,6 +102,53 @@ export function ResponsiveOverlay({
   role = "dialog",
   children,
 }: ResponsiveOverlayProps) {
+  // Drag-to-dismiss lives on the grab handle only, which is `md:hidden` — so
+  // desktop is excluded by CSS rather than by a `window.innerWidth` branch,
+  // keeping this component's "no JS breakpoint" property intact. Handle-only
+  // also means the gesture can never fight the body's own scrolling, which is
+  // the failure mode that makes drag-to-dismiss hard to hand-roll.
+  //
+  // ponytail: no snap points and no velocity fling — a slow 96px drag
+  // dismisses, a fast 40px flick does not. Swap in `vaul` if either matters.
+  // The refs, not the state, are what the handlers read. `pointermove` is a
+  // continuous-priority event in React, so a fast drag can batch every move
+  // update without an intervening render — leaving the `pointerup` handler
+  // looking at a stale `dragY` of 0 and silently refusing to dismiss. State
+  // exists only to drive the render; the refs decide.
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragStartY = useRef<number | null>(null);
+  const dragDistance = useRef(0);
+
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragStartY.current = event.clientY;
+    dragDistance.current = 0;
+    setDragging(true);
+    // Without capture the pointer leaves the handle on the first few pixels
+    // and the rest of the gesture goes to whatever is underneath.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStartY.current === null) return;
+    // Clamped at 0: the sheet is already at its maximum height, so dragging
+    // up has nowhere to go and would just detach it from the bottom edge.
+    dragDistance.current = Math.max(0, event.clientY - dragStartY.current);
+    setDragY(dragDistance.current);
+  };
+
+  const endDrag = () => {
+    if (dragStartY.current === null) return;
+    dragStartY.current = null;
+    const travelled = dragDistance.current;
+    dragDistance.current = 0;
+    setDragging(false);
+    setDragY(0);
+    if (travelled > SHEET_DISMISS_PX) {
+      onOpenChange(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
@@ -110,16 +167,41 @@ export function ResponsiveOverlay({
           {...(description ? {} : { "aria-describedby": undefined })}
           role={role}
           onOpenAutoFocus={onOpenAutoFocus}
+          style={{ "--sheet-drag": `${dragY}px` } as React.CSSProperties}
           className={cn(
             "fixed z-50 flex flex-col overflow-hidden border-border bg-card text-card-foreground outline-none",
             "duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
             MOBILE_CONTENT_CLASS[mobile],
             DESKTOP_WIDTH_CLASS[size],
             DESKTOP_CONTENT_CLASS,
+            // Off while the finger is down so the sheet tracks it exactly;
+            // on after release so a short drag springs back instead of
+            // snapping.
+            //
+            // `translate` specifically, never `transition-transform`: the
+            // latter covers transform/translate/scale/rotate in Tailwind v4,
+            // and `transform` is what the enter/exit keyframes animate — the
+            // two fought, and the sheet opened stuck off-screen. The drag
+            // uses the standalone `translate` property, so the two never
+            // touch. No `duration-*` either; twMerge would collapse it into
+            // the `duration-150` above and retime the animation.
+            dragging
+              ? "transition-none"
+              : "transition-[translate] ease-out motion-reduce:transition-none",
           )}
         >
           {mobile === "sheet" && (
-            <div className="flex shrink-0 justify-center pt-2.5 pb-1 md:hidden">
+            // `touch-none` stops the browser claiming the vertical pan for a
+            // scroll before the pointer handlers see it. The padding is the
+            // touch target — the visible bar is only 4px tall.
+            <div
+              data-testid="responsive-overlay-handle"
+              className="flex shrink-0 cursor-grab touch-none justify-center pt-3 pb-2.5 active:cursor-grabbing md:hidden"
+              onPointerDown={startDrag}
+              onPointerMove={moveDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+            >
               <span
                 aria-hidden="true"
                 className="h-1 w-9 rounded-full bg-muted-foreground/40"

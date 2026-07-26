@@ -43,7 +43,7 @@ export function ActivityFilterPills({ counts }: ActivityFilterPillsProps) {
     <div
       role="group"
       aria-label="Filter activities by status"
-      className="inline-flex max-w-full flex-nowrap gap-1 rounded-xl border border-border bg-muted/30 p-1.5 md:flex-wrap md:gap-1.5"
+      className="inline-flex max-w-full flex-nowrap gap-1 rounded-xl border border-border p-1.5 md:flex-wrap md:gap-1.5"
     >
       {filterOptions.map((option) => {
         const isActive = option.value === activeStatus;

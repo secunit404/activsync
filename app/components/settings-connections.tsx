@@ -388,7 +388,7 @@ function HevyDialog({ state }: { state: SettingsState }) {
               setOpen(false);
             }}
           >
-            <p className="rounded-lg border border-border/70 bg-muted/25 p-3 font-mono text-xs text-muted-foreground">
+            <p className="rounded-lg border border-border/70 bg-background p-3 font-mono text-xs text-muted-foreground">
               API key saved · {state.hevy.status}
             </p>
             <Field>

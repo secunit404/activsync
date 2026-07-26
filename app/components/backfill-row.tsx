@@ -97,14 +97,21 @@ export function BackfillRow({
 
   return (
     <>
+      {/* Two columns on mobile (checkbox | content), with the actions dropping
+          to their own row underneath; three on sm+, actions back on the right.
+          A flex row can't do that without the action group either overflowing
+          (shrink-0) or squashing the title (shrink). */}
       <li
         className={cn(
-          "flex flex-wrap items-center gap-3.5 border-b border-border/60 px-5 py-3 last:border-b-0 md:px-6",
+          "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3.5 gap-y-3 border-b border-border/60 px-5 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center md:px-6",
+          // Row states are relative tints, not surfaces — they have to read
+          // the same whether the list sits on a card or a nested panel.
           locked && "bg-warning/[0.04]",
-          tracked && "bg-muted/20",
+          tracked && "bg-foreground/[0.03]",
         )}
       >
         <Checkbox
+        className="mt-0.5 sm:mt-0"
         aria-label={
           locked
             ? `${item.title} needs mapping`
@@ -116,7 +123,7 @@ export function BackfillRow({
         disabled={locked || tracked}
         onCheckedChange={locked || tracked ? undefined : onToggle}
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
         <p
           className={cn(
             "truncate text-sm font-semibold",
@@ -126,16 +133,18 @@ export function BackfillRow({
         >
           {item.title}
         </p>
+        {/* Wraps on mobile: "→ matches Garmin activity #…" is the whole point
+            of the row, and truncating it there hid exactly that. */}
         <p
           className={cn(
-            "truncate font-mono text-[11.5px]",
+            "font-mono text-[11.5px] break-words sm:truncate",
             locked ? "text-warning/70" : "text-muted-foreground",
           )}
         >
           {describeRow(item, kind)}
         </p>
         </div>
-        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="col-start-2 flex flex-wrap items-center gap-2 sm:col-start-3 sm:row-start-1 sm:justify-end">
           <Button
             type="button"
             variant="outline"
@@ -175,7 +184,7 @@ export function BackfillRow({
         </span>
         ) : null}
         {tracked ? (
-        <span className="shrink-0 rounded-md bg-muted px-2.5 py-1 font-mono text-[10.5px] font-semibold text-muted-foreground uppercase">
+        <span className="shrink-0 rounded-md bg-secondary px-2.5 py-1 font-mono text-[10.5px] font-semibold text-muted-foreground uppercase">
           Tracked
         </span>
         ) : null}
@@ -206,7 +215,7 @@ export function BackfillRow({
         onOpenChange={setPreviewOpen}
         title={item.title}
         description="Workout data recorded by Hevy"
-        mobile="cover"
+        mobile="sheet"
         size="wide"
       >
         <HevyWorkoutDetailContent detail={item.workout} />

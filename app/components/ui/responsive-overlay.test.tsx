@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
@@ -120,11 +120,75 @@ test("renders nothing while closed", () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-test("the body scrolls with a hidden scrollbar", () => {
+test("the body is the scroll region", () => {
   render(<Harness />);
   const body = screen.getByTestId("responsive-overlay-body");
   expect(body).toContainElement(screen.getByText("Body"));
   expect(body).toHaveClass("overlay-scroll", "overflow-y-auto");
+});
+
+function dragHandle(handle: HTMLElement, distance: number) {
+  fireEvent.pointerDown(handle, { clientY: 0, pointerId: 1 });
+  fireEvent.pointerMove(handle, { clientY: distance, pointerId: 1 });
+  fireEvent.pointerUp(handle, { clientY: distance, pointerId: 1 });
+}
+
+test("dragging the sheet handle past the threshold requests close", () => {
+  const onOpenChange = vi.fn();
+  render(<Harness mobile="sheet" onOpenChange={onOpenChange} />);
+  dragHandle(screen.getByTestId("responsive-overlay-handle"), 150);
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+});
+
+// A stray swipe on the handle must not close a sheet the user is reading.
+test("a short drag springs back instead of dismissing", () => {
+  const onOpenChange = vi.fn();
+  render(<Harness mobile="sheet" onOpenChange={onOpenChange} />);
+  dragHandle(screen.getByTestId("responsive-overlay-handle"), 40);
+  expect(onOpenChange).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toHaveStyle({ "--sheet-drag": "0px" });
+});
+
+// React treats `pointermove` as continuous priority, so a fast drag can batch
+// every move without an intervening render. Dispatching the whole gesture
+// inside one `act` reproduces that: a handler reading `dragY` from the render
+// closure still sees 0 at release and refuses to dismiss.
+test("dismisses on a fast drag that never re-renders mid-gesture", () => {
+  const onOpenChange = vi.fn();
+  render(<Harness mobile="sheet" onOpenChange={onOpenChange} />);
+  const handle = screen.getByTestId("responsive-overlay-handle");
+  const event = (type: string, clientY: number) =>
+    new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, clientY });
+  act(() => {
+    handle.dispatchEvent(event("pointerdown", 0));
+    handle.dispatchEvent(event("pointermove", 200));
+    handle.dispatchEvent(event("pointerup", 200));
+  });
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+});
+
+test("the sheet tracks the pointer while dragging", () => {
+  render(<Harness mobile="sheet" />);
+  const handle = screen.getByTestId("responsive-overlay-handle");
+  fireEvent.pointerDown(handle, { clientY: 20, pointerId: 1 });
+  fireEvent.pointerMove(handle, { clientY: 90, pointerId: 1 });
+  expect(screen.getByRole("dialog")).toHaveStyle({ "--sheet-drag": "70px" });
+});
+
+// Dragging up has nowhere to go — the sheet is already at its full height.
+test("dragging up does not detach the sheet from the bottom edge", () => {
+  render(<Harness mobile="sheet" />);
+  const handle = screen.getByTestId("responsive-overlay-handle");
+  fireEvent.pointerDown(handle, { clientY: 200, pointerId: 1 });
+  fireEvent.pointerMove(handle, { clientY: 40, pointerId: 1 });
+  expect(screen.getByRole("dialog")).toHaveStyle({ "--sheet-drag": "0px" });
+});
+
+// The handle is the only drag surface, and it is `md:hidden` — that is what
+// keeps the gesture off desktop without a JS breakpoint.
+test("the cover presentation has no drag handle", () => {
+  render(<Harness mobile="cover" />);
+  expect(screen.queryByTestId("responsive-overlay-handle")).not.toBeInTheDocument();
 });
 
 test("defaults the mobile presentation to a full-screen cover", () => {
