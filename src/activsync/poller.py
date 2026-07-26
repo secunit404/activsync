@@ -9,7 +9,16 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from activsync import config, db, events, hevy_profile, hevy_sync, logging_setup, sync
+from activsync import (
+    config,
+    db,
+    events,
+    hevy_db,
+    hevy_profile,
+    hevy_sync,
+    logging_setup,
+    sync,
+)
 from activsync.garmin_client import GarminClient
 from activsync.hevy_client import HevyAuthError, HevyClient
 from activsync.strava_client import StravaClient, StravaRateLimitError
@@ -110,6 +119,35 @@ class Poller:
         )
         status = row["status"]
         if status in ("merged", "replaced", "described"):
+            self.run_garmin_once(now)
+        events.bus.publish("refresh")
+        return status
+
+    def process_hevy_workout(self, hevy_id: str) -> str:
+        """Start one queued automatic workout immediately.
+
+        Backfill uses this as a background handoff instead of waiting for the
+        next scheduled Hevy interval. The normal decision engine still owns
+        every safety gate and durable operation transition.
+        """
+        row = hevy_db.get_workout(self._conn, hevy_id)
+        if row is None:
+            raise ValueError(f"unknown Hevy workout: {hevy_id}")
+        now = datetime.now(timezone.utc)
+        garmin = self._garmin_factory()
+        hevy = self._hevy_factory()
+        profile = hevy_profile.get_profile(self._conn, garmin, now)
+        cfg = config.load_config(self._conn)
+        cfg[hevy_profile.CACHE_KEY] = {
+            "weight_kg": profile.weight_kg,
+            "birth_year": profile.birth_year,
+            "vo2max": profile.vo2max,
+            "sex": profile.sex,
+        }
+        hevy_sync.process_workout(self._conn, garmin, hevy, row, cfg, now)
+        after = hevy_db.get_workout(self._conn, hevy_id)
+        status = after["status"]
+        if status in ("merged", "replaced", "described", "uploaded_passive"):
             self.run_garmin_once(now)
         events.bus.publish("refresh")
         return status

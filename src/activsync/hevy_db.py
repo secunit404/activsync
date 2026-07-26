@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS hevy_operations (
     target_activity_id INTEGER,
     upload_id TEXT,
     pre_upload_ids TEXT NOT NULL DEFAULT '[]',
+    generated_calories REAL,
+    generated_avg_hr REAL,
     attempt_count INTEGER NOT NULL DEFAULT 0,
     delete_attempt_count INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
@@ -126,6 +128,13 @@ def init_schema(conn: sqlite3.Connection) -> None:
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(hevy_workouts)")}
     if "lease_owner" not in cols:
         conn.execute("ALTER TABLE hevy_workouts ADD COLUMN lease_owner TEXT")
+    operation_cols = {
+        row["name"] for row in conn.execute("PRAGMA table_info(hevy_operations)")
+    }
+    if "generated_calories" not in operation_cols:
+        conn.execute("ALTER TABLE hevy_operations ADD COLUMN generated_calories REAL")
+    if "generated_avg_hr" not in operation_cols:
+        conn.execute("ALTER TABLE hevy_operations ADD COLUMN generated_avg_hr REAL")
     conn.commit()
 
 
@@ -201,14 +210,6 @@ _BLOCKING_STATUSES = (
     "needs_review",
 )
 
-_PROMOTABLE_STATUSES = (
-    "merged",
-    "described",
-    "replaced",
-    "uploaded_passive",
-)
-
-
 def blocking_workout_for_activity(
     conn: sqlite3.Connection, garmin_activity_id: int
 ) -> dict | None:
@@ -263,22 +264,6 @@ def linked_workout_for_activity(
            ORDER BY created_at
            LIMIT 1""",
         (garmin_activity_id, garmin_activity_id),
-    ).fetchone()
-    return dict(row) if row else None
-
-
-def promotable_workout_for_activity(
-    conn: sqlite3.Connection, garmin_activity_id: int
-) -> dict | None:
-    """Return an ActivSync-produced terminal link eligible to bypass holds."""
-    status_placeholders = ", ".join("?" for _ in _PROMOTABLE_STATUSES)
-    row = conn.execute(
-        f"""SELECT * FROM hevy_workouts
-            WHERE garmin_activity_id = ?
-              AND provenance = 'activsync'
-              AND status IN ({status_placeholders})
-            LIMIT 1""",
-        (garmin_activity_id, *_PROMOTABLE_STATUSES),
     ).fetchone()
     return dict(row) if row else None
 
@@ -451,7 +436,7 @@ def get_open_operation(conn: sqlite3.Connection, hevy_id: str) -> dict | None:
 _OPERATION_FIELDS = {
     "phase", "next_step", "source_activity_id", "target_activity_id",
     "upload_id", "pre_upload_ids", "attempt_count", "delete_attempt_count",
-    "last_error", "locked_until",
+    "generated_calories", "generated_avg_hr", "last_error", "locked_until",
 }
 
 

@@ -99,6 +99,7 @@ def create_app(
     *,
     web_dir: Path | None = None,
     apply_hevy_match: Callable[[str, str], str] | None = None,
+    process_hevy_workout: Callable[[str], str] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="ActivSync", lifespan=lifespan)
     resolved_web_dir = web_dir or WEB_DIR
@@ -131,7 +132,13 @@ def create_app(
             pending_garmin_mfa=pending_garmin_mfa,
         )
     )
-    app.include_router(hevy_tools_api_routes.create_router(conn, mock_mode=_mock_mode))
+    app.include_router(
+        hevy_tools_api_routes.create_router(
+            conn,
+            mock_mode=_mock_mode,
+            process_hevy_workout=process_hevy_workout,
+        )
+    )
     app.include_router(
         hevy_queue_api_routes.create_router(
             conn,

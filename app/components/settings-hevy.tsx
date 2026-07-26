@@ -17,7 +17,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { HevyDraft } from "@/lib/hevy-draft";
-import { renderDescriptionPreview } from "@/lib/hevy-description";
+import {
+  renderDescriptionPreview,
+  renderTitlePreview,
+} from "@/lib/hevy-description";
 import { getHevyDeviceOptions, type SettingsState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -86,6 +89,7 @@ export function HevySettings({
     onChange({ ...draft, ...patch });
   }
   const descriptionPreview = renderDescriptionPreview(draft.descriptionTemplate);
+  const titlePreview = renderTitlePreview(draft.titleTemplate);
 
   // Reference data — no DB read and no Hevy key needed server-side, so it
   // is safe to fetch whenever this section renders. `staleTime: Infinity`
@@ -251,6 +255,25 @@ export function HevySettings({
           </div>
 
           <div className="grid gap-4 rounded-xl border border-border/70 bg-muted p-4">
+            <Field className="gap-2">
+              <FieldLabel htmlFor="hevy-title-template">Activity title template</FieldLabel>
+              <Input
+                id="hevy-title-template"
+                value={draft.titleTemplate}
+                maxLength={200}
+                aria-invalid={titlePreview.error ? true : undefined}
+                onChange={(event) => update({ titleTemplate: event.target.value })}
+                required
+              />
+              <FieldDescription className="text-xs leading-relaxed">
+                Available placeholders: {"{title}"} and {"{clean_title}"}.{" "}
+                {"{clean_title}"} removes emoji from the Hevy title.
+                {titlePreview.error
+                  ? ` ${titlePreview.error}`
+                  : ` Preview: ${titlePreview.text || "Workout"}`}
+              </FieldDescription>
+            </Field>
+
             <div className="flex items-start justify-between gap-4">
               <div className="grid gap-1">
                 <FieldLabel htmlFor="hevy-summary-on-structured">
@@ -290,9 +313,8 @@ export function HevySettings({
                   required
                 />
                 <FieldDescription className="text-xs leading-relaxed">
-                  Available placeholders: {"{title}"}, {"{clean_title}"},{" "}
-                  {"{duration}"}, {"{calories}"}, {"{avg_hr}"}, {"{exercises}"},
-                  and {"{marker}"}. {"{clean_title}"} removes emoji from the Hevy title.
+                  Available placeholders: {"{duration}"}, {"{calories}"},{" "}
+                  {"{avg_hr}"}, {"{exercises}"}, and {"{marker}"}.
                   Empty metrics are removed automatically. Use {"{{"} and {"}}"} for
                   literal braces.
                 </FieldDescription>

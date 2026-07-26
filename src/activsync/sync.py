@@ -232,10 +232,6 @@ def sync_garmin(
             if hold_cutoff is not None and act.start_time < hold_cutoff:
                 status, hold_reason = "held", HOLD_BACKLOG
                 stats.held_backlog += 1
-            elif hevy_db.promotable_workout_for_activity(
-                conn, act.garmin_activity_id
-            ) is not None:
-                status, hold_reason = "pending", None
             elif act.activity_type in held_types:
                 status, hold_reason = "held", HOLD_CATEGORY
             else:
@@ -248,29 +244,10 @@ def sync_garmin(
             stats.new += 1
             continue
 
-        hevy_promotes = (
-            existing["publish_status"] == "held"
-            and existing.get("hold_reason") != HOLD_BACKLOG
-            and hevy_db.promotable_workout_for_activity(
-                conn, act.garmin_activity_id
-            ) is not None
-        )
         if existing["content_hash"] == new_hash:
-            if hevy_promotes:
-                db.set_publish_status(conn, act.garmin_activity_id, "pending")
-                stats.updated += 1
             continue
 
         status = existing["publish_status"]
-        # The Hevy marker promotes a CATEGORY-held row to pending. A backlog-held
-        # row is held because it predates the normal window, not because of its
-        # category — an edit must not sneak the outage backlog past the hold.
-        if (
-            status == "held"
-            and existing.get("hold_reason") != HOLD_BACKLOG
-            and hevy_promotes
-        ):
-            status = "pending"
         db.update_activity_content(
             conn, act.garmin_activity_id, act.title, act.description,
             act.activity_type, new_hash, status, garmin_data,

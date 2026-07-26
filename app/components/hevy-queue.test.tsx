@@ -97,6 +97,24 @@ test("the header is the title alone, with no count badges", () => {
   expect(screen.queryByText("1 skipped")).not.toBeInTheDocument();
 });
 
+test("an imported Garmin match says queued while automatic processing starts", () => {
+  renderQueue(
+    emptyQueue({
+      counts: { inFlight: 1, problems: 0, skipped: 0 },
+      inFlight: [
+        item({
+          status: "waiting_watch",
+          matchedGarminActivityId: 123,
+          matchedGarminTitle: "Morning strength",
+        }),
+      ],
+    }),
+  );
+
+  expect(screen.getByText("QUEUED")).toBeVisible();
+  expect(screen.queryByText("WAITING FOR GARMIN")).not.toBeInTheDocument();
+});
+
 test("retry calls the queue action and reports success via toast", async () => {
   runHevyQueueAction.mockResolvedValue({ message: "Retry queued for Leg Day." });
   renderQueue(

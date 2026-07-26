@@ -16,7 +16,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from activsync import db, hevy_db, hr_sources
-from activsync.hevy_description import generate_description
+from activsync.hevy_description import generate_description, generate_title
 from activsync.fit_builder import (
     Profile,
     ResolvedExercise,
@@ -238,21 +238,82 @@ def _activity_window(conn: sqlite3.Connection, activity_id: int,
     return row["start_time"], duration
 
 
+def _activity_metrics(
+    conn: sqlite3.Connection,
+    row: dict,
+    target_activity_id: int,
+    generated_metrics: dict | None = None,
+) -> tuple[int | None, int | None]:
+    """Prefer Garmin's recorded metrics, then the metrics written into a new FIT.
+
+    Replace targets are not in the local activity table until Garmin polling
+    observes the upload, so their original watch activity is the authoritative
+    Garmin source during finalization.
+    """
+    def rounded(value: object) -> int | None:
+        try:
+            return round(float(value)) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    calories: int | None = None
+    avg_hr: int | None = None
+    activity_ids = [
+        target_activity_id,
+        row.get("source_garmin_activity_id"),
+    ]
+    for activity_id in activity_ids:
+        if activity_id is None:
+            continue
+        activity = db.get_activity(conn, activity_id)
+        if activity is None:
+            continue
+        try:
+            metrics = json.loads(activity.get("garmin_data") or "{}")
+        except (TypeError, ValueError):
+            metrics = {}
+        if calories is None:
+            calories = rounded(metrics.get("calories"))
+        if avg_hr is None:
+            avg_hr = rounded(metrics.get("avg_hr"))
+        if calories is not None and avg_hr is not None:
+            return calories, avg_hr
+    generated_metrics = generated_metrics or {}
+    return (
+        calories
+        if calories is not None
+        else rounded(generated_metrics.get("calories")),
+        avg_hr
+        if avg_hr is not None
+        else rounded(generated_metrics.get("avg_hr")),
+    )
+
+
 def _apply_metadata(
+    conn: sqlite3.Connection,
     garmin: GarminClient,
     activity_id: int,
     row: dict,
     cfg: dict,
     *,
     write_summary: bool,
+    generated_metrics: dict | None = None,
 ) -> None:
     payload = _payload_of(row)
-    garmin.set_title(activity_id, row["title"] or payload.get("title", "Workout"))
+    garmin.set_title(
+        activity_id,
+        generate_title(payload, template=cfg.get("hevy_title_template")),
+    )
     if write_summary:
+        calories, avg_hr = _activity_metrics(
+            conn, row, activity_id, generated_metrics
+        )
         garmin.set_description(
             activity_id,
             generate_description(
                 payload,
+                calories=calories,
+                avg_hr=avg_hr,
                 template=cfg.get("hevy_description_template"),
             ),
         )
@@ -287,6 +348,7 @@ def execute_merge(
                                    error="watch activity deleted on Garmin")
         return
     _apply_metadata(
+        conn,
         garmin,
         source_id,
         row,
@@ -303,7 +365,7 @@ def execute_describe(
 ) -> None:
     source_id = row["source_garmin_activity_id"]
     try:
-        _apply_metadata(garmin, source_id, row, cfg, write_summary=True)
+        _apply_metadata(conn, garmin, source_id, row, cfg, write_summary=True)
     except ActivityGone:
         hevy_db.set_workout_status(conn, row["hevy_id"], "needs_review",
                                    error="watch activity deleted on Garmin")
@@ -439,8 +501,20 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
                 tmp_dir_ctx = tempfile.TemporaryDirectory(prefix="activsync-fit-")
                 with tmp_dir_ctx as tmp_dir:
                     fit_path = f"{tmp_dir}/hevy_{hevy_id}.fit"
-                    build_fit(_payload_of(row), resolved, hr or None, profile,
-                              identity, fit_path)
+                    build_result = build_fit(
+                        _payload_of(row),
+                        resolved,
+                        hr or None,
+                        profile,
+                        identity,
+                        fit_path,
+                    )
+                    hevy_db.update_operation(
+                        conn,
+                        op["id"],
+                        generated_calories=build_result.get("calories"),
+                        generated_avg_hr=build_result.get("avg_hr"),
+                    )
                     upload_error: Exception | None = None
                     try:
                         result = garmin.upload_fit(fit_path)
@@ -514,6 +588,7 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
 
             if next_step == "metadata":
                 _apply_metadata(
+                    conn,
                     garmin,
                     target,
                     row,
@@ -522,6 +597,10 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
                         kind != "replace"
                         or bool(cfg.get("hevy_summary_on_structured", True))
                     ),
+                    generated_metrics={
+                        "calories": op.get("generated_calories"),
+                        "avg_hr": op.get("generated_avg_hr"),
+                    },
                 )
                 hevy_db.update_operation(conn, op["id"], next_step="delete")
                 next_step = "delete"

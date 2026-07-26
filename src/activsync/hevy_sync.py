@@ -19,6 +19,7 @@ from activsync.garmin_client import ActivityGone, GarminClient
 from activsync.hevy_apply import (
     _parse_ts,
     _activity_window,
+    _activity_metrics,
     _apply_metadata,
     _payload_of,
     advance_operation,
@@ -28,6 +29,7 @@ from activsync.hevy_apply import (
     execute_passive,
     execute_replace,
     generate_description,
+    generate_title,
     resolve_exercises,
 )
 from activsync.hevy_client import HevyAuthError, HevyClient
@@ -309,7 +311,15 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
             return
 
         strategy = cfg.get("hevy_watch_strategy", "merge")
-        match = find_watch_match(conn, row)
+        # Backfill already made and uniquely claimed this decision. Re-running
+        # overlap matching can disagree with the exact-start backfill matcher
+        # (for example when Garmin's cached duration is absent) and strand a
+        # known match as "waiting for Garmin".
+        match = (
+            row["source_garmin_activity_id"]
+            if row.get("source_garmin_activity_id") is not None
+            else find_watch_match(conn, row)
+        )
         if isinstance(match, int):
             if not hevy_db.claim_source(conn, hevy_id, match):
                 hevy_db.set_workout_status(
@@ -458,6 +468,7 @@ def _reapply(conn: sqlite3.Connection, garmin: GarminClient, hevy: HevyClient,
             garmin.put_exercise_sets(target, payload)
         strategy = row["applied_strategy"] or "merge"
         _apply_metadata(
+            conn,
             garmin,
             target,
             row,
@@ -539,6 +550,9 @@ def _strava_catchup(conn: sqlite3.Connection, strava, cfg: dict) -> bool:
             if not activity or not activity.get("strava_activity_id"):
                 continue  # not published yet — publish carries current content
             payload = _payload_of(row)
+            calories, avg_hr = _activity_metrics(
+                conn, row, activity["garmin_activity_id"]
+            )
             strategy = row["applied_strategy"] or "merge"
             write_summary = (
                 strategy in ("describe", "passive")
@@ -547,10 +561,14 @@ def _strava_catchup(conn: sqlite3.Connection, strava, cfg: dict) -> bool:
             try:
                 strava.update_activity_metadata(
                     activity["strava_activity_id"],
-                    row["title"] or payload.get("title", "Workout"),
+                    generate_title(
+                        payload, template=cfg.get("hevy_title_template")
+                    ),
                     (
                         generate_description(
                             payload,
+                            calories=calories,
+                            avg_hr=avg_hr,
                             template=cfg.get("hevy_description_template"),
                         )
                         if write_summary

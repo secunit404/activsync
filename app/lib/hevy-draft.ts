@@ -11,6 +11,7 @@ export type HevyDraft = {
   enabled: boolean;
   watchStrategy: SettingsState["hevy"]["watchStrategy"];
   matchMode: SettingsState["hevy"]["matchMode"];
+  titleTemplate: string;
   descriptionTemplate: string;
   summaryOnStructured: boolean;
   graceMinutes: number;
@@ -29,6 +30,7 @@ export function hevyDraftFromState(hevy: SettingsState["hevy"]): HevyDraft {
     enabled: hevy.enabled,
     watchStrategy: hevy.watchStrategy,
     matchMode: hevy.matchMode,
+    titleTemplate: hevy.titleTemplate,
     descriptionTemplate: hevy.descriptionTemplate,
     summaryOnStructured: hevy.summaryOnStructured,
     graceMinutes: hevy.graceMinutes,
@@ -56,6 +58,7 @@ export function hevyDraftToPayload(draft: HevyDraft) {
     enabled: draft.enabled,
     watchStrategy: draft.watchStrategy,
     matchMode: draft.matchMode,
+    titleTemplate: draft.titleTemplate,
     descriptionTemplate: draft.descriptionTemplate,
     summaryOnStructured: draft.summaryOnStructured,
     graceMinutes: draft.graceMinutes,

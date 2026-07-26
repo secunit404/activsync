@@ -6,7 +6,11 @@ import os
 import sqlite3
 
 from activsync import db
-from activsync.hevy_description import DEFAULT_TEMPLATE
+from activsync.hevy_description import (
+    DEFAULT_TEMPLATE,
+    DEFAULT_TITLE_TEMPLATE,
+    LEGACY_DEFAULT_TEMPLATE,
+)
 
 DEFAULT_CONFIG = {
     "garmin_poll_interval_minutes": 20,
@@ -15,6 +19,7 @@ DEFAULT_CONFIG = {
     "display_timezone": "Europe/Stockholm",
     "hevy_enabled": False,
     "hevy_match_mode": "automatic",
+    "hevy_title_template": DEFAULT_TITLE_TEMPLATE,
     "hevy_description_template": DEFAULT_TEMPLATE,
     "hevy_summary_on_structured": True,
     # Task-1 spike gate: S1+S2+S3 passed, so replace is the default and all
@@ -35,6 +40,8 @@ def load_config(conn: sqlite3.Connection) -> dict:
     if "hevy_match_mode" not in stored and _development_mode():
         cfg["hevy_match_mode"] = "review"
     cfg.update(stored)
+    if cfg["hevy_description_template"] == LEGACY_DEFAULT_TEMPLATE:
+        cfg["hevy_description_template"] = DEFAULT_TEMPLATE
     return cfg
 
 

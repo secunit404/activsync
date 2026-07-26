@@ -234,7 +234,7 @@ def test_saving_blank_identity_keeps_the_detected_watch_identity(
         "manufacturer": None, "product": None, "serial": None}
 
 
-def test_hevy_description_template_and_summary_preference_round_trip(
+def test_hevy_title_description_templates_and_summary_preference_round_trip(
     tmp_path, monkeypatch
 ):
     conn, client = _client(tmp_path, monkeypatch)
@@ -246,7 +246,8 @@ def test_hevy_description_template_and_summary_preference_round_trip(
             "enabled": False,
             "watchStrategy": "replace",
             "matchMode": "review",
-            "descriptionTemplate": "{title}\n\n{exercises}\n\nCustom footer",
+            "titleTemplate": "Gym — {clean_title}",
+            "descriptionTemplate": "{exercises}\n\nCustom footer",
             "summaryOnStructured": False,
             "graceMinutes": 120,
             "pollIntervalMinutes": 10,
@@ -257,6 +258,7 @@ def test_hevy_description_template_and_summary_preference_round_trip(
     state = client.get("/api/v1/settings")
 
     assert saved.status_code == 200
+    assert state.json()["hevy"]["titleTemplate"] == "Gym — {clean_title}"
     assert state.json()["hevy"]["descriptionTemplate"].endswith("Custom footer")
     assert state.json()["hevy"]["summaryOnStructured"] is False
 
@@ -284,6 +286,32 @@ def test_hevy_description_template_rejects_unknown_placeholder(
 
     assert response.status_code == 400
     assert "Unknown description placeholder" in response.json()["detail"]
+
+
+def test_hevy_title_template_rejects_description_placeholder(
+    tmp_path, monkeypatch
+):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    response = client.put(
+        "/api/v1/settings/hevy",
+        json={
+            "enabled": False,
+            "watchStrategy": "replace",
+            "matchMode": "review",
+            "titleTemplate": "{calories}",
+            "descriptionTemplate": "{exercises}",
+            "summaryOnStructured": True,
+            "graceMinutes": 120,
+            "pollIntervalMinutes": 10,
+            "identity": {},
+            "profileOverride": {},
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Unknown title placeholder" in response.json()["detail"]
 
 
 def test_mock_setup_can_complete_through_json_contract(tmp_path, monkeypatch):
@@ -494,6 +522,54 @@ def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
     assert run.json()["ran"] is True
     assert len(hevy_db.list_workouts(conn)) == 7
     assert "7 workouts ingested" in run.json()["message"]
+
+
+def test_automatic_backfill_starts_a_known_garmin_match_immediately(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "1")
+    conn = db.connect(str(tmp_path / "settings-api.db"))
+    started: list[str] = []
+    client = TestClient(
+        create_app(conn, process_hevy_workout=started.append),
+        follow_redirects=False,
+    )
+    _complete_setup(conn)
+    db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
+    cfg = config.load_config(conn)
+    cfg.update(
+        {
+            "hevy_enabled": True,
+            "hevy_match_mode": "automatic",
+            "hevy_watch_strategy": "replace",
+        }
+    )
+    config.save_config(conn, cfg)
+    workout = dev_mock.dev_hevy_workouts()[0]
+    start = workout["start_time"].replace("T", " ").split("+")[0].rstrip("Z")
+    db.insert_activity(
+        conn,
+        987654,
+        "strength_training",
+        "Watch strength",
+        "",
+        start,
+        "backfill-match",
+        "held",
+        datetime.now(timezone.utc),
+        garmin_data='{"duration": 3600}',
+    )
+
+    run = client.post(
+        "/api/v1/settings/hevy/backfill/run",
+        json={"since": "2020-01-01", "hevyIds": [workout["id"]]},
+    )
+
+    assert run.status_code == 200
+    assert started == [workout["id"]]
+    row = hevy_db.get_workout(conn, workout["id"])
+    assert row["status"] == "waiting_watch"
+    assert row["source_garmin_activity_id"] == 987654
 
 
 def test_hevy_backfill_run_with_explicit_ids_imports_only_those(

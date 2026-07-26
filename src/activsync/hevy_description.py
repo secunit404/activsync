@@ -6,7 +6,9 @@ import re
 from datetime import datetime, timezone
 from string import Formatter
 
-DEFAULT_TEMPLATE = (
+DEFAULT_TITLE_TEMPLATE = "{clean_title}"
+
+LEGACY_DEFAULT_TEMPLATE = (
     "🏋️ {title}\n"
     "{duration}\n"
     "{calories}\n"
@@ -15,10 +17,17 @@ DEFAULT_TEMPLATE = (
     "{marker}"
 )
 
-ALLOWED_FIELDS = frozenset(
+DEFAULT_TEMPLATE = (
+    "{duration}\n"
+    "{calories}\n"
+    "{avg_hr}\n\n"
+    "{exercises}\n\n"
+    "{marker}"
+)
+
+TITLE_FIELDS = frozenset({"title", "clean_title"})
+DESCRIPTION_FIELDS = frozenset(
     {
-        "title",
-        "clean_title",
         "duration",
         "calories",
         "avg_hr",
@@ -26,7 +35,6 @@ ALLOWED_FIELDS = frozenset(
         "marker",
     }
 )
-
 _EMOJI_CODEPOINTS = re.compile(
     "["
     "\U0001F1E6-\U0001FAFF"  # flags, pictographs, faces, symbols
@@ -45,25 +53,42 @@ def clean_title(value: object) -> str:
     return " ".join(title.split()).strip() or "Workout"
 
 
-def validate_template(template: str) -> None:
+def _validate_template(template: str, allowed_fields: frozenset[str], label: str) -> None:
     """Reject unknown or executable-looking formatting expressions."""
     if not template.strip():
-        raise ValueError("Description template cannot be empty.")
+        raise ValueError(f"{label} template cannot be empty.")
     try:
         parts = Formatter().parse(template)
         for _literal, field_name, format_spec, conversion in parts:
             if field_name is None:
                 continue
-            if field_name not in ALLOWED_FIELDS:
+            if field_name not in allowed_fields:
                 raise ValueError(
-                    f"Unknown description placeholder: {{{field_name}}}."
+                    f"Unknown {label.lower()} placeholder: {{{field_name}}}."
                 )
             if format_spec or conversion:
-                raise ValueError("Description placeholders cannot use formatting options.")
+                raise ValueError(f"{label} placeholders cannot use formatting options.")
     except ValueError as exc:
-        if "description" in str(exc).lower():
+        if label.lower() in str(exc).lower():
             raise
-        raise ValueError(f"Invalid description template: {exc}") from exc
+        raise ValueError(f"Invalid {label.lower()} template: {exc}") from exc
+
+
+def validate_title_template(template: str) -> None:
+    _validate_template(template, TITLE_FIELDS, "Title")
+
+
+def validate_template(template: str) -> None:
+    _validate_template(template, DESCRIPTION_FIELDS, "Description")
+
+
+def generate_title(workout: dict, *, template: str | None = None) -> str:
+    chosen = template or DEFAULT_TITLE_TEMPLATE
+    validate_title_template(chosen)
+    title = workout.get("title", "Workout")
+    return chosen.format_map(
+        {"title": title, "clean_title": clean_title(title)}
+    ).strip() or "Workout"
 
 
 def _duration_minutes(workout: dict) -> int:
@@ -153,10 +178,7 @@ def generate_description(
     chosen = template or DEFAULT_TEMPLATE
     validate_template(chosen)
     minutes = _duration_minutes(workout)
-    title = workout.get("title", "Workout")
     values = {
-        "title": title,
-        "clean_title": clean_title(title),
         "duration": f"⏱️ {minutes} min" if minutes > 0 else "",
         "calories": f"🔥 {calories} kcal" if calories else "",
         "avg_hr": f"❤️ avg {avg_hr} bpm" if avg_hr else "",

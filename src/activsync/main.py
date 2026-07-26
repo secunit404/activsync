@@ -119,4 +119,5 @@ app = create_app(
     _conn,
     lifespan=_lifespan,
     apply_hevy_match=_poller.apply_hevy_match,
+    process_hevy_workout=_poller.process_hevy_workout,
 )

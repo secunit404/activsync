@@ -45,10 +45,15 @@ def seed_row(conn, hevy_id="w1", start=None, end=None, exercises=None):
 
 def seed_activity(conn, activity_id, start="2026-07-18 10:05:00",
                   duration=3300.0, activity_type="strength_training",
-                  strava_id=None):
+                  strava_id=None, calories=None, avg_hr=None):
+    garmin_data = {"duration": duration}
+    if calories is not None:
+        garmin_data["calories"] = calories
+    if avg_hr is not None:
+        garmin_data["avg_hr"] = avg_hr
     db.insert_activity(
         conn, activity_id, activity_type, "Strength", "", start, "hash",
-        "held", NOW, garmin_data=json.dumps({"duration": duration}))
+        "held", NOW, garmin_data=json.dumps(garmin_data))
     if strava_id is not None:
         conn.execute(
             "UPDATE activities SET strava_activity_id = ? WHERE garmin_activity_id = ?",
@@ -407,6 +412,30 @@ def test_replace_happy_path():
     assert op["phase"] == "done"
 
 
+def test_backfill_claim_is_used_without_rematching_cached_duration():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(
+        conn,
+        111,
+        start="2026-07-18 10:00:00",
+        duration=0,
+    )
+    assert hevy_db.claim_source(conn, "w1", 111)
+    garmin.snapshot_results = [[111, 500]]
+
+    result = process(
+        conn,
+        garmin,
+        hevy_db.get_workout(conn, "w1"),
+        base_cfg(hevy_watch_strategy="replace"),
+    )
+
+    assert result["status"] == "replaced"
+    assert garmin.called("download_fit") == [("download_fit", 111)]
+
+
 def test_replace_can_leave_the_existing_description_untouched():
     conn = make_conn()
     garmin = StubGarmin()
@@ -425,6 +454,29 @@ def test_replace_can_leave_the_existing_description_untouched():
     assert result["status"] == "replaced"
     assert garmin.called("set_title")
     assert garmin.called("set_description") == []
+
+
+def test_replace_description_uses_metrics_from_the_garmin_watch_activity():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111, calories=487.4, avg_hr=126.6)
+    garmin.snapshot_results = [[111, 500]]
+
+    result = process(
+        conn,
+        garmin,
+        row,
+        base_cfg(
+            hevy_watch_strategy="replace",
+            hevy_description_template="{calories}\n{avg_hr}",
+        ),
+    )
+
+    assert result["status"] == "replaced"
+    assert garmin.called("set_description") == [
+        ("set_description", 999, "🔥 487 kcal\n❤️ avg 127 bpm")
+    ]
 
 
 def test_replace_upgrades_generic_fallback_to_detected_watch_identity(monkeypatch):

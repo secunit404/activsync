@@ -200,8 +200,14 @@ const QUEUE_STATUS_LABELS: Record<string, string> = {
   skipped: "Skipped",
 };
 
-function queueStatusLabel(status: string): string {
-  return QUEUE_STATUS_LABELS[status] ?? status.replaceAll("_", " ");
+function queueStatusLabel(item: HevyQueueItem): string {
+  if (
+    item.status === "waiting_watch" &&
+    item.matchedGarminActivityId !== null
+  ) {
+    return "Queued";
+  }
+  return QUEUE_STATUS_LABELS[item.status] ?? item.status.replaceAll("_", " ");
 }
 
 function QueueRow({
@@ -261,7 +267,7 @@ function QueueRow({
           {item.startDisplay} ·{" "}
           {item.awaitingMatch
             ? `Matched ${item.matchedGarminTitle ?? `Garmin activity ${item.matchedGarminActivityId}`}${item.matchedStravaActivityId ? " · Already on Strava" : ""}`
-            : (item.error ?? queueStatusLabel(item.status))}
+            : (item.error ?? queueStatusLabel(item))}
         </p>
       </div>
       <div
@@ -322,7 +328,7 @@ function QueueRow({
               toneClasses.info.badge,
             )}
           >
-            {queueStatusLabel(item.status).toUpperCase()}
+            {queueStatusLabel(item).toUpperCase()}
           </span>
         ) : null}
         {kind === "problem" ? (

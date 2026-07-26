@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from collections.abc import Callable
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from activsync import db, dev_mock, events, hevy_backfill, hevy_db, view
 from activsync.api_routes import ApiModel
@@ -171,6 +171,7 @@ def create_router(
     conn: sqlite3.Connection,
     *,
     mock_mode: Callable[[], bool],
+    process_hevy_workout: Callable[[str], str] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/settings/hevy", tags=["frontend-hevy"])
 
@@ -396,10 +397,21 @@ def create_router(
         )
 
     @router.post("/backfill/run", response_model=BackfillResult)
-    def run_backfill(payload: BackfillRequest) -> BackfillResult:
+    def run_backfill(
+        payload: BackfillRequest, background_tasks: BackgroundTasks
+    ) -> BackfillResult:
         raw_items, items = build_backfill(payload.since)
         selected_items = _select_backfill_items(raw_items, payload.hevy_ids)
         matched = hevy_backfill.run_items(conn, selected_items)
+        if process_hevy_workout is not None:
+            for item in selected_items:
+                if (
+                    item["twin"] is not None
+                    and item["action"] in ("merge", "replace", "describe")
+                ):
+                    background_tasks.add_task(
+                        process_hevy_workout, item["workout"]["id"]
+                    )
         events.bus.publish("refresh")
         # Reflects what was actually handed to `run_items`, not the full
         # preview length — once the import is selective those two can

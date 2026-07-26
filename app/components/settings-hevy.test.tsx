@@ -24,7 +24,8 @@ const hevyState: SettingsState["hevy"] = {
   enabled: true,
   watchStrategy: "replace",
   matchMode: "automatic",
-  descriptionTemplate: "{title}\n{exercises}",
+  titleTemplate: "{clean_title}",
+  descriptionTemplate: "{exercises}",
   summaryOnStructured: true,
   graceMinutes: 120,
   pollIntervalMinutes: 10,
@@ -78,7 +79,7 @@ test("lets the user switch between reviewed and automatic matching", async () =>
   );
 });
 
-test("edits the description template and structured-summary preference", async () => {
+test("edits the title and description templates and structured-summary preference", async () => {
   const { onChange } = renderHevySettings();
 
   expect(screen.getByLabelText("Write summary for Merge and Replace")).toBeChecked();
@@ -89,11 +90,18 @@ test("edits the description template and structured-summary preference", async (
     expect.objectContaining({ summaryOnStructured: false }),
   );
 
-  fireEvent.change(screen.getByLabelText("Description template"), {
-    target: { value: "{title} — custom" },
+  fireEvent.change(screen.getByLabelText("Activity title template"), {
+    target: { value: "Gym — {clean_title}" },
   });
   expect(onChange).toHaveBeenLastCalledWith(
-    expect.objectContaining({ descriptionTemplate: "{title} — custom" }),
+    expect.objectContaining({ titleTemplate: "Gym — {clean_title}" }),
+  );
+
+  fireEvent.change(screen.getByLabelText("Description template"), {
+    target: { value: "{exercises}\nCustom footer" },
+  });
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ descriptionTemplate: "{exercises}\nCustom footer" }),
   );
 });
 
@@ -101,26 +109,25 @@ test("shows a live plain-text sample beside the description template", () => {
   renderHevySettings(
     hevyDraftFromState({
       ...hevyState,
-      descriptionTemplate: "**{title}**\n\n{exercises}",
+      descriptionTemplate: "{duration}\n\n{exercises}",
     }),
   );
 
   const preview = screen.getByRole("region", { name: "Plain-text preview" });
-  expect(preview).toHaveTextContent("**Afternoon workout 💪**");
+  expect(preview).toHaveTextContent("⏱️ 68 min");
   expect(preview).toHaveTextContent("Chest Fly (Machine)");
 });
 
-test("documents and previews the emoji-free clean title placeholder", () => {
+test("documents and previews the separate emoji-free title template", () => {
   renderHevySettings(
     hevyDraftFromState({
       ...hevyState,
-      descriptionTemplate: "{clean_title}",
+      titleTemplate: "{clean_title}",
     }),
   );
 
-  expect(screen.getByText(/clean_title.*removes emoji/i)).toBeVisible();
-  expect(screen.getByRole("region", { name: "Plain-text preview" })).toHaveTextContent(
-    "Afternoon workout",
+  expect(screen.getByText(/clean_title.*removes emoji/i)).toHaveTextContent(
+    "Preview: Afternoon workout",
   );
 });
 

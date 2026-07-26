@@ -166,7 +166,7 @@ def test_settlement_hold_is_inactive_when_hevy_is_disabled(conn):
     strava.publish.assert_called_once()
 
 
-def test_terminal_activsync_link_promotes_existing_category_held_activity(conn):
+def test_terminal_activsync_link_keeps_existing_category_held_activity(conn):
     garmin = MagicMock()
     activity = ActivityRecord(
         101, "strength_training", "Workout", "", "2026-07-18 09:00:00"
@@ -180,12 +180,10 @@ def test_terminal_activsync_link_promotes_existing_category_held_activity(conn):
     _hevy_workout(conn)
     hevy_db.link_target(conn, "hevy-1", 101, "merge", provenance="activsync")
     hevy_db.set_workout_status(conn, "hevy-1", "merged")
-    # The second Garmin response is intentionally content-identical. Promotion
-    # is a lifecycle transition and must not depend on a metadata edit.
     stats = sync.sync_garmin(conn, garmin, cfg, NOW + timedelta(minutes=1))
 
-    assert db.get_activity(conn, 101)["publish_status"] == "pending"
-    assert stats.updated == 1
+    assert db.get_activity(conn, 101)["publish_status"] == "held"
+    assert stats.updated == 0
 
 
 def test_terminal_activsync_link_does_not_promote_backlog_held_activity(conn):
@@ -215,10 +213,10 @@ def test_terminal_activsync_link_does_not_promote_backlog_held_activity(conn):
     assert row["hold_reason"] == sync.HOLD_BACKLOG
 
 
-def test_backfill_link_does_not_promote_new_activity_past_category_hold(conn):
+def test_terminal_activsync_link_does_not_promote_new_activity_past_category_hold(conn):
     _hevy_workout(conn)
-    hevy_db.link_target(conn, "hevy-1", 101, "external", provenance="backfill")
-    hevy_db.set_workout_status(conn, "hevy-1", "linked_existing")
+    hevy_db.link_target(conn, "hevy-1", 101, "replace", provenance="activsync")
+    hevy_db.set_workout_status(conn, "hevy-1", "replaced")
     garmin = MagicMock()
     garmin.fetch_recent_activities.return_value = [
         ActivityRecord(101, "strength_training", "Workout", "", "2026-07-18 09:00:00")

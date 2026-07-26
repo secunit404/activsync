@@ -14,7 +14,8 @@ const hevy: SettingsState["hevy"] = {
   enabled: true,
   watchStrategy: "replace",
   matchMode: "automatic",
-  descriptionTemplate: "{title}\n{exercises}",
+  titleTemplate: "{clean_title}",
+  descriptionTemplate: "{exercises}",
   summaryOnStructured: true,
   graceMinutes: 20,
   pollIntervalMinutes: 10,
@@ -31,7 +32,8 @@ test("round-trips a state with no overrides through draft and back to a payload"
   expect(draft.profile.sex).toBe("");
 
   const payload = hevyDraftToPayload(draft);
-  expect(payload.descriptionTemplate).toBe("{title}\n{exercises}");
+  expect(payload.titleTemplate).toBe("{clean_title}");
+  expect(payload.descriptionTemplate).toBe("{exercises}");
   expect(payload.summaryOnStructured).toBe(true);
   expect(payload.identity).toEqual({ manufacturer: null, product: null, serial: null });
   expect(payload.profileOverride).toEqual({

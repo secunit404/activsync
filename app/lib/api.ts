@@ -191,6 +191,7 @@ export type SettingsState = {
     enabled: boolean;
     watchStrategy: "replace" | "merge" | "describe";
     matchMode: "review" | "automatic";
+    titleTemplate: string;
     descriptionTemplate: string;
     summaryOnStructured: boolean;
     graceMinutes: number;
@@ -448,6 +449,7 @@ export function saveHevySettings(payload: {
   enabled: boolean;
   watchStrategy: SettingsState["hevy"]["watchStrategy"];
   matchMode: SettingsState["hevy"]["matchMode"];
+  titleTemplate: string;
   descriptionTemplate: string;
   summaryOnStructured: boolean;
   graceMinutes: number;

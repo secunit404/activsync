@@ -29,7 +29,12 @@ from activsync import (
 from activsync.api_routes import ApiModel, Connections, UpdateState
 from activsync.garmin_client import GarminClient, MfaRequired
 from activsync.hevy_client import HevyAuthError, HevyClient
-from activsync.hevy_description import DEFAULT_TEMPLATE, validate_template
+from activsync.hevy_description import (
+    DEFAULT_TEMPLATE,
+    DEFAULT_TITLE_TEMPLATE,
+    validate_template,
+    validate_title_template,
+)
 from activsync.strava_client import StravaAuthError, StravaClient
 
 logger = logging.getLogger("activsync.settings_api_routes")
@@ -92,6 +97,7 @@ class HevySettingsState(ApiModel):
     enabled: bool
     watch_strategy: HevyStrategy
     match_mode: HevyMatchMode
+    title_template: str
     description_template: str
     summary_on_structured: bool
     grace_minutes: int
@@ -167,6 +173,9 @@ class HevySettingsRequest(ApiModel):
     enabled: bool
     watch_strategy: HevyStrategy
     match_mode: HevyMatchMode
+    title_template: str = Field(
+        default=DEFAULT_TITLE_TEMPLATE, min_length=1, max_length=200
+    )
     description_template: str = Field(
         default=DEFAULT_TEMPLATE, min_length=1, max_length=4000
     )
@@ -339,6 +348,7 @@ def create_router(
                 enabled=bool(cfg["hevy_enabled"]),
                 watch_strategy=cfg["hevy_watch_strategy"],
                 match_mode=cfg["hevy_match_mode"],
+                title_template=cfg["hevy_title_template"],
                 description_template=cfg["hevy_description_template"],
                 summary_on_structured=bool(cfg["hevy_summary_on_structured"]),
                 grace_minutes=int(cfg["hevy_grace_minutes"]),
@@ -573,6 +583,7 @@ def create_router(
     @router.put("/settings/hevy", response_model=ActionResult)
     def save_hevy_settings(payload: HevySettingsRequest) -> ActionResult:
         try:
+            validate_title_template(payload.title_template)
             validate_template(payload.description_template)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -589,6 +600,7 @@ def create_router(
                 "hevy_enabled": payload.enabled,
                 "hevy_watch_strategy": payload.watch_strategy,
                 "hevy_match_mode": payload.match_mode,
+                "hevy_title_template": payload.title_template,
                 "hevy_description_template": payload.description_template,
                 "hevy_summary_on_structured": payload.summary_on_structured,
                 "hevy_grace_minutes": payload.grace_minutes,

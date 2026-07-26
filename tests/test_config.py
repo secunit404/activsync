@@ -35,6 +35,21 @@ def test_load_config_merges_partial_saved_settings(conn):
     assert cfg["lookback_days"] == config.DEFAULT_CONFIG["lookback_days"]
 
 
+def test_legacy_default_description_moves_title_to_its_own_template(conn):
+    from activsync.hevy_description import (
+        DEFAULT_TEMPLATE,
+        DEFAULT_TITLE_TEMPLATE,
+        LEGACY_DEFAULT_TEMPLATE,
+    )
+
+    config.save_config(conn, {"hevy_description_template": LEGACY_DEFAULT_TEMPLATE})
+
+    cfg = config.load_config(conn)
+
+    assert cfg["hevy_title_template"] == DEFAULT_TITLE_TEMPLATE
+    assert cfg["hevy_description_template"] == DEFAULT_TEMPLATE
+
+
 def test_default_lookback_days_is_seven(tmp_path):
     from activsync import config, db
     conn = db.connect(str(tmp_path / "test.db"))
