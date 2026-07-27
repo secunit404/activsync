@@ -529,7 +529,7 @@ def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
     # `dev_seed._seed_hevy`), so all 7 come back fresh.
     assert preview.status_code == 200
     assert preview.json()["ran"] is False
-    assert len(preview.json()["items"]) == 7
+    assert len(preview.json()["items"]) == 8
     assert hevy_db.list_workouts(conn) == []
 
     run = client.post(
@@ -538,8 +538,8 @@ def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
     )
     assert run.status_code == 200
     assert run.json()["ran"] is True
-    assert len(hevy_db.list_workouts(conn)) == 7
-    assert "7 workouts ingested" in run.json()["message"]
+    assert len(hevy_db.list_workouts(conn)) == 8
+    assert "8 workouts ingested" in run.json()["message"]
 
 
 def test_automatic_backfill_starts_a_known_garmin_match_immediately(
@@ -748,8 +748,8 @@ def test_hevy_backfill_run_without_ids_still_imports_everything(tmp_path, monkey
     )
 
     assert run.status_code == 200
-    assert "7 workouts ingested" in run.json()["message"]
-    assert len(hevy_db.list_workouts(conn)) == 7
+    assert "8 workouts ingested" in run.json()["message"]
+    assert len(hevy_db.list_workouts(conn)) == 8
 
 
 def test_device_options_offers_garmin_as_the_only_manufacturer(tmp_path, monkeypatch):

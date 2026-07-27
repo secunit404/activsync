@@ -49,13 +49,13 @@ HEVY_DEV_MIDNIGHT_ID = "hw-dev-midnight"
 HEVY_DEV_SYNCING_ID = "hw-dev-syncing"
 HEVY_DEV_CUSTOM_TEMPLATE_ID = "tpl-dev-custom"
 
-# Two more, added for Task 16 (backfill). The five above are all seeded into
+# Three more, added for Task 16 (backfill). The five above are all seeded into
 # `hevy_workouts` by `dev_seed._seed_hevy` (looked up there by id, one at a
 # time — see that function), so `hevy_backfill.preview_items` short-circuits
 # every one of them to `"already tracked"` before it ever reaches the
 # mapping-miss check. That leaves no reachable `needs_mapping` (locked) row
 # for the backfill screen to demo or for `e2e/backfill.spec.ts` to click
-# through — these two exist to fix that, and are deliberately left OUT of
+# through — these exist to fix that, and are deliberately left OUT of
 # `dev_seed._seed_hevy` (which only looks up the five ids above by name) so
 # they stay "unseen" and land in a backfill preview as fresh workouts.
 # - UNMAPPED reuses the same custom exercise/template as HEVY_DEV_UNMAPPED_ID
@@ -69,6 +69,16 @@ HEVY_DEV_CUSTOM_TEMPLATE_ID = "tpl-dev-custom"
 #   that path is untestable in a real browser, unit tests only.
 HEVY_DEV_BACKFILL_UNMAPPED_ID = "hw-dev-backfill-unmapped"
 HEVY_DEV_BACKFILL_UNMAPPABLE_ID = "hw-dev-backfill-unmappable"
+
+# A third backfill fixture, and the only one of the three that can actually be
+# imported: untracked like the two above, but on a template that resolves, so
+# it comes back unlocked with an enabled checkbox. Both fixtures above are
+# deliberately locked, which left the preview demoing nothing but guardrails —
+# no row to tick, so "select some and import" was unreachable in a browser
+# (and `e2e/backfill.spec.ts` had no importable row to click). Dated between
+# them so the preview's date ordering interleaves importable and locked rows
+# rather than grouping them, which is what a real scan looks like.
+HEVY_DEV_BACKFILL_IMPORTABLE_ID = "hw-dev-backfill-importable"
 
 # Watch/upload activity ids the seeded scenarios link against.
 HEVY_DEV_MERGED_ACTIVITY_ID = 910001
@@ -150,6 +160,18 @@ def dev_hevy_workouts(now: datetime | None = None) -> list[dict]:
             "start_time": _iso(now - timedelta(minutes=90)),
             "end_time": _iso(now - timedelta(minutes=30)),
             "updated_at": _iso(now - timedelta(minutes=30)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_BACKFILL_IMPORTABLE_ID,
+            "title": "Old push day (Hevy)",
+            "start_time": _iso(now - timedelta(days=4, minutes=41)),
+            "end_time": _iso(now - timedelta(days=4, minutes=41) + timedelta(hours=1)),
+            "updated_at": _iso(now - timedelta(days=4, minutes=41) + timedelta(hours=1)),
             "exercises": [{
                 "title": "Bench Press (Barbell)",
                 "exercise_template_id": "tpl-dev-bench",
