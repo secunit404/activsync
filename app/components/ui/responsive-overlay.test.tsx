@@ -86,6 +86,15 @@ test("the close button requests close", async () => {
   expect(onOpenChange).toHaveBeenCalledWith(false);
 });
 
+// Radix's own default is the first focusable child — the close button, or a
+// form's first field — which opened every overlay with a focus ring on a
+// control nobody chose.
+test("opens with focus on the panel, not the close button", () => {
+  render(<Harness />);
+  const dialog = screen.getByRole("dialog", { name: "Details" });
+  expect(document.activeElement).toBe(dialog);
+});
+
 test("keeps focus inside the overlay", async () => {
   const user = userEvent.setup();
   render(
@@ -146,6 +155,24 @@ test("a short drag springs back instead of dismissing", () => {
   render(<Harness mobile="sheet" onOpenChange={onOpenChange} />);
   dragHandle(screen.getByTestId("responsive-overlay-handle"), 40);
   expect(onOpenChange).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toHaveStyle({ "--sheet-drag": "0px" });
+});
+
+// Resetting the translate before the exit animation started snapped the sheet
+// back to its resting position for a frame, which read as a flicker. The
+// offset has to survive the dismissal so the slide-out continues from it.
+test("a dismissing drag keeps its offset for the exit animation", () => {
+  render(<Harness mobile="sheet" />);
+  dragHandle(screen.getByTestId("responsive-overlay-handle"), 150);
+  expect(screen.getByRole("dialog")).toHaveStyle({ "--sheet-drag": "150px" });
+});
+
+// …and is cleared before the next open, or the sheet slides in pre-pushed.
+test("re-opening starts from a fresh, untranslated sheet", () => {
+  const { rerender } = render(<Harness mobile="sheet" />);
+  dragHandle(screen.getByTestId("responsive-overlay-handle"), 150);
+  rerender(<Harness mobile="sheet" open={false} />);
+  rerender(<Harness mobile="sheet" />);
   expect(screen.getByRole("dialog")).toHaveStyle({ "--sheet-drag": "0px" });
 });
 

@@ -142,25 +142,35 @@ test("a disconnected Strava reads Save & connect and offers Cancel", async () =>
   expect(within(dialog).queryByRole("button", { name: "Disconnect" })).toBeNull();
 });
 
-// Every settings dialog footer button is a 44px touch target. DialogFooter's
-// own built-in Close was a default-size h-8, which is where the Garmin
-// dialog's mismatched pair came from.
+// Every settings sheet footer button is a 44px touch target. The header ✕
+// that ResponsiveOverlay supplies is what closes the sheet now, so the
+// footer holds actions only.
 test("every settings dialog footer button is the same height", async () => {
   renderConnections();
   const dialog = await openDialog("garmin-connect");
 
-  // Scoped to the footer: DialogContent also renders a corner ✕ with an
+  // Scoped to the footer: ResponsiveOverlay also renders a header ✕ with an
   // sr-only "Close" label, which is an icon button and deliberately smaller.
-  const footer = dialog.querySelector('[data-slot="dialog-footer"]');
+  const footer = dialog.querySelector('[data-testid="responsive-overlay-footer"]');
   expect(footer).not.toBeNull();
   const buttons = within(footer as HTMLElement).getAllByRole("button");
-  expect(buttons.length).toBeGreaterThanOrEqual(2);
-  expect(buttons.map((button) => button.textContent)).toEqual(
-    expect.arrayContaining(["Reconnect", "Close"]),
-  );
+  expect(buttons.map((button) => button.textContent)).toEqual(["Reconnect"]);
   for (const button of buttons) {
     expect(button.className).toContain("h-11");
   }
+});
+
+// The footer buttons live outside the <form> element (ResponsiveOverlay keeps
+// its footer out of the scrolling body), so they reach it by `form=` id.
+// Without that wiring, submitting is impossible from the footer at all.
+test("the footer's submit button targets the form in the sheet body", async () => {
+  renderConnections();
+  const dialog = await openDialog("garmin-connect");
+
+  const submit = within(dialog).getByRole("button", { name: "Reconnect" });
+  const formId = submit.getAttribute("form");
+  expect(formId).toBeTruthy();
+  expect(dialog.querySelector(`form#${formId}`)).not.toBeNull();
 });
 
 test("a disconnected Hevy dialog asks for a key instead", async () => {

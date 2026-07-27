@@ -30,9 +30,11 @@ export type ResponsiveOverlayProps = {
   /** Pinned to the bottom of the panel, above the scrolling body. */
   footer?: ReactNode;
   /**
-   * Radix focuses the first focusable element on open — the close button,
-   * by default — before this fires. Call `event.preventDefault()` and move
-   * focus yourself (e.g. to a form's first field) to override it.
+   * By default this component focuses the panel itself on open, rather than
+   * letting Radix focus the first focusable child (the close button, or a
+   * form's first input — both of which flash a focus ring the user never
+   * asked for). Pass this to focus something specific instead; it replaces
+   * the default entirely, so call `event.preventDefault()` yourself.
    */
   onOpenAutoFocus?: (event: Event) => void;
   /**
@@ -119,6 +121,20 @@ export function ResponsiveOverlay({
   const [dragging, setDragging] = useState(false);
   const dragStartY = useRef<number | null>(null);
   const dragDistance = useRef(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // A dismissing drag leaves `dragY` where the finger let go (see endDrag), so
+  // the exit animation continues from there instead of snapping back first.
+  // That offset has to be cleared before the next open, or the sheet slides in
+  // already pushed down. Consumers that unmount on close never reach this;
+  // ConfirmDialog, which stays mounted with `open={false}`, does.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open && dragY !== 0) {
+      setDragY(0);
+    }
+  }
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     dragStartY.current = event.clientY;
@@ -143,9 +159,15 @@ export function ResponsiveOverlay({
     const travelled = dragDistance.current;
     dragDistance.current = 0;
     setDragging(false);
-    setDragY(0);
     if (travelled > SHEET_DISMISS_PX) {
+      // Deliberately NOT resetting `dragY` here: doing so snapped the sheet
+      // back up to its resting position for one frame before the exit
+      // animation started from there, which read as a flicker. Leaving the
+      // translate in place lets the slide-out continue from where the finger
+      // released. The open-transition reset above clears it afterwards.
       onOpenChange(false);
+    } else {
+      setDragY(0);
     }
   };
 
@@ -165,8 +187,20 @@ export function ResponsiveOverlay({
           // passing the prop explicitly as undefined (it overrides the default
           // because our props spread last).
           {...(description ? {} : { "aria-describedby": undefined })}
+          ref={contentRef}
           role={role}
-          onOpenAutoFocus={onOpenAutoFocus}
+          // Radix's default lands on the first focusable child — the close
+          // button, or the first form field — so every overlay opened with a
+          // visible focus ring on a control the user did not choose. Focus
+          // the panel instead (Radix gives Content `tabindex="-1"`): the trap,
+          // Escape, and Tab-into-the-dialog all still work, with no ring.
+          onOpenAutoFocus={
+            onOpenAutoFocus ??
+            ((event) => {
+              event.preventDefault();
+              contentRef.current?.focus();
+            })
+          }
           style={{ "--sheet-drag": `${dragY}px` } as React.CSSProperties}
           className={cn(
             "fixed z-50 flex flex-col overflow-hidden border-border bg-card text-card-foreground outline-none",
@@ -237,7 +271,12 @@ export function ResponsiveOverlay({
           {footer && (
             <div
               data-testid="responsive-overlay-footer"
-              className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-card px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:px-7 md:pt-[18px] md:pb-[18px]"
+              // The mobile bottom padding is deliberately larger than the top:
+              // `env(safe-area-inset-bottom)` is 0 without `viewport-fit=cover`
+              // (which this app does not set), so on a home-indicator phone the
+              // buttons sat right on the gesture bar. 1.75rem is the clearance,
+              // and the env() term still helps anywhere it does report a value.
+              className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-card px-5 pt-4 pb-[calc(1.75rem+env(safe-area-inset-bottom))] md:px-7 md:pt-[18px] md:pb-[18px]"
             >
               {footer}
             </div>

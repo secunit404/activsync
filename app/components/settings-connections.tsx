@@ -1,18 +1,8 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { ConnectionStatus, SettingsSection } from "@/components/settings-shell";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Field,
   FieldDescription,
@@ -20,6 +10,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
 import { useSettingsAction } from "@/hooks/use-settings-action";
 import {
@@ -101,6 +92,24 @@ export function ConnectionsSettings({ state }: { state: SettingsState }) {
   );
 }
 
+/**
+ * Footer row shared by the three connection sheets. `ResponsiveOverlay` keeps
+ * its footer outside the scrolling body, so the buttons can't live inside the
+ * `<form>` element they submit — they reach it by `form={id}` instead, which
+ * is what the attribute is for.
+ */
+function ConnectionFooter({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col-reverse gap-2.5 md:flex-row md:justify-end">
+      {children}
+    </div>
+  );
+}
+
+const GARMIN_FORM_ID = "settings-garmin-form";
+const STRAVA_FORM_ID = "settings-strava-form";
+const HEVY_FORM_ID = "settings-hevy-form";
+
 function GarminDialog({ state }: { state: SettingsState }) {
   const [open, setOpen] = useState(state.setup.mfaRequired);
   const [email, setEmail] = useState(state.credentials.garminEmail);
@@ -112,23 +121,63 @@ function GarminDialog({ state }: { state: SettingsState }) {
   const pending = reconnect.isPending || mfa.isPending || cancelMfa.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="lg">
-          {state.connections.garmin.connected ? "Manage" : "Reconnect"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Manage Garmin</DialogTitle>
-          <DialogDescription>
-            {state.setup.mfaRequired
-              ? "Enter the verification code Garmin sent."
-              : "Leave the password blank to keep the saved one."}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
+        {state.connections.garmin.connected ? "Manage" : "Reconnect"}
+      </Button>
+      <ResponsiveOverlay
+        open={open}
+        onOpenChange={setOpen}
+        title="Manage Garmin"
+        description={
+          state.setup.mfaRequired
+            ? "Enter the verification code Garmin sent."
+            : "Leave the password blank to keep the saved one."
+        }
+        mobile="sheet"
+        footer={
+          <ConnectionFooter>
+            {state.setup.mfaRequired ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xl"
+                  disabled={pending}
+                  onClick={async () => {
+                    await cancelMfa.mutateAsync();
+                    setOpen(false);
+                  }}
+                >
+                  Cancel verification
+                </Button>
+                <Button
+                  type="submit"
+                  form={GARMIN_FORM_ID}
+                  size="xl"
+                  disabled={pending}
+                >
+                  {mfa.isPending ? <Spinner /> : null}
+                  {mfa.isPending ? "Verifying…" : "Verify code"}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="submit"
+                form={GARMIN_FORM_ID}
+                size="xl"
+                disabled={pending}
+              >
+                {reconnect.isPending ? <Spinner /> : null}
+                {reconnect.isPending ? "Connecting…" : "Reconnect"}
+              </Button>
+            )}
+          </ConnectionFooter>
+        }
+      >
         {state.setup.mfaRequired ? (
           <form
+            id={GARMIN_FORM_ID}
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault();
@@ -148,30 +197,12 @@ function GarminDialog({ state }: { state: SettingsState }) {
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
                 required
-                autoFocus
               />
             </Field>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                size="xl"
-                disabled={pending}
-                onClick={async () => {
-                  await cancelMfa.mutateAsync();
-                  setOpen(false);
-                }}
-              >
-                Cancel verification
-              </Button>
-              <Button type="submit" size="xl" disabled={pending}>
-                {mfa.isPending ? <Spinner /> : null}
-                {mfa.isPending ? "Verifying…" : "Verify code"}
-              </Button>
-            </DialogFooter>
           </form>
         ) : (
           <form
+            id={GARMIN_FORM_ID}
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault();
@@ -219,16 +250,10 @@ function GarminDialog({ state }: { state: SettingsState }) {
                 </FieldDescription>
               </Field>
             </FieldGroup>
-            <DialogFooter showCloseButton>
-              <Button type="submit" size="xl" disabled={pending}>
-                {reconnect.isPending ? <Spinner /> : null}
-                {reconnect.isPending ? "Connecting…" : "Reconnect"}
-              </Button>
-            </DialogFooter>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+      </ResponsiveOverlay>
+    </>
   );
 }
 
@@ -243,21 +268,56 @@ function StravaDialog({ state }: { state: SettingsState }) {
     Boolean(clientId.trim()) &&
     (Boolean(clientSecret) || state.credentials.stravaClientSecretSaved);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="lg">
-          {state.connections.strava.connected ? "Manage" : "Connect"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Manage Strava</DialogTitle>
-          <DialogDescription>
-            Saving takes you to Strava to authorize. Leave the secret blank to
-            keep the saved one.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
+        {state.connections.strava.connected ? "Manage" : "Connect"}
+      </Button>
+      <ResponsiveOverlay
+        open={open}
+        onOpenChange={setOpen}
+        title="Manage Strava"
+        description="Saving takes you to Strava to authorize. Leave the secret blank to keep the saved one."
+        mobile="sheet"
+        footer={
+          <ConnectionFooter>
+            {state.connections.strava.connected ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="xl"
+                disabled={disconnect.isPending}
+                onClick={() => setConfirmDisconnect(true)}
+              >
+                Disconnect
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="xl"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button
+              type="submit"
+              form={STRAVA_FORM_ID}
+              size="xl"
+              disabled={!canConnect || save.isPending}
+            >
+              {save.isPending ? <Spinner /> : null}
+              {save.isPending
+                ? "Saving…"
+                : state.connections.strava.connected
+                  ? "Save & reconnect"
+                  : "Save & connect"}
+            </Button>
+          </ConnectionFooter>
+        }
+      >
         <form
+          id={STRAVA_FORM_ID}
           className="grid gap-4"
           onSubmit={async (event) => {
             event.preventDefault();
@@ -301,39 +361,8 @@ function StravaDialog({ state }: { state: SettingsState }) {
               />
             </Field>
           </FieldGroup>
-          <DialogFooter className="sm:flex-wrap">
-            {state.connections.strava.connected ? (
-              <Button
-                type="button"
-                variant="destructive"
-                size="xl"
-                disabled={disconnect.isPending}
-                onClick={() => setConfirmDisconnect(true)}
-              >
-                Disconnect
-              </Button>
-            ) : (
-              <DialogClose asChild>
-                <Button variant="outline" size="xl">
-                  Cancel
-                </Button>
-              </DialogClose>
-            )}
-            <Button
-              type="submit"
-              size="xl"
-              disabled={!canConnect || save.isPending}
-            >
-              {save.isPending ? <Spinner /> : null}
-              {save.isPending
-                ? "Saving…"
-                : state.connections.strava.connected
-                  ? "Save & reconnect"
-                  : "Save & connect"}
-            </Button>
-          </DialogFooter>
         </form>
-      </DialogContent>
+      </ResponsiveOverlay>
       <ConfirmDialog
         open={confirmDisconnect}
         onOpenChange={setConfirmDisconnect}
@@ -348,7 +377,7 @@ function StravaDialog({ state }: { state: SettingsState }) {
           setOpen(false);
         }}
       />
-    </Dialog>
+    </>
   );
 }
 
@@ -360,26 +389,61 @@ function HevyDialog({ state }: { state: SettingsState }) {
   const disconnect = useSettingsAction(disconnectHevy);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="lg">
-          {state.hevy.connected ? "Manage" : "Connect"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Manage Hevy</DialogTitle>
-          <DialogDescription>
-            Requires Hevy Pro. The key is validated before it is saved.
-            Watch strategy and sync behavior live in Hevy integration below.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
+        {state.hevy.connected ? "Manage" : "Connect"}
+      </Button>
+      <ResponsiveOverlay
+        open={open}
+        onOpenChange={setOpen}
+        title="Manage Hevy"
+        description="Requires Hevy Pro. The key is validated before it is saved. Watch strategy and sync behavior live in Hevy integration below."
+        mobile="sheet"
+        footer={
+          <ConnectionFooter>
+            {state.hevy.connected ? (
+              <>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="xl"
+                  disabled={disconnect.isPending}
+                  onClick={() => setConfirmDisconnect(true)}
+                >
+                  {disconnect.isPending ? <Spinner /> : null}
+                  {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+                </Button>
+                <Button
+                  type="submit"
+                  form={HEVY_FORM_ID}
+                  size="xl"
+                  disabled={!apiKey.trim() || connect.isPending}
+                >
+                  {connect.isPending ? <Spinner /> : null}
+                  {connect.isPending ? "Validating…" : "Save new key"}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="submit"
+                form={HEVY_FORM_ID}
+                size="xl"
+                disabled={connect.isPending}
+              >
+                {connect.isPending ? <Spinner /> : null}
+                {connect.isPending ? "Validating…" : "Connect Hevy"}
+              </Button>
+            )}
+          </ConnectionFooter>
+        }
+      >
         {state.hevy.connected ? (
           // Connected, this dialog used to be a Disconnect button and
           // nothing else — there was no way to rotate a key without
           // disconnecting first. Replacing it reuses the same validated
           // save path the connect form uses.
           <form
+            id={HEVY_FORM_ID}
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault();
@@ -409,29 +473,10 @@ function HevyDialog({ state }: { state: SettingsState }) {
                 saved one.
               </FieldDescription>
             </Field>
-            <DialogFooter className="sm:flex-wrap">
-              <Button
-                type="button"
-                variant="destructive"
-                size="xl"
-                disabled={disconnect.isPending}
-                onClick={() => setConfirmDisconnect(true)}
-              >
-                {disconnect.isPending ? <Spinner /> : null}
-                {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
-              </Button>
-              <Button
-                type="submit"
-                size="xl"
-                disabled={!apiKey.trim() || connect.isPending}
-              >
-                {connect.isPending ? <Spinner /> : null}
-                {connect.isPending ? "Validating…" : "Save new key"}
-              </Button>
-            </DialogFooter>
           </form>
         ) : (
           <form
+            id={HEVY_FORM_ID}
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault();
@@ -453,15 +498,9 @@ function HevyDialog({ state }: { state: SettingsState }) {
                 required
               />
             </Field>
-            <DialogFooter showCloseButton>
-              <Button type="submit" size="xl" disabled={connect.isPending}>
-                {connect.isPending ? <Spinner /> : null}
-                {connect.isPending ? "Validating…" : "Connect Hevy"}
-              </Button>
-            </DialogFooter>
           </form>
         )}
-      </DialogContent>
+      </ResponsiveOverlay>
       <ConfirmDialog
         open={confirmDisconnect}
         onOpenChange={setConfirmDisconnect}
@@ -476,6 +515,6 @@ function HevyDialog({ state }: { state: SettingsState }) {
           setOpen(false);
         }}
       />
-    </Dialog>
+    </>
   );
 }
