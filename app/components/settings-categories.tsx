@@ -91,10 +91,14 @@ export function CategorySettings({
           Search activity types
           <span className="relative flex items-center">
             <SearchIcon className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
+            {/* The field's own text stays `text-base` on mobile — anything
+                smaller makes iOS Safari zoom the page on focus. Only the
+                placeholder is stepped down, which is what actually looked
+                oversized in an 11-unit-tall input. */}
             <Input
-              className="h-11 pl-9"
+              className="h-11 pl-9 placeholder:text-sm"
               type="search"
-              placeholder="Search Garmin activity types…"
+              placeholder="Search activity types…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />

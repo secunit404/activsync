@@ -115,8 +115,12 @@ test("renders no brand bar of its own, since the rail supplies one", () => {
   renderSettings();
   // AppBrand splits its text across two spans, so match its aria-label —
   // a text query for "ActivSync" would never match it and would pass here
-  // whether the brand bar were present or not.
-  expect(screen.queryByLabelText("ActivSync")).toBeNull();
+  // whether the brand bar were present or not. The page header's eyebrow is
+  // an AppBrand itself, so the assertion is "exactly one, and it is the
+  // eyebrow" rather than "none".
+  const brands = screen.getAllByLabelText("ActivSync");
+  expect(brands).toHaveLength(1);
+  expect(brands[0].closest("header")).not.toBeNull();
   // The page heading and its eyebrow are unaffected.
   expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 });

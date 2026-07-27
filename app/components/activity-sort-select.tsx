@@ -1,3 +1,4 @@
+import { ArrowDownUpIcon } from "lucide-react";
 import { useSearchParams } from "react-router";
 
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -30,15 +31,31 @@ export function ActivitySortSelect() {
     setSearchParams(params);
   }
 
+  const next: SortOrder = value === "newest" ? "oldest" : "newest";
+
+  // Below `sm:` this is a toggle, not a picker: with only two orders, a menu
+  // buys nothing, and the shrunk-to-44px `<select>` it replaces opened its
+  // native popup detached from the control. Styled like the filter pills it
+  // shares the row with (same border, same muted icon).
   return (
-    <NativeSelect
-      aria-label="Sort activities"
-      className="w-auto shrink-0"
-      value={value}
-      onChange={(event) => selectSort(event.target.value)}
-    >
-      <NativeSelectOption value="newest">Newest first</NativeSelectOption>
-      <NativeSelectOption value="oldest">Oldest first</NativeSelectOption>
-    </NativeSelect>
+    <>
+      <button
+        type="button"
+        aria-label={`Sort ${next} first`}
+        onClick={() => selectSort(next)}
+        className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground sm:hidden"
+      >
+        <ArrowDownUpIcon aria-hidden="true" className="size-4" />
+      </button>
+      <NativeSelect
+        aria-label="Sort activities"
+        className="hidden w-auto shrink-0 sm:block"
+        value={value}
+        onChange={(event) => selectSort(event.target.value)}
+      >
+        <NativeSelectOption value="newest">Newest first</NativeSelectOption>
+        <NativeSelectOption value="oldest">Oldest first</NativeSelectOption>
+      </NativeSelect>
+    </>
   );
 }

@@ -11,7 +11,9 @@ test("renders the title as the page heading", () => {
 
 test("shows the ActivSync eyebrow by default", () => {
   render(<PageHeader title="Settings" description="Manage connections." />);
-  expect(screen.getByText("ActivSync")).toBeVisible();
+  // AppBrand splits the wordmark across two coloured spans, so match its
+  // aria-label rather than a single text node.
+  expect(screen.getByLabelText("ActivSync")).toBeVisible();
 });
 
 test("renders an action beside the title when given", () => {

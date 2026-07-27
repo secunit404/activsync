@@ -259,6 +259,10 @@ export function HevySettings({
               <FieldLabel htmlFor="hevy-title-template">Activity title template</FieldLabel>
               <Input
                 id="hevy-title-template"
+                // A template editor is a well, same as the description
+                // Textarea below it — see the surface ramp note in app.css.
+                // The stock input fill made the two sit at different depths.
+                className="dark:bg-background"
                 value={draft.titleTemplate}
                 maxLength={200}
                 aria-invalid={titlePreview.error ? true : undefined}

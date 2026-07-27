@@ -251,9 +251,13 @@ export function ActivitiesView({
         description="Review your Garmin sync history before it reaches Strava."
         action={
           isRefetching ? (
+            // Absolute, not a flex child: in the flow this stole ~32px from
+            // the text column, which pushed the description onto an extra
+            // line and grew the header by a full line height. Every filter
+            // click then bumped the entire page down and back — the flicker.
             <Spinner
               aria-label="Loading activities"
-              className="size-4 text-muted-foreground"
+              className="absolute top-0 right-0 size-4 text-muted-foreground"
             />
           ) : undefined
         }
@@ -273,13 +277,13 @@ export function ActivitiesView({
       <StatStrip data={data} />
 
       {
-        // Stacked below `sm:` — the pill row is `flex-nowrap` on mobile (it
-        // never wraps, so every filter stays reachable), which means it will
-        // not yield width to a sibling. Side by side at 375px the select
-        // simply overlapped the last pill.
+        // One row at every width. This was stacked below `sm:` because the
+        // full-width "Newest first" select overlapped the last filter pill at
+        // 375px; the select now collapses to a 44px icon control on mobile
+        // (see ActivitySortSelect), which fits beside the pills.
       }
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="min-w-0 sm:flex-1">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="min-w-0 flex-1">
           <ActivityFilterPills counts={data.counts} />
         </div>
         <ActivitySortSelect />
@@ -384,8 +388,7 @@ function StatStrip({ data }: { data: ActivitiesPage }) {
             </span>
             <span
               className={cn(
-                "font-mono leading-none font-extrabold",
-                stat.tone === "neutral" ? "text-sm" : "text-lg",
+                "font-mono text-lg leading-none font-extrabold",
                 statTileToneClass[stat.tone],
               )}
             >
