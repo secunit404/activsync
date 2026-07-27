@@ -73,9 +73,11 @@ export function BulkActionBar({
       return;
     }
     const syncHeight = () => {
+      // +24 for the 12px it floats within, top and bottom — the same
+      // arithmetic behind `AppTabBar`'s 74px (58 + 12 + 12).
       document.documentElement.style.setProperty(
         "--bottom-bar-height",
-        `${node.offsetHeight}px`,
+        `${node.offsetHeight + 24}px`,
       );
     };
     syncHeight();
@@ -102,8 +104,13 @@ export function BulkActionBar({
       ref={bottomBarHeightRef}
       data-testid="bulk-action-bar"
       className={cn(
-        "fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2.5 border-t border-primary/30 bg-primary/[0.07] px-3.5 py-3 shadow-[0_-10px_30px_rgba(0,0,0,0.35)]",
-        "md:static md:inset-auto md:z-auto md:rounded-xl md:border md:border-primary/30 md:bg-primary/[0.06] md:px-4 md:py-3 md:shadow-[0_14px_40px_rgba(0,0,0,0.4)]",
+        // Mobile is the same floating dock as `AppTabBar` — inset from all
+        // three edges, same radius/border/shadow — since it takes over that
+        // exact slot. Its fill stays opaque (`bg-rail`, not the desktop bar's
+        // 7%-alpha primary tint): fixed over a scrolling list, a wash let
+        // every row read straight through it and the bar all but disappeared.
+        "fixed inset-x-4 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 flex flex-col gap-2.5 rounded-[22px] border border-border/80 bg-rail px-3 py-3 shadow-[0_10px_30px_rgb(0_0_0/45%)]",
+        "md:static md:inset-auto md:z-auto md:rounded-xl md:border-primary/30 md:bg-primary/[0.06] md:px-4 md:py-3 md:shadow-[0_14px_40px_rgba(0,0,0,0.4)]",
       )}
     >
       {/* Mobile: stacked rows — count/Clear above the two actions. */}
