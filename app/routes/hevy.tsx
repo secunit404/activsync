@@ -29,7 +29,6 @@ import {
   type HevyToolsState,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
 import type { Route } from "./+types/hevy";
 
 /**
@@ -156,27 +155,16 @@ export function HevyView({
   backfillRefreshToken?: number;
   onQueueChanged?: () => void;
 }) {
-  const { connected, status } = appState.hevy;
+  const { connected } = appState.hevy;
 
   return (
     <PageContainer className="grid gap-6 py-8 md:gap-7 md:py-10">
+      {/* No connection pill here: Settings owns connection state, and a
+          disconnected Hevy already takes over this page with the empty
+          state below. */}
       <PageHeader
         title="Hevy"
         description="Workouts flowing from Hevy into Garmin, then on to Strava."
-        action={
-          <span className="flex items-center gap-2 rounded-[11px] border border-border bg-card px-3.5 py-2">
-            <span
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                connected ? "bg-success" : "bg-muted-foreground/50",
-              )}
-              aria-hidden="true"
-            />
-            <span className="font-mono text-xs text-muted-foreground uppercase">
-              {status}
-            </span>
-          </span>
-        }
       />
 
       <HevySectionNav />
