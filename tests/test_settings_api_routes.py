@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
@@ -10,6 +11,23 @@ def _client(tmp_path, monkeypatch, *, mock=True):
     monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "1" if mock else "0")
     conn = db.connect(str(tmp_path / "settings-api.db"))
     return conn, TestClient(create_app(conn), follow_redirects=False)
+
+
+def _pinned_hevy_workouts(monkeypatch):
+    """The canned Hevy workouts, frozen for the length of one test.
+
+    `dev_mock.dev_hevy_workouts` re-derives its timestamps from the current
+    clock on every call — that is what keeps the demo data fresh while a dev
+    server runs. A test that writes one of those workouts and then asks the
+    mock API for it makes two calls, so a second boundary between them shifts
+    every timestamp by a second and the two copies stop matching. Freezing the
+    result keeps the relative offsets the demo relies on and removes the race.
+    """
+    workouts = dev_mock.dev_hevy_workouts(datetime.now(timezone.utc))
+    monkeypatch.setattr(
+        dev_mock, "dev_hevy_workouts", lambda now=None: deepcopy(workouts)
+    )
+    return workouts
 
 
 def _complete_setup(conn):
@@ -545,7 +563,7 @@ def test_automatic_backfill_starts_a_known_garmin_match_immediately(
         }
     )
     config.save_config(conn, cfg)
-    workout = dev_mock.dev_hevy_workouts()[0]
+    workout = _pinned_hevy_workouts(monkeypatch)[0]
     start = workout["start_time"].replace("T", " ").split("+")[0].rstrip("Z")
     db.insert_activity(
         conn,
@@ -649,7 +667,7 @@ def test_hevy_backfill_hides_tracked_workout_until_queue_skip(
     conn, client = _client(tmp_path, monkeypatch)
     _complete_setup(conn)
     db.set_config_value(conn, "hevy_api_key", "safe-mock-key")
-    workout = dev_mock.dev_hevy_workouts(datetime.now(timezone.utc))[0]
+    workout = _pinned_hevy_workouts(monkeypatch)[0]
     hevy_db.upsert_workout(
         conn,
         workout["id"],
