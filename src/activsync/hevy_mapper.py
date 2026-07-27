@@ -112,9 +112,9 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     #  BACK – Rows (category 23)
     # ======================================================================= #
     "Bent Over Row (Band)":                     (23, 0),   # row / barbell_straight_leg_deadlift_to_row (closest band row)
-    "Bent Over Row (Barbell)":                  (23, 65535),  # ROW / generic (no exact barbell bent-over sub in FIT)
+    "Bent Over Row (Barbell)":                  (23, 46),  # row / bent_over_row_with_barbell
     "Bent Over Row (Dumbbell)":                 (23, 2),   # row / dumbbell_row
-    "Chest Supported Incline Row (Dumbbell)":   (23, 2),  # ROW / dumbbell_row
+    "Chest Supported Incline Row (Dumbbell)":   (23, 40),  # row / chest_supported_dumbbell_row
     "Dumbbell Row":                             (23, 2),   # row / dumbbell_row
     "Face Pull":                                (23, 5),   # row / face_pull
     "Gorilla Row (Kettlebell)":                 (23, 9),   # row / kettlebell_row (closest)
@@ -125,7 +125,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Landmine Row":                             (23, 13),  # row / one_arm_bent_over_row (closest)
     "Low Row (Suspension)":                     (23, 26),  # row / suspended_inverted_row
     "Meadows Rows (Barbell)":                   (23, 13),  # row / one_arm_bent_over_row
-    "Pendlay Row (Barbell)":                    (23, 65535),  # ROW / generic (no exact sub in FIT)
+    "Pendlay Row (Barbell)":                    (23, 46),  # row / bent_over_row_with_barbell (Pendlay = strict bent-over)
     "Renegade Row (Dumbbell)":                  (23, 15),  # row / renegade_row
     "Seated Cable Row - Bar Grip":              (23, 18),  # row / seated_cable_row
     "Seated Cable Row - Bar Wide Grip":         (23, 33),  # row / wide_grip_seated_cable_row
@@ -350,8 +350,8 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     # ======================================================================= #
     "Dumbbell Step Up":                         (28, 32),  # squat / dumbbell_step_up
     "Step Up":                                  (28, 66),  # squat / step_up
-    "Stair Machine (Floors)":                   (2, 65535),   # CARDIO / generic (STAIR_STEPPER/47 exists but is unproven with Garmin)
-    "Stair Machine (Steps)":                    (2, 65535),   # CARDIO / generic (STAIR_STEPPER/47 exists but is unproven with Garmin)
+    "Stair Machine (Floors)":                   (47, 0),   # stair_stepper / stair_stepper
+    "Stair Machine (Steps)":                    (47, 0),   # stair_stepper / stair_stepper
 
     # ======================================================================= #
     #  LEGS – Lunges (category 17)
@@ -598,26 +598,26 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     #  CARDIO / MACHINES — uses newer FIT SDK categories (33+) where available
     # ======================================================================= #
     "Aerobics":                                 (2, 0),    # cardio / generic
-    "Air Bike":                                 (2, 65535),   # CARDIO / generic
-    "Battle Ropes":                             (2, 65535),   # CARDIO / generic
-    "Boxing":                                   (2, 65535),   # CARDIO / generic
+    "Air Bike":                                 (41, 0),   # indoor_bike / air_bike
+    "Battle Ropes":                             (38, 0),   # battle_rope / alternating_figure_eight
+    "Boxing":                                   (2, 42),   # cardio / punch
     "Climbing":                                 (2, 0),    # cardio / generic
-    "Cycling":                                  (2, 65535),   # CARDIO / generic
-    "Elliptical Trainer":                       (2, 65535),   # CARDIO / generic
+    "Cycling":                                  (33, 0),   # bike / bike
+    "Elliptical Trainer":                       (39, 0),   # elliptical / elliptical
     "HIIT":                                     (2, 0),    # cardio / generic
     "Hiking":                                   (32, 1),   # run / walk (hiking = walking)
     "Jump Rope":                                (2, 6),    # cardio / jump_rope
     "Jumping Jack":                             (2, 12),   # cardio / jumping_jacks
     "Pilates":                                  (2, 0),    # cardio / generic
-    "Rowing Machine":                           (2, 65535),   # CARDIO / generic
+    "Rowing Machine":                           (42, 0),   # indoor_row / rowing_machine
     "Skating":                                  (2, 0),    # cardio / generic
     "Skiing":                                   (2, 0),    # cardio / generic
     "Snowboarding":                             (2, 0),    # cardio / generic
-    "Spinning":                                 (2, 65535),   # CARDIO / generic
+    "Spinning":                                 (41, 3),   # indoor_bike / stationary_bike
     "Stretching":                               (31, 0),   # warm_up / generic (stretching)
     "Swimming":                                 (2, 0),    # cardio / generic
-    "Treadmill":                                (2, 65535),   # CARDIO / generic
-    "Yoga":                                     (29, 65535),   # TOTAL_BODY / generic (not a Garmin strength exercise)
+    "Treadmill":                                (52, 1),   # run_indoor / treadmill
+    "Yoga":                                     (36, 0),   # pose / all_fours
     "High Knees":                               (2, 0),    # cardio / generic
     "Sprints":                                  (32, 3),   # run / sprint
     "Cable Pull Through":                       (10, 11),  # hip_raise / hip_raise (cable pull-through = hip hinge)

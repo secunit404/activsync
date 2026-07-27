@@ -126,3 +126,34 @@ def test_all_template_map_categories_have_names():
     cats = {cat for cat, _sub in TEMPLATE_TO_GARMIN.values()}
     missing = cats - set(CATEGORY_NAMES)
     assert not missing, f"categories with no name: {missing}"
+
+
+@pytest.mark.parametrize("table", ["HEVY_TO_GARMIN", "TEMPLATE_TO_GARMIN"])
+def test_every_mapped_pair_exists_in_the_fit_profile(table):
+    """A pair that no longer resolves would upload as "Unknown" in Garmin.
+    65535 is FIT's "no name" and is deliberately allowed; 65534 is the
+    UNKNOWN sentinel, which the resolver treats as a miss."""
+    from activsync.fit_profile import SUBCATEGORY_NAMES
+    from activsync.hevy_template_map import TEMPLATE_TO_GARMIN
+
+    pairs = {"HEVY_TO_GARMIN": hevy_mapper.HEVY_TO_GARMIN,
+             "TEMPLATE_TO_GARMIN": TEMPLATE_TO_GARMIN}[table]
+    broken = {
+        key: (category, subcategory)
+        for key, (category, subcategory) in pairs.items()
+        if category != UNKNOWN_CATEGORY
+        and (category not in CATEGORY_NAMES
+             or (subcategory != 65535
+                 and subcategory not in SUBCATEGORY_NAMES.get(category, {})))
+    }
+    assert not broken, f"pairs missing from the FIT profile: {broken}"
+
+
+def test_machine_cardio_uses_its_own_category():
+    """These sat on generic CARDIO only because the old FIT profile had no
+    machine categories. The template table already used the real ones, so the
+    name fallback disagreed with the id lookup for the same exercise."""
+    assert hevy_mapper.HEVY_TO_GARMIN["Treadmill"] == (52, 1)
+    assert hevy_mapper.HEVY_TO_GARMIN["Stair Machine (Steps)"] == (47, 0)
+    assert hevy_mapper.HEVY_TO_GARMIN["Rowing Machine"] == (42, 0)
+    assert hevy_mapper.HEVY_TO_GARMIN["Bent Over Row (Barbell)"] == (23, 46)
