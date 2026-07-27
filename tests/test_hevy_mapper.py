@@ -128,7 +128,8 @@ def test_all_template_map_categories_have_names():
     assert not missing, f"categories with no name: {missing}"
 
 
-@pytest.mark.parametrize("table", ["HEVY_TO_GARMIN", "TEMPLATE_TO_GARMIN"])
+@pytest.mark.parametrize(
+    "table", ["HEVY_TO_GARMIN", "TEMPLATE_TO_GARMIN", "TEMPLATE_OVERRIDES"])
 def test_every_mapped_pair_exists_in_the_fit_profile(table):
     """A pair that no longer resolves would upload as "Unknown" in Garmin.
     65535 is FIT's "no name" and is deliberately allowed; 65534 is the
@@ -137,7 +138,8 @@ def test_every_mapped_pair_exists_in_the_fit_profile(table):
     from activsync.hevy_template_map import TEMPLATE_TO_GARMIN
 
     pairs = {"HEVY_TO_GARMIN": hevy_mapper.HEVY_TO_GARMIN,
-             "TEMPLATE_TO_GARMIN": TEMPLATE_TO_GARMIN}[table]
+             "TEMPLATE_TO_GARMIN": TEMPLATE_TO_GARMIN,
+             "TEMPLATE_OVERRIDES": hevy_mapper.TEMPLATE_OVERRIDES}[table]
     broken = {
         key: (category, subcategory)
         for key, (category, subcategory) in pairs.items()
@@ -147,6 +149,20 @@ def test_every_mapped_pair_exists_in_the_fit_profile(table):
                  and subcategory not in SUBCATEGORY_NAMES.get(category, {})))
     }
     assert not broken, f"pairs missing from the FIT profile: {broken}"
+
+
+def test_overrides_win_over_the_generated_template_table():
+    """The generated table is re-copied verbatim from upstream, so a wrong
+    pair can only be corrected by shadowing it."""
+    from activsync.hevy_template_map import TEMPLATE_TO_GARMIN
+
+    swimming = "B60A678F"
+    assert TEMPLATE_TO_GARMIN[swimming] == (2, 0)  # cardio / bob_and_weave_circle
+    assert hevy_mapper.lookup_standard_mapping("Swimming", swimming) == (2, 65535)
+
+    # and an id upstream never had at all still resolves
+    assert hevy_mapper.lookup_standard_mapping("Seal Row (Barbell)", "DF3BDB9C") \
+        == (23, 45)
 
 
 def test_machine_cardio_uses_its_own_category():

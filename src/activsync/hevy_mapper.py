@@ -631,6 +631,60 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
 }
 
 
+# --------------------------------------------------------------------------- #
+# Corrections to the generated template table
+# --------------------------------------------------------------------------- #
+
+# TEMPLATE_TO_GARMIN is auto-generated upstream and re-copied verbatim, so
+# corrections live here instead of being edited into it. Checked first.
+#
+# 65535 is FIT's "no name": Garmin renders the category's own label, which
+# beats a confidently wrong exercise name (an unrecognised name string shows
+# as "Unknown", but a null name under a valid category is accepted).
+TEMPLATE_OVERRIDES: dict[str, tuple[int, int]] = {
+    # Hevy exercises the generated table does not carry.
+    "B3B1D947": (19, 4),        # Bear Crawl -> plank / bear_crawl
+    "EB813C91": (23, 46),       # Bent Over Row (Smith Machine) -> row / bent_over_row_with_barbell
+    "0F24286A": (17, 7),        # Bulgarian Split Squat (Barbell) -> lunge / barbell_bulgarian_split_squat
+    "115CC72C": (29, 0),        # Burpee Broad Jumps -> total_body / burpee
+    "CC55119B": (5, 6),         # Cable Core Pallof Press -> core / cable_core_press
+    "6A8D3193": (23, 28),       # Chest Supported T Bar Row -> row / t_bar_row
+    "49C922A1": (10, 0),        # Glute Bridge (Barbell) -> hip_raise / barbell_hip_thrust_on_floor
+    "C469EA70": (11, 27),       # Hip Abduction (Cable) -> hip_stability / standing_cable_hip_abduction
+    "22578A94": (11, 25),       # Hip Adduction (Cable) -> hip_stability / standing_adduction
+    "DA5430FC": (10, 12),       # Hip Thrust (Dumbbell) -> hip_raise / weighted_hip_raise
+    "7FD2EC3E": (41, 3),        # Recumbent Bike -> indoor_bike / stationary_bike
+    "8B5BED30": (30, 18),       # Reverse Grip Triceps Pushdown -> triceps_extension / reverse_grip_triceps_pressdown
+    "D8460FA6": (7, 17),        # Reverse Wrist Curl (Dumbbell) -> curl / dumbbell_reverse_wrist_curl
+    "0B9B92BA": (8, 23),        # Romanian Deadlift (Smith Machine) -> deadlift / romanian_deadlift
+    "DF3BDB9C": (23, 45),       # Seal Row (Barbell) -> row / barbell_row
+    "7E93E23F": (23, 40),       # Seal Row (Dumbbell) -> row / chest_supported_dumbbell_row
+    "C01F58D1": (7, 16),        # Seated Incline Hammer Curl (Dumbbell) -> curl / dumbbell_hammer_curl
+    "95F2E076": (7, 5),         # Seated Wrist Curl (Barbell) -> curl / barbell_wrist_curl
+    "5D99A2FA": (2, 65535),     # Ski Erg -> cardio / no name
+    "7D1BD41D": (45, 0),        # Sled Pull -> sled / backward_drag
+    "28927A36": (25, 65535),    # Standing Y Raise (Cable) -> shoulder_stability / no name
+    "7593855D": (3, 7),         # Suitcase Carry (Dumbbell) -> carry / farmers_carry
+    "F30A4F01": (44, 9),        # Walking Lunge (Sandbag) -> sandbag / lunge
+
+    # Pairs the generator got wrong — it fell back to name 0 of the
+    # category, so "Swimming" uploaded as "Bob and weave circle".
+    "5E0DDACE": (2, 65535),     # Aerobics -> was cardio / bob_and_weave_circle
+    "084A67CA": (38, 65535),    # Battle Ropes -> was battle_rope / alternating_figure_eight
+    "E23F1F2B": (2, 65535),     # Climbing -> was cardio / bob_and_weave_circle
+    "023947AB": (2, 65535),     # HIIT -> was cardio / bob_and_weave_circle
+    "150E076B": (2, 65535),     # High Knees -> was cardio / bob_and_weave_circle
+    "5F8903BF": (5, 89),        # Kettlebell Turkish Get Up -> was total_body / burpee
+    "EC2510CD": (2, 65535),     # Pilates -> was cardio / bob_and_weave_circle
+    "24A809EF": (2, 65535),     # Skating -> was cardio / bob_and_weave_circle
+    "84325755": (2, 65535),     # Skiing -> was cardio / bob_and_weave_circle
+    "7757171F": (45, 4),        # Sled Push -> was plyo / squat_jump_onto_box
+    "911A58D3": (2, 65535),     # Snowboarding -> was cardio / bob_and_weave_circle
+    "20C1A3CB": (17, 65535),    # Split Squat (Dumbbell) -> was lunge / gunslinger_lunge
+    "B60A678F": (2, 65535),     # Swimming -> was cardio / bob_and_weave_circle
+    "79EF4E4F": (31, 65535),    # Warm Up -> was warm_up / quadruped_rocking
+    "8C9D2928": (36, 65535),    # Yoga -> was pose / all_fours
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -642,9 +696,9 @@ def lookup_exercise(
 ) -> tuple[int, int, str]:
     """Resolve an exercise to (category, subcategory, display_name).
 
-    Order: user mapping -> generated template-id table -> built-in English-name
-    table. A miss raises
-    MappingMiss; this function never returns the UNKNOWN sentinel.
+    Order: user mapping -> template-id table (corrections first) -> built-in
+    English-name table. A miss raises MappingMiss; this function never returns
+    the UNKNOWN sentinel.
     """
     # Both ported tables contain UNKNOWN (65534) entries — exercises even
     # upstream could not place. Every resolution source filters them: the
@@ -668,7 +722,7 @@ def lookup_standard_mapping(
     decide whether an override can truthfully offer "Reset to standard".
     """
     if template_id:
-        pair = TEMPLATE_TO_GARMIN.get(template_id)
+        pair = TEMPLATE_OVERRIDES.get(template_id) or TEMPLATE_TO_GARMIN.get(template_id)
         if pair is not None and pair[0] != UNKNOWN_CATEGORY:
             return pair
     pair = HEVY_TO_GARMIN.get(title)
