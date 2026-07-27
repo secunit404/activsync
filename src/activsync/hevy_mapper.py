@@ -642,48 +642,105 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
 # beats a confidently wrong exercise name (an unrecognised name string shows
 # as "Unknown", but a null name under a valid category is accepted).
 TEMPLATE_OVERRIDES: dict[str, tuple[int, int]] = {
-    # Hevy exercises the generated table does not carry.
-    "B3B1D947": (19, 4),        # Bear Crawl -> plank / bear_crawl
-    "EB813C91": (23, 46),       # Bent Over Row (Smith Machine) -> row / bent_over_row_with_barbell
-    "0F24286A": (17, 7),        # Bulgarian Split Squat (Barbell) -> lunge / barbell_bulgarian_split_squat
-    "115CC72C": (29, 0),        # Burpee Broad Jumps -> total_body / burpee
-    "CC55119B": (5, 6),         # Cable Core Pallof Press -> core / cable_core_press
-    "6A8D3193": (23, 28),       # Chest Supported T Bar Row -> row / t_bar_row
-    "49C922A1": (10, 0),        # Glute Bridge (Barbell) -> hip_raise / barbell_hip_thrust_on_floor
-    "C469EA70": (11, 27),       # Hip Abduction (Cable) -> hip_stability / standing_cable_hip_abduction
-    "22578A94": (11, 25),       # Hip Adduction (Cable) -> hip_stability / standing_adduction
-    "DA5430FC": (10, 12),       # Hip Thrust (Dumbbell) -> hip_raise / weighted_hip_raise
-    "7FD2EC3E": (41, 3),        # Recumbent Bike -> indoor_bike / stationary_bike
-    "8B5BED30": (30, 18),       # Reverse Grip Triceps Pushdown -> triceps_extension / reverse_grip_triceps_pressdown
-    "D8460FA6": (7, 17),        # Reverse Wrist Curl (Dumbbell) -> curl / dumbbell_reverse_wrist_curl
-    "0B9B92BA": (8, 23),        # Romanian Deadlift (Smith Machine) -> deadlift / romanian_deadlift
-    "DF3BDB9C": (23, 45),       # Seal Row (Barbell) -> row / barbell_row
-    "7E93E23F": (23, 40),       # Seal Row (Dumbbell) -> row / chest_supported_dumbbell_row
-    "C01F58D1": (7, 16),        # Seated Incline Hammer Curl (Dumbbell) -> curl / dumbbell_hammer_curl
-    "95F2E076": (7, 5),         # Seated Wrist Curl (Barbell) -> curl / barbell_wrist_curl
-    "5D99A2FA": (2, 65535),     # Ski Erg -> cardio / no name
-    "7D1BD41D": (45, 0),        # Sled Pull -> sled / backward_drag
-    "28927A36": (25, 65535),    # Standing Y Raise (Cable) -> shoulder_stability / no name
-    "7593855D": (3, 7),         # Suitcase Carry (Dumbbell) -> carry / farmers_carry
-    "F30A4F01": (44, 9),        # Walking Lunge (Sandbag) -> sandbag / lunge
+    # Exercises the generated table does not carry at all.
+    "B3B1D947": (19, 4),        # Bear Crawl -> PLANK/BEAR_CRAWL
+    "EB813C91": (23, 46),       # Bent Over Row (Smith Machine) -> ROW/BENT_OVER_ROW_WITH_BARBELL
+    "0F24286A": (17, 7),        # Bulgarian Split Squat (Barbell) -> LUNGE/BARBELL_BULGARIAN_SPLIT_SQUAT
+    "115CC72C": (29, 0),        # Burpee Broad Jumps -> TOTAL_BODY/BURPEE
+    "CC55119B": (5, 6),         # Cable Core Pallof Press -> CORE/CABLE_CORE_PRESS
+    "6A8D3193": (23, 28),       # Chest Supported T Bar Row -> ROW/T_BAR_ROW
+    "49C922A1": (10, 0),        # Glute Bridge (Barbell) -> HIP_RAISE/BARBELL_HIP_THRUST_ON_FLOOR
+    "C469EA70": (11, 27),       # Hip Abduction (Cable) -> HIP_STABILITY/STANDING_CABLE_HIP_ABDUCTION
+    "22578A94": (11, 25),       # Hip Adduction (Cable) -> HIP_STABILITY/STANDING_ADDUCTION
+    "DA5430FC": (10, 12),       # Hip Thrust (Dumbbell) -> HIP_RAISE/WEIGHTED_HIP_RAISE
+    "7FD2EC3E": (41, 3),        # Recumbent Bike -> INDOOR_BIKE/STATIONARY_BIKE
+    "8B5BED30": (30, 18),       # Reverse Grip Triceps Pushdown -> TRICEPS_EXTENSION/REVERSE_GRIP_TRICEPS_PRESSDOWN
+    "D8460FA6": (7, 17),        # Reverse Wrist Curl (Dumbbell) -> CURL/DUMBBELL_REVERSE_WRIST_CURL
+    "0B9B92BA": (8, 23),        # Romanian Deadlift (Smith Machine) -> DEADLIFT/ROMANIAN_DEADLIFT
+    "DF3BDB9C": (23, 45),       # Seal Row (Barbell) -> ROW/BARBELL_ROW
+    "7E93E23F": (23, 40),       # Seal Row (Dumbbell) -> ROW/CHEST_SUPPORTED_DUMBBELL_ROW
+    "C01F58D1": (7, 16),        # Seated Incline Hammer Curl (Dumbbell) -> CURL/DUMBBELL_HAMMER_CURL
+    "95F2E076": (7, 5),         # Seated Wrist Curl (Barbell) -> CURL/BARBELL_WRIST_CURL
+    "5D99A2FA": (2, 65535),     # Ski Erg -> CARDIO/(no name)
+    "7D1BD41D": (45, 0),        # Sled Pull -> SLED/BACKWARD_DRAG
+    "28927A36": (25, 65535),    # Standing Y Raise (Cable) -> SHOULDER_STABILITY/(no name)
+    "7593855D": (3, 7),         # Suitcase Carry (Dumbbell) -> CARRY/FARMERS_CARRY
+    "F30A4F01": (44, 9),        # Walking Lunge (Sandbag) -> SANDBAG/LUNGE
 
-    # Pairs the generator got wrong — it fell back to name 0 of the
-    # category, so "Swimming" uploaded as "Bob and weave circle".
-    "5E0DDACE": (2, 65535),     # Aerobics -> was cardio / bob_and_weave_circle
-    "084A67CA": (38, 65535),    # Battle Ropes -> was battle_rope / alternating_figure_eight
-    "E23F1F2B": (2, 65535),     # Climbing -> was cardio / bob_and_weave_circle
-    "023947AB": (2, 65535),     # HIIT -> was cardio / bob_and_weave_circle
-    "150E076B": (2, 65535),     # High Knees -> was cardio / bob_and_weave_circle
-    "5F8903BF": (5, 89),        # Kettlebell Turkish Get Up -> was total_body / burpee
-    "EC2510CD": (2, 65535),     # Pilates -> was cardio / bob_and_weave_circle
-    "24A809EF": (2, 65535),     # Skating -> was cardio / bob_and_weave_circle
-    "84325755": (2, 65535),     # Skiing -> was cardio / bob_and_weave_circle
-    "7757171F": (45, 4),        # Sled Push -> was plyo / squat_jump_onto_box
-    "911A58D3": (2, 65535),     # Snowboarding -> was cardio / bob_and_weave_circle
-    "20C1A3CB": (17, 65535),    # Split Squat (Dumbbell) -> was lunge / gunslinger_lunge
-    "B60A678F": (2, 65535),     # Swimming -> was cardio / bob_and_weave_circle
-    "79EF4E4F": (31, 65535),    # Warm Up -> was warm_up / quadruped_rocking
-    "8C9D2928": (36, 65535),    # Yoga -> was pose / all_fours
+    # Pairs that named an exercise nobody did — the generator fell back to
+    # name 0 of the category, so "Swimming" uploaded as "Bob and weave
+    # circle". 65535 is FIT's "no name", which shows the category label.
+    "B4F2FF72": (5, 65),        # Ab Scissors -> CORE/SCISSORS (was CORE/BICYCLE)
+    "5E0DDACE": (2, 65535),     # Aerobics -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "084A67CA": (38, 65535),    # Battle Ropes -> BATTLE_ROPE/(no name) (was BATTLE_ROPE/ALTERNATING_FIGURE_EIGHT)
+    "EA820646": (23, 65535),    # Bent Over Row (Band) -> ROW/(no name) (was ROW/BARBELL_STRAIGHT_LEG_DEADLIFT_TO_ROW)
+    "8C331CD8": (4, 0),         # Cable Pull Through -> CHOP/CABLE_PULL_THROUGH (was HIP_RAISE/HIP_RAISE)
+    "91237BDD": (1, 6),         # Calf Press (Machine) -> CALF_RAISE/SEATED_CALF_RAISE (was CALF_RAISE/STANDING_CALF_RAISE)
+    "720B0D70": (49, 0),        # Chest Fly (Suspension) -> SUSPENSION/CHEST_FLY (was FLYE/DUMBBELL_FLYE)
+    "EAC7D9C5": (22, 0),        # Chest Press (Band) -> PUSH_UP/CHEST_PRESS_WITH_BAND (was BENCH_PRESS/BARBELL_BENCH_PRESS)
+    "F21D5693": (25, 20),       # Chest Supported Y Raise (Dumbbell) -> SHOULDER_STABILITY/INCLINE_Y_RAISE (was LATERAL_RAISE/FRONT_RAISE)
+    "E23F1F2B": (2, 65535),     # Climbing -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "EB43ADD4": (6, 83),        # Crunch (Machine) -> CRUNCH/CRUNCH (was CRUNCH/KNEELING_CABLE_CRUNCH)
+    "B9380898": (21, 65535),    # Dead Hang -> PULL_UP/(no name) (was PULL_UP/PULL_UP)
+    "99507114": (37, 9),        # Deadlift (Band) -> BANDED_EXERCISES/DEADLIFT (was DEADLIFT/BARBELL_DEADLIFT)
+    "7DA843A3": (36, 21),       # Downward Dog -> POSE/DOWNWARD_FACING_DOG (was WARM_UP/QUADRUPED_ROCKING)
+    "01A35BF9": (7, 38),        # EZ Bar Biceps Curl -> CURL/STANDING_EZ_BAR_BICEPS_CURL (was CURL/EZ_BAR_PREACHER_CURL)
+    "A01BE509": (6, 11),        # Elbow to Knee -> CRUNCH/ELBOW_TO_KNEE_CRUNCH (was SIT_UP/SIT_UP)
+    "0E608350": (5, 20),        # Front Lever Hold -> CORE/MODIFIED_FRONT_LEVER (was PULL_UP/PULL_UP)
+    "30F03BF0": (5, 20),        # Front Lever Raise -> CORE/MODIFIED_FRONT_LEVER (was PULL_UP/PULL_UP)
+    "023947AB": (2, 65535),     # HIIT -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "150E076B": (31, 26),       # High Knees -> WARM_UP/WALKING_HIGH_KNEES (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "D410F649": (5, 25),        # Jack Knife (Suspension) -> CORE/SWISS_BALL_JACKKNIFE (was CRUNCH/CRUNCH)
+    "5F8903BF": (5, 89),        # Kettlebell Turkish Get Up -> CORE/TURKISH_GET_UP (was TOTAL_BODY/BURPEE)
+    "6D54A050": (5, 88),        # L-Sit Hold -> CORE/L_SIT (was LEG_RAISE/HANGING_LEG_RAISE)
+    "EC02979E": (37, 24),       # Lateral Band Walks -> BANDED_EXERCISES/LATERAL_BAND_WALKS (was HIP_STABILITY/LATERAL_WALKS_WITH_BAND_AT_ANKLES)
+    "DF200976": (37, 25),       # Lateral Raise (Band) -> BANDED_EXERCISES/LATERAL_RAISE (was LATERAL_RAISE/LEANING_DUMBBELL_LATERAL_RAISE)
+    "4C6721B9": (17, 83),       # Overhead Dumbbell Lunge -> LUNGE/OVERHEAD_DUMBBELL_LUNGE (was CARRY/OVERHEAD_CARRY)
+    "EC2510CD": (2, 65535),     # Pilates -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "9F48F858": (7, 65535),     # Reverse Curl (Cable) -> CURL/(no name) (was CURL/REVERSE_GRIP_BARBELL_BICEPS_CURL)
+    "99B49684": (19, 28),       # Reverse Plank -> PLANK/LYING_REVERSE_PLANK (was PLANK/PLANK)
+    "B33B526E": (7, 8),         # Single Arm Curl (Cable) -> CURL/CABLE_BICEPS_CURL (was CURL/BEHIND_THE_BACK_ONE_ARM_CABLE_CURL)
+    "24A809EF": (2, 65535),     # Skating -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "84325755": (2, 65535),     # Skiing -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "7757171F": (45, 4),        # Sled Push -> SLED/PUSH (was PLYO/SQUAT_JUMP_ONTO_BOX)
+    "911A58D3": (2, 65535),     # Snowboarding -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "20C1A3CB": (28, 28),       # Split Squat (Dumbbell) -> SQUAT/DUMBBELL_SPLIT_SQUAT (was LUNGE/GUNSLINGER_LUNGE)
+    "B60A678F": (2, 65535),     # Swimming -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
+    "6182EE83": (49, 33),       # Triceps Extension (Suspension) -> SUSPENSION/TRICEP_PRESS (was TRICEPS_EXTENSION/CABLE_OVERHEAD_TRICEPS_EXTENSION)
+    "286C1D0B": (26, 24),       # Upright Row (Cable) -> SHRUG/UPRIGHT_ROW (was SHRUG/DUMBBELL_UPRIGHT_ROW)
+    "79EF4E4F": (31, 65535),    # Warm Up -> WARM_UP/(no name) (was WARM_UP/QUADRUPED_ROCKING)
+    "8C9D2928": (36, 65535),    # Yoga -> POSE/(no name) (was POSE/ALL_FOURS)
+
+    # Right movement, but the profile has a name that fits it exactly.
+    "DDB29047": (7, 6),         # Behind the Back Wrist Curl (Barbell) -> CURL/BEHIND_THE_BACK_BARBELL_REVERSE_WRIST_CURL (was CURL/BARBELL_REVERSE_WRIST_CURL)
+    "23E92538": (23, 47),       # Bent Over Row (Dumbbell) -> ROW/BENT_OVER_ROW_WITH_DUMBELL (was ROW/DUMBBELL_ROW)
+    "37FCC2BB": (7, 46),        # Bicep Curl (Dumbbell) -> CURL/DUMBBELL_BICEPS_CURL (was CURL/STANDING_DUMBBELL_BICEPS_CURL)
+    "56092DD1": (20, 33),       # Box Jump -> PLYO/BOX_JUMP (was PLYO/HIGH_BOX_JUMP)
+    "B5D3A742": (17, 18),       # Bulgarian Split Squat (Dumbbell) -> LUNGE/DUMBBELL_BULGARIAN_SPLIT_SQUAT (was LUNGE/BARBELL_BULGARIAN_SPLIT_SQUAT)
+    "86B00DDE": (29, 18),       # Burpee Over the Bar -> TOTAL_BODY/TOTAL_BODY_BURPEE_OVER_BAR (was TOTAL_BODY/BURPEE)
+    "29083183": (21, 39),       # Chin Up -> PULL_UP/CHIN_UP (was PULL_UP/CLOSE_GRIP_CHIN_UP)
+    "D23C609B": (21, 2),        # Chin Up (Assisted) -> PULL_UP/BAND_ASSISTED_CHIN_UP (was PULL_UP/CLOSE_GRIP_CHIN_UP)
+    "023943F1": (21, 41),       # Chin Up (Weighted) -> PULL_UP/WEIGHTED_CHIN_UP (was PULL_UP/WEIGHTED_CLOSE_GRIP_CHIN_UP)
+    "D3095577": (18, 27),       # Clean and Press -> OLYMPIC_LIFT/CLEAN_AND_PRESS (was OLYMPIC_LIFT/CLEAN_AND_JERK)
+    "724CDE60": (7, 44),        # Concentration Curl -> CURL/ONE_ARM_CONCENTRATION_CURL (was CURL/STANDING_DUMBBELL_BICEPS_CURL)
+    "F3717B0E": (18, 25),       # Dumbbell Snatch -> OLYMPIC_LIFT/DUMBBELL_SNATCH (was OLYMPIC_LIFT/SINGLE_ARM_DUMBBELL_SNATCH)
+    "8293E554": (24, 28),       # Front Raise (Dumbbell) -> SHOULDER_PRESS/DUMBBELL_FRONT_RAISE (was LATERAL_RAISE/FRONT_RAISE)
+    "3A6FA3D1": (0, 10),        # Incline Bench Press (Smith Machine) -> BENCH_PRESS/INCLINE_SMITH_MACHINE_BENCH_PRESS (was BENCH_PRESS/INCLINE_BARBELL_BENCH_PRESS)
+    "425805F4": (23, 35),       # Inverted Row -> ROW/INVERTED_ROW (was ROW/MODIFIED_INVERTED_ROW)
+    "70D4EBBF": (20, 37),       # Jump Squat -> PLYO/JUMP_SQUAT (was PLYO/BODY_WEIGHT_JUMP_SQUAT)
+    "07EBC4DC": (20, 33),       # Lateral Box Jump -> PLYO/BOX_JUMP (was PLYO/LATERAL_PLYO_SQUATS)
+    "422B08F1": (14, 34),       # Lateral Raise (Dumbbell) -> LATERAL_RAISE/DUMBBELL_LATERAL_RAISE (was LATERAL_RAISE/LEANING_DUMBBELL_LATERAL_RAISE)
+    "0EFE8162": (22, 84),       # Pike Pushup -> PUSH_UP/PIKE_PUSH_UP (was PUSH_UP/SHOULDER_PUSH_UP)
+    "DBF9273A": (24, 23),       # Plate Front Raise -> SHOULDER_PRESS/WEIGHT_PLATE_FRONT_RAISE (was LATERAL_RAISE/PLATE_RAISES)
+    "B567DD46": (7, 34),        # Reverse Curl (Dumbbell) -> CURL/SEATED_REVERSE_DUMBBELL_CURL (was CURL/REVERSE_GRIP_BARBELL_BICEPS_CURL)
+    "FFDA283B": (17, 82),       # Reverse Lunge (Dumbbell) -> LUNGE/DUMBBELL_REVERSE_LUNGE (was LUNGE/DUMBBELL_LUNGE)
+    "2B4B7310": (8, 23),        # Romanian Deadlift (Barbell) -> DEADLIFT/ROMANIAN_DEADLIFT (was DEADLIFT/BARBELL_STRAIGHT_LEG_DEADLIFT)
+    "72CFFAD5": (8, 23),        # Romanian Deadlift (Dumbbell) -> DEADLIFT/ROMANIAN_DEADLIFT (was DEADLIFT/DUMBBELL_STRAIGHT_LEG_DEADLIFT)
+    "878CD1D0": (24, 24),       # Shoulder Press (Dumbbell) -> SHOULDER_PRESS/DUMBBELL_SHOULDER_PRESS (was SHOULDER_PRESS/OVERHEAD_DUMBBELL_PRESS)
+    "FB09C938": (18, 28),       # Snatch -> OLYMPIC_LIFT/SNATCH (was OLYMPIC_LIFT/BARBELL_SNATCH)
+    "E764B907": (18, 19),       # Split Jerk -> OLYMPIC_LIFT/SPLIT_JERK (was OLYMPIC_LIFT/BARBELL_SPLIT_JERK)
+    "073032BB": (24, 25),       # Standing Military Press (Barbell) -> SHOULDER_PRESS/MILITARY_PRESS (was SHOULDER_PRESS/OVERHEAD_BARBELL_PRESS)
+    "2A48E443": (8, 25),        # Straight Leg Deadlift -> DEADLIFT/STRAIGHT_LEG_DEADLIFT (was DEADLIFT/BARBELL_STRAIGHT_LEG_DEADLIFT)
 }
 
 
