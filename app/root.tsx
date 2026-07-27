@@ -16,6 +16,12 @@ import "./app.css";
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.ico" },
+  {
+    rel: "apple-touch-icon",
+    href: "/apple-touch-icon.png",
+    sizes: "180x180",
+    type: "image/png",
+  },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -23,7 +29,22 @@ export function Layout({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/*
+          `viewport-fit=cover` is what makes `env(safe-area-inset-*)` report
+          real values — without it every one of them resolves to 0, which is
+          why the floating dock sat directly on the home indicator once the
+          app was added to an iPhone home screen and ran without Safari's
+          chrome. Every `env(safe-area-inset-bottom)` already in the codebase
+          (app-tab-bar, bulk-action-bar, responsive-overlay) was dead until
+          this landed.
+
+          The trade is that content now extends under the status bar too, so
+          `body` pays that back with a matching top inset — see app.css.
+        */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <Meta />
         <Links />
       </head>

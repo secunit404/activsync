@@ -14,10 +14,12 @@ def _package_data_patterns() -> list[str]:
     return ast.literal_eval(match.group(1))
 
 
-def test_runtime_favicon_is_declared_as_package_data():
+def test_runtime_icons_are_declared_as_package_data():
     patterns = _package_data_patterns()
     assert "static/favicon.png" in patterns
+    assert "static/apple-touch-icon.png" in patterns
     assert (PACKAGE_ROOT / "static" / "favicon.png").is_file()
+    assert (PACKAGE_ROOT / "static" / "apple-touch-icon.png").is_file()
 
 
 def test_react_build_output_is_declared_as_package_data():

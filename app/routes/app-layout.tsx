@@ -5,6 +5,8 @@ import { Outlet } from "react-router";
 import { AppRail } from "@/components/app-rail";
 import { AppTabBar } from "@/components/app-tab-bar";
 import { AppVersionFooter } from "@/components/app-version-footer";
+import { PullToRefresh } from "@/components/pull-to-refresh";
+import { usePrefetchTabs } from "@/hooks/use-prefetch-tabs";
 import { getAppState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -29,13 +31,18 @@ export default function AppLayout() {
     queryFn: ({ signal }) => getAppState(signal),
   });
   const [tabBarHidden, setTabBarHidden] = useState(false);
+  usePrefetchTabs();
 
   return (
     <div className="min-h-screen bg-background">
+      <PullToRefresh />
       <AppRail>
         {data ? <AppVersionFooter version={data.version} update={data.update} /> : null}
       </AppRail>
-      <div className="pb-[74px] md:pb-0 md:pl-[74px]">
+      {/* The dock's 74px slot plus the home-indicator inset it now floats
+          above (root.tsx's `viewport-fit=cover`) — without the env() term the
+          last row of a list scrolls under the dock by exactly that inset. */}
+      <div className="pb-[calc(74px+env(safe-area-inset-bottom))] md:pb-0 md:pl-[74px]">
         <Outlet context={setTabBarHidden} />
       </div>
       <AppTabBar hidden={tabBarHidden} />

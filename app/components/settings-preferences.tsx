@@ -1,10 +1,6 @@
 import { SettingsSection } from "@/components/settings-shell";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import {
   NativeSelect,
@@ -100,7 +96,10 @@ function NumberField({
 }) {
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <div className="flex items-center gap-0.5">
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <Hint label={label}>{description}</Hint>
+      </div>
       <Input
         id={id}
         className="h-11"
@@ -110,7 +109,6 @@ function NumberField({
         onChange={(event) => onChange(event.target.valueAsNumber)}
         required
       />
-      <FieldDescription>{description}</FieldDescription>
     </Field>
   );
 }

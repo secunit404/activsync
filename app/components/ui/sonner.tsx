@@ -53,7 +53,12 @@ const Toaster = ({ theme = "dark", ...props }: ToasterProps) => {
       duration={5000}
       offset={{ bottom: 24, right: 24 }}
       mobileOffset={{
-        bottom: "calc(var(--bottom-bar-height, 74px) + 16px)",
+        // `--bottom-bar-height` is written from JS as a plain pixel count, so
+        // it cannot carry the safe-area inset itself — neither the tab bar's
+        // 74px default nor `BulkActionBar`'s measured height includes it, and
+        // both float above it. The env() term is added once here instead.
+        bottom:
+          "calc(var(--bottom-bar-height, 74px) + env(safe-area-inset-bottom) + 16px)",
         left: 16,
         right: 16,
       }}

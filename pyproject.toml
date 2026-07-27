@@ -27,4 +27,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-activsync = ["static/favicon.png", "web/*", "web/assets/*"]
+activsync = ["static/favicon.png", "static/apple-touch-icon.png", "web/*", "web/assets/*"]

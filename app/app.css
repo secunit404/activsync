@@ -117,6 +117,24 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  /*
+   * The app owns the overscroll at the top of the page: `PullToRefresh` reads
+   * that drag as its gesture, and without this the native rubber-band (and
+   * Chrome's own pull-to-refresh) runs at the same time and fights it.
+   */
+  overscroll-behavior-y: contain;
+  /*
+   * The other half of `viewport-fit=cover` (root.tsx): with it, content is
+   * allowed under the status bar as well as under the home indicator, so the
+   * page header would start beneath the clock in a home-screen app. Fixed
+   * bottom chrome positions against the viewport rather than this box, so it
+   * carries its own `env(safe-area-inset-bottom)` term instead.
+   *
+   * Only the top is paid back here. The horizontal insets matter solely in
+   * landscape on a notched phone, which this portrait-shaped dashboard has
+   * no real use for.
+   */
+  padding-top: env(safe-area-inset-top);
   background:
     radial-gradient(circle at top right, rgb(242 107 56 / 12%), transparent 32rem),
     var(--background);

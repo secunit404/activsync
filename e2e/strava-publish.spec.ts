@@ -47,7 +47,12 @@ test("connecting Strava in mock mode and publishing an activity succeeds end to 
   await garminStatus.getByRole("button", { name: "Reconnect" }).click();
   const garminDialog = page.getByRole("dialog", { name: "Manage Garmin" });
   await garminDialog.getByLabel("Garmin email").fill("athlete@example.com");
-  await garminDialog.getByLabel("Garmin password").fill("mock-garmin-password");
+  // `exact` because the field now has a `Hint` beside it (ui/hint.tsx) named
+  // "About Garmin password", and Playwright's `getByLabel` matches substrings
+  // by default — without this the locator is ambiguous between the two.
+  await garminDialog
+    .getByLabel("Garmin password", { exact: true })
+    .fill("mock-garmin-password");
   await garminDialog.getByRole("button", { name: "Reconnect", exact: true }).click();
   await expect(
     page.getByText("Garmin reconnected and catch-up sync started."),

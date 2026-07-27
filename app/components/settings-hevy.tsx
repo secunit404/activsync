@@ -8,6 +8,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import {
   NativeSelect,
@@ -279,14 +280,14 @@ export function HevySettings({
             </Field>
 
             <div className="flex items-start justify-between gap-4">
-              <div className="grid gap-1">
+              <div className="flex items-center gap-0.5">
                 <FieldLabel htmlFor="hevy-summary-on-structured">
                   Write summary for Merge and Replace
                 </FieldLabel>
-                <FieldDescription>
+                <Hint label="Write summary for Merge and Replace">
                   Description only always writes the summary. Turn this off to
                   keep the Garmin description unchanged for structured matches.
-                </FieldDescription>
+                </Hint>
               </div>
               <Switch
                 id="hevy-summary-on-structured"

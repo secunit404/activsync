@@ -31,6 +31,17 @@ def test_react_build_serves_all_spa_entry_routes_and_assets(tmp_path):
     assert client.get("/api/v1/app").status_code == 200
 
 
+def test_apple_touch_icon_is_served_as_png(tmp_path):
+    conn = db.connect(str(tmp_path / "app.db"))
+    client = TestClient(create_app(conn, web_dir=_web_build(tmp_path)))
+
+    response = client.get("/apple-touch-icon.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
 def test_spa_fallback_supports_future_client_routes_but_not_unknown_apis(tmp_path):
     conn = db.connect(str(tmp_path / "app.db"))
     client = TestClient(create_app(conn, web_dir=_web_build(tmp_path)))

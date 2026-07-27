@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
@@ -228,9 +228,15 @@ function GarminDialog({ state }: { state: SettingsState }) {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="settings-garmin-password">
-                  Garmin password
-                </FieldLabel>
+                <div className="flex items-center gap-0.5">
+                  <FieldLabel htmlFor="settings-garmin-password">
+                    Garmin password
+                  </FieldLabel>
+                  <Hint label="Garmin password">
+                    A failed attempt never overwrites the last verified
+                    password.
+                  </Hint>
+                </div>
                 <Input
                   id="settings-garmin-password"
                   className="h-11"
@@ -245,9 +251,6 @@ function GarminDialog({ state }: { state: SettingsState }) {
                       : undefined
                   }
                 />
-                <FieldDescription>
-                  A failed attempt never overwrites the last verified password.
-                </FieldDescription>
               </Field>
             </FieldGroup>
           </form>
@@ -456,9 +459,15 @@ function HevyDialog({ state }: { state: SettingsState }) {
               API key saved · {state.hevy.status}
             </p>
             <Field>
-              <FieldLabel htmlFor="settings-hevy-replace-key">
-                Replace API key
-              </FieldLabel>
+              <div className="flex items-center gap-0.5">
+                <FieldLabel htmlFor="settings-hevy-replace-key">
+                  Replace API key
+                </FieldLabel>
+                <Hint label="Replace API key">
+                  The new key is validated against Hevy before it replaces the
+                  saved one.
+                </Hint>
+              </div>
               <Input
                 id="settings-hevy-replace-key"
                 className="h-11"
@@ -468,10 +477,6 @@ function HevyDialog({ state }: { state: SettingsState }) {
                 onChange={(event) => setApiKey(event.target.value)}
                 placeholder="Leave blank to keep the saved key"
               />
-              <FieldDescription>
-                The new key is validated against Hevy before it replaces the
-                saved one.
-              </FieldDescription>
             </Field>
           </form>
         ) : (

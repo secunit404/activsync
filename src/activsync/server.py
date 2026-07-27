@@ -154,6 +154,13 @@ def create_app(
     def favicon() -> FileResponse:
         return FileResponse(STATIC_DIR / "favicon.png", media_type="image/png")
 
+    @app.get("/apple-touch-icon.png", include_in_schema=False)
+    def apple_touch_icon() -> FileResponse:
+        return FileResponse(
+            STATIC_DIR / "apple-touch-icon.png",
+            media_type="image/png",
+        )
+
     @app.get("/api/events")
     async def sse_events(request: Request):
         queue = events.bus.subscribe()

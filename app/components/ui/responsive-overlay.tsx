@@ -271,12 +271,13 @@ export function ResponsiveOverlay({
           {footer && (
             <div
               data-testid="responsive-overlay-footer"
-              // The mobile bottom padding is deliberately larger than the top:
-              // `env(safe-area-inset-bottom)` is 0 without `viewport-fit=cover`
-              // (which this app does not set), so on a home-indicator phone the
-              // buttons sat right on the gesture bar. 1.75rem is the clearance,
-              // and the env() term still helps anywhere it does report a value.
-              className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-card px-5 pt-4 pb-[calc(1.75rem+env(safe-area-inset-bottom))] md:px-7 md:pt-[18px] md:pb-[18px]"
+              // The 1rem base matches `pt-4` above it; the env() term is what
+              // clears the home indicator. That term used to be dead — the app
+              // set no `viewport-fit=cover`, so it always resolved to 0 — and
+              // this padding was a hardcoded 1.75rem to compensate. Now that
+              // root.tsx sets it, the base can go back to matching the top:
+              // 1.75rem on top of a real 34px inset was too much air.
+              className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-card px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:px-7 md:pt-[18px] md:pb-[18px]"
             >
               {footer}
             </div>
