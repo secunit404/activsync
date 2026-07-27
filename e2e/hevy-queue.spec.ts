@@ -33,9 +33,17 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
   await page.goto("/hevy");
   await expect(page.getByText("Ring circuit (Hevy)")).toBeVisible();
 
+  // Scoped to the one row this test acts on. Skip is offered by every queue
+  // row that has a decision pending — the seeded queue also holds an
+  // awaiting-match workout ("Leg day (Hevy)") with its own Skip — so a
+  // page-wide locator matches more than one button and is ambiguous about
+  // which workout is being skipped. The row survives the skip: it moves into
+  // the Skipped group, still carrying this title.
+  const row = page.getByRole("listitem").filter({ hasText: "Ring circuit (Hevy)" });
+
   // Cancel: the previously-native `window.confirm()` would have hung
   // Playwright's CDP browser here — this dialog does not.
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await row.getByRole("button", { name: "Skip", exact: true }).click();
   const dialog = page.getByRole("alertdialog", { name: "Skip this workout?" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAccessibleDescription("Skip Ring circuit (Hevy)?");
@@ -43,10 +51,10 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Ring circuit (Hevy)")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Unskip" })).not.toBeVisible();
+  await expect(row.getByRole("button", { name: "Unskip" })).not.toBeVisible();
 
   // Confirm: the destructive action actually runs.
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await row.getByRole("button", { name: "Skip", exact: true }).click();
   await page
     .getByRole("alertdialog", { name: "Skip this workout?" })
     .getByRole("button", { name: "Skip", exact: true })
@@ -54,6 +62,6 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
 
   await expect(page.getByText(/^Skipped/)).toBeVisible();
   await expect(page.getByRole("alertdialog")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Unskip" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Skip", exact: true })).not.toBeVisible();
+  await expect(row.getByRole("button", { name: "Unskip" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Skip", exact: true })).not.toBeVisible();
 });
