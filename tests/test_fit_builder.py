@@ -12,6 +12,7 @@ from activsync.fit_builder import (
     Profile,
     ResolvedExercise,
     build_fit,
+    decode_fit,
     identity_from_config,
     identity_from_fit,
     keytel_kcal_per_min,
@@ -125,31 +126,43 @@ def test_all_timestamps_stay_within_activity_window(tmp_path):
           {"time": 350.0, "hr": 130}]  # 350 s > 300 s duration
     result = build(tmp_path, workout=workout, hr=hr)
 
-    from fit_tool.fit_file import FitFile
-    fit = FitFile.from_file(result["output_path"])
-    end_ms = None
-    timestamps = []
-    for record in fit.records:
-        message = record.message
-        name = type(message).__name__
-        if name == "SessionMessage":
-            end_ms = message.timestamp
-        if name in ("RecordMessage", "SetMessage"):
-            timestamps.append(message.timestamp)
-    assert end_ms is not None
-    assert timestamps and all(ts <= end_ms for ts in timestamps)
+    messages = decode_fit(Path(result["output_path"]).read_bytes())
+    end = messages["session_mesgs"][0]["timestamp"]
+    timestamps = [
+        message["timestamp"]
+        for key in ("record_mesgs", "set_mesgs")
+        for message in messages.get(key, [])
+    ]
+    assert timestamps and all(ts <= end for ts in timestamps)
 
 
 def test_identity_fields_land_in_file(tmp_path):
-    from fit_tool.fit_file import FitFile
-    from fit_tool.profile.messages.file_id_message import FileIdMessage
-
     result = build(tmp_path)
-    fit = FitFile.from_file(result["output_path"])
-    file_id = next(r.message for r in fit.records
-                   if isinstance(r.message, FileIdMessage))
-    assert file_id.manufacturer == 1
-    assert file_id.serial_number == 987654321
+    file_id = decode_fit(Path(result["output_path"]).read_bytes())["file_id_mesgs"][0]
+
+    assert file_id["manufacturer"] == 1
+    assert file_id["serial_number"] == 987654321
+
+
+def test_set_messages_round_trip_their_scaled_fields(tmp_path):
+    """weight (scale 16) and duration (scale 1000) are encoded as scaled
+    integers — a wrong scale is invisible until Garmin renders the set."""
+    result = build(tmp_path)
+    messages = decode_fit(Path(result["output_path"]).read_bytes())
+
+    active = [s for s in messages["set_mesgs"] if s["set_type"] == 1]  # 0 = rest
+    assert len(active) == 5
+    first = active[0]
+    # category/category_subtype are FIT arrays; a single entry decodes bare
+    assert first["category"] == 0 and first["category_subtype"] == 1
+    assert first["repetitions"] == 10
+    assert first["weight"] == 40.0
+    assert first["duration"] > 0
+    assert [s["wkt_step_index"] for s in active] == [0, 0, 0, 1, 1]
+
+    titles = messages["exercise_title_mesgs"]
+    assert [t["wkt_step_name"] for t in titles] == [
+        "Bench Press (Barbell)", "Squat (Barbell)"]
 
 
 def test_identity_round_trips_through_fit_bytes(tmp_path):

@@ -8,10 +8,18 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from activsync import db, dev_mock, events, hevy_backfill, hevy_db, view
+from activsync import (
+    db,
+    dev_mock,
+    events,
+    fit_profile,
+    hevy_backfill,
+    hevy_db,
+    view,
+)
 from activsync.api_routes import ApiModel
+from activsync.fit_profile import CATEGORY_NAMES, SUBCATEGORY_NAMES
 from activsync.hevy_client import HevyAuthError, HevyClient
-from activsync.hevy_mapper import CATEGORY_NAMES, SUBCATEGORY_NAMES
 from activsync.hevy_workout_detail import HevyWorkoutDetail, workout_detail
 
 logger = logging.getLogger("activsync.hevy_tools_api_routes")
@@ -145,24 +153,13 @@ def _humanise_enum_name(name: str) -> str:
     return name.replace("_", " ").title()
 
 
-def _enum_options(enum_class) -> list[DeviceOption]:
-    """Distinct value/label pairs from a FIT profile enum, sorted by label.
-
-    `fit_tool`'s profile enums contain aliases — several names can share one
-    integer value. Emitting each would look like duplicate devices in the
-    picker and would make the select's value ambiguous, so this keeps one
-    label per value. The shortest name wins: aliases are generally
-    qualified variants of a base name (`FENIX3` vs `FENIX3_CHINA` share no
-    value, but where they do collide the plain name is the useful one)."""
-    labels: dict[int, str] = {}
-    for member in enum_class:
-        value = int(member.value)
-        label = _humanise_enum_name(member.name)
-        current = labels.get(value)
-        if current is None or len(label) < len(current):
-            labels[value] = label
+def _enum_options(names: dict[int, str]) -> list[DeviceOption]:
+    """Value/label pairs from a FIT profile enum, sorted by label."""
     return sorted(
-        (DeviceOption(value=value, label=label) for value, label in labels.items()),
+        (
+            DeviceOption(value=value, label=_humanise_enum_name(name))
+            for value, name in names.items()
+        ),
         key=lambda option: option.label,
     )
 
@@ -269,26 +266,22 @@ def create_router(
         """Manufacturer and Garmin product pickers for the device-identity
         override in Settings.
 
-        Read-only reference data straight out of `fit_tool`'s FIT profile
-        enums — no DB access and no Hevy API key needed, so it stays
-        available before Hevy is connected (the identity fields render in
-        Settings regardless).
+        Read-only reference data straight out of the FIT profile — no DB
+        access and no Hevy API key needed, so it stays available before Hevy
+        is connected (the identity fields render in Settings regardless).
 
         Manufacturers are deliberately narrowed to Garmin. ActivSync writes
         Garmin FIT files and uploads them to Garmin Connect; `fit_builder`'s
         only real identity is GENERIC_GARMIN_IDENTITY, and the one other
         constant there (DEVELOPMENT_IDENTITY, manufacturer 255) is documented
-        as reference/tests only. Offering `fit_tool`'s remaining 189
+        as reference/tests only. Offering the profile's remaining 242
         manufacturers would let a user pick one that cannot work."""
-        from fit_tool.profile.profile_type import GarminProduct, Manufacturer
-
+        garmin = fit_profile.GARMIN_MANUFACTURER
         return DeviceOptions(
-            manufacturers=[
-                option
-                for option in _enum_options(Manufacturer)
-                if option.value == Manufacturer.GARMIN.value
-            ],
-            products=_enum_options(GarminProduct),
+            manufacturers=_enum_options(
+                {garmin: fit_profile.MANUFACTURER_NAMES[garmin]}
+            ),
+            products=_enum_options(fit_profile.GARMIN_PRODUCT_NAMES),
         )
 
     @router.get("/tools", response_model=HevyToolsState)

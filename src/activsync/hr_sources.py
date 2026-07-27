@@ -26,39 +26,24 @@ _WINDOW_BUFFER_MS = 60_000  # ±1 min around the workout window
 def extract_fit_hr(fit_bytes: bytes, workout_start_ms: int) -> list[dict]:
     """High-resolution HR from a watch FIT's RecordMessages, as offsets from
     the workout start. [] on any parse failure."""
-    from fit_tool.fit_file import FitFile
-    from fit_tool.profile.messages.record_message import RecordMessage
+    from activsync.fit_builder import decode_fit
 
-    # Device FITs carry fields newer than fit_tool's bundled profile; they are
-    # skipped safely but logged once per record, flooding sync output.
-    fit_logger = logging.getLogger("fit_tool")
-    previous_level = fit_logger.level
-    fit_logger.setLevel(logging.ERROR)
     try:
-        fit_file = FitFile.from_bytes(fit_bytes, check_crc=False)
+        messages = decode_fit(fit_bytes)
     except Exception as exc:
         logger.debug("watch FIT parse failed: %s", exc)
         return []
-    finally:
-        fit_logger.setLevel(previous_level)
 
     samples: list[dict] = []
-    for record in fit_file.records:
-        message = record.message
-        if not isinstance(message, RecordMessage):
-            continue
-        timestamp = getattr(message, "timestamp", None)
-        bpm = getattr(message, "heart_rate", None)
+    for message in messages.get("record_mesgs", []):
+        timestamp = message.get("timestamp")
+        bpm = message.get("heart_rate")
         if timestamp is None or bpm is None:
             continue
         try:
-            timestamp_ms = float(timestamp)
-            # Defensive: some FIT implementations return Unix seconds rather
-            # than fit_tool's milliseconds.
-            if timestamp_ms < 100_000_000_000:
-                timestamp_ms *= 1000
+            timestamp_ms = timestamp.timestamp() * 1000
             bpm_int = int(bpm)
-        except (TypeError, ValueError):
+        except (AttributeError, TypeError, ValueError):
             continue
         if timestamp_ms >= workout_start_ms and 0 < bpm_int < 256:
             samples.append({

@@ -5,9 +5,8 @@ import sqlite3
 import pytest
 
 from activsync import hevy_db, hevy_mapper
+from activsync.fit_profile import CATEGORY_NAMES
 from activsync.hevy_mapper import (
-    CATEGORY_NAMES,
-    SUBCATEGORY_NAMES,
     UNKNOWN_CATEGORY,
     MappingMiss,
     lookup_exercise,
@@ -120,20 +119,6 @@ def test_suggest_muscle_group_fallback():
 def test_suggest_none_when_no_signal():
     assert suggest_mapping("zzzzzz qqqq", None) is None
     assert suggest_mapping("zzzzzz qqqq", {"primary_muscle_group": "mystery"}) is None
-
-
-# -- name tables ------------------------------------------------------------
-
-def test_category_names_cover_fit_categories():
-    assert CATEGORY_NAMES[0] == "BENCH_PRESS"
-    assert CATEGORY_NAMES[28] == "SQUAT"
-    assert CATEGORY_NAMES[65534] == "UNKNOWN"
-
-
-def test_subcategory_names_resolve():
-    assert SUBCATEGORY_NAMES[0][1] == "BARBELL_BENCH_PRESS"
-    # unresolvable pair → absent (payload builder then sends null name)
-    assert 999 not in SUBCATEGORY_NAMES.get(0, {})
 
 
 def test_all_template_map_categories_have_names():

@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 
 import json
 from dataclasses import fields as dataclass_fields
+from pathlib import Path
 
 from activsync import db
 from activsync.garmin_client import ActivityRecord, MfaRequired, SubcategoryRejected
@@ -575,18 +576,12 @@ class FakeGarminClient:
         start_time = datetime.now(timezone.utc)
         duration = 3600.0
         try:
-            from fit_tool.fit_file import FitFile
-            from fit_tool.profile.messages.session_message import SessionMessage
+            from activsync.fit_builder import decode_fit
 
-            fit = FitFile.from_file(fit_path)
-            session = next(
-                record.message for record in fit.records
-                if isinstance(record.message, SessionMessage)
-            )
-            start_time = datetime.fromtimestamp(
-                float(session.start_time) / 1000.0, tz=timezone.utc
-            )
-            duration = float(session.total_elapsed_time)
+            messages = decode_fit(Path(fit_path).read_bytes())
+            session = messages["session_mesgs"][0]
+            start_time = session["start_time"]
+            duration = float(session["total_elapsed_time"])
         except Exception:
             # Surface tests may pass a placeholder path; the fake still needs
             # a coherent activity record for later reconciliation.

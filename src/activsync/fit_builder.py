@@ -7,8 +7,11 @@ and no UNKNOWN can slip in), and calories use sex-correct Keytel constants
 (upstream hardcodes the male equation).
 
 Device identity helpers live here too: identity_from_fit reads a watch FIT's
-FileIdMessage so each install carries its *own* watch identity — never a
+file_id message so each install carries its *own* watch identity — never a
 hardcoded serial.
+
+Encoding and decoding both go through Garmin's official FIT SDK; the message
+and field names used below are the profile's own, checked by `fit_profile.mesg`.
 """
 
 from __future__ import annotations
@@ -17,26 +20,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fit_tool.fit_file import FitFile
-from fit_tool.fit_file_builder import FitFileBuilder
-from fit_tool.profile.messages.activity_message import ActivityMessage
-from fit_tool.profile.messages.event_message import EventMessage
-from fit_tool.profile.messages.exercise_title_message import ExerciseTitleMessage
-from fit_tool.profile.messages.file_id_message import FileIdMessage
-from fit_tool.profile.messages.lap_message import LapMessage
-from fit_tool.profile.messages.record_message import RecordMessage
-from fit_tool.profile.messages.session_message import SessionMessage
-from fit_tool.profile.messages.set_message import SetMessage
-from fit_tool.profile.messages.sport_message import SportMessage
-from fit_tool.profile.profile_type import (
-    Activity,
-    Event,
-    EventType,
-    FileType,
-    SetType,
-    Sport,
-    SubSport,
-)
+from garmin_fit_sdk import Decoder, Encoder, Stream
+
+from activsync.fit_profile import mesg
 
 # -- timing/scaling constants (upstream's config defaults, now fixed) --------
 WORKING_SET_S = 40
@@ -92,30 +78,39 @@ class ResolvedExercise:
     sets: list  # Hevy set dicts
 
 
+def decode_fit(fit_bytes: bytes) -> dict:
+    """Decode FIT bytes into the SDK's {"<mesg>_mesgs": [ {field: value} ]}.
+
+    Timestamps come back as aware datetimes and enums as their raw integers —
+    the two things every caller here wants. CRC checking is off because watch
+    files reach us through Garmin's download endpoint, sometimes truncated;
+    the decoder still returns everything it managed to read, and a file that
+    yields nothing usable simply decodes to {}.
+    """
+    stream = Stream.from_byte_array(bytearray(fit_bytes))
+    messages, _errors = Decoder(stream).read(
+        convert_types_to_strings=False, enable_crc_check=False
+    )
+    return messages
+
+
 def identity_from_fit(fit_bytes: bytes) -> DeviceIdentity | None:
     """Read the device identity from a watch FIT's FileIdMessage.
 
     This is the auto-detection primitive: each install derives its identity
     from the user's own watch recordings. None when the bytes are not a
     parseable FIT or carry no usable FileId."""
-    import tempfile
-
     try:
-        with tempfile.NamedTemporaryFile(suffix=".fit") as tmp:
-            tmp.write(fit_bytes)
-            tmp.flush()
-            fit = FitFile.from_file(tmp.name)
-        for record in fit.records:
-            message = record.message
-            if isinstance(message, FileIdMessage):
-                manufacturer = message.manufacturer
-                product = getattr(message, "product", None)
-                serial = message.serial_number
-                if manufacturer is None or product is None or serial is None:
-                    return None
-                return DeviceIdentity(int(manufacturer), int(product), int(serial))
+        messages = decode_fit(fit_bytes)
     except Exception:
         return None
+    for file_id in messages.get("file_id_mesgs", []):
+        manufacturer = file_id.get("manufacturer")
+        product = file_id.get("product")
+        serial = file_id.get("serial_number")
+        if manufacturer is None or product is None or serial is None:
+            return None
+        return DeviceIdentity(int(manufacturer), int(product), int(serial))
     return None
 
 
@@ -137,6 +132,21 @@ def identity_from_config(cfg: dict) -> DeviceIdentity:
 
 def _ms(dt: datetime) -> int:
     return round(dt.timestamp() * 1000)
+
+
+def _dt(ms: int) -> datetime:
+    """Milliseconds back to the aware datetime the encoder wants. FIT
+    date_time is second-resolution, so this rounds rather than truncates —
+    sub-second timeline positions must not walk backwards."""
+    return datetime.fromtimestamp(round(ms / 1000), tz=timezone.utc)
+
+
+def _timed(payload: dict) -> dict:
+    """A message payload with its FIT date_time fields converted."""
+    return {
+        field: _dt(value) if field in ("timestamp", "start_time") else value
+        for field, value in payload.items()
+    }
 
 
 def _parse_timestamp(raw: object) -> datetime | None:
@@ -283,45 +293,42 @@ def build_fit(
         cursor_s += scaled_set + si["rest_dur"] * scale
 
     # -- build messages --
-    builder = FitFileBuilder(auto_define=True, min_string_size=50)
+    encoder = Encoder()
 
-    file_id = FileIdMessage()
-    file_id.type = FileType.ACTIVITY
-    file_id.manufacturer = identity.manufacturer
-    file_id.product = identity.product
-    file_id.serial_number = identity.serial
-    file_id.time_created = start_ms
-    builder.add(file_id)
+    encoder.write_mesg(mesg(
+        "file_id",
+        type="activity",
+        manufacturer=identity.manufacturer,
+        product=identity.product,
+        serial_number=identity.serial,
+        time_created=_dt(start_ms),
+    ))
 
-    sport_msg = SportMessage()
-    sport_msg.sport = Sport.TRAINING
-    sport_msg.sub_sport = SubSport.STRENGTH_TRAINING
-    builder.add(sport_msg)
+    encoder.write_mesg(mesg(
+        "sport", sport="training", sub_sport="strength_training"))
 
     for ex_idx, exercise in enumerate(resolved):
-        etm = ExerciseTitleMessage()
-        etm.message_index = ex_idx
-        etm.exercise_category = exercise.category
-        etm.exercise_name = exercise.subcategory
-        etm.workout_step_name = exercise.title
-        builder.add(etm)
+        encoder.write_mesg(mesg(
+            "exercise_title",
+            message_index=ex_idx,
+            exercise_category=exercise.category,
+            exercise_name=exercise.subcategory,
+            wkt_step_name=exercise.title,
+        ))
 
-    event_start = EventMessage()
-    event_start.timestamp = start_ms
-    event_start.event = Event.TIMER
-    event_start.event_type = EventType.START
-    builder.add(event_start)
+    encoder.write_mesg(mesg(
+        "event", timestamp=_dt(start_ms), event="timer", event_type="start"))
 
-    # timeline of (ms, kind, message) — records sort before sets at equal ts
-    timeline: list[tuple[int, str, object]] = []
+    # timeline of (ms, kind, payload) — records sort before sets at equal ts.
+    # Payloads carry millisecond timestamps until they are written, so the
+    # clipping pass below stays plain arithmetic.
+    timeline: list[tuple[int, str, dict]] = []
 
     if hr_timed:
         for offset_s, hr_val in hr_timed:
             t_ms = start_ms + round(offset_s * 1000)
-            rec = RecordMessage()
-            rec.timestamp = t_ms
-            rec.heart_rate = hr_val
-            timeline.append((t_ms, "record", rec))
+            timeline.append(
+                (t_ms, "record", {"timestamp": t_ms, "heart_rate": hr_val}))
     elif hr_bpm:
         if len(hr_bpm) == 1:
             hr_interval_ms = 0
@@ -329,10 +336,8 @@ def build_fit(
             hr_interval_ms = round(duration_s * 1000 / (len(hr_bpm) - 1))
         for i, hr_val in enumerate(hr_bpm):
             t_ms = start_ms + (i * hr_interval_ms if len(hr_bpm) > 1 else 0)
-            rec = RecordMessage()
-            rec.timestamp = t_ms
-            rec.heart_rate = hr_val
-            timeline.append((t_ms, "record", rec))
+            timeline.append(
+                (t_ms, "record", {"timestamp": t_ms, "heart_rate": hr_val}))
 
     msg_index = 0
     for si in all_sets_info:
@@ -342,30 +347,26 @@ def build_fit(
         set_start_ms = start_ms + round(si["start_offset_s"] * 1000)
         set_end_ms = start_ms + round(si["end_offset_s"] * 1000)
 
-        active = SetMessage()
-        active.timestamp = set_end_ms
-        active.start_time = set_start_ms
-        active.duration = si["end_offset_s"] - si["start_offset_s"]
-        active.set_type = SetType.ACTIVE
-        active.category = [exercise.category]
-        active.category_subtype = [exercise.subcategory]
-        active.message_index = msg_index
-        active.workout_step_index = si["ex_idx"]
-
         reps = s.get("reps")
-        if reps is not None:
-            active.repetitions = int(reps)
         weight = s.get("weight_kg")
-        if weight is not None:
-            active.weight = max(0.0, float(weight))
+        active = {
+            "timestamp": set_end_ms,
+            "start_time": set_start_ms,
+            "duration": si["end_offset_s"] - si["start_offset_s"],
+            "set_type": "active",
+            "category": [exercise.category],
+            "category_subtype": [exercise.subcategory],
+            "message_index": msg_index,
+            "wkt_step_index": si["ex_idx"],
+            "repetitions": int(reps) if reps is not None else None,
+            "weight": max(0.0, float(weight)) if weight is not None else None,
+        }
 
         distance = s.get("distance_meters")
         if distance is not None and float(distance) > 0:
             total_distance_m += float(distance)
-            dist_rec = RecordMessage()
-            dist_rec.timestamp = set_end_ms
-            dist_rec.distance = float(distance)
-            timeline.append((set_end_ms, "record", dist_rec))
+            timeline.append((set_end_ms, "record", {
+                "timestamp": set_end_ms, "distance": float(distance)}))
 
         timeline.append((set_end_ms, "set", active))
         msg_index += 1
@@ -375,96 +376,77 @@ def build_fit(
             rest_dur_scaled = si["rest_dur"] * scale
             rest_end_ms = rest_start_ms + round(rest_dur_scaled * 1000)
 
-            rest = SetMessage()
-            rest.timestamp = rest_end_ms
-            rest.start_time = rest_start_ms
-            rest.duration = rest_dur_scaled
-            rest.set_type = SetType.REST
-            rest.message_index = msg_index
-            rest.workout_step_index = si["ex_idx"]
-
-            timeline.append((rest_end_ms, "set", rest))
+            timeline.append((rest_end_ms, "set", {
+                "timestamp": rest_end_ms,
+                "start_time": rest_start_ms,
+                "duration": rest_dur_scaled,
+                "set_type": "rest",
+                "message_index": msg_index,
+                "wkt_step_index": si["ex_idx"],
+            }))
             msg_index += 1
 
     # Nothing may be stamped after TIMER STOP_ALL: HR carries a ±60 s slice
     # buffer and the scale floor can push synthetic sets past the end, so
     # clamp set boundaries to end_ms and drop out-of-window records.
-    clipped: list[tuple[int, str, object]] = []
-    for ts, kind, msg in timeline:
+    clipped: list[tuple[int, str, dict]] = []
+    for ts, kind, payload in timeline:
         if kind == "record":
             if ts <= end_ms:
-                clipped.append((ts, kind, msg))
+                clipped.append((ts, kind, payload))
             continue
-        if msg.start_time >= end_ms:
+        if payload["start_time"] >= end_ms:
             continue
         if ts > end_ms:
-            msg.timestamp = end_ms
-            msg.duration = (end_ms - msg.start_time) / 1000.0
+            payload = dict(
+                payload,
+                timestamp=end_ms,
+                duration=(end_ms - payload["start_time"]) / 1000.0,
+            )
             ts = end_ms
-        clipped.append((ts, kind, msg))
+        clipped.append((ts, kind, payload))
     timeline = clipped
 
     timeline.sort(key=lambda x: (x[0], 0 if x[1] == "record" else 1))
-    for _, _, msg in timeline:
-        builder.add(msg)
+    for _, kind, payload in timeline:
+        encoder.write_mesg(mesg(kind, **_timed(payload)))
 
-    event_stop = EventMessage()
-    event_stop.timestamp = end_ms
-    event_stop.event = Event.TIMER
-    event_stop.event_type = EventType.STOP_ALL
-    builder.add(event_stop)
-
-    lap = LapMessage()
-    lap.timestamp = end_ms
-    lap.start_time = start_ms
-    lap.total_elapsed_time = duration_s
-    lap.total_timer_time = duration_s
-    lap.sport = Sport.TRAINING
-    lap.sub_sport = SubSport.STRENGTH_TRAINING
-    lap.message_index = 0
-    lap.event = Event.LAP
-    lap.event_type = EventType.STOP
-    if hr_bpm:
-        lap.avg_heart_rate = round(sum(hr_bpm) / len(hr_bpm))
-        lap.max_heart_rate = max(hr_bpm)
-    if total_distance_m > 0:
-        lap.total_distance = total_distance_m
-    lap.total_calories = calories
-    builder.add(lap)
-
-    session = SessionMessage()
-    session.timestamp = end_ms
-    session.start_time = start_ms
-    session.total_elapsed_time = duration_s
-    session.total_timer_time = duration_s
-    session.sport = Sport.TRAINING
-    session.sub_sport = SubSport.STRENGTH_TRAINING
-    session.message_index = 0
-    session.first_lap_index = 0
-    session.num_laps = 1
-    session.event = Event.LAP
-    session.event_type = EventType.STOP
-    if hr_bpm:
-        session.avg_heart_rate = round(sum(hr_bpm) / len(hr_bpm))
-        session.max_heart_rate = max(hr_bpm)
-    if total_distance_m > 0:
-        session.total_distance = total_distance_m
-    session.total_calories = calories
-    builder.add(session)
-
-    activity = ActivityMessage()
-    activity.timestamp = end_ms
-    activity.total_timer_time = duration_s
-    activity.num_sessions = 1
-    activity.type = Activity.MANUAL
-    activity.event = Event.ACTIVITY
-    activity.event_type = EventType.STOP
-    builder.add(activity)
-
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    builder.build().to_file(output_path)
+    encoder.write_mesg(mesg(
+        "event", timestamp=_dt(end_ms), event="timer", event_type="stop_all"))
 
     avg_hr = round(sum(hr_bpm) / len(hr_bpm)) if hr_bpm else None
+    summary = {
+        "timestamp": end_ms,
+        "start_time": start_ms,
+        "total_elapsed_time": duration_s,
+        "total_timer_time": duration_s,
+        "sport": "training",
+        "sub_sport": "strength_training",
+        "message_index": 0,
+        "event": "lap",
+        "event_type": "stop",
+        "avg_heart_rate": avg_hr,
+        "max_heart_rate": max(hr_bpm) if hr_bpm else None,
+        "total_distance": total_distance_m if total_distance_m > 0 else None,
+        "total_calories": calories,
+    }
+    encoder.write_mesg(mesg("lap", **_timed(summary)))
+    encoder.write_mesg(mesg(
+        "session", **_timed(summary), first_lap_index=0, num_laps=1))
+
+    encoder.write_mesg(mesg(
+        "activity",
+        timestamp=_dt(end_ms),
+        total_timer_time=duration_s,
+        num_sessions=1,
+        type="manual",
+        event="activity",
+        event_type="stop",
+    ))
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(output_path).write_bytes(encoder.close())
+
     return {
         "exercises": num_exercises,
         "total_sets": total_sets,

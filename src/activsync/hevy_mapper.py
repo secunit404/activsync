@@ -7,9 +7,8 @@ raises MappingMiss instead of returning the UNKNOWN sentinel (the mapping gate
 parks the workout; UNKNOWN never reaches Garmin), and suggest_mapping powers
 the mapping queue's pre-selected suggestions.
 
-CATEGORY_NAMES / SUBCATEGORY_NAMES are built from fit_tool's FIT SDK profile
-so they always agree with the ids we write into FIT files and exerciseSets
-payloads (upstream resolved these lazily the same way).
+The (category, subcategory) ids here are FIT profile values; their names live
+in `fit_profile`, which reads them from Garmin's SDK.
 """
 
 from __future__ import annotations
@@ -17,9 +16,6 @@ from __future__ import annotations
 import difflib
 import re
 import sqlite3
-
-import fit_tool.profile.profile_type as _profile_type
-from fit_tool.profile.profile_type import ExerciseCategory as _ExerciseCategory
 
 from activsync import hevy_db
 from activsync.hevy_template_map import TEMPLATE_TO_GARMIN
@@ -116,7 +112,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     #  BACK – Rows (category 23)
     # ======================================================================= #
     "Bent Over Row (Band)":                     (23, 0),   # row / barbell_straight_leg_deadlift_to_row (closest band row)
-    "Bent Over Row (Barbell)":                  (23, 65535),  # ROW / generic (no exact barbell bent-over sub in fit_tool)
+    "Bent Over Row (Barbell)":                  (23, 65535),  # ROW / generic (no exact barbell bent-over sub in FIT)
     "Bent Over Row (Dumbbell)":                 (23, 2),   # row / dumbbell_row
     "Chest Supported Incline Row (Dumbbell)":   (23, 2),  # ROW / dumbbell_row
     "Dumbbell Row":                             (23, 2),   # row / dumbbell_row
@@ -129,7 +125,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Landmine Row":                             (23, 13),  # row / one_arm_bent_over_row (closest)
     "Low Row (Suspension)":                     (23, 26),  # row / suspended_inverted_row
     "Meadows Rows (Barbell)":                   (23, 13),  # row / one_arm_bent_over_row
-    "Pendlay Row (Barbell)":                    (23, 65535),  # ROW / generic (no exact sub in fit_tool)
+    "Pendlay Row (Barbell)":                    (23, 65535),  # ROW / generic (no exact sub in FIT)
     "Renegade Row (Dumbbell)":                  (23, 15),  # row / renegade_row
     "Seated Cable Row - Bar Grip":              (23, 18),  # row / seated_cable_row
     "Seated Cable Row - Bar Wide Grip":         (23, 33),  # row / wide_grip_seated_cable_row
@@ -354,8 +350,8 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     # ======================================================================= #
     "Dumbbell Step Up":                         (28, 32),  # squat / dumbbell_step_up
     "Step Up":                                  (28, 66),  # squat / step_up
-    "Stair Machine (Floors)":                   (2, 65535),   # CARDIO / generic (fit_tool lacks stair_stepper)
-    "Stair Machine (Steps)":                    (2, 65535),   # CARDIO / generic (fit_tool lacks stair_stepper)
+    "Stair Machine (Floors)":                   (2, 65535),   # CARDIO / generic (STAIR_STEPPER/47 exists but is unproven with Garmin)
+    "Stair Machine (Steps)":                    (2, 65535),   # CARDIO / generic (STAIR_STEPPER/47 exists but is unproven with Garmin)
 
     # ======================================================================= #
     #  LEGS – Lunges (category 17)
@@ -635,40 +631,6 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
 }
 
 
-# --------------------------------------------------------------------------- #
-# Name tables for the Garmin exerciseSets payload and the mappings UI picker
-# --------------------------------------------------------------------------- #
-
-# Categories the current FIT SDK defines beyond fit_tool 0.9.15's enum
-# (which stops at 32/RUN). Names per upstream's canonical table; none of
-# these have subcategory enums.
-_POST_FIT_TOOL_CATEGORIES: dict[int, str] = {
-    33: "CYCLING", 36: "YOGA", 38: "BATTLE_ROPES", 39: "ELLIPTICAL",
-    41: "INDOOR_BIKE", 42: "INDOOR_ROW", 47: "STAIR_MACHINE", 52: "TREADMILL",
-}
-
-
-def _build_name_tables() -> tuple[dict[int, str], dict[int, dict[int, str]]]:
-    categories: dict[int, str] = dict(_POST_FIT_TOOL_CATEGORIES)
-    subcategories: dict[int, dict[int, str]] = {}
-    for member in _ExerciseCategory:
-        categories[member.value] = member.name
-        enum_name = member.name.title().replace("_", "") + "ExerciseName"
-        sub_enum = getattr(_profile_type, enum_name, None)
-        if sub_enum is not None:
-            subcategories[member.value] = {m.value: m.name for m in sub_enum}
-    return categories, subcategories
-
-
-CATEGORY_NAMES, SUBCATEGORY_NAMES = _build_name_tables()
-
-
-def subcategory_name(category: int, subcategory: int) -> str | None:
-    """Garmin's enum name for the pair, or None when unresolvable. Callers
-    must send a null exercise name in that case — Garmin renders an
-    unrecognised *name* as "Unknown", but accepts null under a valid
-    category."""
-    return SUBCATEGORY_NAMES.get(category, {}).get(subcategory)
 
 
 # --------------------------------------------------------------------------- #

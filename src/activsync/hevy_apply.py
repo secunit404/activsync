@@ -32,12 +32,11 @@ from activsync.garmin_client import (
     SubcategoryRejected,
     _is_not_found,
 )
+from activsync.fit_profile import CATEGORY_NAMES, subcategory_name
 from activsync.hevy_mapper import (
-    CATEGORY_NAMES,
     UNKNOWN_CATEGORY,
     MappingMiss,
     lookup_exercise,
-    subcategory_name,
 )
 
 logger = logging.getLogger("activsync.hevy_apply")

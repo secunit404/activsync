@@ -10,7 +10,7 @@ dependencies = [
     "garmin-auth>=0.3.0",
     "requests>=2.31",
     "tzdata>=2024.1",
-    "fit-tool>=0.9.15",
+    "garmin-fit-sdk>=21.208",
 ]
 
 [project.optional-dependencies]

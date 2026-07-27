@@ -19,15 +19,11 @@ def garmin_exercise_label(enum_name: str) -> str:
     """Turn a Garmin FIT enum identifier into a sentence-case UI label.
 
     The raw enum name must stay unchanged where it is sent back to Garmin.
-    FIT prefixes identifiers that begin with a number with ``N`` so they are
-    valid Python names (for example ``N45_DEGREE_PLANK``); that implementation
-    detail should not leak into the UI either.
     """
-    words = enum_name.split("_")
-    if words and len(words[0]) > 1 and words[0][0] == "N" and words[0][1:].isdigit():
-        words[0] = words[0][1:]
-
-    words = [word if word in _GARMIN_EXERCISE_ACRONYMS else word.lower() for word in words]
+    words = [
+        word if word in _GARMIN_EXERCISE_ACRONYMS else word.lower()
+        for word in enum_name.split("_")
+    ]
     label = " ".join(words)
     return label[:1].upper() + label[1:]
 
@@ -331,9 +327,8 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
       ""          — nothing resolves it yet; this is the needs-mapping case
     """
     from activsync import hevy_db
+    from activsync.fit_profile import CATEGORY_NAMES, SUBCATEGORY_NAMES
     from activsync.hevy_mapper import (
-        CATEGORY_NAMES,
-        SUBCATEGORY_NAMES,
         MappingMiss,
         lookup_exercise,
         lookup_standard_mapping,

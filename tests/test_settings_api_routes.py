@@ -738,7 +738,7 @@ def test_device_options_offers_garmin_as_the_only_manufacturer(tmp_path, monkeyp
     """ActivSync writes Garmin FIT files and nothing else — `fit_builder`'s
     only real identity is GENERIC_GARMIN_IDENTITY (manufacturer 1), and
     DEVELOPMENT_IDENTITY is documented there as "reference/tests only, never
-    the default". Offering fit_tool's other 189 manufacturers would let a
+    the default". Offering the profile's other 242 manufacturers would let a
     user pick one that cannot work."""
     conn, client = _client(tmp_path, monkeypatch)
     _complete_setup(conn)
@@ -752,8 +752,8 @@ def test_device_options_offers_garmin_as_the_only_manufacturer(tmp_path, monkeyp
 
 
 def test_device_options_lists_garmin_products(tmp_path, monkeypatch):
-    """Products still come from fit_tool's own GarminProduct enum, so the
-    picker cannot drift from what Garmin actually recognises."""
+    """Products come straight from the FIT profile's garmin_product table, so
+    the picker cannot drift from what Garmin actually recognises."""
     conn, client = _client(tmp_path, monkeypatch)
     _complete_setup(conn)
 
@@ -770,9 +770,8 @@ def test_device_options_lists_garmin_products(tmp_path, monkeypatch):
 
 
 def test_device_options_values_are_unique(tmp_path, monkeypatch):
-    """fit_tool's profile enums contain aliases — several names sharing one
-    integer value. Emitting each would look like duplicate devices in the
-    picker and would make the select's value ambiguous."""
+    """One option per device: a duplicate value would look like a duplicate
+    device in the picker and make the select's value ambiguous."""
     conn, client = _client(tmp_path, monkeypatch)
     _complete_setup(conn)
 

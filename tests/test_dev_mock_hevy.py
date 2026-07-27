@@ -93,6 +93,30 @@ def test_fake_garmin_upload_returns_fresh_ids(conn):
     assert first["activity_id"] != second["activity_id"]
 
 
+def test_fake_garmin_upload_reads_the_session_of_a_real_fit(conn, tmp_path):
+    """The fake mirrors the uploaded file so later reconciliation sees a
+    coherent activity — a placeholder path falls back to "now", a real FIT
+    must carry its own session times through."""
+    from activsync.fit_builder import DeviceIdentity, Profile, ResolvedExercise, build_fit
+
+    path = str(tmp_path / "generated.fit")
+    build_fit(
+        {"start_time": "2026-07-19T10:00:00Z", "end_time": "2026-07-19T10:45:00Z"},
+        [ResolvedExercise("Bench Press (Barbell)", 0, 1, [{"reps": 8, "weight_kg": 60.0}])],
+        None,
+        Profile(weight_kg=80.0, birth_year=1990, vo2max=45.0, sex="male"),
+        DeviceIdentity(manufacturer=1, product=0, serial=42),
+        path,
+    )
+
+    garmin = dev_mock.FakeGarminClient(conn)
+    uploaded = garmin.upload_fit(path)["activity_id"]
+
+    record = next(activity for activity in garmin.fetch_recent_activities(3650)
+                  if activity.garmin_activity_id == uploaded)
+    assert record.start_time == "2026-07-19 10:00:00"
+
+
 def test_fake_garmin_upload_and_delete_change_later_fetches(conn):
     garmin = dev_mock.FakeGarminClient(conn)
     db.insert_activity(

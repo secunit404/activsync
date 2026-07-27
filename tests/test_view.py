@@ -157,7 +157,7 @@ def test_garmin_exercise_label_hides_enum_formatting():
         view.garmin_exercise_label("BARBELL_BULGARIAN_SPLIT_SQUAT")
         == "Barbell bulgarian split squat"
     )
-    assert view.garmin_exercise_label("N45_DEGREE_PLANK") == "45 degree plank"
+    assert view.garmin_exercise_label("45_DEGREE_PLANK") == "45 degree plank"
     assert view.garmin_exercise_label("EZ_BAR_PREACHER_CURL") == "EZ bar preacher curl"
 
 
