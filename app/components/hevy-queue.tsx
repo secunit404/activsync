@@ -56,11 +56,11 @@ function isMatchStrategy(action: QueueCommand): action is HevyMatchStrategy {
 type QueueRowKind = "in-flight" | "problem" | "skipped";
 type Tone = "info" | "warning" | "destructive" | "muted";
 
-const toneClasses: Record<Tone, { dot: string; badge: string }> = {
-  info: { dot: "bg-info", badge: "bg-info/12 text-info" },
-  warning: { dot: "bg-warning", badge: "bg-warning/12 text-warning" },
-  destructive: { dot: "bg-destructive", badge: "bg-destructive/12 text-destructive" },
-  muted: { dot: "bg-muted-foreground/50", badge: "bg-secondary text-muted-foreground" },
+const toneClasses: Record<Tone, { dot: string }> = {
+  info: { dot: "bg-info" },
+  warning: { dot: "bg-warning" },
+  destructive: { dot: "bg-destructive" },
+  muted: { dot: "bg-muted-foreground/50" },
 };
 
 /**
@@ -237,9 +237,9 @@ function QueueRow({
         // Only the problem tint survives. `awaitingMatch` also carried a
         // `bg-info/[0.04]` wash, but the surfaces are themselves blue-grey
         // (oklch hue 254), so an info blue at 4% never read as a highlight —
-        // it read as a colour cast on the row. The dot and the badge already
-        // say the row is awaiting a match. Warning stays because orange is
-        // far enough off the surface hue to actually register as an alert.
+        // it read as a colour cast on the row. The dot and the detail line
+        // already say the row is awaiting a match. Warning stays because
+        // orange is far enough off the surface hue to register as an alert.
         kind === "problem" && "bg-warning/[0.04]",
       )}
     >
@@ -321,15 +321,6 @@ function QueueRow({
               onClick={() => onAction("skip")}
             />
           </>
-        ) : kind === "in-flight" ? (
-          <span
-            className={cn(
-              "rounded-md px-2.5 py-1 font-mono text-[11px] whitespace-nowrap",
-              toneClasses.info.badge,
-            )}
-          >
-            {queueStatusLabel(item).toUpperCase()}
-          </span>
         ) : null}
         {kind === "problem" ? (
           <>

@@ -111,8 +111,10 @@ test("an imported Garmin match says queued while automatic processing starts", (
     }),
   );
 
-  expect(screen.getByText("QUEUED")).toBeVisible();
-  expect(screen.queryByText("WAITING FOR GARMIN")).not.toBeInTheDocument();
+  // The status reads once, on the row's detail line — there is no second
+  // badge repeating it next to the actions.
+  expect(screen.getByText(/· Queued$/)).toBeVisible();
+  expect(screen.queryByText(/waiting for garmin/i)).not.toBeInTheDocument();
 });
 
 test("retry calls the queue action and reports success via toast", async () => {
@@ -399,7 +401,7 @@ test("in-flight items show their status and inspection but no mutation actions",
     }),
   );
 
-  expect(screen.getByText("WAITING FOR GARMIN")).toBeInTheDocument();
+  expect(screen.getByText(/· Waiting for Garmin$/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "View workout" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
