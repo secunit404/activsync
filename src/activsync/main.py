@@ -68,10 +68,7 @@ logging_setup.configure_logging(
 
 
 def _garmin_factory() -> GarminClient:
-    creds = db.get_config_value(_conn, "garmin_credentials")
-    if not creds:
-        raise RuntimeError("Garmin credentials are not configured")
-    raw = get_garmin_raw_client(creds["email"], creds["password"], GARMIN_TOKEN_DIR)
+    raw = get_garmin_raw_client(GARMIN_TOKEN_DIR)
     return GarminClient(raw)
 
 

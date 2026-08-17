@@ -59,14 +59,7 @@ def _mock_mode() -> bool:
 def _build_garmin_client(conn: sqlite3.Connection):
     if _mock_mode():
         return dev_mock.FakeGarminClient(conn)
-    credentials = db.get_config_value(conn, "garmin_credentials")
-    if not credentials:
-        raise RuntimeError("Garmin credentials are not configured")
-    raw = get_garmin_raw_client(
-        credentials["email"],
-        credentials["password"],
-        _garmin_token_dir(),
-    )
+    raw = get_garmin_raw_client(_garmin_token_dir())
     return GarminClient(raw)
 
 

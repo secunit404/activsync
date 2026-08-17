@@ -8,10 +8,13 @@ import pytest
 from activsync.garmin_client import (
     ActivityRecord,
     GarminClient,
+    GarminSessionExpired,
     MfaRequired,
     begin_login,
     complete_login,
+    get_client,
 )
+from garminconnect import GarminConnectAuthenticationError
 
 
 def _garmin_activity(activity_id, type_key, name, description, start_time_gmt):
@@ -156,6 +159,38 @@ def test_complete_login_calls_resume_login_on_pending_auth():
 
     assert result is mock_client
     mock_auth.resume_login.assert_called_once_with("123456")
+
+
+@patch("activsync.garmin_client.GarminAuth")
+def test_get_client_uses_cached_session_without_credentials(mock_garmin_auth_cls):
+    mock_auth = MagicMock()
+    mock_client = MagicMock()
+
+    def cached_login_only():
+        assert mock_auth.email == ""
+        assert mock_auth.password == ""
+        return mock_client
+
+    mock_auth.login.side_effect = cached_login_only
+    mock_garmin_auth_cls.return_value = mock_auth
+
+    assert get_client("/tmp/tokens") is mock_client
+    mock_garmin_auth_cls.assert_called_once_with(token_dir="/tmp/tokens")
+
+
+@patch("activsync.garmin_client.GarminAuth")
+def test_get_client_requires_manual_reconnect_when_cached_session_expires(
+    mock_garmin_auth_cls,
+):
+    mock_auth = MagicMock()
+    mock_auth.login.side_effect = GarminConnectAuthenticationError("no cached tokens")
+    mock_garmin_auth_cls.return_value = mock_auth
+
+    with pytest.raises(GarminSessionExpired, match="reconnect Garmin"):
+        get_client("/tmp/tokens")
+
+    assert mock_auth.email == ""
+    assert mock_auth.password == ""
 
 
 def test_fetch_activity_types_maps_dedupes_and_sorts_by_label():

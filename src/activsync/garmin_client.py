@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from garmin_auth import GarminAuth, RateLimiter
-from garminconnect import Garmin
+from garminconnect import Garmin, GarminConnectAuthenticationError
 
 from activsync.timeutil import parse_iso_utc
 
@@ -101,10 +101,29 @@ class ActivityRecord:
     total_volume: float | None = None      # strength (kg)
 
 
-def get_client(email: str, password: str, token_dir: str) -> Garmin:
-    """Get an authenticated Garmin client using garmin-auth's cached-token login."""
-    auth = GarminAuth(email=email, password=password, token_dir=token_dir)
-    return auth.login()
+class GarminSessionExpired(RuntimeError):
+    """Cached Garmin authentication is unavailable and needs user attention."""
+
+
+def get_client(token_dir: str) -> Garmin:
+    """Open a cached Garmin session without ever starting a credential login.
+
+    ``GarminAuth.login()`` normally falls back from rejected cached tokens to
+    the account email/password. That fallback can initiate an MFA challenge,
+    which is appropriate for an explicit Connect/Reconnect request but unsafe
+    in an unattended poller. Clearing the credential fields after construction
+    also prevents GARMIN_EMAIL/GARMIN_PASSWORD environment variables from
+    silently re-enabling that fallback.
+    """
+    auth = GarminAuth(token_dir=token_dir)
+    auth.email = ""
+    auth.password = ""
+    try:
+        return auth.login()
+    except GarminConnectAuthenticationError as exc:
+        raise GarminSessionExpired(
+            "Garmin session expired; reconnect Garmin to resume sync."
+        ) from exc
 
 
 class MfaRequired(Exception):
@@ -122,9 +141,9 @@ class MfaRequired(Exception):
 def begin_login(email: str, password: str, token_dir: str) -> Garmin:
     """Start a Garmin login, raising MfaRequired if a one-time code is needed.
 
-    Unlike get_client(), this never blocks on a synchronous input() prompt —
-    callers that catch MfaRequired hold its .pending_auth and call
-    complete_login() once the user has supplied a code (e.g. from a web form).
+    This is the only path allowed to use account credentials. Callers that
+    catch MfaRequired hold its .pending_auth and call complete_login() once the
+    user has supplied a code (e.g. from a web form).
     """
     auth = GarminAuth(email=email, password=password, token_dir=token_dir, return_on_mfa=True)
     result = auth.login()

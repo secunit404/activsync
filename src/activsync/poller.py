@@ -19,7 +19,7 @@ from activsync import (
     logging_setup,
     sync,
 )
-from activsync.garmin_client import GarminClient
+from activsync.garmin_client import GarminClient, GarminSessionExpired
 from activsync.hevy_client import HevyAuthError, HevyClient
 from activsync.strava_client import StravaClient, StravaRateLimitError
 
@@ -61,19 +61,32 @@ class Poller:
         self._last_hevy_run: datetime | None = None
         self._strava_backoff_until: datetime | None = None
 
+    def _get_garmin(self, now: datetime) -> GarminClient:
+        """Build a token-only client and durably pause on an expired session."""
+        try:
+            return self._garmin_factory()
+        except GarminSessionExpired as exc:
+            db.set_config_value(self._conn, "garmin_last_sync_at", now.isoformat())
+            db.set_config_value(self._conn, "garmin_last_sync_ok", False)
+            db.set_config_value(self._conn, "garmin_last_sync_error", str(exc))
+            db.set_config_value(self._conn, "garmin_credentials_verified", False)
+            events.bus.publish("refresh")
+            logger.warning("%s", exc)
+            raise
+
     def run_garmin_once(self, now: datetime | None = None) -> sync.GarminSyncStats:
-        cfg = config.load_config(self._conn)
-        garmin = self._garmin_factory()
         now = now or datetime.now(timezone.utc)
+        cfg = config.load_config(self._conn)
+        garmin = self._get_garmin(now)
         return sync.sync_garmin(self._conn, garmin, cfg, now)
 
     def run_strava_once(
         self, now: datetime | None = None
     ) -> tuple[sync.PublishStats, sync.StatusCheckStats]:
-        cfg = config.load_config(self._conn)
-        garmin = self._garmin_factory()
-        strava = self._strava_factory()
         now = now or datetime.now(timezone.utc)
+        cfg = config.load_config(self._conn)
+        garmin = self._get_garmin(now)
+        strava = self._strava_factory()
         publish_stats = sync.publish_pending(self._conn, garmin, strava, now)
         status_stats = sync.check_strava_status(self._conn, strava, cfg, now)
         return publish_stats, status_stats
@@ -82,7 +95,7 @@ class Poller:
         """One Hevy leg pass. Returns whether anything changed. The profile
         cache refresh runs first so the cfg snapshot the leg reads is current."""
         now = now or datetime.now(timezone.utc)
-        garmin = self._garmin_factory()
+        garmin = self._get_garmin(now)
         hevy = self._hevy_factory()
         profile = hevy_profile.get_profile(self._conn, garmin, now)
         cfg = config.load_config(self._conn)
@@ -104,7 +117,7 @@ class Poller:
 
     def apply_hevy_match(self, hevy_id: str, strategy: str) -> str:
         now = datetime.now(timezone.utc)
-        garmin = self._garmin_factory()
+        garmin = self._get_garmin(now)
         hevy = self._hevy_factory()
         profile = hevy_profile.get_profile(self._conn, garmin, now)
         cfg = config.load_config(self._conn)
@@ -134,7 +147,7 @@ class Poller:
         if row is None:
             raise ValueError(f"unknown Hevy workout: {hevy_id}")
         now = datetime.now(timezone.utc)
-        garmin = self._garmin_factory()
+        garmin = self._get_garmin(now)
         hevy = self._hevy_factory()
         profile = hevy_profile.get_profile(self._conn, garmin, now)
         cfg = config.load_config(self._conn)

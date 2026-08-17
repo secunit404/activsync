@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from activsync import config, db, logging_setup
+from activsync.garmin_client import GarminSessionExpired
 from activsync.poller import Poller
 from activsync.strava_client import StravaRateLimitError
 
@@ -183,6 +184,34 @@ def test_poller_syncs_on_the_next_tick_after_a_reconnect(conn):
     db.set_config_value(conn, "garmin_credentials_verified", True)
     poller._loop_once(datetime(2026, 7, 14, 12, 1, tzinfo=timezone.utc))
     assert garmin.fetch_recent_activities.call_count == 1
+
+
+def test_poller_pauses_all_garmin_work_when_cached_session_expires(conn):
+    db.set_config_value(conn, "initial_sync_done", True)
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    factory = MagicMock(
+        side_effect=GarminSessionExpired(
+            "Garmin session expired; reconnect Garmin to resume sync."
+        )
+    )
+    poller = Poller(
+        conn,
+        garmin_factory=factory,
+        strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=0,
+    )
+    now = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+
+    poller._loop_once(now)
+    poller._loop_once(now + timedelta(minutes=1))
+
+    assert factory.call_count == 1
+    assert db.get_config_value(conn, "garmin_credentials_verified") is False
+    assert db.get_config_value(conn, "garmin_last_sync_ok") is False
+    assert db.get_config_value(conn, "garmin_last_sync_at") == now.isoformat()
+    assert db.get_config_value(conn, "garmin_last_sync_error") == (
+        "Garmin session expired; reconnect Garmin to resume sync."
+    )
 
 
 def test_poller_does_nothing_before_the_initial_sync(conn):
