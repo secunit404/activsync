@@ -1,0 +1,1 @@
+import{l as e}from"./utils-BndEjNEG.js";function t({params:t}){if(!/^\d+$/.test(t.id))throw e(`Not Found`,{status:404,statusText:`Not Found`});return null}export{t as clientLoader};

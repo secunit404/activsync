@@ -1,0 +1,1233 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: tmp-shot.spec.ts >> shot
+- Location: e2e/tmp-shot.spec.ts:3:1
+
+# Error details
+
+```
+Test timeout of 30000ms exceeded.
+```
+
+```
+Error: locator.scrollIntoViewIfNeeded: Test timeout of 30000ms exceeded.
+Call log:
+  - waiting for getByRole('button', { name: 'About Garmin poll interval' })
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic:
+      - generic:
+        - img
+    - generic [ref=e4]:
+      - main [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic "ActivSync" [ref=e8]
+            - heading "Settings" [level=1] [ref=e9]
+            - paragraph [ref=e10]: Manage connections, decide what publishes automatically, and tune each sync leg.
+          - generic [ref=e11]: Mock data
+        - generic [ref=e12]:
+          - generic [ref=e13]:
+            - generic [ref=e14]:
+              - heading "Connections" [level=2] [ref=e16]
+              - generic [ref=e17]: Credentials are stored locally. Reconnecting only replaces them after verification succeeds.
+            - generic [ref=e18]:
+              - generic [ref=e19]:
+                - generic [ref=e20]:
+                  - generic [ref=e22]:
+                    - paragraph [ref=e23]: Garmin Connect
+                    - paragraph [ref=e24]: Connected
+                    - paragraph [ref=e25]: last synced 0 min ago
+                  - button "Manage" [ref=e26] [cursor=pointer]
+                - generic [ref=e27]:
+                  - generic [ref=e29]:
+                    - paragraph [ref=e30]: Strava
+                    - paragraph [ref=e31]: Connected
+                  - button "Manage" [ref=e32] [cursor=pointer]
+                - generic [ref=e33]:
+                  - generic [ref=e35]:
+                    - paragraph [ref=e36]: Hevy
+                    - paragraph [ref=e37]: Connected
+                  - button "Manage" [ref=e38] [cursor=pointer]
+              - generic [ref=e39]:
+                - generic [ref=e40]:
+                  - heading "Manual sync" [level=3] [ref=e41]
+                  - paragraph [ref=e42]: ActivSync polls automatically. Use these to check right now.
+                - generic [ref=e43]:
+                  - button "Sync Garmin" [ref=e44] [cursor=pointer]
+                  - button "Sync Strava" [ref=e45] [cursor=pointer]
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - heading "Preferences" [level=2] [ref=e49]
+              - generic [ref=e50]: Control polling, history, and display timezone.
+            - generic [ref=e53]:
+              - group [ref=e54]:
+                - generic [ref=e55]:
+                  - generic [ref=e56]: Garmin sync interval (min)
+                  - button "About Garmin sync interval (min)" [ref=e57] [cursor=pointer]:
+                    - img [ref=e58]
+                - spinbutton "Garmin sync interval (min)" [ref=e60]: "20"
+              - group [ref=e61]:
+                - generic [ref=e62]:
+                  - generic [ref=e63]: Strava sync interval (min)
+                  - button "About Strava sync interval (min)" [ref=e64] [cursor=pointer]:
+                    - img [ref=e65]
+                - spinbutton "Strava sync interval (min)" [ref=e67]: "5"
+              - group [ref=e68]:
+                - generic [ref=e69]:
+                  - generic [ref=e70]: Activity history window (days)
+                  - button "About Activity history window (days)" [ref=e71] [cursor=pointer]:
+                    - img [ref=e72]
+                - spinbutton "Activity history window (days)" [ref=e74]: "7"
+              - group [ref=e75]:
+                - generic [ref=e76]: Display timezone
+                - generic [ref=e77]:
+                  - combobox "Display timezone" [ref=e78]:
+                    - option "Pacific/Honolulu"
+                    - option "America/Anchorage"
+                    - option "America/Los_Angeles"
+                    - option "America/Denver"
+                    - option "America/Chicago"
+                    - option "America/New_York"
+                    - option "America/Halifax"
+                    - option "America/St_Johns"
+                    - option "America/Sao_Paulo"
+                    - option "Atlantic/Azores"
+                    - option "UTC"
+                    - option "Europe/London"
+                    - option "Europe/Paris"
+                    - option "Europe/Berlin"
+                    - option "Europe/Stockholm" [selected]
+                    - option "Europe/Helsinki"
+                    - option "Europe/Moscow"
+                    - option "Asia/Dubai"
+                    - option "Asia/Kolkata"
+                    - option "Asia/Bangkok"
+                    - option "Asia/Singapore"
+                    - option "Asia/Shanghai"
+                    - option "Asia/Tokyo"
+                    - option "Asia/Seoul"
+                    - option "Australia/Sydney"
+                    - option "Pacific/Auckland"
+                    - option "Pacific/Fiji"
+                  - img
+          - generic [ref=e79]:
+            - generic [ref=e80]:
+              - heading "Auto-sync by type" [level=2] [ref=e82]
+              - generic [ref=e83]: On types publish to Strava automatically. Off types wait for manual review.
+            - generic [ref=e84]:
+              - generic [ref=e85]:
+                - generic [ref=e86]:
+                  - text: Search activity types
+                  - generic [ref=e87]:
+                    - img
+                    - searchbox "Search activity types" [ref=e88]
+                - button "Refresh types" [ref=e89] [cursor=pointer]
+              - group "Filter by state" [ref=e90]:
+                - button "All 152" [pressed] [ref=e91] [cursor=pointer]
+                - button "On 152" [ref=e92] [cursor=pointer]
+                - button "Off 0" [ref=e93] [cursor=pointer]
+              - generic [ref=e94]:
+                - generic [ref=e95]:
+                  - paragraph [ref=e96]: CLIMBING
+                  - generic [ref=e97] [cursor=pointer]:
+                    - generic [ref=e98]: Bouldering
+                    - switch "Bouldering" [checked] [ref=e99]
+                  - generic [ref=e100] [cursor=pointer]:
+                    - generic [ref=e101]: Floor Climbing
+                    - switch "Floor Climbing" [checked] [ref=e102]
+                  - generic [ref=e103] [cursor=pointer]:
+                    - generic [ref=e104]: Indoor Climbing
+                    - switch "Indoor Climbing" [checked] [ref=e105]
+                  - generic [ref=e106] [cursor=pointer]:
+                    - generic [ref=e107]: Rock Climbing
+                    - switch "Rock Climbing" [checked] [ref=e108]
+                - generic [ref=e109]:
+                  - paragraph [ref=e110]: CYCLING
+                  - generic [ref=e111] [cursor=pointer]:
+                    - generic [ref=e112]: Bmx
+                    - switch "Bmx" [checked] [ref=e113]
+                  - generic [ref=e114] [cursor=pointer]:
+                    - generic [ref=e115]: Cycling
+                    - switch "Cycling" [checked] [ref=e116]
+                  - generic [ref=e117] [cursor=pointer]:
+                    - generic [ref=e118]: Cyclocross
+                    - switch "Cyclocross" [checked] [ref=e119]
+                  - generic [ref=e120] [cursor=pointer]:
+                    - generic [ref=e121]: Downhill Biking
+                    - switch "Downhill Biking" [checked] [ref=e122]
+                  - generic [ref=e123] [cursor=pointer]:
+                    - generic [ref=e124]: E Bike Fitness
+                    - switch "E Bike Fitness" [checked] [ref=e125]
+                  - generic [ref=e126] [cursor=pointer]:
+                    - generic [ref=e127]: E Bike Mountain
+                    - switch "E Bike Mountain" [checked] [ref=e128]
+                  - generic [ref=e129] [cursor=pointer]:
+                    - generic [ref=e130]: E Enduro Mtb
+                    - switch "E Enduro Mtb" [checked] [ref=e131]
+                  - generic [ref=e132] [cursor=pointer]:
+                    - generic [ref=e133]: Enduro Mtb
+                    - switch "Enduro Mtb" [checked] [ref=e134]
+                  - generic [ref=e135] [cursor=pointer]:
+                    - generic [ref=e136]: Gravel Cycling
+                    - switch "Gravel Cycling" [checked] [ref=e137]
+                  - generic [ref=e138] [cursor=pointer]:
+                    - generic [ref=e139]: Hand Cycling
+                    - switch "Hand Cycling" [checked] [ref=e140]
+                  - generic [ref=e141] [cursor=pointer]:
+                    - generic [ref=e142]: Indoor Cycling
+                    - switch "Indoor Cycling" [checked] [ref=e143]
+                  - generic [ref=e144] [cursor=pointer]:
+                    - generic [ref=e145]: Indoor Hand Cycling
+                    - switch "Indoor Hand Cycling" [checked] [ref=e146]
+                  - generic [ref=e147] [cursor=pointer]:
+                    - generic [ref=e148]: Motorcycling V2
+                    - switch "Motorcycling V2" [checked] [ref=e149]
+                  - generic [ref=e150] [cursor=pointer]:
+                    - generic [ref=e151]: Mountain Biking
+                    - switch "Mountain Biking" [checked] [ref=e152]
+                  - generic [ref=e153] [cursor=pointer]:
+                    - generic [ref=e154]: Recumbent Cycling
+                    - switch "Recumbent Cycling" [checked] [ref=e155]
+                  - generic [ref=e156] [cursor=pointer]:
+                    - generic [ref=e157]: Road Biking
+                    - switch "Road Biking" [checked] [ref=e158]
+                  - generic [ref=e159] [cursor=pointer]:
+                    - generic [ref=e160]: Track Cycling
+                    - switch "Track Cycling" [checked] [ref=e161]
+                  - generic [ref=e162] [cursor=pointer]:
+                    - generic [ref=e163]: Virtual Ride
+                    - switch "Virtual Ride" [checked] [ref=e164]
+                - generic [ref=e165]:
+                  - paragraph [ref=e166]: DIVING
+                  - generic [ref=e167] [cursor=pointer]:
+                    - generic [ref=e168]: Apnea Diving
+                    - switch "Apnea Diving" [checked] [ref=e169]
+                  - generic [ref=e170] [cursor=pointer]:
+                    - generic [ref=e171]: Apnea Hunting
+                    - switch "Apnea Hunting" [checked] [ref=e172]
+                  - generic [ref=e173] [cursor=pointer]:
+                    - generic [ref=e174]: Ccr Diving
+                    - switch "Ccr Diving" [checked] [ref=e175]
+                  - generic [ref=e176] [cursor=pointer]:
+                    - generic [ref=e177]: Diving
+                    - switch "Diving" [checked] [ref=e178]
+                  - generic [ref=e179] [cursor=pointer]:
+                    - generic [ref=e180]: Gauge Diving
+                    - switch "Gauge Diving" [checked] [ref=e181]
+                  - generic [ref=e182] [cursor=pointer]:
+                    - generic [ref=e183]: Multi Gas Diving
+                    - switch "Multi Gas Diving" [checked] [ref=e184]
+                  - generic [ref=e185] [cursor=pointer]:
+                    - generic [ref=e186]: Pool Apnea
+                    - switch "Pool Apnea" [checked] [ref=e187]
+                  - generic [ref=e188] [cursor=pointer]:
+                    - generic [ref=e189]: Single Gas Diving
+                    - switch "Single Gas Diving" [checked] [ref=e190]
+                  - generic [ref=e191] [cursor=pointer]:
+                    - generic [ref=e192]: Snorkeling
+                    - switch "Snorkeling" [checked] [ref=e193]
+                - generic [ref=e194]:
+                  - paragraph [ref=e195]: GOLF
+                  - generic [ref=e196] [cursor=pointer]:
+                    - generic [ref=e197]: Disc Golf
+                    - switch "Disc Golf" [checked] [ref=e198]
+                  - generic [ref=e199] [cursor=pointer]:
+                    - generic [ref=e200]: Golf
+                    - switch "Golf" [checked] [ref=e201]
+                - generic [ref=e202]:
+                  - paragraph [ref=e203]: HIKING
+                  - generic [ref=e204] [cursor=pointer]:
+                    - generic [ref=e205]: Hiking
+                    - switch "Hiking" [checked] [ref=e206]
+                  - generic [ref=e207] [cursor=pointer]:
+                    - generic [ref=e208]: Mountaineering
+                    - switch "Mountaineering" [checked] [ref=e209]
+                  - generic [ref=e210] [cursor=pointer]:
+                    - generic [ref=e211]: Rucking
+                    - switch "Rucking" [checked] [ref=e212]
+                - generic [ref=e213]:
+                  - paragraph [ref=e214]: MOTOR SPORTS
+                  - generic [ref=e215] [cursor=pointer]:
+                    - generic [ref=e216]: Atv V2
+                    - switch "Atv V2" [checked] [ref=e217]
+                  - generic [ref=e218] [cursor=pointer]:
+                    - generic [ref=e219]: Auto Racing
+                    - switch "Auto Racing" [checked] [ref=e220]
+                  - generic [ref=e221] [cursor=pointer]:
+                    - generic [ref=e222]: Driving General
+                    - switch "Driving General" [checked] [ref=e223]
+                  - generic [ref=e224] [cursor=pointer]:
+                    - generic [ref=e225]: Flying
+                    - switch "Flying" [checked] [ref=e226]
+                  - generic [ref=e227] [cursor=pointer]:
+                    - generic [ref=e228]: Hang Gliding
+                    - switch "Hang Gliding" [checked] [ref=e229]
+                  - generic [ref=e230] [cursor=pointer]:
+                    - generic [ref=e231]: Motocross V2
+                    - switch "Motocross V2" [checked] [ref=e232]
+                  - generic [ref=e233] [cursor=pointer]:
+                    - generic [ref=e234]: Rc Drone
+                    - switch "Rc Drone" [checked] [ref=e235]
+                  - generic [ref=e236] [cursor=pointer]:
+                    - generic [ref=e237]: Sky Diving
+                    - switch "Sky Diving" [checked] [ref=e238]
+                  - generic [ref=e239] [cursor=pointer]:
+                    - generic [ref=e240]: Wingsuit Flying
+                    - switch "Wingsuit Flying" [checked] [ref=e241]
+                - generic [ref=e242]:
+                  - paragraph [ref=e243]: MULTISPORT
+                  - generic [ref=e244] [cursor=pointer]:
+                    - generic [ref=e245]: Biketoruntransition V2
+                    - switch "Biketoruntransition V2" [checked] [ref=e246]
+                  - generic [ref=e247] [cursor=pointer]:
+                    - generic [ref=e248]: Multi Sport
+                    - switch "Multi Sport" [checked] [ref=e249]
+                  - generic [ref=e250] [cursor=pointer]:
+                    - generic [ref=e251]: Runtobiketransition V2
+                    - switch "Runtobiketransition V2" [checked] [ref=e252]
+                  - generic [ref=e253] [cursor=pointer]:
+                    - generic [ref=e254]: Swimtobiketransition V2
+                    - switch "Swimtobiketransition V2" [checked] [ref=e255]
+                  - generic [ref=e256] [cursor=pointer]:
+                    - generic [ref=e257]: Transition V2
+                    - switch "Transition V2" [checked] [ref=e258]
+                - generic [ref=e259]:
+                  - paragraph [ref=e260]: OTHER
+                  - generic [ref=e261] [cursor=pointer]:
+                    - generic [ref=e262]: Archery
+                    - switch "Archery" [checked] [ref=e263]
+                  - generic [ref=e264] [cursor=pointer]:
+                    - generic [ref=e265]: Assistance
+                    - switch "Assistance" [checked] [ref=e266]
+                  - generic [ref=e267] [cursor=pointer]:
+                    - generic [ref=e268]: E Sport
+                    - switch "E Sport" [checked] [ref=e269]
+                  - generic [ref=e270] [cursor=pointer]:
+                    - generic [ref=e271]: Fishing V2
+                    - switch "Fishing V2" [checked] [ref=e272]
+                  - generic [ref=e273] [cursor=pointer]:
+                    - generic [ref=e274]: Horseback Riding
+                    - switch "Horseback Riding" [checked] [ref=e275]
+                  - generic [ref=e276] [cursor=pointer]:
+                    - generic [ref=e277]: Hunting
+                    - switch "Hunting" [checked] [ref=e278]
+                  - generic [ref=e279] [cursor=pointer]:
+                    - generic [ref=e280]: Hunting Fishing
+                    - switch "Hunting Fishing" [checked] [ref=e281]
+                  - generic [ref=e282] [cursor=pointer]:
+                    - generic [ref=e283]: Incident Detected
+                    - switch "Incident Detected" [checked] [ref=e284]
+                  - generic [ref=e285] [cursor=pointer]:
+                    - generic [ref=e286]: Inline Skating
+                    - switch "Inline Skating" [checked] [ref=e287]
+                  - generic [ref=e288] [cursor=pointer]:
+                    - generic [ref=e289]: Other
+                    - switch "Other" [checked] [ref=e290]
+                  - generic [ref=e291] [cursor=pointer]:
+                    - generic [ref=e292]: Overland
+                    - switch "Overland" [checked] [ref=e293]
+                  - generic [ref=e294] [cursor=pointer]:
+                    - generic [ref=e295]: Para Sports
+                    - switch "Para Sports" [checked] [ref=e296]
+                  - generic [ref=e297] [cursor=pointer]:
+                    - generic [ref=e298]: Safety
+                    - switch "Safety" [checked] [ref=e299]
+                  - generic [ref=e300] [cursor=pointer]:
+                    - generic [ref=e301]: Steps
+                    - switch "Steps" [checked] [ref=e302]
+                  - generic [ref=e303] [cursor=pointer]:
+                    - generic [ref=e304]: Stop Watch
+                    - switch "Stop Watch" [checked] [ref=e305]
+                - generic [ref=e306]:
+                  - paragraph [ref=e307]: RACQUET SPORTS
+                  - generic [ref=e308] [cursor=pointer]:
+                    - generic [ref=e309]: Badminton
+                    - switch "Badminton" [checked] [ref=e310]
+                  - generic [ref=e311] [cursor=pointer]:
+                    - generic [ref=e312]: Paddelball
+                    - switch "Paddelball" [checked] [ref=e313]
+                  - generic [ref=e314] [cursor=pointer]:
+                    - generic [ref=e315]: Pickleball
+                    - switch "Pickleball" [checked] [ref=e316]
+                  - generic [ref=e317] [cursor=pointer]:
+                    - generic [ref=e318]: Platform Tennis
+                    - switch "Platform Tennis" [checked] [ref=e319]
+                  - generic [ref=e320] [cursor=pointer]:
+                    - generic [ref=e321]: Racket Sports
+                    - switch "Racket Sports" [checked] [ref=e322]
+                  - generic [ref=e323] [cursor=pointer]:
+                    - generic [ref=e324]: Racquetball
+                    - switch "Racquetball" [checked] [ref=e325]
+                  - generic [ref=e326] [cursor=pointer]:
+                    - generic [ref=e327]: Squash
+                    - switch "Squash" [checked] [ref=e328]
+                  - generic [ref=e329] [cursor=pointer]:
+                    - generic [ref=e330]: Table Tennis
+                    - switch "Table Tennis" [checked] [ref=e331]
+                  - generic [ref=e332] [cursor=pointer]:
+                    - generic [ref=e333]: Tennis V2
+                    - switch "Tennis V2" [checked] [ref=e334]
+                - generic [ref=e335]:
+                  - paragraph [ref=e336]: RUNNING
+                  - generic [ref=e337] [cursor=pointer]:
+                    - generic [ref=e338]: Indoor Running
+                    - switch "Indoor Running" [checked] [ref=e339]
+                  - generic [ref=e340] [cursor=pointer]:
+                    - generic [ref=e341]: Obstacle Run
+                    - switch "Obstacle Run" [checked] [ref=e342]
+                  - generic [ref=e343] [cursor=pointer]:
+                    - generic [ref=e344]: Running
+                    - switch "Running" [checked] [ref=e345]
+                  - generic [ref=e346] [cursor=pointer]:
+                    - generic [ref=e347]: Street Running
+                    - switch "Street Running" [checked] [ref=e348]
+                  - generic [ref=e349] [cursor=pointer]:
+                    - generic [ref=e350]: Track Running
+                    - switch "Track Running" [checked] [ref=e351]
+                  - generic [ref=e352] [cursor=pointer]:
+                    - generic [ref=e353]: Trail Running
+                    - switch "Trail Running" [checked] [ref=e354]
+                  - generic [ref=e355] [cursor=pointer]:
+                    - generic [ref=e356]: Treadmill Running
+                    - switch "Treadmill Running" [checked] [ref=e357]
+                  - generic [ref=e358] [cursor=pointer]:
+                    - generic [ref=e359]: Ultra Run
+                    - switch "Ultra Run" [checked] [ref=e360]
+                  - generic [ref=e361] [cursor=pointer]:
+                    - generic [ref=e362]: Virtual Run
+                    - switch "Virtual Run" [checked] [ref=e363]
+                  - generic [ref=e364] [cursor=pointer]:
+                    - generic [ref=e365]: Wheelchair Push Run
+                    - switch "Wheelchair Push Run" [checked] [ref=e366]
+                - generic [ref=e367]:
+                  - paragraph [ref=e368]: STRENGTH & FITNESS
+                  - generic [ref=e369] [cursor=pointer]:
+                    - generic [ref=e370]: Boxing
+                    - switch "Boxing" [checked] [ref=e371]
+                  - generic [ref=e372] [cursor=pointer]:
+                    - generic [ref=e373]: Breathwork
+                    - switch "Breathwork" [checked] [ref=e374]
+                  - generic [ref=e375] [cursor=pointer]:
+                    - generic [ref=e376]: Dance
+                    - switch "Dance" [checked] [ref=e377]
+                  - generic [ref=e378] [cursor=pointer]:
+                    - generic [ref=e379]: Elliptical
+                    - switch "Elliptical" [checked] [ref=e380]
+                  - generic [ref=e381] [cursor=pointer]:
+                    - generic [ref=e382]: Fitness Equipment
+                    - switch "Fitness Equipment" [checked] [ref=e383]
+                  - generic [ref=e384] [cursor=pointer]:
+                    - generic [ref=e385]: Hiit
+                    - switch "Hiit" [checked] [ref=e386]
+                  - generic [ref=e387] [cursor=pointer]:
+                    - generic [ref=e388]: Indoor Cardio
+                    - switch "Indoor Cardio" [checked] [ref=e389]
+                  - generic [ref=e390] [cursor=pointer]:
+                    - generic [ref=e391]: Indoor Rowing
+                    - switch "Indoor Rowing" [checked] [ref=e392]
+                  - generic [ref=e393] [cursor=pointer]:
+                    - generic [ref=e394]: Jump Rope
+                    - switch "Jump Rope" [checked] [ref=e395]
+                  - generic [ref=e396] [cursor=pointer]:
+                    - generic [ref=e397]: Meditation
+                    - switch "Meditation" [checked] [ref=e398]
+                  - generic [ref=e399] [cursor=pointer]:
+                    - generic [ref=e400]: Mixed Martial Arts
+                    - switch "Mixed Martial Arts" [checked] [ref=e401]
+                  - generic [ref=e402] [cursor=pointer]:
+                    - generic [ref=e403]: Mobility
+                    - switch "Mobility" [checked] [ref=e404]
+                  - generic [ref=e405] [cursor=pointer]:
+                    - generic [ref=e406]: Pilates
+                    - switch "Pilates" [checked] [ref=e407]
+                  - generic [ref=e408] [cursor=pointer]:
+                    - generic [ref=e409]: Stair Climbing
+                    - switch "Stair Climbing" [checked] [ref=e410]
+                  - generic [ref=e411] [cursor=pointer]:
+                    - generic [ref=e412]: Strength Training
+                    - switch "Strength Training" [checked] [ref=e413]
+                  - generic [ref=e414] [cursor=pointer]:
+                    - generic [ref=e415]: Yoga
+                    - switch "Yoga" [checked] [ref=e416]
+                - generic [ref=e417]:
+                  - paragraph [ref=e418]: SWIMMING
+                  - generic [ref=e419] [cursor=pointer]:
+                    - generic [ref=e420]: Lap Swimming
+                    - switch "Lap Swimming" [checked] [ref=e421]
+                  - generic [ref=e422] [cursor=pointer]:
+                    - generic [ref=e423]: Open Water Swimming
+                    - switch "Open Water Swimming" [checked] [ref=e424]
+                  - generic [ref=e425] [cursor=pointer]:
+                    - generic [ref=e426]: Swimming
+                    - switch "Swimming" [checked] [ref=e427]
+                - generic [ref=e428]:
+                  - paragraph [ref=e429]: TEAM SPORTS
+                  - generic [ref=e430] [cursor=pointer]:
+                    - generic [ref=e431]: American Football
+                    - switch "American Football" [checked] [ref=e432]
+                  - generic [ref=e433] [cursor=pointer]:
+                    - generic [ref=e434]: Baseball
+                    - switch "Baseball" [checked] [ref=e435]
+                  - generic [ref=e436] [cursor=pointer]:
+                    - generic [ref=e437]: Basketball
+                    - switch "Basketball" [checked] [ref=e438]
+                  - generic [ref=e439] [cursor=pointer]:
+                    - generic [ref=e440]: Cricket
+                    - switch "Cricket" [checked] [ref=e441]
+                  - generic [ref=e442] [cursor=pointer]:
+                    - generic [ref=e443]: Field Hockey
+                    - switch "Field Hockey" [checked] [ref=e444]
+                  - generic [ref=e445] [cursor=pointer]:
+                    - generic [ref=e446]: Ice Hockey
+                    - switch "Ice Hockey" [checked] [ref=e447]
+                  - generic [ref=e448] [cursor=pointer]:
+                    - generic [ref=e449]: Lacrosse
+                    - switch "Lacrosse" [checked] [ref=e450]
+                  - generic [ref=e451] [cursor=pointer]:
+                    - generic [ref=e452]: Rugby
+                    - switch "Rugby" [checked] [ref=e453]
+                  - generic [ref=e454] [cursor=pointer]:
+                    - generic [ref=e455]: Soccer
+                    - switch "Soccer" [checked] [ref=e456]
+                  - generic [ref=e457] [cursor=pointer]:
+                    - generic [ref=e458]: Softball
+                    - switch "Softball" [checked] [ref=e459]
+                  - generic [ref=e460] [cursor=pointer]:
+                    - generic [ref=e461]: Team Sports
+                    - switch "Team Sports" [checked] [ref=e462]
+                  - generic [ref=e463] [cursor=pointer]:
+                    - generic [ref=e464]: Ultimate Disc
+                    - switch "Ultimate Disc" [checked] [ref=e465]
+                  - generic [ref=e466] [cursor=pointer]:
+                    - generic [ref=e467]: Volleyball
+                    - switch "Volleyball" [checked] [ref=e468]
+                - generic [ref=e469]:
+                  - paragraph [ref=e470]: WALKING
+                  - generic [ref=e471] [cursor=pointer]:
+                    - generic [ref=e472]: Casual Walking
+                    - switch "Casual Walking" [checked] [ref=e473]
+                  - generic [ref=e474] [cursor=pointer]:
+                    - generic [ref=e475]: Speed Walking
+                    - switch "Speed Walking" [checked] [ref=e476]
+                  - generic [ref=e477] [cursor=pointer]:
+                    - generic [ref=e478]: Walking
+                    - switch "Walking" [checked] [ref=e479]
+                  - generic [ref=e480] [cursor=pointer]:
+                    - generic [ref=e481]: Wheelchair Push Walk
+                    - switch "Wheelchair Push Walk" [checked] [ref=e482]
+                - generic [ref=e483]:
+                  - paragraph [ref=e484]: WATER SPORTS
+                  - generic [ref=e485] [cursor=pointer]:
+                    - generic [ref=e486]: Boating V2
+                    - switch "Boating V2" [checked] [ref=e487]
+                  - generic [ref=e488] [cursor=pointer]:
+                    - generic [ref=e489]: Kayaking V2
+                    - switch "Kayaking V2" [checked] [ref=e490]
+                  - generic [ref=e491] [cursor=pointer]:
+                    - generic [ref=e492]: Kiteboarding V2
+                    - switch "Kiteboarding V2" [checked] [ref=e493]
+                  - generic [ref=e494] [cursor=pointer]:
+                    - generic [ref=e495]: Offshore Grinding V2
+                    - switch "Offshore Grinding V2" [checked] [ref=e496]
+                  - generic [ref=e497] [cursor=pointer]:
+                    - generic [ref=e498]: Onshore Grinding V2
+                    - switch "Onshore Grinding V2" [checked] [ref=e499]
+                  - generic [ref=e500] [cursor=pointer]:
+                    - generic [ref=e501]: Paddling V2
+                    - switch "Paddling V2" [checked] [ref=e502]
+                  - generic [ref=e503] [cursor=pointer]:
+                    - generic [ref=e504]: Rowing V2
+                    - switch "Rowing V2" [checked] [ref=e505]
+                  - generic [ref=e506] [cursor=pointer]:
+                    - generic [ref=e507]: Sailing V2
+                    - switch "Sailing V2" [checked] [ref=e508]
+                  - generic [ref=e509] [cursor=pointer]:
+                    - generic [ref=e510]: Stand Up Paddleboarding V2
+                    - switch "Stand Up Paddleboarding V2" [checked] [ref=e511]
+                  - generic [ref=e512] [cursor=pointer]:
+                    - generic [ref=e513]: Surfing V2
+                    - switch "Surfing V2" [checked] [ref=e514]
+                  - generic [ref=e515] [cursor=pointer]:
+                    - generic [ref=e516]: Wakeboarding V2
+                    - switch "Wakeboarding V2" [checked] [ref=e517]
+                  - generic [ref=e518] [cursor=pointer]:
+                    - generic [ref=e519]: Wakesurfing
+                    - switch "Wakesurfing" [checked] [ref=e520]
+                  - generic [ref=e521] [cursor=pointer]:
+                    - generic [ref=e522]: Water Sports
+                    - switch "Water Sports" [checked] [ref=e523]
+                  - generic [ref=e524] [cursor=pointer]:
+                    - generic [ref=e525]: Water Tubing
+                    - switch "Water Tubing" [checked] [ref=e526]
+                  - generic [ref=e527] [cursor=pointer]:
+                    - generic [ref=e528]: Whitewater Rafting Kayaking
+                    - switch "Whitewater Rafting Kayaking" [checked] [ref=e529]
+                  - generic [ref=e530] [cursor=pointer]:
+                    - generic [ref=e531]: Whitewater Rafting V2
+                    - switch "Whitewater Rafting V2" [checked] [ref=e532]
+                  - generic [ref=e533] [cursor=pointer]:
+                    - generic [ref=e534]: Wind Kite Surfing
+                    - switch "Wind Kite Surfing" [checked] [ref=e535]
+                  - generic [ref=e536] [cursor=pointer]:
+                    - generic [ref=e537]: Windsurfing V2
+                    - switch "Windsurfing V2" [checked] [ref=e538]
+                - generic [ref=e539]:
+                  - paragraph [ref=e540]: WINTER SPORTS
+                  - generic [ref=e541] [cursor=pointer]:
+                    - generic [ref=e542]: Backcountry Skiing
+                    - switch "Backcountry Skiing" [checked] [ref=e543]
+                  - generic [ref=e544] [cursor=pointer]:
+                    - generic [ref=e545]: Backcountry Skiing Snowboarding Ws
+                    - switch "Backcountry Skiing Snowboarding Ws" [checked] [ref=e546]
+                  - generic [ref=e547] [cursor=pointer]:
+                    - generic [ref=e548]: Backcountry Snowboarding
+                    - switch "Backcountry Snowboarding" [checked] [ref=e549]
+                  - generic [ref=e550] [cursor=pointer]:
+                    - generic [ref=e551]: Cross Country Indoor Skiing
+                    - switch "Cross Country Indoor Skiing" [checked] [ref=e552]
+                  - generic [ref=e553] [cursor=pointer]:
+                    - generic [ref=e554]: Cross Country Skiing Ws
+                    - switch "Cross Country Skiing Ws" [checked] [ref=e555]
+                  - generic [ref=e556] [cursor=pointer]:
+                    - generic [ref=e557]: Resort Skiing
+                    - switch "Resort Skiing" [checked] [ref=e558]
+                  - generic [ref=e559] [cursor=pointer]:
+                    - generic [ref=e560]: Resort Skiing Snowboarding Ws
+                    - switch "Resort Skiing Snowboarding Ws" [checked] [ref=e561]
+                  - generic [ref=e562] [cursor=pointer]:
+                    - generic [ref=e563]: Resort Snowboarding
+                    - switch "Resort Snowboarding" [checked] [ref=e564]
+                  - generic [ref=e565] [cursor=pointer]:
+                    - generic [ref=e566]: Skate Skiing Ws
+                    - switch "Skate Skiing Ws" [checked] [ref=e567]
+                  - generic [ref=e568] [cursor=pointer]:
+                    - generic [ref=e569]: Skating Ws
+                    - switch "Skating Ws" [checked] [ref=e570]
+                  - generic [ref=e571] [cursor=pointer]:
+                    - generic [ref=e572]: Snow Shoe Ws
+                    - switch "Snow Shoe Ws" [checked] [ref=e573]
+                  - generic [ref=e574] [cursor=pointer]:
+                    - generic [ref=e575]: Snowmobiling Ws
+                    - switch "Snowmobiling Ws" [checked] [ref=e576]
+                  - generic [ref=e577] [cursor=pointer]:
+                    - generic [ref=e578]: Waterskiing
+                    - switch "Waterskiing" [checked] [ref=e579]
+                  - generic [ref=e580] [cursor=pointer]:
+                    - generic [ref=e581]: Winter Sports
+                    - switch "Winter Sports" [checked] [ref=e582]
+              - generic [ref=e583]:
+                - generic [ref=e584]: Scroll for all 152 types
+                - generic [ref=e585]:
+                  - button "Enable all matches" [ref=e586] [cursor=pointer]
+                  - button "Disable all matches" [ref=e587] [cursor=pointer]
+          - generic [ref=e588]:
+            - generic [ref=e589]:
+              - heading "Hevy integration" [level=2] [ref=e591]
+              - generic [ref=e592]: Bring strength workouts from Hevy into Garmin, then publish the reviewed result to Strava.
+              - generic [ref=e594]:
+                - generic [ref=e595]: DISABLED
+                - switch "Enable Hevy sync" [ref=e596] [cursor=pointer]
+            - generic [ref=e598]:
+              - generic [ref=e599]:
+                - paragraph [ref=e600]: Match handling
+                - radiogroup "Match handling" [ref=e601]:
+                  - radio "Review each match" [checked] [ref=e602] [cursor=pointer]:
+                    - generic [ref=e603]:
+                      - generic [ref=e604]: Review each match
+                      - img [ref=e606]
+                    - generic [ref=e608]: Pauses when a Hevy workout matches Garmin so you choose Merge, Replace, or Description only.
+                  - radio "Automatic" [ref=e609] [cursor=pointer]:
+                    - generic [ref=e611]: Automatic
+                    - generic [ref=e613]: Applies the automatic strategy below as soon as ActivSync finds one Garmin match.
+              - generic [ref=e614]:
+                - paragraph [ref=e615]: Automatic match strategy
+                - radiogroup "Automatic match strategy" [ref=e616]:
+                  - radio "Replace" [checked] [ref=e617] [cursor=pointer]:
+                    - generic [ref=e618]:
+                      - generic [ref=e619]: Replace
+                      - img [ref=e621]
+                    - generic [ref=e623]: Overwrites the Garmin activity's exercise data with the Hevy workout. Best when Hevy is your source of truth for lifts.
+                  - radio "Merge" [ref=e624] [cursor=pointer]:
+                    - generic [ref=e626]: Merge
+                    - generic [ref=e628]: Keeps existing Garmin data and adds only exercises that Hevy has and Garmin is missing.
+                  - radio "Describe" [ref=e629] [cursor=pointer]:
+                    - generic [ref=e631]: Describe
+                    - generic [ref=e633]: Leaves Garmin untouched and just appends a text summary of the Hevy workout to the description.
+              - generic [ref=e634]:
+                - group [ref=e635]:
+                  - generic [ref=e636]: Activity title template
+                  - textbox "Activity title template" [ref=e637]: "{clean_title}"
+                  - paragraph [ref=e638]: "Available placeholders: {title} and {clean_title}. {clean_title} removes emoji from the Hevy title. Preview: Afternoon workout"
+                - generic [ref=e639]:
+                  - generic [ref=e640]:
+                    - generic [ref=e641]: Write summary for Merge and Replace
+                    - button "About Write summary for Merge and Replace" [ref=e642] [cursor=pointer]:
+                      - img [ref=e643]
+                  - switch "Write summary for Merge and Replace" [checked] [ref=e645] [cursor=pointer]
+                - generic [ref=e646]:
+                  - group [ref=e647]:
+                    - generic [ref=e649]: Description template
+                    - textbox "Description template" [ref=e650]: "{duration} {calories} {avg_hr} {exercises} {marker}"
+                    - paragraph [ref=e651]: "Available placeholders: {duration}, {calories}, {avg_hr}, {exercises}, and {marker}. Empty metrics are removed automatically. Use {{ and }} for literal braces."
+                  - generic [ref=e652]:
+                    - generic [ref=e653]:
+                      - heading "Plain-text preview" [level=3] [ref=e654]
+                      - generic [ref=e655]: Sample data
+                    - region "Plain-text preview" [ref=e656]:
+                      - paragraph [ref=e657]: "⏱️ 68 min 🔥 386 kcal ❤️ avg 104 bpm • Chest Fly (Machine): 3 sets · 57.5kg × 9 • Lat Pulldown (Cable): 3 sets · 50.0kg × 9 • Bulgarian Split Squat (Barbell): 3 sets · 25.0kg × 8 — synced by activsync"
+                    - paragraph [ref=e658]: Garmin and Strava treat this as plain text. Line breaks, emoji, Unicode symbols, and bullets work.
+              - generic [ref=e659]:
+                - group [ref=e660]:
+                  - generic [ref=e661]: Grace period (min)
+                  - spinbutton "Grace period (min)" [ref=e662]: "120"
+                - group [ref=e663]:
+                  - generic [ref=e664]: Poll interval (min)
+                  - spinbutton "Poll interval (min)" [ref=e665]: "10"
+              - group [ref=e666]:
+                - generic "Device and profile overrides Advanced" [ref=e667] [cursor=pointer]:
+                  - text: Device and profile overrides
+                  - generic [ref=e668]: Advanced
+                - option "Automatic" [selected]
+                - option "Garmin"
+                - option "Automatic" [selected]
+                - option "Alf04"
+                - option "Amx"
+                - option "Android Antplus Plugin"
+                - option "Approach G10"
+                - option "Approach G12"
+                - option "Approach G12 Asia"
+                - option "Approach G80"
+                - option "Approach J1"
+                - option "Approach S10"
+                - option "Approach S12"
+                - option "Approach S12 Asia"
+                - option "Approach S20"
+                - option "Approach S40"
+                - option "Approach S42"
+                - option "Approach S42 Asia"
+                - option "Approach S6"
+                - option "Approach S60"
+                - option "Approach S70"
+                - option "Approach X10"
+                - option "Approach X40"
+                - option "Approach Z80"
+                - option "Approachs44"
+                - option "Approachs50"
+                - option "Axb01"
+                - option "Axb02"
+                - option "Axh01"
+                - option "Axs01"
+                - option "Bcm"
+                - option "Bounce2"
+                - option "Bsm"
+                - option "Chirp"
+                - option "Connect"
+                - option "Connectiq Simulator"
+                - option "D2 Air X10"
+                - option "D2 Air X15"
+                - option "D2 Bravo"
+                - option "D2 Bravo Titanium"
+                - option "D2 Mach1 Pro"
+                - option "D2 Mach2"
+                - option "D2 Mach2 Pro"
+                - option "D2Airvenu"
+                - option "D2Charlie"
+                - option "Descent"
+                - option "Descent G1"
+                - option "Descent G1 Asia"
+                - option "Descent G2"
+                - option "Descent Mk2"
+                - option "Descent Mk2 Asia"
+                - option "Descent Mk2S"
+                - option "Descent Mk2S Asia"
+                - option "Descent Mk3"
+                - option "Descent Mk3I"
+                - option "Descent T1"
+                - option "Descent T2"
+                - option "Dsi Alf01"
+                - option "Dsi Alf02"
+                - option "Edge 1030"
+                - option "Edge 1030 Asia"
+                - option "Edge 1030 Bontrager"
+                - option "Edge 1030 Plus"
+                - option "Edge 1030 Plus Asia"
+                - option "Edge 1040"
+                - option "Edge 1040 Asia"
+                - option "Edge 1050"
+                - option "Edge 130"
+                - option "Edge 130 Asia"
+                - option "Edge 130 Plus"
+                - option "Edge 130 Plus Asia"
+                - option "Edge 520 Plus"
+                - option "Edge 520 Plus Apac"
+                - option "Edge 530"
+                - option "Edge 530 Apac"
+                - option "Edge 540"
+                - option "Edge 550"
+                - option "Edge 820"
+                - option "Edge 820 China"
+                - option "Edge 820 Japan"
+                - option "Edge 820 Korea"
+                - option "Edge 820 Sea"
+                - option "Edge 820 Taiwan"
+                - option "Edge 830"
+                - option "Edge 830 Apac"
+                - option "Edge 840"
+                - option "Edge 850"
+                - option "Edge Explore"
+                - option "Edge Explore 1000"
+                - option "Edge Explore 820"
+                - option "Edge Explore2"
+                - option "Edge Mtb"
+                - option "Edge Remote"
+                - option "Edge Touring"
+                - option "Edge1000"
+                - option "Edge1000 China"
+                - option "Edge1000 Japan"
+                - option "Edge1000 Korea"
+                - option "Edge1000 Taiwan"
+                - option "Edge1000 Thai"
+                - option "Edge20"
+                - option "Edge20 Asia"
+                - option "Edge200"
+                - option "Edge200 Taiwan"
+                - option "Edge25"
+                - option "Edge25 Asia"
+                - option "Edge25 Jpn"
+                - option "Edge500"
+                - option "Edge500 China"
+                - option "Edge500 Japan"
+                - option "Edge500 Korea"
+                - option "Edge500 Taiwan"
+                - option "Edge510"
+                - option "Edge510 Asia"
+                - option "Edge510 Japan"
+                - option "Edge510 Korea"
+                - option "Edge520"
+                - option "Edge520 Asia"
+                - option "Edge520 Japan"
+                - option "Edge800"
+                - option "Edge800 China"
+                - option "Edge800 Japan"
+                - option "Edge800 Korea"
+                - option "Edge800 Taiwan"
+                - option "Edge810"
+                - option "Edge810 China"
+                - option "Edge810 Japan"
+                - option "Edge810 Taiwan"
+                - option "Enduro"
+                - option "Enduro Asia"
+                - option "Enduro2"
+                - option "Enduro3"
+                - option "Epix"
+                - option "Epix Gen2"
+                - option "Epix Gen2 Apac"
+                - option "Epix Gen2 Pro 42"
+                - option "Epix Gen2 Pro 47"
+                - option "Epix Gen2 Pro 51"
+                - option "Epix Japan"
+                - option "Epix Korea"
+                - option "Etrex Touch"
+                - option "Fenix"
+                - option "Fenix E"
+                - option "Fenix2"
+                - option "Fenix3"
+                - option "Fenix3 China"
+                - option "Fenix3 Chronos"
+                - option "Fenix3 Chronos Asia"
+                - option "Fenix3 Hr"
+                - option "Fenix3 Hr Chn"
+                - option "Fenix3 Hr Jpn"
+                - option "Fenix3 Hr Kor"
+                - option "Fenix3 Hr Sea"
+                - option "Fenix3 Hr Twn"
+                - option "Fenix3 Japan"
+                - option "Fenix3 Korea"
+                - option "Fenix3 Sea"
+                - option "Fenix3 Twn"
+                - option "Fenix5"
+                - option "Fenix5 Asia"
+                - option "Fenix5 Plus"
+                - option "Fenix5S"
+                - option "Fenix5S Asia"
+                - option "Fenix5S Plus"
+                - option "Fenix5S Plus Apac"
+                - option "Fenix5X"
+                - option "Fenix5X Asia"
+                - option "Fenix5X Plus"
+                - option "Fenix5X Plus Apac"
+                - option "Fenix6"
+                - option "Fenix6 Asia"
+                - option "Fenix6 Sport"
+                - option "Fenix6 Sport Asia"
+                - option "Fenix6S"
+                - option "Fenix6S Asia"
+                - option "Fenix6S Sport"
+                - option "Fenix6S Sport Asia"
+                - option "Fenix6X"
+                - option "Fenix6X Asia"
+                - option "Fenix7"
+                - option "Fenix7 Apac"
+                - option "Fenix7 Pro Solar"
+                - option "Fenix7S"
+                - option "Fenix7S Apac"
+                - option "Fenix7S Pro Solar"
+                - option "Fenix7X"
+                - option "Fenix7X Apac"
+                - option "Fenix7X Pro Solar"
+                - option "Fenix8"
+                - option "Fenix8 Pro"
+                - option "Fenix8 Small"
+                - option "Fenix8 Solar"
+                - option "Fenix8 Solar Large"
+                - option "Foretrex 601 701"
+                - option "Fr10"
+                - option "Fr10 Japan"
+                - option "Fr110"
+                - option "Fr110 Japan"
+                - option "Fr15"
+                - option "Fr15 Japan"
+                - option "Fr165"
+                - option "Fr165 Music"
+                - option "Fr170"
+                - option "Fr170 Music"
+                - option "Fr210 Japan"
+                - option "Fr220"
+                - option "Fr220 China"
+                - option "Fr220 Japan"
+                - option "Fr220 Russia"
+                - option "Fr220 Taiwan"
+                - option "Fr225"
+                - option "Fr225 Asia"
+                - option "Fr225 Single Byte Product Id"
+                - option "Fr230"
+                - option "Fr230 Jpn"
+                - option "Fr235"
+                - option "Fr235 Asia"
+                - option "Fr235 China Nfc"
+                - option "Fr235 Japan"
+                - option "Fr235L Asia"
+                - option "Fr245"
+                - option "Fr245 Asia"
+                - option "Fr245 Music"
+                - option "Fr245M Asia"
+                - option "Fr25"
+                - option "Fr255"
+                - option "Fr255 Music"
+                - option "Fr255 Small"
+                - option "Fr255 Small Music"
+                - option "Fr265 Large"
+                - option "Fr265 Small"
+                - option "Fr30"
+                - option "Fr30 Asia"
+                - option "Fr301 China"
+                - option "Fr301 Japan"
+                - option "Fr301 Korea"
+                - option "Fr301 Taiwan"
+                - option "Fr310Xt"
+                - option "Fr310Xt 4T"
+                - option "Fr35"
+                - option "Fr35 Apac"
+                - option "Fr35 Hebrew"
+                - option "Fr35 Japan"
+                - option "Fr35 Korea"
+                - option "Fr35 Sea"
+                - option "Fr405"
+                - option "Fr405 Japan"
+                - option "Fr45"
+                - option "Fr45 Asia"
+                - option "Fr50"
+                - option "Fr55"
+                - option "Fr55 Asia"
+                - option "Fr60"
+                - option "Fr610"
+                - option "Fr610 Japan"
+                - option "Fr620"
+                - option "Fr620 China"
+                - option "Fr620 Japan"
+                - option "Fr620 Russia"
+                - option "Fr620 Taiwan"
+                - option "Fr630"
+                - option "Fr630 Asia"
+                - option "Fr630 Jpn"
+                - option "Fr645"
+                - option "Fr645 Asia"
+                - option "Fr645M"
+                - option "Fr645M Asia"
+                - option "Fr70"
+                - option "Fr70 2026"
+                - option "Fr735Xt"
+                - option "Fr735Xt Apac"
+                - option "Fr735Xt Japan"
+                - option "Fr745"
+                - option "Fr745 Asia"
+                - option "Fr910Xt"
+                - option "Fr910Xt China"
+                - option "Fr910Xt Japan"
+                - option "Fr910Xt Korea"
+                - option "Fr920Xt"
+                - option "Fr920Xt China"
+                - option "Fr920Xt Japan"
+                - option "Fr920Xt Taiwan"
+                - option "Fr935"
+                - option "Fr935 Asia"
+                - option "Fr945"
+                - option "Fr945 Asia"
+                - option "Fr945 Lte"
+                - option "Fr945 Lte Asia"
+                - option "Fr955"
+                - option "Fr965"
+                - option "Gen3 Bcm"
+                - option "Gen3 Bcm Single Byte Product Id"
+                - option "Gen3 Bsm"
+                - option "Gen3 Bsm Single Byte Product Id"
+                - option "Gnss"
+                - option "Gpsmap66"
+                - option "Gpsmap66I"
+                - option "Hrm 200"
+                - option "Hrm Dual"
+                - option "Hrm Fit"
+                - option "Hrm Fit Single Byte Product Id"
+                - option "Hrm Pro"
+                - option "Hrm Pro Plus"
+                - option "Hrm Run"
+                - option "Hrm Run Single Byte Product Id"
+                - option "Hrm Tri"
+                - option "Hrm Tri Single Byte Product Id"
+                - option "Hrm1"
+                - option "Hrm2Ss"
+                - option "Hrm3Ss"
+                - option "Hrm4 Run"
+                - option "Hrm4 Run Single Byte Product Id"
+                - option "Index Smart Scale"
+                - option "Index Smart Scale 2"
+                - option "Instinct 2"
+                - option "Instinct 2 Asia"
+                - option "Instinct 2S"
+                - option "Instinct 2X"
+                - option "Instinct Crossover"
+                - option "Instinct Crossover Amoled"
+                - option "Instinct Esports"
+                - option "Instinct Solar"
+                - option "Instinct3 Amoled 45Mm"
+                - option "Instinct3 Amoled 50Mm"
+                - option "Instinct3 Solar 45Mm"
+                - option "Instinct3 Solar 50Mm"
+                - option "Instincte 40Mm"
+                - option "Instincte 45Mm"
+                - option "Legacy Captain Marvel"
+                - option "Legacy Captain Marvel Asia"
+                - option "Legacy Darth Vader"
+                - option "Legacy Darth Vader Asia"
+                - option "Legacy First Avenger"
+                - option "Legacy First Avenger Asia"
+                - option "Legacy Rey"
+                - option "Legacy Rey Asia"
+                - option "Lily"
+                - option "Lily Asia"
+                - option "Lily Athlete"
+                - option "Lily2"
+                - option "Marq Adventurer"
+                - option "Marq Adventurer Asia"
+                - option "Marq Athlete"
+                - option "Marq Athlete Asia"
+                - option "Marq Aviator"
+                - option "Marq Aviator Asia"
+                - option "Marq Captain"
+                - option "Marq Captain Asia"
+                - option "Marq Commander"
+                - option "Marq Commander Asia"
+                - option "Marq Driver"
+                - option "Marq Driver Asia"
+                - option "Marq Expedition"
+                - option "Marq Expedition Asia"
+                - option "Marq Gen2"
+                - option "Marq Gen2 Aviator"
+                - option "Marq Gen2 Commander"
+                - option "Marq Golfer"
+                - option "Marq Golfer Asia"
+                - option "Nautix"
+                - option "Ohr"
+                - option "Oregon7Xx"
+                - option "Oregon7Xx Ww"
+                - option "Rally 200"
+                - option "Rally X10"
+                - option "Rino7Xx"
+                - option "Running Dynamics Pod"
+                - option "Sdm4"
+                - option "Swim"
+                - option "Swim2"
+                - option "Swim2 Apac"
+                - option "Tactix7"
+                - option "Tactix8 Amoled"
+                - option "Tactix8 Solar"
+                - option "Tacx Bushido Smart"
+                - option "Tacx Flow Smart"
+                - option "Tacx Flux Flux S Smart"
+                - option "Tacx Flux2 Smart"
+                - option "Tacx Genius Smart"
+                - option "Tacx Magnum"
+                - option "Tacx Neo Smart"
+                - option "Tacx Neo Smart Bike"
+                - option "Tacx Neo2 Smart"
+                - option "Tacx Neo2 T Smart"
+                - option "Tacx Satori Smart"
+                - option "Tacx Training App Android"
+                - option "Tacx Training App Ios"
+                - option "Tacx Training App Legacy"
+                - option "Tacx Training App Mac"
+                - option "Tacx Training App Mac Catalyst"
+                - option "Tacx Training App Win"
+                - option "Tacx Vortex Smart"
+                - option "Tempe"
+                - option "Training Center"
+                - option "Truswing"
+                - option "Varia Headlight"
+                - option "Varia Radar Display"
+                - option "Varia Radar Taillight"
+                - option "Varia Rct715"
+                - option "Varia Remote"
+                - option "Varia Taillight"
+                - option "Varia Taillight Old"
+                - option "Varia Ut800"
+                - option "Varia Vision"
+                - option "Vector 2"
+                - option "Vector 2S"
+                - option "Vector 3"
+                - option "Vector Cp"
+                - option "Vector S"
+                - option "Vector Ss"
+                - option "Venu"
+                - option "Venu Daimler"
+                - option "Venu Daimler Asia"
+                - option "Venu X1"
+                - option "Venu2"
+                - option "Venu2 Asia"
+                - option "Venu2 Plus"
+                - option "Venu2 Plus Asia"
+                - option "Venu2S"
+                - option "Venu2S Asia"
+                - option "Venu3"
+                - option "Venu3S"
+                - option "Venu4"
+                - option "Venu4S"
+                - option "Venusq"
+                - option "Venusq Asia"
+                - option "Venusq Music"
+                - option "Venusq Music V2"
+                - option "Venusq2"
+                - option "Venusq2Music"
+                - option "Virb 360"
+                - option "Virb Elite"
+                - option "Virb Remote"
+                - option "Virb Ultra 30"
+                - option "Virbx"
+                - option "Virbxe"
+                - option "Vivo Active"
+                - option "Vivo Active Apac"
+                - option "Vivo Active Hr"
+                - option "Vivo Active Hr Apac"
+                - option "Vivo Active3M Apac"
+                - option "Vivo Active3T Chn"
+                - option "Vivo Active4 Large Asia"
+                - option "Vivo Active4 Oled Asia"
+                - option "Vivo Active4 Small Asia"
+                - option "Vivo Fit"
+                - option "Vivo Fit Jr"
+                - option "Vivo Fit2"
+                - option "Vivo Fit3"
+                - option "Vivo Fit4"
+                - option "Vivo Ki"
+                - option "Vivo Move"
+                - option "Vivo Move Hr"
+                - option "Vivo Move Hr Asia"
+                - option "Vivo Move Sport"
+                - option "Vivo Move3"
+                - option "Vivo Move3 Asia"
+                - option "Vivo Move3 Premium"
+                - option "Vivo Smart"
+                - option "Vivo Smart Apac"
+                - option "Vivo Smart Emea"
+                - option "Vivo Smart Gps Hr"
+                - option "Vivo Smart Gps Hr Asia"
+                - option "Vivo Smart Hr"
+                - option "Vivo Smart Hr Asia"
+                - option "Vivo Smart2"
+                - option "Vivo Smart3"
+                - option "Vivo Smart3 Apac"
+                - option "Vivo Smart4 Asia"
+                - option "Vivo Sport"
+                - option "Vivo Sport Apac"
+                - option "Vivoactive3"
+                - option "Vivoactive3 Daimler"
+                - option "Vivoactive3M L"
+                - option "Vivoactive3M W"
+                - option "Vivoactive4 Large"
+                - option "Vivoactive4 Small"
+                - option "Vivoactive5"
+                - option "Vivoactive6"
+                - option "Vivomove Trend"
+                - option "Vivosmart 4"
+                - option "Vivosmart 5"
+                - option "Automatic (male)" [selected]
+                - option "Female"
+                - option "Male"
+          - generic [ref=e669]:
+            - button "Discard" [disabled]
+            - button "Save" [disabled]
+      - contentinfo [ref=e670]:
+        - generic [ref=e671]: ActivSync v1.2.4
+        - generic [ref=e672]: ·
+        - link "GitHub" [ref=e673] [cursor=pointer]:
+          - /url: https://github.com/secunit404/activsync
+    - navigation "Primary":
+      - generic [ref=e674]:
+        - link "Activities" [ref=e675] [cursor=pointer]:
+          - /url: /
+          - img [ref=e676]
+          - generic [ref=e678]: Activities
+        - link "Hevy" [ref=e679] [cursor=pointer]:
+          - /url: /hevy
+          - img [ref=e680]
+          - generic [ref=e686]: Hevy
+        - link "Settings" [ref=e687] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e688]
+          - generic [ref=e691]: Settings
+  - status "Notifications alt+T"
+```
+
+# Test source
+
+```ts
+  1  | import { test } from "./fixtures";
+  2  | 
+  3  | test("shot", async ({ page }) => {
+  4  |   test.skip(test.info().project.name !== "mobile", "mobile only");
+  5  |   await page.goto("/settings");
+  6  |   const hint = page.getByRole("button", { name: "About Garmin poll interval" });
+> 7  |   await hint.scrollIntoViewIfNeeded();
+     |              ^ Error: locator.scrollIntoViewIfNeeded: Test timeout of 30000ms exceeded.
+  8  |   await hint.click();
+  9  |   await page.getByTestId("hint-content").waitFor();
+  10 |   const box = (await hint.boundingBox())!;
+  11 |   await page.screenshot({
+  12 |     path: "/private/tmp/claude-501/-Users-aasen-Projects-activsync/828d4d4e-f233-461d-8a24-5c855403c7a2/scratchpad/hint.png",
+  13 |     clip: { x: 0, y: Math.max(0, box.y - 180), width: 390, height: 300 },
+  14 |   });
+  15 | });
+  16 | 
+```

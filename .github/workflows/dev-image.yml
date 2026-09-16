@@ -45,3 +45,11 @@ jobs:
             REVISION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # `dev` moves on every push, stranding the previous multi-arch children.
+      # Tagged versions are release images, so only untagged ones are pruned.
+      - name: Prune orphaned image versions
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-untagged: true
