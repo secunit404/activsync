@@ -41,6 +41,14 @@ ACTIVITIES_PAGE_SIZE = 20
 ACTIVITIES_PAGE_SIZES = (10, 20, 50, 100)
 
 
+def _utcnow() -> datetime:
+    """The wall clock, as a single seam. Route handlers read the time through
+    this so tests can pin it; calling datetime.now directly makes any test with
+    a fixed fixture date rot once real time drifts past its lookback window.
+    """
+    return datetime.now(timezone.utc)
+
+
 def _garmin_token_dir() -> str:
     return os.environ.get("ACTIVSYNC_GARMIN_TOKEN_DIR", os.environ.get("G2S_GARMIN_TOKEN_DIR", "/config/.garminconnect"))
 
@@ -145,7 +153,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         types = garmin.fetch_activity_types()
         db.set_config_value(conn, "garmin_activity_types", types)
         db.set_config_value(conn, "garmin_activity_types_fetched_at",
-                            datetime.now(timezone.utc).isoformat())
+                            _utcnow().isoformat())
         if hold_all:
             cfg = config.load_config(conn)
             cfg["held_activity_types"] = sorted(t["type_key"] for t in types)
@@ -239,7 +247,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         try:
             stats = sync.catch_up_sync(
                 conn, _build_garmin_client(conn), _build_strava_client(conn),
-                config.load_config(conn), datetime.now(timezone.utc),
+                config.load_config(conn), _utcnow(),
                 last_sync_ok_at=last_sync_ok_at,
             )
         except Exception:
@@ -460,7 +468,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
                 "Garmin is disconnected — reconnect it to sync.", status_code=409,
             )
         garmin = _build_garmin_client(conn)
-        now = datetime.now(timezone.utc)
+        now = _utcnow()
         sync.sync_garmin(conn, garmin, config.load_config(conn), now)
         if _settings_context()["strava_connected"]:
             sync.check_strava_status(conn, _build_strava_client(conn), config.load_config(conn), now)
@@ -490,7 +498,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             strava = _build_strava_client(conn)
             try:
                 stats = sync.publish_pending(
-                    conn, garmin, strava, datetime.now(timezone.utc), garmin_activity_ids=set(activity_ids),
+                    conn, garmin, strava, _utcnow(), garmin_activity_ids=set(activity_ids),
                 )
             except StravaAuthError as e:
                 return templates.TemplateResponse(
@@ -515,7 +523,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
             )
         strava = _build_strava_client(conn)
         try:
-            sync.check_strava_status(conn, strava, config.load_config(conn), datetime.now(timezone.utc))
+            sync.check_strava_status(conn, strava, config.load_config(conn), _utcnow())
         except StravaAuthError as e:
             # A revoked token or an app missing activity:read_all surfaces here
             # rather than as a 500, since this is the button a user reaches for
@@ -533,7 +541,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     ):
         garmin = _build_garmin_client(conn)
         strava = _build_strava_client(conn)
-        sync.publish_now(conn, garmin, strava, garmin_activity_id, datetime.now(timezone.utc))
+        sync.publish_now(conn, garmin, strava, garmin_activity_id, _utcnow())
         events.bus.publish("refresh")
         return templates.TemplateResponse(request, "partials/activity_table.html", _activity_context(sort_order, status_filter))
 
@@ -759,7 +767,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         if not ctx["garmin_connected"] or not ctx["strava_connected"]:
             return RedirectResponse("/setup", status_code=303)
         try:
-            now = datetime.now(timezone.utc)
+            now = _utcnow()
             garmin = _build_garmin_client(conn)
             strava = _build_strava_client(conn)
             cfg = config.load_config(conn)
@@ -901,7 +909,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
         garmin = _build_garmin_client(conn)
         types = garmin.fetch_activity_types()
         db.set_config_value(conn, "garmin_activity_types", types)
-        db.set_config_value(conn, "garmin_activity_types_fetched_at", datetime.now(timezone.utc).isoformat())
+        db.set_config_value(conn, "garmin_activity_types_fetched_at", _utcnow().isoformat())
         if _is_htmx(request):
             # Just the picker: htmx swaps it into the open page, so refreshing
             # redraws the list without reloading or moving the reader.
