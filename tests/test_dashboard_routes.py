@@ -2,12 +2,24 @@ import re
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from activsync import db
 from activsync import server as server_module
 from activsync.server import create_app
 from activsync.strava_client import StravaAuthError, StravaUploadError
+
+
+# Every fixture in this file dates its activities to July 2026. Routes that
+# compare against the lookback window need the clock pinned alongside them, or
+# the tests silently stop exercising the window once real time moves past it.
+NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _pin_clock(monkeypatch):
+    monkeypatch.setattr(server_module, "_utcnow", lambda: NOW)
 
 
 def _logged_in_client(tmp_path):
