@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Exercise Mappings | ActivSync</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "alert-ink": "#b8392a",
+                        "tertiary-container": "#6c7581",
+                        "error": "#ba1a1a",
+                        "border-field": "#c8d1db",
+                        "surface-variant": "#e0e3e5",
+                        "success-ink": "#18834d",
+                        "outline": "#8d7168",
+                        "on-primary-container": "#fffbff",
+                        "surface-white": "#ffffff",
+                        "on-secondary-fixed": "#001d33",
+                        "surface-container": "#eceef0",
+                        "secondary-fixed": "#cee5ff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-tint": "#ad3300",
+                        "on-surface-variant": "#59413a",
+                        "secondary-container": "#7ec1ff",
+                        "outline-variant": "#e1bfb5",
+                        "on-primary-fixed-variant": "#842500",
+                        "tertiary": "#545d68",
+                        "hover-primary": "#c5441b",
+                        "primary-container": "#cd4817",
+                        "secondary-fixed-dim": "#97cbff",
+                        "primary-fixed-dim": "#ffb59e",
+                        "surface": "#f8f9fb",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed": "#131c26",
+                        "surface-bright": "#f8f9fb",
+                        "border-hairline": "#d8e0e7",
+                        "surface-dim": "#d8dadc",
+                        "info-ink": "#2865b5",
+                        "on-tertiary-container": "#fdfcff",
+                        "text-muted": "#5c6976",
+                        "background": "#f8f9fb",
+                        "on-secondary-container": "#004f7d",
+                        "success-bg": "#e2f3e9",
+                        "on-secondary": "#ffffff",
+                        "primary": "#a93200",
+                        "on-tertiary-fixed-variant": "#3e4853",
+                        "tertiary-fixed": "#dae3f1",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#bec7d5",
+                        "alert-bg": "#fde8e4",
+                        "on-error": "#ffffff",
+                        "on-background": "#191c1e",
+                        "caution-bg": "#fff3d6",
+                        "surface-container-highest": "#e0e3e5",
+                        "inverse-primary": "#ffb59e",
+                        "caution-ink": "#a56b08",
+                        "on-surface": "#191c1e",
+                        "inverse-on-surface": "#eff1f3",
+                        "on-primary": "#ffffff",
+                        "info-bg": "#e7f0fc",
+                        "primary-fixed": "#ffdbd0",
+                        "on-error-container": "#93000a",
+                        "on-tertiary": "#ffffff",
+                        "inverse-surface": "#2d3133",
+                        "surface-secondary": "#f0f3f6",
+                        "surface-container-high": "#e6e8ea",
+                        "on-secondary-fixed-variant": "#004a76",
+                        "secondary": "#00639b",
+                        "on-primary-fixed": "#3a0b00"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "6px",
+                        "lg": "6px",
+                        "xl": "8px",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-sm": "8px",
+                        "gutter": "16px",
+                        "container-margin": "24px",
+                        "stack-md": "16px",
+                        "base": "4px",
+                        "section-gap": "32px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "helper-text": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "data-md": ["JetBrains Mono"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "helper-text": ["12px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "headline-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "data-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .pending-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #a93200;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 0 2px rgba(169, 50, 0, 0.2);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen font-body-md">
+<!-- Modal Container -->
+<div class="flex flex-col h-screen max-w-md mx-auto bg-surface-white overflow-hidden shadow-2xl relative">
+<!-- Header -->
+<header class="bg-surface-white sticky top-0 z-50 border-b border-border-hairline px-container-margin py-stack-md flex justify-between items-center">
+<div class="flex flex-col">
+<span class="text-primary font-label-sm uppercase tracking-widest text-[10px]">Hevy</span>
+<h1 class="font-headline-sm text-headline-sm text-on-surface">Exercise Mappings</h1>
+</div>
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors active:opacity-70">
+<span class="material-symbols-outlined text-text-muted">close</span>
+</button>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 overflow-y-auto hide-scrollbar pb-32">
+<!-- Summary Chips -->
+<section class="px-container-margin mt-stack-md">
+<div class="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-full border border-border-hairline shrink-0">
+<span class="font-data-md text-data-md font-bold text-on-surface">24</span>
+<span class="font-label-sm text-text-muted">exercises</span>
+</div>
+<div class="flex items-center gap-2 bg-caution-bg px-3 py-1.5 rounded-full border border-caution-ink/10 shrink-0">
+<span class="font-data-md text-data-md font-bold text-caution-ink">8</span>
+<span class="font-label-sm text-caution-ink">unmapped</span>
+</div>
+<div class="flex items-center gap-2 bg-info-bg px-3 py-1.5 rounded-full border border-info-ink/10 shrink-0">
+<span class="font-data-md text-data-md font-bold text-info-ink">6</span>
+<span class="font-label-sm text-info-ink">suggested</span>
+</div>
+<div class="flex items-center gap-2 bg-alert-bg px-3 py-1.5 rounded-full border border-alert-ink/10 shrink-0">
+<span class="font-data-md text-data-md font-bold text-alert-ink">1</span>
+<span class="font-label-sm text-alert-ink">rejected</span>
+</div>
+</div>
+</section>
+<!-- Global Action -->
+<section class="px-container-margin mt-stack-md">
+<button class="w-full flex items-center justify-center gap-2 py-3 border border-primary text-primary font-label-sm rounded hover:bg-primary/5 transition-all">
+<span class="material-symbols-outlined text-[18px]">done_all</span>
+                    ACCEPT ALL SUGGESTIONS
+                </button>
+</section>
+<!-- Filters -->
+<section class="px-container-margin mt-section-gap space-y-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[20px]">search</span>
+<input class="w-full pl-10 pr-4 py-2.5 bg-surface-container-lowest border border-border-field rounded-lg text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Search exercises" type="text"/>
+</div>
+<div class="flex p-1 bg-surface-container rounded-lg">
+<button class="flex-1 py-1.5 text-center font-label-sm text-on-surface bg-surface-white shadow-sm rounded-md">All</button>
+<button class="flex-1 py-1.5 text-center font-label-sm text-text-muted hover:text-on-surface transition-colors">Unmapped</button>
+<button class="flex-1 py-1.5 text-center font-label-sm text-text-muted hover:text-on-surface transition-colors">Rejected</button>
+</div>
+</section>
+<!-- Card List -->
+<section class="px-container-margin mt-section-gap space-y-stack-md">
+<!-- 1. Bulgarian Split Squat -->
+<div class="p-4 bg-surface-white border border-border-hairline rounded-lg shadow-[0px_1px_2px_rgba(0,0,0,0.06)]">
+<div class="flex justify-between items-start mb-3">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-[16px] text-on-surface">Bulgarian Split Squat</h3>
+<span class="font-label-sm text-text-muted text-[10px]">CUSTOM</span>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 bg-info-bg text-info-ink rounded-full border border-info-ink/20">
+<div class="w-1.5 h-1.5 rounded-full bg-info-ink"></div>
+<span class="font-label-sm text-[10px]">SUGGESTED</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4 p-3 bg-surface-container-low rounded border border-border-hairline">
+<div class="flex items-center overflow-hidden">
+<span class="pending-dot shrink-0"></span>
+<span class="font-data-md text-data-md text-on-surface truncate">Squat › Bulgarian Split Squat</span>
+</div>
+<button class="text-primary font-label-sm shrink-0 hover:underline">Confirm</button>
+</div>
+</div>
+<!-- 2. Cable Fly (Open Combobox) -->
+<div class="p-4 bg-surface-white border border-primary/40 rounded-lg shadow-[0px_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-primary/10">
+<div class="flex justify-between items-start mb-3">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-[16px] text-on-surface">Cable Fly</h3>
+<span class="font-label-sm text-text-muted text-[10px]">CUSTOM</span>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 bg-caution-bg text-caution-ink rounded-full border border-caution-ink/20">
+<div class="w-1.5 h-1.5 rounded-full bg-caution-ink"></div>
+<span class="font-label-sm text-[10px]">UNMAPPED</span>
+</div>
+</div>
+<div class="relative">
+<div class="flex items-center justify-between gap-4 p-3 bg-white border-2 border-primary rounded-t">
+<input class="bg-transparent border-none p-0 focus:ring-0 font-data-md text-data-md text-on-surface w-full" type="text" value="fly"/>
+<button class="text-primary font-label-sm shrink-0">Map</button>
+</div>
+<!-- Dropdown Panel -->
+<div class="absolute w-full z-10 bg-white border-x-2 border-b-2 border-primary rounded-b shadow-lg -mt-0.5">
+<div class="p-1">
+<div class="p-3 bg-primary-fixed/30 border-l-4 border-primary flex items-center justify-between cursor-pointer">
+<span class="font-data-md text-data-md font-medium text-on-primary-fixed">Cable Chest Fly</span>
+<span class="material-symbols-outlined text-primary text-[18px]">check</span>
+</div>
+<div class="p-3 hover:bg-surface-container-low cursor-pointer transition-colors">
+<span class="font-data-md text-data-md text-text-muted">Dumbbell Fly</span>
+</div>
+<div class="p-3 hover:bg-surface-container-low cursor-pointer transition-colors">
+<span class="font-data-md text-data-md text-text-muted">Machine Fly</span>
+</div>
+<div class="p-3 hover:bg-surface-container-low cursor-pointer transition-colors">
+<span class="font-data-md text-data-md text-text-muted">Reverse Cable Fly</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Spacing for open combobox -->
+<div class="h-40"></div>
+<!-- 3. Barbell Bench Press -->
+<div class="p-4 bg-surface-white border border-border-hairline rounded-lg shadow-[0px_1px_2px_rgba(0,0,0,0.06)]">
+<div class="flex justify-between items-start mb-3">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-[16px] text-on-surface">Barbell Bench Press</h3>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 bg-success-bg text-success-ink rounded-full border border-success-ink/20">
+<div class="w-1.5 h-1.5 rounded-full bg-success-ink"></div>
+<span class="font-label-sm text-[10px]">MAPPED</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4 p-3 bg-surface-container-low rounded border border-border-hairline">
+<div class="flex items-center overflow-hidden">
+<span class="font-data-md text-data-md text-text-muted truncate">Bench Press › Barbell Bench Press</span>
+</div>
+<button class="text-error font-label-sm shrink-0 hover:underline">Remove</button>
+</div>
+</div>
+<!-- 4. Hack Squat -->
+<div class="p-4 bg-surface-white border border-border-hairline rounded-lg shadow-[0px_1px_2px_rgba(0,0,0,0.06)]">
+<div class="flex justify-between items-start mb-3">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-[16px] text-on-surface">Hack Squat</h3>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 bg-alert-bg text-alert-ink rounded-full border border-alert-ink/20">
+<div class="w-1.5 h-1.5 rounded-full bg-alert-ink"></div>
+<span class="font-label-sm text-[10px]">REJECTED</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4 p-3 bg-alert-bg/30 rounded border border-alert-ink/10">
+<div class="flex items-center overflow-hidden">
+<span class="font-data-md text-data-md text-alert-ink line-through truncate opacity-60">Squat › Hack Squat</span>
+</div>
+<button class="text-primary font-label-sm shrink-0 hover:underline">Retry</button>
+</div>
+</div>
+<!-- 5. Seated Calf Raise -->
+<div class="p-4 bg-surface-white border border-border-hairline rounded-lg shadow-[0px_1px_2px_rgba(0,0,0,0.06)]">
+<div class="flex justify-between items-start mb-3">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-[16px] text-on-surface">Seated Calf Raise</h3>
+<span class="font-label-sm text-text-muted text-[10px]">CUSTOM</span>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 bg-info-bg text-info-ink rounded-full border border-info-ink/20">
+<div class="w-1.5 h-1.5 rounded-full bg-info-ink"></div>
+<span class="font-label-sm text-[10px]">SUGGESTED</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4 p-3 bg-surface-container-low rounded border border-border-hairline">
+<div class="flex items-center overflow-hidden">
+<span class="pending-dot shrink-0"></span>
+<span class="font-data-md text-data-md text-on-surface truncate">Calf Raise › Seated Calf Raise</span>
+</div>
+<button class="text-primary font-label-sm shrink-0 hover:underline">Confirm</button>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Bar -->
+<footer class="absolute bottom-0 w-full p-container-margin bg-white/80 backdrop-blur-md border-t border-border-hairline">
+<button class="w-full bg-[#e85b2a] hover:bg-[#c5441b] text-white py-4 rounded font-headline-sm text-center shadow-lg active:scale-[0.98] transition-all">
+                Save all (6)
+            </button>
+</footer>
+</div>
+<!-- Background Decoration (Atmospheric) -->
+<div class="fixed inset-0 -z-10 bg-background overflow-hidden">
+<div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[120px] rounded-full"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-secondary/5 blur-[120px] rounded-full"></div>
+</div>
+<script>
+        // Simple micro-interaction for the search bar
+        const searchInput = document.querySelector('input[type="text"]');
+        if (searchInput) {
+            searchInput.addEventListener('focus', () => {
+                searchInput.parentElement.classList.add('scale-[1.01]');
+            });
+            searchInput.addEventListener('blur', () => {
+                searchInput.parentElement.classList.remove('scale-[1.01]');
+            });
+        }
+    </script>
+</body></html>

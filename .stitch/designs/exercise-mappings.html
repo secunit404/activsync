@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Exercise Mapping | Workout Integrator</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed-variant": "#004a76",
+                        "on-error-container": "#93000a",
+                        "caution-bg": "#fff3d6",
+                        "secondary-fixed-dim": "#97cbff",
+                        "surface-container-highest": "#e0e3e5",
+                        "error-container": "#ffdad6",
+                        "error": "#ba1a1a",
+                        "success-bg": "#e2f3e9",
+                        "outline": "#8d7168",
+                        "surface-white": "#ffffff",
+                        "secondary-container": "#7ec1ff",
+                        "on-surface": "#191c1e",
+                        "outline-variant": "#e1bfb5",
+                        "surface": "#f8f9fb",
+                        "surface-dim": "#d8dadc",
+                        "primary-fixed": "#ffdbd0",
+                        "on-tertiary": "#ffffff",
+                        "primary": "#a93200",
+                        "on-tertiary-fixed": "#131c26",
+                        "on-background": "#191c1e",
+                        "on-primary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "border-hairline": "#d8e0e7",
+                        "on-primary-fixed-variant": "#842500",
+                        "on-primary-fixed": "#3a0b00",
+                        "tertiary-fixed": "#dae3f1",
+                        "border-field": "#c8d1db",
+                        "surface-variant": "#e0e3e5",
+                        "surface-tint": "#ad3300",
+                        "primary-fixed-dim": "#ffb59e",
+                        "surface-container-high": "#e6e8ea",
+                        "tertiary-container": "#6c7581",
+                        "tertiary": "#545d68",
+                        "primary-container": "#cd4817",
+                        "hover-primary": "#c5441b",
+                        "surface-bright": "#f8f9fb",
+                        "secondary": "#00639b",
+                        "inverse-surface": "#2d3133",
+                        "tertiary-fixed-dim": "#bec7d5",
+                        "on-tertiary-container": "#fdfcff",
+                        "background": "#f8f9fb",
+                        "on-tertiary-fixed-variant": "#3e4853",
+                        "on-secondary-fixed": "#001d33",
+                        "alert-bg": "#fde8e4",
+                        "success-ink": "#18834d",
+                        "secondary-fixed": "#cee5ff",
+                        "inverse-on-surface": "#eff1f3",
+                        "alert-ink": "#b8392a",
+                        "caution-ink": "#a56b08",
+                        "surface-container-low": "#f2f4f6",
+                        "info-ink": "#2865b5",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#004f7d",
+                        "inverse-primary": "#ffb59e",
+                        "surface-secondary": "#f0f3f6",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#fffbff",
+                        "text-muted": "#5c6976",
+                        "info-bg": "#e7f0fc",
+                        "surface-container": "#eceef0",
+                        "on-surface-variant": "#59413a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-sm": "8px",
+                        "section-gap": "32px",
+                        "stack-md": "16px",
+                        "container-margin": "24px",
+                        "gutter": "16px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "helper-text": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "data-md": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "helper-text": ["12px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "data-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .thin-scrollbar::-webkit-scrollbar { width: 4px; }
+        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .thin-scrollbar::-webkit-scrollbar-thumb { background: #d8e0e7; border-radius: 10px; }
+        .zebra-row:nth-child(even) { background-color: #f8f9fb; }
+        .custom-shadow { box-shadow: 0px 0px 1px 2px rgba(0, 0, 0, 0.06); }
+    </style>
+</head>
+<body class="bg-surface font-body-md text-on-surface antialiased">
+<!-- Top Navigation Anchor -->
+<header class="w-full top-0 sticky bg-surface border-b border-border-hairline z-40 flex justify-between items-center w-full px-container-margin py-stack-md">
+<div class="flex items-center gap-gutter">
+<h1 class="font-headline-md text-headline-md font-extrabold text-primary tracking-tight">Exercise Mapping</h1>
+<nav class="hidden md:flex items-center gap-stack-md ml-gutter">
+<a class="font-label-sm text-label-sm text-text-muted hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="font-label-sm text-label-sm text-text-muted hover:text-primary transition-colors" href="#">Workouts</a>
+<a class="font-label-sm text-label-sm text-primary border-b-2 border-primary pb-1" href="#">Mappings</a>
+<a class="font-label-sm text-label-sm text-text-muted hover:text-primary transition-colors" href="#">Library</a>
+<a class="font-label-sm text-label-sm text-text-muted hover:text-primary transition-colors" href="#">History</a>
+</nav>
+</div>
+<div class="flex items-center gap-stack-md">
+<button class="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-sm text-label-sm hover:bg-hover-primary transition-all">Sync Data</button>
+<div class="flex items-center gap-base text-tertiary">
+<span class="material-symbols-outlined cursor-pointer hover:text-primary">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary">settings</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-dim overflow-hidden border border-border-hairline">
+<img class="w-full h-full object-cover" data-alt="A clean, professional headshot of a software developer with short brown hair, wearing a navy blue polo shirt, set against a blurred office background with warm lighting. High-key lighting, modern corporate aesthetic, soft depth of field." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCWtQhXvFBh42gj6lkwtujDJYliWhNo6mD75vL_PKvbGYTH887BS5bR7cYgcv2KULnoQzhJqIY3KrjLCIQmvd6-PEmV9RCrwfaSdNluEIX5K7ZDXN6rnk-fEZi_gFwHxoCjhvKSkn-pX5FDdvnzFeEP5G3fCe98yQRdQ6v1lMe-9flYqpwLcBbedRr1orVVW_1Artqy1nrW31Kxv85Gr7JcPetf6D30hxDOh8lhwjv5RIK3BM51ewwizkoC5ydqCsjetTEdMdeFsWKO"/>
+</div>
+</div>
+</header>
+<div class="flex">
+<!-- Sidebar Anchor -->
+<aside class="h-[calc(100vh-64px)] w-64 sticky top-16 border-r border-border-hairline bg-surface-container-low p-stack-md flex flex-col justify-between hidden md:flex">
+<div>
+<div class="mb-section-gap">
+<p class="font-label-sm text-label-sm text-on-surface font-bold">Workout Integrator</p>
+<p class="font-helper-text text-helper-text text-text-muted">v2.4.0-stable</p>
+</div>
+<div class="space-y-base">
+<a class="flex items-center gap-stack-sm p-stack-sm text-text-muted hover:bg-surface-container-high rounded-lg transition-all group" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="font-label-sm text-label-sm">Overview</span>
+</a>
+<a class="flex items-center gap-stack-sm p-stack-sm bg-secondary-container text-on-secondary-container rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">sync_alt</span>
+<span class="font-label-sm text-label-sm">Mapping Rules</span>
+</a>
+<a class="flex items-center gap-stack-sm p-stack-sm text-text-muted hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">watch</span>
+<span class="font-label-sm text-label-sm">Garmin Link</span>
+</a>
+<a class="flex items-center gap-stack-sm p-stack-sm text-text-muted hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">fitness_center</span>
+<span class="font-label-sm text-label-sm">Hevy Sync</span>
+</a>
+<a class="flex items-center gap-stack-sm p-stack-sm text-text-muted hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">history</span>
+<span class="font-label-sm text-label-sm">Audit Logs</span>
+</a>
+</div>
+</div>
+<div class="space-y-base pt-stack-md border-t border-border-hairline">
+<a class="flex items-center gap-stack-sm p-stack-sm text-text-muted hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">help</span>
+<span class="font-label-sm text-label-sm">Support</span>
+</a>
+<a class="flex items-center gap-stack-sm p-stack-sm text-text-muted hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">logout</span>
+<span class="font-label-sm text-label-sm">Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 p-container-margin max-w-6xl mx-auto">
+<!-- Section Header -->
+<div class="mb-section-gap">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-base">Exercise mappings</h2>
+<p class="font-body-md text-body-md text-text-muted max-w-3xl">
+                    Every exercise must map to a Garmin category before workouts can sync. Suggestions are pre-selected — confirm or adjust, then save.
+                </p>
+</div>
+<!-- Sticky Summary + Action Bar -->
+<div class="sticky top-[64px] z-30 bg-surface/95 backdrop-blur-sm py-stack-md mb-stack-md border-b border-border-hairline flex flex-col md:flex-row items-center justify-between gap-gutter">
+<div class="flex flex-wrap items-center gap-stack-sm">
+<div class="flex items-center gap-base px-3 py-1 bg-surface-container border border-border-hairline rounded-full">
+<span class="font-data-md text-data-md font-bold text-on-surface">24</span>
+<span class="font-label-sm text-label-sm text-text-muted">exercises</span>
+</div>
+<div class="flex items-center gap-base px-3 py-1 bg-caution-bg border border-caution-ink/20 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-caution-ink"></span>
+<span class="font-data-md text-data-md font-bold text-caution-ink">8</span>
+<span class="font-label-sm text-label-sm text-caution-ink">unmapped</span>
+</div>
+<div class="flex items-center gap-base px-3 py-1 bg-info-bg border border-info-ink/20 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-info-ink"></span>
+<span class="font-data-md text-data-md font-bold text-info-ink">6</span>
+<span class="font-label-sm text-label-sm text-info-ink">suggested</span>
+</div>
+<div class="flex items-center gap-base px-3 py-1 bg-alert-bg border border-alert-ink/20 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-alert-ink"></span>
+<span class="font-data-md text-data-md font-bold text-alert-ink">1</span>
+<span class="font-label-sm text-label-sm text-alert-ink">rejected</span>
+</div>
+</div>
+<div class="flex items-center gap-stack-sm">
+<button class="px-4 py-2 border border-border-field text-on-surface font-label-sm text-label-sm rounded-lg hover:bg-surface-container-high transition-all">Accept all suggestions</button>
+<button class="px-4 py-2 bg-primary text-on-primary font-label-sm text-label-sm rounded-lg hover:bg-hover-primary transition-all shadow-sm">Save all (6)</button>
+</div>
+</div>
+<!-- Toolbar Row -->
+<div class="flex flex-col md:flex-row items-center justify-between mb-gutter gap-gutter">
+<div class="relative w-full md:w-80 group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-white border border-border-field rounded-lg font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Search exercises" type="text"/>
+</div>
+<div class="flex bg-surface-container-high p-1 rounded-full gap-1">
+<button class="px-5 py-1.5 bg-surface-white text-on-surface font-label-sm text-label-sm rounded-full shadow-sm">All</button>
+<button class="px-5 py-1.5 text-text-muted font-label-sm text-label-sm rounded-full hover:bg-surface-container-highest transition-all">Unmapped</button>
+<button class="px-5 py-1.5 text-text-muted font-label-sm text-label-sm rounded-full hover:bg-surface-container-highest transition-all">Rejected</button>
+</div>
+</div>
+<!-- Mappings Table -->
+<div class="bg-white rounded-lg border border-border-hairline custom-shadow overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low border-b border-border-hairline sticky top-0 z-20">
+<tr>
+<th class="px-container-margin py-stack-md font-label-sm text-label-sm text-text-muted uppercase tracking-wider">Exercise</th>
+<th class="px-stack-md py-stack-md font-label-sm text-label-sm text-text-muted uppercase tracking-wider">Status</th>
+<th class="px-stack-md py-stack-md font-label-sm text-label-sm text-text-muted uppercase tracking-wider">Garmin mapping</th>
+<th class="px-container-margin py-stack-md font-label-sm text-label-sm text-text-muted uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-hairline">
+<!-- Bulgarian Split Squat -->
+<tr class="zebra-row group hover:bg-info-bg/10 transition-colors">
+<td class="px-container-margin py-stack-md">
+<div class="flex flex-col">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Bulgarian Split Squat</span>
+<span class="px-2 py-0.5 bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px] rounded uppercase tracking-tighter">custom</span>
+</div>
+<span class="font-helper-text text-helper-text text-text-muted">Quadriceps</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-info-ink"></span>
+<span class="font-label-sm text-label-sm text-info-ink">Suggested</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md text-on-surface">Squat › Bulgarian Split Squat</span>
+<span class="w-2 h-2 rounded-full bg-primary" title="Pending confirmation"></span>
+</div>
+</td>
+<td class="px-container-margin py-stack-md text-right">
+<button class="text-primary hover:underline font-label-sm text-label-sm">Confirm</button>
+</td>
+</tr>
+<!-- Barbell Bench Press -->
+<tr class="zebra-row group hover:bg-success-bg/10 transition-colors">
+<td class="px-container-margin py-stack-md">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Barbell Bench Press</span>
+<span class="font-helper-text text-helper-text text-text-muted">Chest</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-success-ink"></span>
+<span class="font-label-sm text-label-sm text-success-ink">Mapped</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<span class="font-body-md text-body-md text-on-surface">Bench Press › Barbell Bench Press</span>
+</td>
+<td class="px-container-margin py-stack-md text-right">
+<button class="text-text-muted hover:text-error transition-colors font-label-sm text-label-sm">Remove</button>
+</td>
+</tr>
+<!-- Cable Fly (OPEN COMBOBOX) -->
+<tr class="zebra-row group relative z-10 bg-white">
+<td class="px-container-margin py-stack-md align-top">
+<div class="flex flex-col">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Cable Fly</span>
+<span class="px-2 py-0.5 bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px] rounded uppercase tracking-tighter">custom</span>
+</div>
+<span class="font-helper-text text-helper-text text-text-muted">Chest</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md align-top">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-caution-ink"></span>
+<span class="font-label-sm text-label-sm text-caution-ink">Unmapped</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md relative">
+<div class="w-full max-w-md bg-white border-2 border-primary rounded-lg shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+<!-- Combobox Header -->
+<div class="p-2 border-b border-border-hairline flex items-center gap-base">
+<span class="material-symbols-outlined text-text-muted text-[18px]">search</span>
+<input class="flex-1 bg-transparent border-none focus:ring-0 font-body-md p-0" placeholder="Search Garmin exercise..." type="text" value="fly"/>
+<span class="material-symbols-outlined text-text-muted text-[18px] cursor-pointer">close</span>
+</div>
+<!-- Dropdown List -->
+<div class="max-h-48 overflow-y-auto thin-scrollbar">
+<div class="px-3 py-1.5 bg-surface-container-low font-label-sm text-[10px] text-text-muted uppercase tracking-widest">Chest Fly</div>
+<div class="px-3 py-2 bg-secondary-container/30 border-l-4 border-primary flex items-center justify-between cursor-pointer">
+<span class="font-body-md text-body-md text-on-surface">Cable Chest Fly</span>
+<span class="material-symbols-outlined text-primary text-[18px]">check</span>
+</div>
+<div class="px-3 py-2 hover:bg-surface-container-high transition-colors cursor-pointer">
+<span class="font-body-md text-body-md text-on-surface">Dumbbell Fly</span>
+</div>
+<div class="px-3 py-2 hover:bg-surface-container-high transition-colors cursor-pointer">
+<span class="font-body-md text-body-md text-on-surface">Machine Fly</span>
+</div>
+<div class="px-3 py-1.5 bg-surface-container-low font-label-sm text-[10px] text-text-muted uppercase tracking-widest border-t border-border-hairline">Rear Delt</div>
+<div class="px-3 py-2 hover:bg-surface-container-high transition-colors cursor-pointer">
+<span class="font-body-md text-body-md text-on-surface">Reverse Cable Fly</span>
+</div>
+</div>
+</div>
+</td>
+<td class="px-container-margin py-stack-md text-right align-top">
+<button class="p-1 hover:bg-surface-container rounded-full"><span class="material-symbols-outlined text-text-muted">more_vert</span></button>
+</td>
+</tr>
+<!-- Meadows Row -->
+<tr class="zebra-row group hover:bg-info-bg/10 transition-colors">
+<td class="px-container-margin py-stack-md">
+<div class="flex flex-col">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Meadows Row</span>
+<span class="px-2 py-0.5 bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px] rounded uppercase tracking-tighter">custom</span>
+</div>
+<span class="font-helper-text text-helper-text text-text-muted">Back</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-info-ink"></span>
+<span class="font-label-sm text-label-sm text-info-ink">Suggested</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md text-on-surface">Row › Meadows Row</span>
+<span class="w-2 h-2 rounded-full bg-primary" title="Pending confirmation"></span>
+</div>
+</td>
+<td class="px-container-margin py-stack-md text-right">
+<button class="text-primary hover:underline font-label-sm text-label-sm">Confirm</button>
+</td>
+</tr>
+<!-- Hack Squat (REJECTED) -->
+<tr class="zebra-row group hover:bg-alert-bg/10 transition-colors">
+<td class="px-container-margin py-stack-md">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Hack Squat</span>
+<span class="font-helper-text text-helper-text text-text-muted">Quadriceps</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-label-sm text-label-sm text-error">Rejected</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<span class="font-body-md text-body-md text-on-surface line-through decoration-error/30 text-text-muted">Squat › Hack Squat</span>
+</td>
+<td class="px-container-margin py-stack-md text-right">
+<button class="text-primary hover:underline font-label-sm text-label-sm">Retry</button>
+</td>
+</tr>
+<!-- Face Pull -->
+<tr class="zebra-row group hover:bg-caution-bg/10 transition-colors">
+<td class="px-container-margin py-stack-md">
+<div class="flex flex-col">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Face Pull</span>
+<span class="px-2 py-0.5 bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px] rounded uppercase tracking-tighter">custom</span>
+</div>
+<span class="font-helper-text text-helper-text text-text-muted">Shoulders</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-caution-ink"></span>
+<span class="font-label-sm text-label-sm text-caution-ink">Unmapped</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<span class="font-body-md text-body-md text-text-muted italic">Choose a Garmin exercise…</span>
+</td>
+<td class="px-container-margin py-stack-md text-right">
+<button class="text-primary hover:underline font-label-sm text-label-sm">Map</button>
+</td>
+</tr>
+<!-- Romanian Deadlift -->
+<tr class="zebra-row group hover:bg-success-bg/10 transition-colors">
+<td class="px-container-margin py-stack-md">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Romanian Deadlift</span>
+<span class="font-helper-text text-helper-text text-text-muted">Hamstrings</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-success-ink"></span>
+<span class="font-label-sm text-label-sm text-success-ink">Mapped</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<span class="font-body-md text-body-md text-on-surface">Deadlift › Romanian Deadlift</span>
+</td>
+<td class="px-container-margin py-stack-md text-right">
+<button class="text-text-muted hover:text-error transition-colors font-label-sm text-label-sm">Remove</button>
+</td>
+</tr>
+<!-- Seated Calf Raise -->
+<tr class="zebra-row group hover:bg-info-bg/10 transition-colors">
+<td class="px-container-margin py-stack-md">
+<div class="flex flex-col">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Seated Calf Raise</span>
+<span class="px-2 py-0.5 bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px] rounded uppercase tracking-tighter">custom</span>
+</div>
+<span class="font-helper-text text-helper-text text-text-muted">Calves</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-base">
+<span class="w-2 h-2 rounded-full bg-info-ink"></span>
+<span class="font-label-sm text-label-sm text-info-ink">Suggested</span>
+</div>
+</td>
+<td class="px-stack-md py-stack-md">
+<div class="flex items-center gap-stack-sm">
+<span class="font-body-md text-body-md text-on-surface">Calf Raise › Seated Calf Raise</span>
+<span class="w-2 h-2 rounded-full bg-primary" title="Pending confirmation"></span>
+</div>
+</td>
+<td class="px-container-margin py-stack-md text-right">
+<button class="text-primary hover:underline font-label-sm text-label-sm">Confirm</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination / Footer -->
+<div class="px-container-margin py-stack-md bg-surface-container-low border-t border-border-hairline flex items-center justify-between">
+<span class="font-helper-text text-helper-text text-text-muted">Showing 8 of 24 exercises</span>
+<div class="flex items-center gap-base">
+<button class="p-1.5 hover:bg-surface-container-high rounded transition-all border border-border-hairline disabled:opacity-30" disabled="">
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</button>
+<span class="font-data-md text-data-md px-3">1 / 3</span>
+<button class="p-1.5 hover:bg-surface-container-high rounded transition-all border border-border-hairline">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Micro-interaction Scripts -->
+<script>
+        document.querySelectorAll('button, a').forEach(el => {
+            el.addEventListener('click', (e) => {
+                if(el.tagName === 'A' && el.getAttribute('href') === '#') e.preventDefault();
+                // Simple ripple/pulse simulation logic could go here
+            });
+        });
+
+        // Search highlight logic simulation
+        const searchInput = document.querySelector('input[placeholder="Search exercises"]');
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(term) ? '' : 'none';
+            });
+        });
+    </script>
+</body></html>
