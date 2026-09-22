@@ -18,7 +18,6 @@ from urllib3.util.retry import Retry
 logger = logging.getLogger("activsync.hevy_client")
 
 DEFAULT_BASE_URL = "https://api.hevyapp.com/v1"
-EVENT_TYPES = ("updated", "deleted")
 
 
 class HevyAuthError(Exception):

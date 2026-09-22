@@ -19,7 +19,8 @@ def test_activities_view_adds_display_time_and_garmin_link(conn):
     assert len(rows) == 1
     row = rows[0]
     assert row["garmin_activity_id"] == 42
-    assert row["start_time_display"] == "2026-07-09 11:00"
+    assert row["start_date_display"] == "9 Jul"
+    assert row["start_clock_display"] == "11:00"
     assert row["garmin_url"] == "https://connect.garmin.com/modern/activity/42"
 
 
@@ -32,7 +33,7 @@ def test_activities_view_uses_configured_display_timezone(conn):
 
     rows = view.activities_view(conn)
 
-    assert rows[0]["start_time_display"] == "2026-07-09 16:00"
+    assert rows[0]["start_clock_display"] == "16:00"
 
 
 def test_activities_view_does_not_mutate_db_rows(conn):
@@ -42,7 +43,7 @@ def test_activities_view_does_not_mutate_db_rows(conn):
     view.activities_view(conn)
     raw_row = db.get_activity(conn, 44)
 
-    assert "start_time_display" not in raw_row
+    assert "start_date_display" not in raw_row
     assert "garmin_url" not in raw_row
 
 

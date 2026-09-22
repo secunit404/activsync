@@ -116,7 +116,6 @@ def _hevy_badges(conn: sqlite3.Connection) -> dict[int, str]:
 def activities_view(
     conn: sqlite3.Connection,
     sort_order: str = "newest",
-    status_filter: str = "",
     tz_name: str | None = None,
 ) -> list[dict]:
     """Activity rows augmented with display-only fields.
@@ -129,7 +128,6 @@ def activities_view(
         tz_name = config.load_config(conn)["display_timezone"]
     rows = db.list_activities(
         conn,
-        status=status_filter or None,
         sort_order=sort_order,
     )
     hevy_badges = _hevy_badges(conn)
@@ -141,9 +139,7 @@ def activities_view(
         result.append({
             **row,
             "duration_seconds": duration,
-            "start_time_display": timeutil.format_local_time(row["start_time"], tz_name),
             "start_date_display": timeutil.format_local_date(row["start_time"], tz_name),
-            "start_year_display": timeutil.format_local_year(row["start_time"], tz_name),
             "start_month_year_display": timeutil.format_local_month_year(row["start_time"], tz_name),
             "start_clock_display": timeutil.format_local_clock(row["start_time"], tz_name),
             "garmin_url": GARMIN_ACTIVITY_URL.format(row["garmin_activity_id"]),
@@ -305,10 +301,8 @@ def hevy_settings_view(conn: sqlite3.Connection) -> dict:
         "profile_baseline": baseline,
         "profile_from_garmin": from_garmin,
         "profile_override": override,
-        "profile_fetched_at": cache.get("fetched_at"),
         "identity": settings.get("hevy_device_identity_override") or {},
         "identity_display": identity_display,
-        "last_success_at": db.get_config_value(conn, "hevy_last_success_at"),
     }
 
 

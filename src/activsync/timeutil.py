@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 GARMIN_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -92,11 +92,6 @@ def format_local_date(start_time: str, tz_name: str) -> str:
     """Format the local activity date compactly, e.g. ``9 Jul``."""
     local_dt = to_local(start_time, tz_name)
     return f"{local_dt.day} {local_dt.strftime('%b')}"
-
-
-def format_local_year(start_time: str, tz_name: str) -> str:
-    """Format the local activity year."""
-    return str(to_local(start_time, tz_name).year)
 
 
 def format_local_month_year(start_time: str, tz_name: str) -> str:

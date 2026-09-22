@@ -34,10 +34,3 @@ def test_blank_build_falls_back_to_the_released_version(monkeypatch, value):
     assert build_info.display_version() == __version__
     assert build_info.is_release() is True
 
-
-def test_label_prefixes_only_a_released_version(monkeypatch):
-    assert build_info.version_label() == f"v{__version__}"
-
-    monkeypatch.setenv(build_info.BUILD_ENV_VAR, "dev-feat-hevy-react-frontend")
-
-    assert build_info.version_label() == "dev-feat-hevy-react-frontend"

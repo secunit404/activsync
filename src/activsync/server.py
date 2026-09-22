@@ -38,7 +38,7 @@ logger = logging.getLogger("activsync.server")
 
 STATIC_DIR = Path(__file__).parent / "static"
 WEB_DIR = Path(__file__).parent / "web"
-SPA_RESERVED_PREFIXES = ("api", "assets", "static", "strava")
+SPA_RESERVED_PREFIXES = ("api", "assets", "strava")
 
 
 def _garmin_token_dir() -> str:

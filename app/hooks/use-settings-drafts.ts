@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { SettingsState } from "@/lib/api";
-import { hevyDraftFromState, hevyDraftsEqual, type HevyDraft } from "@/lib/hevy-draft";
+import { hevyDraftFromState, hevyDraftsEqual } from "@/lib/hevy-draft";
 
 type PreferencesDraft = SettingsState["preferences"];
 
@@ -64,8 +64,6 @@ export function useSettingsDrafts(state: SettingsState) {
     discardToken,
   };
 }
-
-export type HevyDraftValue = HevyDraft;
 
 function enabledTypeKeys(
   activityTypes: SettingsState["activityTypes"],

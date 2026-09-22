@@ -211,7 +211,7 @@ def test_closed_operation_frees_the_unique_slots():
     conn = make_conn()
     seed_workout(conn, "w1")
     op_id = hevy_db.open_operation(conn, "w1", "replace", 111, [])
-    hevy_db.close_operation(conn, op_id, "done")
+    hevy_db.complete_operation(conn, op_id, "w1", 111, "replace", "replaced", None)
     assert hevy_db.get_open_operation(conn, "w1") is None
     assert hevy_db.open_operation(conn, "w1", "replace", 111, []) is not None
 

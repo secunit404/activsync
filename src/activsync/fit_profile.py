@@ -22,7 +22,6 @@ MESG_NUM: dict[str, int] = {
     definition["name"]: number for number, definition in _MESSAGES.items()
 }
 
-PROFILE_VERSION = "{major}.{minor}".format(**_Profile["version"])
 
 
 def _names(type_name: str) -> dict[int, str]:

@@ -134,12 +134,6 @@ export function categorizeActivityType(typeKey: string): string {
   return OTHER_CATEGORY;
 }
 
-export type ActivityTypeOption = {
-  typeKey: string;
-  label: string;
-  autosync: boolean;
-};
-
 /**
  * Groups activity types by derived category, preserving each group's
  * incoming (already alphabetical-by-label) order and sorting the groups

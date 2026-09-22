@@ -20,8 +20,3 @@ def display_version() -> str:
 def is_release() -> bool:
     return display_version() == __version__
 
-
-def version_label() -> str:
-    """The footer's text. Only a semver release earns the "v" prefix — a branch
-    build's tag is a name, not a version."""
-    return f"v{__version__}" if is_release() else display_version()
