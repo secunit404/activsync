@@ -103,6 +103,7 @@ class AppState(ApiModel):
 PublishStatus = Literal["pending", "held", "published", "missing", "excluded"]
 SortOrder = Literal["newest", "oldest"]
 PageSize = Literal[10, 20, 50, 100]
+HevyStrategy = Literal["replace", "merge", "describe"]
 PUBLISH_STATUSES: tuple[PublishStatus, ...] = (
     "pending",
     "held",
@@ -239,6 +240,9 @@ def create_router(
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=20, alias="pageSize"),
     ) -> ActivitiesPage:
+        # Not a Literal[10, 20, 50, 100] annotation: a query parameter arrives
+        # as a string and pydantic will not coerce one into an int Literal, so
+        # every valid request would 422.
         if page_size not in (10, 20, 50, 100):
             raise HTTPException(
                 status_code=422,

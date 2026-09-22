@@ -9,10 +9,9 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 
 from activsync import config, db, events, hevy_db, view
-from activsync.api_routes import ApiModel
+from activsync.api_routes import ApiModel, HevyStrategy
 from activsync.hevy_client import HevyAuthError
 from activsync.hevy_workout_detail import HevyWorkoutDetail, workout_detail
 
@@ -62,8 +61,8 @@ class HevyQueueActionResult(ApiModel):
     message: str
 
 
-class HevyMatchRequest(BaseModel):
-    strategy: str
+class HevyMatchRequest(ApiModel):
+    strategy: HevyStrategy
 
 
 def _workout_detail(conn: sqlite3.Connection, row: dict) -> dict:
@@ -103,8 +102,6 @@ def create_router(
     def choose_match(
         hevy_id: str, payload: HevyMatchRequest
     ) -> HevyQueueActionResult:
-        if payload.strategy not in ("merge", "replace", "describe"):
-            raise HTTPException(status_code=400, detail="Unknown Hevy match strategy.")
         row = hevy_db.get_workout(conn, hevy_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Unknown Hevy workout.")

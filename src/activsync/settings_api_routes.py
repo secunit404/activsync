@@ -25,7 +25,7 @@ from activsync import (
     update_check,
     view,
 )
-from activsync.api_routes import ApiModel, Connections, UpdateState
+from activsync.api_routes import ApiModel, Connections, HevyStrategy, UpdateState
 from activsync.garmin_client import GarminClient, MfaRequired
 from activsync.hevy_client import HevyAuthError
 from activsync.hevy_description import (
@@ -39,7 +39,6 @@ from activsync.strava_client import StravaAuthError, StravaClient
 logger = logging.getLogger("activsync.settings_api_routes")
 
 SetupStep = onboarding.SetupStep
-HevyStrategy = Literal["replace", "merge", "describe"]
 HevyMatchMode = Literal["review", "automatic"]
 
 

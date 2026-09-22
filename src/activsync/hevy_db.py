@@ -605,12 +605,25 @@ def save_backup(
     original_sets: dict,
     original_fit: bytes | None,
 ) -> None:
-    """Persist the pre-destruction snapshot. INSERT OR IGNORE — the first
-    backup is the truth; later calls must never overwrite it."""
+    """Persist the pre-destruction snapshot. The first backup is the truth and
+    later calls must never overwrite it — with one exception: a NULL
+    original_fit is an absence, not a backup, so a later call carrying a real
+    FIT fills it in.
+
+    That case is reachable. A merge backs up with no FIT because it destroys
+    nothing on the watch side; if resync-fresh then clears the links (it does
+    not clear backups) and the workout is re-applied as a replace, plain
+    INSERT OR IGNORE would keep the NULL and the rebuilt activity would lose
+    its heart rate.
+    """
     conn.execute(
-        """INSERT OR IGNORE INTO merge_backups
+        """INSERT INTO merge_backups
            (garmin_activity_id, hevy_id, original_sets, original_fit, created_at)
-           VALUES (?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(garmin_activity_id) DO UPDATE SET
+               original_fit = excluded.original_fit
+           WHERE merge_backups.original_fit IS NULL
+             AND excluded.original_fit IS NOT NULL""",
         (garmin_activity_id, hevy_id, json.dumps(original_sets), original_fit,
          _now_iso()),
     )

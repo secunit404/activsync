@@ -1,5 +1,6 @@
 """Tests for the Hevy sync data model (hevy_db)."""
 
+import json
 import sqlite3
 import threading
 import time
@@ -440,3 +441,31 @@ def test_statuses_constant_matches_spec():
         "replaced", "uploaded_passive", "linked_existing", "failed",
         "needs_review", "skipped",
     }
+
+
+def test_backup_fills_in_a_watch_fit_the_first_snapshot_lacked():
+    """A merge backs up with no FIT (it destroys nothing on the watch side).
+    If that source is later replaced — after resync-fresh clears the links but
+    not the backups — the replace's FIT must not be dropped by INSERT OR
+    IGNORE, or the rebuilt activity silently loses its heart rate."""
+    conn = make_conn()
+    seed_workout(conn, "w1")
+
+    hevy_db.save_backup(conn, 111, "w1", {"exerciseSets": [{"a": 1}]}, None)
+    hevy_db.save_backup(conn, 111, "w1", {"exerciseSets": [{"b": 2}]}, b"watch-fit")
+
+    backup = hevy_db.get_backup(conn, 111)
+    assert backup["original_fit"] == b"watch-fit"
+    # The first snapshot stays the truth for the sets: it is the pristine
+    # pre-ActivSync state, and the second call saw already-merged sets.
+    assert json.loads(backup["original_sets"]) == {"exerciseSets": [{"a": 1}]}
+
+
+def test_backup_never_overwrites_an_existing_watch_fit():
+    conn = make_conn()
+    seed_workout(conn, "w1")
+
+    hevy_db.save_backup(conn, 111, "w1", {"exerciseSets": []}, b"first-fit")
+    hevy_db.save_backup(conn, 111, "w1", {"exerciseSets": []}, b"second-fit")
+
+    assert hevy_db.get_backup(conn, 111)["original_fit"] == b"first-fit"

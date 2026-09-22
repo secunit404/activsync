@@ -214,7 +214,9 @@ def test_hevy_match_choice_rejects_unknown_strategy(tmp_path):
         "/api/v1/hevy/hevy-match/match", json={"strategy": "erase"}
     )
 
-    assert response.status_code == 400
+    # 422 rather than 400: the strategy is a Literal on the request model, so
+    # pydantic rejects it before the handler runs.
+    assert response.status_code == 422
 
 
 def test_hevy_match_choice_requires_awaiting_state(tmp_path):
