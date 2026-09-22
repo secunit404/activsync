@@ -785,6 +785,9 @@ class MockHevyClient:
                 return workout
         return None
 
+    def get_workout_count(self) -> int | None:
+        return len(dev_hevy_workouts())
+
     def get_workouts_page(self, page: int = 1, page_size: int = 10) -> dict:
         workouts = dev_hevy_workouts() if page == 1 else []
         return {"page": page, "page_count": 1, "workouts": workouts}

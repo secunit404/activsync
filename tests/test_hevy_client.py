@@ -128,3 +128,24 @@ def test_retry_covers_429():
     client = HevyClient(api_key="k")
     adapter = client.session.get_adapter("https://api.hevyapp.com/v1/workouts")
     assert 429 in adapter.max_retries.status_forcelist
+
+
+def test_get_workout_count_reads_the_total(monkeypatch):
+    client = HevyClient(api_key="k")
+    monkeypatch.setattr(client, "_get", lambda path, params=None: {"workout_count": 340})
+    assert client.get_workout_count() == 340
+
+
+@pytest.mark.parametrize("payload", [
+    {},                          # field absent
+    {"workout_count": None},
+    {"workout_count": "many"},   # not an integer
+    {"workout_count": -1},       # not a plausible total
+    "not-a-dict",
+])
+def test_get_workout_count_returns_none_when_unusable(monkeypatch, payload):
+    """A total that cannot be trusted must not bound a scan — callers fall
+    back to the paging the API reports."""
+    client = HevyClient(api_key="k")
+    monkeypatch.setattr(client, "_get", lambda path, params=None: payload)
+    assert client.get_workout_count() is None

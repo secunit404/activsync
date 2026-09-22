@@ -31,12 +31,46 @@ def parse_since(raw: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def workouts_since(client, since_dt: datetime) -> list[dict]:
-    """Page through newest-first Hevy workouts to the requested boundary."""
+PAGE_SIZE = 10
+
+
+def account_workout_count(client) -> int | None:
+    """Total workouts on the Hevy account, or None if it cannot be read.
+
+    Only ever used to bound a scan or label a preview, so an outage here
+    degrades rather than failing the caller.
+    """
+    try:
+        return client.get_workout_count()
+    except Exception as exc:
+        logger.warning("hevy workout count unavailable: %s", exc)
+        return None
+
+
+def _page_bound(total_count: int | None) -> int | None:
+    if total_count is None:
+        return None
+    return max(1, -(-total_count // PAGE_SIZE))
+
+
+def workouts_since(
+    client, since_dt: datetime, total_count: int | None = None,
+) -> list[dict]:
+    """Page through newest-first Hevy workouts to the requested boundary.
+
+    The account total bounds the scan when a page omits ``page_count``, which
+    otherwise reads as "this is the last page" and truncates history well
+    before the boundary. Pass ``total_count`` to reuse a total already
+    fetched; omit it and one is looked up.
+    """
+    if total_count is None:
+        total_count = account_workout_count(client)
+    max_pages = _page_bound(total_count)
+
     collected: list[dict] = []
     page = 1
     while True:
-        data = client.get_workouts_page(page, page_size=10)
+        data = client.get_workouts_page(page, page_size=PAGE_SIZE)
         workouts = data.get("workouts", []) or []
         older_seen = False
         for workout in workouts:
@@ -47,8 +81,12 @@ def workouts_since(client, since_dt: datetime) -> list[dict]:
                 older_seen = True
                 continue
             collected.append(workout)
-        page_count = data.get("page_count", page)
-        if older_seen or page >= page_count or not workouts:
+        if older_seen or not workouts:
+            break
+        bound = data.get("page_count")
+        if not isinstance(bound, int):
+            bound = max_pages
+        if bound is None or page >= bound:
             break
         page += 1
     return collected
@@ -67,12 +105,15 @@ def twin_activity(conn: sqlite3.Connection, workout: dict) -> dict | None:
     return None
 
 
-def preview_items(conn: sqlite3.Connection, client, since_dt: datetime) -> list[dict]:
+def preview_items(
+    conn: sqlite3.Connection, client, since_dt: datetime,
+    total_count: int | None = None,
+) -> list[dict]:
     """Describe the backfill plan without writing any state."""
     cfg = config.load_config(conn)
     now = datetime.now(timezone.utc)
     items: list[dict] = []
-    for workout in workouts_since(client, since_dt):
+    for workout in workouts_since(client, since_dt, total_count=total_count):
         has_mapping_miss = False
         missing_ids: list[str] = []
         hevy_id = workout.get("id")

@@ -185,16 +185,22 @@ def create_router(
             )
         return api_key
 
-    def build_backfill(since: str) -> tuple[list[dict], list[BackfillItem]]:
+    def build_backfill(
+        since: str,
+    ) -> tuple[list[dict], list[BackfillItem], int | None]:
         api_key = require_api_key()
         since_dt = hevy_backfill.parse_since(since)
         if since_dt is None:
             raise HTTPException(
                 status_code=400, detail="Enter the backfill start date as YYYY-MM-DD."
             )
+        client = client_for(api_key)
+        # Read once here: it both bounds the scan's paging and labels the
+        # preview, and a second call would be a wasted round trip.
+        total_count = hevy_backfill.account_workout_count(client)
         try:
             raw_items = hevy_backfill.preview_items(
-                conn, client_for(api_key), since_dt
+                conn, client, since_dt, total_count=total_count
             )
         except HevyAuthError as exc:
             raise HTTPException(
@@ -259,7 +265,7 @@ def create_router(
             )
             for item in raw_items
         ]
-        return raw_items, items
+        return raw_items, items, total_count
 
     @router.get("/device-options", response_model=DeviceOptions)
     def device_options() -> DeviceOptions:
@@ -373,14 +379,16 @@ def create_router(
 
     @router.post("/backfill/preview", response_model=BackfillResult)
     def preview_backfill(payload: BackfillRequest) -> BackfillResult:
-        _, items = build_backfill(payload.since)
+        _, items, total_count = build_backfill(payload.since)
         count = len(items)
-        message = (
-            f"{count} workout{'s' if count != 1 else ''} found. "
-            "Nothing has been written yet."
-            if count
-            else f"No Hevy workouts found since {payload.since}."
-        )
+        if not count:
+            message = f"No Hevy workouts found since {payload.since}."
+        else:
+            scale = f", of {total_count} on your Hevy account" if total_count else ""
+            message = (
+                f"{count} workout{'s' if count != 1 else ''} found{scale}. "
+                "Nothing has been written yet."
+            )
         return BackfillResult(
             message=message,
             since=payload.since,
@@ -393,7 +401,7 @@ def create_router(
     def run_backfill(
         payload: BackfillRequest, background_tasks: BackgroundTasks
     ) -> BackfillResult:
-        raw_items, items = build_backfill(payload.since)
+        raw_items, items, _ = build_backfill(payload.since)
         selected_items = _select_backfill_items(raw_items, payload.hevy_ids)
         matched = hevy_backfill.run_items(conn, selected_items)
         if process_hevy_workout is not None:

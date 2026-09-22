@@ -109,6 +109,21 @@ class HevyClient:
         logger.warning("malformed workout response for %s: %.200s", workout_id, data)
         return None
 
+    def get_workout_count(self) -> int | None:
+        """Total workouts on the account, or None when the API does not give a
+        usable number. None means "unknown", never "zero" — callers use it only
+        to bound a scan, so a bad value must degrade to the API's own paging
+        rather than truncate history."""
+        data = self._get("/workouts/count")
+        if not isinstance(data, dict):
+            logger.warning("malformed workout count response: %.200s", data)
+            return None
+        count = data.get("workout_count")
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            logger.warning("unusable workout_count: %.200s", count)
+            return None
+        return count
+
     def get_workouts_page(self, page: int = 1, page_size: int = 10) -> dict:
         return self._get("/workouts", {"page": page, "pageSize": page_size})
 
