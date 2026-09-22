@@ -103,3 +103,15 @@ def test_update_checker_refreshes_on_start_then_stops():
         checker.stop()
 
     assert update_check.get_status().latest == "v5.0.0"
+
+
+def test_checker_does_not_start_on_a_branch_build(monkeypatch):
+    monkeypatch.setenv("ACTIVSYNC_BUILD", "dev-feat-hevy-react-frontend")
+    calls: list[int] = []
+    checker = update_check.UpdateChecker(fetcher=lambda: calls.append(1) or "v9.9.9")
+
+    checker.start()
+    try:
+        assert calls == []
+    finally:
+        checker.stop()

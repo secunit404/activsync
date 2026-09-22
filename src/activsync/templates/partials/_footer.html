@@ -1,6 +1,6 @@
 {% set status = update_status() %}
 <footer class="app-footer">
-    <span class="app-footer-version">ActivSync v{{ app_version }}</span>
+    <span class="app-footer-version" title="ActivSync {{ app_version }}">ActivSync {{ app_version }}</span>
     {% if status.update_available %}
     <a class="app-footer-update" href="{{ status.release_url }}"
        target="_blank" rel="noopener"

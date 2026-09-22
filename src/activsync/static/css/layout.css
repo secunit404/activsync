@@ -125,6 +125,13 @@
     font-size: 0.74rem;
 }
 
+.app-footer-version {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .app-footer a { color: var(--muted); font-weight: 600; }
 
 .app-footer a:hover { color: var(--ink); }

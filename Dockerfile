@@ -10,6 +10,9 @@ LABEL org.opencontainers.image.title="ActivSync" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"
 
+# The app reports this in the footer: a release version, or a dev image's branch tag.
+ENV ACTIVSYNC_BUILD="${VERSION}"
+
 WORKDIR /app
 
 COPY pyproject.toml ./

@@ -23,7 +23,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from activsync import __version__, config, db, dev_mock, events, logging_setup, sync, timeutil, update_check, view
+from activsync import __version__, build_info, config, db, dev_mock, events, logging_setup, sync, timeutil, update_check, view
 from activsync.garmin_client import (
     GarminClient,
     MfaRequired,
@@ -134,7 +134,7 @@ def create_app(conn: sqlite3.Connection, lifespan=None) -> FastAPI:
     # Available to every template without threading it through each route's
     # context, so the dev banner and tab-title marker render app-wide.
     templates.env.globals["dev_mode"] = _mock_mode()
-    templates.env.globals["app_version"] = __version__
+    templates.env.globals["app_version"] = build_info.version_label()
     templates.env.globals["asset_version"] = _asset_version
     templates.env.globals["update_status"] = update_check.get_status
     # Single-user app: at most one Garmin login can be mid-MFA-challenge at a
