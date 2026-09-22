@@ -4,7 +4,18 @@ __pycache__/
 *.pyc
 *.egg-info/
 .pytest_cache/
+.coverage
+htmlcov/
+
+# React / Node
+node_modules/
 build/
+.react-router/
+.vite/
+*.tsbuildinfo
+coverage/
+npm-debug.log*
+src/activsync/web/
 
 # Data & secrets — NEVER commit (real DB holds Garmin/Strava tokens)
 *.db
@@ -13,9 +24,15 @@ build/
 data/
 .env
 
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+
 # OS / editor
 .DS_Store
 .vscode/
+.idea/
 
 # AI agents & planning docs — LOCAL ONLY
 docs/
@@ -25,3 +42,7 @@ docs/
 AGENTS.md
 CLAUDE.md
 .github/copilot-instructions.md
+.stitch/
+.agents/
+.mcp.json
+skills-lock.json
