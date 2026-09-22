@@ -8,9 +8,9 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from garmin_auth import GarminAuth, RateLimiter
 from garminconnect import Garmin, GarminConnectAuthenticationError
 
+from activsync.rate_limit import RateLimiter
 from activsync.timeutil import parse_iso_utc
 
 logger = logging.getLogger("activsync.garmin_client")
@@ -108,32 +108,59 @@ class GarminSessionExpired(RuntimeError):
 def get_client(token_dir: str) -> Garmin:
     """Open a cached Garmin session without ever starting a credential login.
 
-    ``GarminAuth.login()`` normally falls back from rejected cached tokens to
-    the account email/password. That fallback can initiate an MFA challenge,
-    which is appropriate for an explicit Connect/Reconnect request but unsafe
-    in an unattended poller. Clearing the credential fields after construction
-    also prevents GARMIN_EMAIL/GARMIN_PASSWORD environment variables from
-    silently re-enabling that fallback.
+    The client is constructed with no email or password, so the credential
+    branch of ``login()`` cannot run and an unattended poller cannot trigger an
+    MFA challenge it has no way to answer. Building it without credentials also
+    keeps GARMIN_EMAIL/GARMIN_PASSWORD from silently re-enabling that fallback.
     """
-    auth = GarminAuth(token_dir=token_dir)
-    auth.email = ""
-    auth.password = ""
+    client = Garmin()
     try:
-        return auth.login()
+        client.login(tokenstore=token_dir)
     except GarminConnectAuthenticationError as exc:
         raise GarminSessionExpired(
             "Garmin session expired; reconnect Garmin to resume sync."
         ) from exc
+    return client
+
+
+class PendingLogin:
+    """A login paused on an MFA challenge, resumable with the user's code.
+
+    Holds the client and the opaque state ``login()`` handed back, so a wrong
+    code can be retried against the same in-flight challenge instead of
+    restarting the login (garminconnect 0.3.12 keeps that state alive).
+    """
+
+    def __init__(self, client: Garmin, client_state: object, token_dir: str) -> None:
+        self.client = client
+        self.client_state = client_state
+        self.token_dir = token_dir
+
+    def resume_login(self, mfa_code: str) -> Garmin:
+        self.client.resume_login(self.client_state, mfa_code)
+        _persist_tokens(self.client, self.token_dir)
+        return self.client
+
+
+def _persist_tokens(client: Garmin, token_dir: str) -> None:
+    """Write the session to the token store.
+
+    ``login()`` persists on its own, but the MFA resume path does not, so a
+    completed challenge would otherwise be forgotten at restart. The transport
+    object owns the hardened writer (0o600 in a 0o700 directory) and there is
+    no public wrapper for it.
+    """
+    client.client.dump(token_dir)
 
 
 class MfaRequired(Exception):
     """Raised by begin_login when Garmin challenges the login with a one-time code.
 
-    Carries the in-flight GarminAuth so the caller can complete the challenge
-    later via complete_login(), without restarting the login from scratch.
+    Carries the paused login so the caller can complete the challenge later via
+    complete_login(), without restarting it from scratch.
     """
 
-    def __init__(self, pending_auth: GarminAuth):
+    def __init__(self, pending_auth: PendingLogin):
         super().__init__("Garmin requires a one-time code to complete login")
         self.pending_auth = pending_auth
 
@@ -145,16 +172,16 @@ def begin_login(email: str, password: str, token_dir: str) -> Garmin:
     catch MfaRequired hold its .pending_auth and call complete_login() once the
     user has supplied a code (e.g. from a web form).
     """
-    auth = GarminAuth(email=email, password=password, token_dir=token_dir, return_on_mfa=True)
-    result = auth.login()
-    if result == "needs_mfa":
+    client = Garmin(email=email, password=password, return_on_mfa=True)
+    status, client_state = client.login(tokenstore=token_dir)
+    if status == "needs_mfa":
         logger.info("garmin login requires MFA for %s", email)
-        raise MfaRequired(auth)
+        raise MfaRequired(PendingLogin(client, client_state, token_dir))
     logger.info("garmin login succeeded for %s", email)
-    return result
+    return client
 
 
-def complete_login(pending_auth: GarminAuth, mfa_code: str) -> Garmin:
+def complete_login(pending_auth: PendingLogin, mfa_code: str) -> Garmin:
     """Finish a login that raised MfaRequired, using the code the user supplied."""
     result = pending_auth.resume_login(mfa_code)
     logger.info("garmin MFA login completed")
@@ -298,10 +325,9 @@ class GarminClient:
 
     def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
         """PUT the full exercise-set list (atomic replace of ALL sets)."""
-        url = f"/activity-service/activity/{activity_id}/exerciseSets"
         try:
-            _limiter.call(self._client.client.request, "PUT", "connectapi", url,
-                          json=payload)
+            _limiter.call(self._client.set_activity_exercise_sets,
+                          activity_id, payload)
         except Exception as exc:
             if _is_subcategory_rejection(exc):
                 raise SubcategoryRejected(str(exc)) from exc

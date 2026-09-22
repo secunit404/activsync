@@ -438,7 +438,8 @@ def garmin_activity_types() -> list[dict]:
 
 
 class _FakePendingAuth:
-    """Stand-in for ``garmin_auth.GarminAuth`` during a simulated MFA challenge."""
+    """Stand-in for :class:`~activsync.garmin_client.PendingLogin` during a
+    simulated MFA challenge."""
 
     def resume_login(self, mfa_code: str):
         if mfa_code == MFA_REJECT_CODE:

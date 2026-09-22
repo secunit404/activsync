@@ -10,6 +10,7 @@ from activsync.garmin_client import (
     GarminClient,
     GarminSessionExpired,
     MfaRequired,
+    PendingLogin,
     begin_login,
     complete_login,
     get_client,
@@ -123,74 +124,90 @@ def test_update_activity_metadata_sets_name_and_description(mock_limiter_call):
     raw_client.set_activity_description.assert_called_once_with(12345, "Easy Z2")
 
 
-@patch("activsync.garmin_client.GarminAuth")
-def test_begin_login_returns_client_on_success(mock_garmin_auth_cls):
-    mock_auth = MagicMock()
+@patch("activsync.garmin_client.Garmin")
+def test_begin_login_returns_client_on_success(mock_garmin_cls):
     mock_client = MagicMock()
-    mock_auth.login.return_value = mock_client
-    mock_garmin_auth_cls.return_value = mock_auth
+    mock_client.login.return_value = (None, None)
+    mock_garmin_cls.return_value = mock_client
 
     result = begin_login("me@example.com", "pw", "/tmp/tokens")
 
     assert result is mock_client
-    mock_garmin_auth_cls.assert_called_once_with(
-        email="me@example.com", password="pw", token_dir="/tmp/tokens", return_on_mfa=True,
+    mock_garmin_cls.assert_called_once_with(
+        email="me@example.com", password="pw", return_on_mfa=True,
     )
+    mock_client.login.assert_called_once_with(tokenstore="/tmp/tokens")
 
 
-@patch("activsync.garmin_client.GarminAuth")
-def test_begin_login_raises_mfa_required_with_pending_auth(mock_garmin_auth_cls):
-    mock_auth = MagicMock()
-    mock_auth.login.return_value = "needs_mfa"
-    mock_garmin_auth_cls.return_value = mock_auth
+@patch("activsync.garmin_client.Garmin")
+def test_begin_login_raises_mfa_required_with_pending_auth(mock_garmin_cls):
+    mock_client = MagicMock()
+    mock_client.login.return_value = ("needs_mfa", {"state": 1})
+    mock_garmin_cls.return_value = mock_client
 
     with pytest.raises(MfaRequired) as exc_info:
         begin_login("me@example.com", "pw", "/tmp/tokens")
 
-    assert exc_info.value.pending_auth is mock_auth
+    pending = exc_info.value.pending_auth
+    assert pending.client is mock_client
+    assert pending.client_state == {"state": 1}
+    assert pending.token_dir == "/tmp/tokens"
 
 
-def test_complete_login_calls_resume_login_on_pending_auth():
-    mock_auth = MagicMock()
+def test_complete_login_resumes_the_paused_challenge():
     mock_client = MagicMock()
-    mock_auth.resume_login.return_value = mock_client
+    pending = PendingLogin(mock_client, {"state": 1}, "/tmp/tokens")
 
-    result = complete_login(mock_auth, "123456")
+    result = complete_login(pending, "123456")
 
     assert result is mock_client
-    mock_auth.resume_login.assert_called_once_with("123456")
+    mock_client.resume_login.assert_called_once_with({"state": 1}, "123456")
 
 
-@patch("activsync.garmin_client.GarminAuth")
-def test_get_client_uses_cached_session_without_credentials(mock_garmin_auth_cls):
-    mock_auth = MagicMock()
+def test_complete_login_persists_tokens_so_mfa_survives_restart():
+    """login() writes the token store itself, but the MFA resume path does not."""
     mock_client = MagicMock()
+    pending = PendingLogin(mock_client, {"state": 1}, "/tmp/tokens")
 
-    def cached_login_only():
-        assert mock_auth.email == ""
-        assert mock_auth.password == ""
-        return mock_client
+    complete_login(pending, "123456")
 
-    mock_auth.login.side_effect = cached_login_only
-    mock_garmin_auth_cls.return_value = mock_auth
+    mock_client.client.dump.assert_called_once_with("/tmp/tokens")
+
+
+def test_complete_login_does_not_persist_when_the_code_is_rejected():
+    mock_client = MagicMock()
+    mock_client.resume_login.side_effect = ValueError("bad code")
+    pending = PendingLogin(mock_client, {"state": 1}, "/tmp/tokens")
+
+    with pytest.raises(ValueError):
+        complete_login(pending, "000000")
+
+    mock_client.client.dump.assert_not_called()
+
+
+@patch("activsync.garmin_client.Garmin")
+def test_get_client_uses_cached_session_without_credentials(mock_garmin_cls):
+    """No credentials on the client means the poller cannot trigger an MFA
+    challenge it has no way to answer, whatever GARMIN_* env vars are set."""
+    mock_client = MagicMock()
+    mock_garmin_cls.return_value = mock_client
 
     assert get_client("/tmp/tokens") is mock_client
-    mock_garmin_auth_cls.assert_called_once_with(token_dir="/tmp/tokens")
+
+    mock_garmin_cls.assert_called_once_with()
+    mock_client.login.assert_called_once_with(tokenstore="/tmp/tokens")
 
 
-@patch("activsync.garmin_client.GarminAuth")
+@patch("activsync.garmin_client.Garmin")
 def test_get_client_requires_manual_reconnect_when_cached_session_expires(
-    mock_garmin_auth_cls,
+    mock_garmin_cls,
 ):
-    mock_auth = MagicMock()
-    mock_auth.login.side_effect = GarminConnectAuthenticationError("no cached tokens")
-    mock_garmin_auth_cls.return_value = mock_auth
+    mock_client = MagicMock()
+    mock_client.login.side_effect = GarminConnectAuthenticationError("no cached tokens")
+    mock_garmin_cls.return_value = mock_client
 
     with pytest.raises(GarminSessionExpired, match="reconnect Garmin"):
         get_client("/tmp/tokens")
-
-    assert mock_auth.email == ""
-    assert mock_auth.password == ""
 
 
 def test_fetch_activity_types_maps_dedupes_and_sorts_by_label():

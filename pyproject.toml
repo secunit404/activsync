@@ -2,12 +2,11 @@
 name = "activsync"
 version = "1.2.4"
 description = "Activity synchronization and publishing control"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "garminconnect>=0.3.6",
-    "garmin-auth>=0.3.0",
+    "garminconnect>=0.3.16",
     "requests>=2.31",
     "tzdata>=2024.1",
     "garmin-fit-sdk>=21.208",

@@ -32,18 +32,7 @@ class StubRaw:
         self.user_profile = {}
         self.max_metrics = []
         self.heart_rates = {"heartRateValues": []}
-        self.request_exc = None
-
-        outer = self
-
-        class _Inner:
-            def request(self, method, subdomain, url, **kwargs):
-                outer.calls.append(("request", method, url, kwargs))
-                if outer.request_exc is not None:
-                    raise outer.request_exc
-                return None
-
-        self.client = _Inner()
+        self.set_sets_exc = None
 
     def upload_activity(self, path):
         self.calls.append(("upload_activity", path))
@@ -54,6 +43,11 @@ class StubRaw:
     def get_activity_exercise_sets(self, activity_id):
         self.calls.append(("get_activity_exercise_sets", activity_id))
         return {"exerciseSets": []}
+
+    def set_activity_exercise_sets(self, activity_id, payload):
+        self.calls.append(("set_activity_exercise_sets", activity_id, payload))
+        if self.set_sets_exc is not None:
+            raise self.set_sets_exc
 
     def set_activity_name(self, activity_id, title):
         self.calls.append(("set_activity_name", activity_id, title))
@@ -150,15 +144,14 @@ def test_put_exercise_sets_sends_payload():
     raw = StubRaw()
     client = GarminClient(raw)
     client.put_exercise_sets(99, {"exerciseSets": [1]})
-    kind, method, url, kwargs = raw.calls[-1]
-    assert (kind, method) == ("request", "PUT")
-    assert url == "/activity-service/activity/99/exerciseSets"
-    assert kwargs["json"] == {"exerciseSets": [1]}
+    assert raw.calls[-1] == (
+        "set_activity_exercise_sets", 99, {"exerciseSets": [1]},
+    )
 
 
 def test_put_exercise_sets_subcategory_rejection():
     raw = StubRaw()
-    raw.request_exc = RuntimeError('400 Bad Request: "Invalid Sub-Category provided"')
+    raw.set_sets_exc = RuntimeError('400 Bad Request: "Invalid Sub-Category provided"')
     client = GarminClient(raw)
     with pytest.raises(SubcategoryRejected):
         client.put_exercise_sets(99, {"exerciseSets": []})
@@ -166,7 +159,7 @@ def test_put_exercise_sets_subcategory_rejection():
 
 def test_put_exercise_sets_404_raises_activity_gone():
     raw = StubRaw()
-    raw.request_exc = RuntimeError("404 Not Found for url")
+    raw.set_sets_exc = RuntimeError("404 Not Found for url")
     client = GarminClient(raw)
     with pytest.raises(ActivityGone):
         client.put_exercise_sets(99, {"exerciseSets": []})
@@ -174,7 +167,7 @@ def test_put_exercise_sets_404_raises_activity_gone():
 
 def test_put_exercise_sets_other_errors_pass_through():
     raw = StubRaw()
-    raw.request_exc = RuntimeError("500 Internal Server Error")
+    raw.set_sets_exc = RuntimeError("500 Internal Server Error")
     client = GarminClient(raw)
     with pytest.raises(RuntimeError):
         client.put_exercise_sets(99, {"exerciseSets": []})
