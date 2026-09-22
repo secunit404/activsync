@@ -8,12 +8,80 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from garminconnect import Garmin
-from garmin_auth import GarminAuth, RateLimiter
+from garminconnect import (
+    Garmin,
+    GarminConnectAuthenticationError,
+    GarminConnectNotFoundError,
+)
+
+from activsync.rate_limit import RateLimiter
+from activsync.timeutil import parse_timestamp
 
 logger = logging.getLogger("activsync.garmin_client")
 _limiter = RateLimiter(delay=1.0, max_retries=3, base_wait=30)
 _PAGE_SIZE = 20
+
+
+class GarminUploadRejected(RuntimeError):
+    """Garmin definitively rejected a FIT upload (failures, no successes)."""
+
+
+class SubcategoryRejected(Exception):
+    """Garmin 400-rejected an exerciseSets payload over a (category,
+    subcategory) pair. The PUT is atomic, so the whole payload failed; the
+    response does not identify which pair was at fault."""
+
+
+class ActivityGone(Exception):
+    """The target activity no longer exists on Garmin (404)."""
+
+
+def _sanitize_activity_id(raw: object) -> int | None:
+    """Normalize an activity id from the upload API. Garmin occasionally
+    returns internalId as a string wrapped in quote characters (upstream
+    hevy2garmin #153); stored verbatim, every later call 404s."""
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw
+    cleaned = str(raw).strip().strip("'\"").strip()
+    try:
+        return int(cleaned)
+    except (ValueError, TypeError):
+        return None
+
+
+def _is_subcategory_rejection(exc: Exception) -> bool:
+    """A 400 whose body complains about the exercise sub-category (upstream
+    finding: fit_tool-valid pairs can still be rejected by the API)."""
+    msg = str(exc).lower()
+    return "sub-category" in msg or "subcategory" in msg or "invalid sub" in msg
+
+
+def _is_not_found(exc: Exception) -> bool:
+    """A definitive 404, read from the status code rather than the message.
+
+    garminconnect stringifies transport failures as "Connection error: {e}"
+    with the request URL embedded, and that URL carries the activity id — so a
+    substring match answered True for any id containing "404" whenever Garmin
+    was merely down. Callers escalate ActivityGone to destructive recovery
+    (completing a replace, offering resync-fresh), so it must never stand in
+    for an outage.
+    """
+    if isinstance(exc, GarminConnectNotFoundError):
+        return True
+    response = _exception_response(exc)
+    return getattr(response, "status_code", None) == 404
+
+
+def _exception_response(exc: Exception):
+    """Find an HTTP response on an exception or its immediate wrapper chain."""
+    for candidate in (exc, exc.__cause__, exc.__context__):
+        if candidate is not None:
+            response = getattr(candidate, "response", None)
+            if response is not None:
+                return response
+    return None
 
 
 @dataclass
@@ -46,20 +114,66 @@ class ActivityRecord:
     total_volume: float | None = None      # strength (kg)
 
 
-def get_client(email: str, password: str, token_dir: str) -> Garmin:
-    """Get an authenticated Garmin client using garmin-auth's cached-token login."""
-    auth = GarminAuth(email=email, password=password, token_dir=token_dir)
-    return auth.login()
+class GarminSessionExpired(RuntimeError):
+    """Cached Garmin authentication is unavailable and needs user attention."""
+
+
+def get_client(token_dir: str) -> Garmin:
+    """Open a cached Garmin session without ever starting a credential login.
+
+    The client is constructed with no email or password, so the credential
+    branch of ``login()`` cannot run and an unattended poller cannot trigger an
+    MFA challenge it has no way to answer. Building it without credentials also
+    keeps GARMIN_EMAIL/GARMIN_PASSWORD from silently re-enabling that fallback.
+    """
+    client = Garmin()
+    try:
+        client.login(tokenstore=token_dir)
+    except GarminConnectAuthenticationError as exc:
+        raise GarminSessionExpired(
+            "Garmin session expired; reconnect Garmin to resume sync."
+        ) from exc
+    return client
+
+
+class PendingLogin:
+    """A login paused on an MFA challenge, resumable with the user's code.
+
+    Holds the client and the opaque state ``login()`` handed back, so a wrong
+    code can be retried against the same in-flight challenge instead of
+    restarting the login (garminconnect 0.3.12 keeps that state alive).
+    """
+
+    def __init__(self, client: Garmin, client_state: object, token_dir: str) -> None:
+        self.client = client
+        self.client_state = client_state
+        self.token_dir = token_dir
+
+    def resume_login(self, mfa_code: str) -> Garmin:
+        self.client.resume_login(self.client_state, mfa_code)
+        _persist_tokens(self.client, self.token_dir)
+        return self.client
+
+
+def _persist_tokens(client: Garmin, token_dir: str) -> None:
+    """Write the session to the token store.
+
+    ``login()`` persists on its own, but the MFA resume path does not, so a
+    completed challenge would otherwise be forgotten at restart. The transport
+    object owns the hardened writer (0o600 in a 0o700 directory) and there is
+    no public wrapper for it.
+    """
+    client.client.dump(token_dir)
 
 
 class MfaRequired(Exception):
     """Raised by begin_login when Garmin challenges the login with a one-time code.
 
-    Carries the in-flight GarminAuth so the caller can complete the challenge
-    later via complete_login(), without restarting the login from scratch.
+    Carries the paused login so the caller can complete the challenge later via
+    complete_login(), without restarting it from scratch.
     """
 
-    def __init__(self, pending_auth: GarminAuth):
+    def __init__(self, pending_auth: PendingLogin):
         super().__init__("Garmin requires a one-time code to complete login")
         self.pending_auth = pending_auth
 
@@ -67,33 +181,24 @@ class MfaRequired(Exception):
 def begin_login(email: str, password: str, token_dir: str) -> Garmin:
     """Start a Garmin login, raising MfaRequired if a one-time code is needed.
 
-    Unlike get_client(), this never blocks on a synchronous input() prompt —
-    callers that catch MfaRequired hold its .pending_auth and call
-    complete_login() once the user has supplied a code (e.g. from a web form).
+    This is the only path allowed to use account credentials. Callers that
+    catch MfaRequired hold its .pending_auth and call complete_login() once the
+    user has supplied a code (e.g. from a web form).
     """
-    auth = GarminAuth(email=email, password=password, token_dir=token_dir, return_on_mfa=True)
-    result = auth.login()
-    if result == "needs_mfa":
+    client = Garmin(email=email, password=password, return_on_mfa=True)
+    status, client_state = client.login(tokenstore=token_dir)
+    if status == "needs_mfa":
         logger.info("garmin login requires MFA for %s", email)
-        raise MfaRequired(auth)
+        raise MfaRequired(PendingLogin(client, client_state, token_dir))
     logger.info("garmin login succeeded for %s", email)
-    return result
+    return client
 
 
-def complete_login(pending_auth: GarminAuth, mfa_code: str) -> Garmin:
+def complete_login(pending_auth: PendingLogin, mfa_code: str) -> Garmin:
     """Finish a login that raised MfaRequired, using the code the user supplied."""
     result = pending_auth.resume_login(mfa_code)
     logger.info("garmin MFA login completed")
     return result
-
-
-def _parse_garmin_time(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
 
 
 class GarminClient:
@@ -101,6 +206,15 @@ class GarminClient:
 
     def __init__(self, raw_client: Garmin):
         self._client = raw_client
+
+    def _activity_call(self, activity_id: int, func, *args):
+        """Call an activity endpoint and normalize a real 404."""
+        try:
+            return _limiter.call(func, activity_id, *args)
+        except Exception as exc:
+            if _is_not_found(exc):
+                raise ActivityGone(f"activity {activity_id} not found") from exc
+            raise
 
     def fetch_recent_activities(self, lookback_days: int) -> list[ActivityRecord]:
         cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
@@ -115,7 +229,7 @@ class GarminClient:
             reached_cutoff = False
             for act in batch:
                 start_time = act.get("startTimeGMT", "")
-                start_dt = _parse_garmin_time(start_time)
+                start_dt = parse_timestamp(start_time)
                 if start_dt is not None and start_dt < cutoff:
                     reached_cutoff = True
                     break
@@ -168,6 +282,135 @@ class GarminClient:
     def update_activity_metadata(self, garmin_activity_id: int, title: str, description: str) -> None:
         _limiter.call(self._client.set_activity_name, garmin_activity_id, title)
         _limiter.call(self._client.set_activity_description, garmin_activity_id, description)
+
+    # -- Hevy integration additions -------------------------------------
+
+    def upload_fit(self, fit_path: str) -> dict:
+        """Upload a FIT file; returns {"upload_id", "activity_id"}.
+
+        activity_id is None when Garmin's response omits it (import still
+        processing) — resolution is the operation journal's job, never a
+        start-time retry loop here. Definite rejection raises
+        GarminUploadRejected."""
+        from pathlib import Path
+
+        if not Path(fit_path).exists():
+            raise FileNotFoundError(f"FIT file not found: {fit_path}")
+        try:
+            resp = _limiter.call(self._client.upload_activity, str(fit_path))
+        except Exception as exc:
+            response = _exception_response(exc)
+            status = getattr(response, "status_code", None)
+            body = getattr(response, "text", "") if response is not None else ""
+            # The phase-0 spike proved this is a definite non-import, not an
+            # ambiguous outcome that belongs in submission_unknown.
+            if status == 409 or "duplicate activity" in str(exc).lower():
+                raise GarminUploadRejected(
+                    f"Garmin rejected upload: {body or exc}") from exc
+            raise
+
+        upload_id = None
+        activity_id = None
+        if isinstance(resp, dict):
+            detail = resp.get("detailedImportResult", {})
+            upload_id = detail.get("uploadId")
+            successes = detail.get("successes", [])
+            if successes and isinstance(successes, list):
+                activity_id = _sanitize_activity_id(successes[0].get("internalId"))
+            failures = detail.get("failures", [])
+            if failures and not activity_id and not successes:
+                raise GarminUploadRejected(f"Garmin rejected upload: {failures}")
+        logger.info("fit upload: upload_id=%s activity_id=%s", upload_id, activity_id)
+        return {"upload_id": upload_id, "activity_id": activity_id}
+
+    def get_exercise_sets(self, activity_id: int) -> dict:
+        return self._activity_call(
+            activity_id, self._client.get_activity_exercise_sets)
+
+    def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
+        """PUT the full exercise-set list (atomic replace of ALL sets)."""
+        try:
+            _limiter.call(self._client.set_activity_exercise_sets,
+                          activity_id, payload)
+        except Exception as exc:
+            if _is_subcategory_rejection(exc):
+                raise SubcategoryRejected(str(exc)) from exc
+            if _is_not_found(exc):
+                raise ActivityGone(f"activity {activity_id} not found") from exc
+            raise
+
+    def set_title(self, activity_id: int, title: str) -> None:
+        self._activity_call(activity_id, self._client.set_activity_name, title)
+
+    def set_description(self, activity_id: int, description: str) -> None:
+        self._activity_call(
+            activity_id, self._client.set_activity_description, description)
+
+    def delete_activity(self, activity_id: int) -> None:
+        _limiter.call(self._client.delete_activity, activity_id)
+        logger.info("deleted garmin activity %s", activity_id)
+
+    def get_daily_heart_rates(self, date_str: str) -> dict:
+        return _limiter.call(self._client.get_heart_rates, date_str)
+
+    def fetch_user_profile(self) -> dict:
+        """User physiology for calorie estimation: weight (grams → kg), birth
+        year, sex, and VO2max from the max-metrics endpoint. Missing pieces
+        come back as None — hevy_profile fills defaults."""
+        user_data = {}
+        try:
+            user_data = _limiter.call(self._client.get_user_profile).get("userData") or {}
+        except Exception as exc:
+            logger.warning("user profile fetch failed: %s", exc)
+
+        weight = user_data.get("weight")
+        weight_kg = round(float(weight) / 1000.0, 1) if weight else None
+        birth_date = user_data.get("birthDate") or ""
+        try:
+            birth_year = int(str(birth_date)[:4])
+        except (ValueError, TypeError):
+            birth_year = None
+        gender = user_data.get("gender")
+        sex = str(gender).lower() if gender else None
+
+        vo2max = None
+        try:
+            today = datetime.now(timezone.utc).date().isoformat()
+            metrics = _limiter.call(self._client.get_max_metrics, today)
+            entries = metrics if isinstance(metrics, list) else [metrics]
+            for entry in entries:
+                generic = (entry or {}).get("generic") or {}
+                value = generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue")
+                if value:
+                    vo2max = float(value)
+                    break
+        except Exception as exc:
+            logger.debug("vo2max fetch failed: %s", exc)
+
+        return {"weight_kg": weight_kg, "birth_year": birth_year,
+                "sex": sex, "vo2max": vo2max}
+
+    def list_activities_near(self, start_time: str) -> list[dict]:
+        """ALL activities (raw dicts) in start_time's date ±1 day — the
+        journal's resolution primitive needs metadata (type, start, duration)
+        for strict candidate matching, not bare ids. Failures PROPAGATE."""
+        target = parse_timestamp(start_time)
+        if target is None:
+            raise ValueError(f"unparseable start_time: {start_time!r}")
+        date_from = (target - timedelta(days=1)).date().isoformat()
+        date_to = (target + timedelta(days=1)).date().isoformat()
+        activities = _limiter.call(
+            self._client.get_activities_by_date, date_from, date_to)
+        return list(activities or [])
+
+    def list_activity_ids_near(self, start_time: str) -> list[int]:
+        """ALL activity ids in start_time's date ±1 day, every type — the
+        operation journal's pre/post-upload snapshot primitive. Failures
+        PROPAGATE: an outage must never read as an empty snapshot, or a later
+        submission_unknown diff would adopt the wrong activity."""
+        return [int(act["activityId"])
+                for act in self.list_activities_near(start_time)
+                if act.get("activityId") is not None]
 
     def fetch_activity_types(self) -> list[dict]:
         """Garmin's canonical activity type taxonomy, as

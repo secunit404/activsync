@@ -2,16 +2,14 @@
 name = "activsync"
 version = "1.3.0"
 description = "Activity synchronization and publishing control"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "jinja2>=3.1",
-    "python-multipart>=0.0.9",
-    "garminconnect>=0.3.6",
-    "garmin-auth>=0.3.0",
+    "garminconnect>=0.3.16",
     "requests>=2.31",
     "tzdata>=2024.1",
+    "garmin-fit-sdk>=21.208",
 ]
 
 [project.optional-dependencies]
@@ -28,4 +26,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-activsync = ["templates/*.html", "templates/partials/*.html", "templates/partials/*.svg", "static/*", "static/css/*.css", "static/js/*.js"]
+activsync = ["static/favicon.png", "static/apple-touch-icon.png", "web/*", "web/assets/*"]

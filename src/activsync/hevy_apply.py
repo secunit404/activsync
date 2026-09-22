@@ -1,0 +1,685 @@
+"""Hevy sync engine, part 2: strategy execution + operation journal.
+
+Split from hevy_sync.py (file-size cap): the pure "apply this workout to
+Garmin" machinery — the exerciseSets payload builder (ported from upstream
+merge.py), description generation (ported from upstream garmin.py), the four
+strategy executors, and the crash-safe operation state machine. hevy_sync
+owns ingestion, matching, and the per-workout decision flow, and re-exports
+this module's public names.
+"""
+
+from __future__ import annotations
+
+import json
+import tempfile
+import logging
+import sqlite3
+from datetime import timedelta
+
+from activsync import db, hevy_db, hr_sources
+from activsync.hevy_profile import PROFILE_DEFAULTS
+from activsync.timeutil import parse_timestamp
+from activsync.hevy_description import generate_description, generate_title
+from activsync.fit_builder import (
+    MAX_SCALE,
+    MIN_SCALE,
+    REST_BETWEEN_EXERCISES_S,
+    REST_BETWEEN_SETS_S,
+    WARMUP_SET_S,
+    WORKING_SET_S,
+    Profile,
+    ResolvedExercise,
+    build_fit,
+    identity_from_config,
+    identity_from_fit,
+    new_fallback_identity,
+)
+from activsync.garmin_client import (
+    ActivityGone,
+    GarminClient,
+    GarminUploadRejected,
+    SubcategoryRejected,
+    _is_not_found,
+)
+from activsync.fit_profile import CATEGORY_NAMES, subcategory_name
+from activsync.hevy_mapper import (
+    UNKNOWN_CATEGORY,
+    MappingMiss,
+    lookup_exercise,
+)
+
+logger = logging.getLogger("activsync.hevy_apply")
+
+
+def resolve_exercises(
+    conn: sqlite3.Connection, workout_payload: dict
+) -> list[ResolvedExercise]:
+    """Resolve every exercise or raise MappingMiss on the first unmapped one."""
+    resolved: list[ResolvedExercise] = []
+    for exercise in workout_payload.get("exercises", []):
+        category, subcategory, title = lookup_exercise(
+            conn, exercise.get("title", ""), exercise.get("exercise_template_id"))
+        resolved.append(ResolvedExercise(
+            title=title, category=category, subcategory=subcategory,
+            sets=exercise.get("sets", [])))
+    return resolved
+
+
+# -- profile / identity helpers --------------------------------------------
+
+def _profile_from_cfg(cfg: dict) -> Profile:
+    """Profile for calorie estimation: cached Garmin values overridden
+    field-by-field by the user's manual override, defaults as last resort.
+    (Task 11's hevy_profile refreshes the cache; this only reads.)"""
+    merged = dict(PROFILE_DEFAULTS)
+    for source_key in ("garmin_user_profile", "profile_override"):
+        stored = cfg.get(source_key) or {}
+        for key in PROFILE_DEFAULTS:
+            if stored.get(key) is not None:
+                merged[key] = stored[key]
+    return Profile(weight_kg=float(merged["weight_kg"]),
+                   birth_year=int(merged["birth_year"]),
+                   vo2max=float(merged["vo2max"]), sex=str(merged["sex"]))
+
+
+def _persist_identity(conn: sqlite3.Connection, identity) -> None:
+    # Read and write as one unit: a settings save from the request thread
+    # landing between them would be overwritten by this stale copy. The raw
+    # blob is used rather than load_config so defaults are not baked into it.
+    with db.transaction(conn):
+        stored = db.get_config_value(conn, "settings", default={}) or {}
+        stored["hevy_device_identity"] = {
+            "manufacturer": identity.manufacturer, "product": identity.product,
+            "serial": identity.serial}
+        db.set_config_value(conn, "settings", stored)
+
+
+def _identity_for_build(conn: sqlite3.Connection, cfg: dict):
+    """The per-install device identity: the user's manual override first,
+    then the detected/stored one (preparing may have just persisted the watch
+    identity), else a freshly generated per-install fallback, persisted so it
+    stays stable."""
+    settings = db.get_config_value(conn, "settings", default={}) or {}
+    stored = (settings.get("hevy_device_identity_override")
+              or settings.get("hevy_device_identity")
+              or cfg.get("hevy_device_identity"))
+    if stored:
+        return identity_from_config({"hevy_device_identity": stored})
+    identity = new_fallback_identity()
+    _persist_identity(conn, identity)
+    return identity
+
+
+# -- exerciseSets payload (ported from upstream merge.py) --------------------
+
+
+def build_exercise_sets_payload(
+    resolved: list[ResolvedExercise],
+    activity_start: str,
+    activity_duration_s: float,
+) -> dict:
+    """Convert resolved exercises into a Garmin exerciseSets PUT payload,
+    distributing synthetic set timing across the real activity window."""
+    act_start = parse_timestamp(activity_start)
+    if act_start is None:
+        raise ValueError(f"unparseable activity start: {activity_start!r}")
+    for exercise in resolved:
+        if exercise.category == UNKNOWN_CATEGORY:
+            raise ValueError(f"exercise {exercise.title!r} resolved to UNKNOWN")
+
+    working_set_s, warmup_set_s = WORKING_SET_S, WARMUP_SET_S
+    rest_sets_s, rest_exercises_s = REST_BETWEEN_SETS_S, REST_BETWEEN_EXERCISES_S
+
+    all_sets: list[dict] = []
+    for ex_idx, exercise in enumerate(resolved):
+        sets = exercise.sets
+        for s_idx, s in enumerate(sets):
+            is_warmup = s.get("type", "normal") == "warmup"
+            explicit_dur = s.get("duration_seconds")
+            if explicit_dur and explicit_dur > 0:
+                set_dur = float(explicit_dur)
+            else:
+                set_dur = warmup_set_s if is_warmup else working_set_s
+            is_last_set = s_idx == len(sets) - 1
+            is_last_exercise = ex_idx == len(resolved) - 1
+            if is_last_set and is_last_exercise:
+                rest_dur = 0.0
+            elif is_last_set:
+                rest_dur = float(rest_exercises_s)
+            else:
+                rest_dur = float(rest_sets_s)
+            all_sets.append({"ex_idx": ex_idx, "set_data": s,
+                             "set_dur": set_dur, "rest_dur": rest_dur})
+
+    ideal_total = sum(si["set_dur"] + si["rest_dur"] for si in all_sets)
+    scale = activity_duration_s / ideal_total if ideal_total > 0 else 1.0
+    scale = max(MIN_SCALE, min(MAX_SCALE, scale))
+
+    exercise_sets: list[dict] = []
+    msg_idx = 0
+    cursor_s = 0.0
+    for si in all_sets:
+        s = si["set_data"]
+        exercise = resolved[si["ex_idx"]]
+        cat_str = CATEGORY_NAMES.get(exercise.category)
+        if cat_str is None:
+            raise ValueError(f"no category name for id {exercise.category}")
+        # A null name under a valid category is accepted and rendered as the
+        # generic label; an unrecognised name string renders as "Unknown".
+        sub_name = subcategory_name(exercise.category, exercise.subcategory)
+
+        set_start = act_start + timedelta(seconds=cursor_s)
+        scaled_dur = si["set_dur"] * scale
+        reps = s.get("reps")
+        weight_kg = s.get("weight_kg")
+        exercise_sets.append({
+            "exercises": [{"category": cat_str, "name": sub_name,
+                           "probability": None}],
+            "duration": round(scaled_dur, 3),
+            "repetitionCount": int(reps) if reps is not None else 0,
+            "weight": float(round(weight_kg * 1000)) if weight_kg else 0.0,
+            "setType": "ACTIVE",
+            "startTime": set_start.strftime("%Y-%m-%dT%H:%M:%S.0"),
+            "wktStepIndex": si["ex_idx"],
+            "messageIndex": msg_idx,
+        })
+        msg_idx += 1
+        cursor_s += scaled_dur
+
+        if si["rest_dur"] > 0:
+            rest_start = act_start + timedelta(seconds=cursor_s)
+            scaled_rest = si["rest_dur"] * scale
+            exercise_sets.append({
+                "exercises": [],
+                "duration": round(scaled_rest, 3),
+                "setType": "REST",
+                "startTime": rest_start.strftime("%Y-%m-%dT%H:%M:%S.0"),
+                "wktStepIndex": si["ex_idx"],
+                "messageIndex": msg_idx,
+            })
+            msg_idx += 1
+            cursor_s += scaled_rest
+
+    return {"exerciseSets": exercise_sets}
+
+
+# -- strategy execution ------------------------------------------------------
+
+
+def _payload_of(row: dict) -> dict:
+    payload = row["payload"]
+    return json.loads(payload) if isinstance(payload, str) else payload
+
+
+def _activity_window(conn: sqlite3.Connection, activity_id: int,
+                     row: dict) -> tuple[str, float]:
+    """The linked activity's (start, duration) for set-timing distribution,
+    falling back to the Hevy workout's own window."""
+    activity = db.get_activity(conn, activity_id)
+    if activity:
+        duration = db.activity_duration_seconds(activity)
+        if duration > 0:
+            return activity["start_time"], duration
+    start_dt = parse_timestamp(row["start_time"])
+    end_dt = parse_timestamp(row["end_time"])
+    duration = (end_dt - start_dt).total_seconds() if start_dt and end_dt else 0.0
+    return row["start_time"], duration
+
+
+def _activity_metrics(
+    conn: sqlite3.Connection,
+    row: dict,
+    target_activity_id: int,
+    generated_metrics: dict | None = None,
+) -> tuple[int | None, int | None]:
+    """Prefer Garmin's recorded metrics, then the metrics written into a new FIT.
+
+    Replace targets are not in the local activity table until Garmin polling
+    observes the upload, so their original watch activity is the authoritative
+    Garmin source during finalization.
+    """
+    def rounded(value: object) -> int | None:
+        try:
+            return round(float(value)) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    calories: int | None = None
+    avg_hr: int | None = None
+    activity_ids = [
+        target_activity_id,
+        row.get("source_garmin_activity_id"),
+    ]
+    for activity_id in activity_ids:
+        if activity_id is None:
+            continue
+        activity = db.get_activity(conn, activity_id)
+        if activity is None:
+            continue
+        try:
+            metrics = json.loads(activity.get("garmin_data") or "{}")
+        except (TypeError, ValueError):
+            metrics = {}
+        if calories is None:
+            calories = rounded(metrics.get("calories"))
+        if avg_hr is None:
+            avg_hr = rounded(metrics.get("avg_hr"))
+        if calories is not None and avg_hr is not None:
+            return calories, avg_hr
+    generated_metrics = generated_metrics or {}
+    return (
+        calories
+        if calories is not None
+        else rounded(generated_metrics.get("calories")),
+        avg_hr
+        if avg_hr is not None
+        else rounded(generated_metrics.get("avg_hr")),
+    )
+
+
+def _apply_metadata(
+    conn: sqlite3.Connection,
+    garmin: GarminClient,
+    activity_id: int,
+    row: dict,
+    cfg: dict,
+    *,
+    write_summary: bool,
+    generated_metrics: dict | None = None,
+) -> None:
+    payload = _payload_of(row)
+    garmin.set_title(
+        activity_id,
+        generate_title(payload, template=cfg.get("hevy_title_template")),
+    )
+    if write_summary:
+        calories, avg_hr = _activity_metrics(
+            conn, row, activity_id, generated_metrics
+        )
+        garmin.set_description(
+            activity_id,
+            generate_description(
+                payload,
+                calories=calories,
+                avg_hr=avg_hr,
+                template=cfg.get("hevy_description_template"),
+            ),
+        )
+
+
+def execute_merge(
+    conn: sqlite3.Connection, garmin: GarminClient, row: dict, cfg: dict
+) -> None:
+    source_id = row["source_garmin_activity_id"]
+    resolved = resolve_exercises(conn, _payload_of(row))
+    # Back up the activity's own sets before the atomic full replace.
+    existing = garmin.get_exercise_sets(source_id)
+    hevy_db.save_backup(conn, source_id, row["hevy_id"], existing, None)
+
+    start, duration = _activity_window(conn, source_id, row)
+    payload = {**build_exercise_sets_payload(resolved, start, duration),
+               "activityId": source_id}
+    try:
+        garmin.put_exercise_sets(source_id, payload)
+    except SubcategoryRejected:
+        # The 400 does not say WHICH pair was rejected — list candidates
+        # (non-generic subcategories), never blame or auto-reject one.
+        candidates = [r.title for r in resolved
+                      if r.subcategory not in (0, 65535)]
+        hevy_db.set_workout_status(
+            conn, row["hevy_id"], "needs_mapping",
+            error="Garmin rejected an exercise pair; adjust one of: "
+                  + ", ".join(candidates))
+        return
+    except ActivityGone:
+        hevy_db.set_workout_status(conn, row["hevy_id"], "needs_review",
+                                   error="watch activity deleted on Garmin")
+        return
+    _apply_metadata(
+        conn,
+        garmin,
+        source_id,
+        row,
+        cfg,
+        write_summary=bool(cfg.get("hevy_summary_on_structured", True)),
+    )
+    hevy_db.link_target(conn, row["hevy_id"], source_id, "merge")
+    hevy_db.set_workout_status(conn, row["hevy_id"], "merged")
+    hevy_db.set_applied(conn, row["hevy_id"], "garmin", row["source_updated_at"])
+
+
+def execute_describe(
+    conn: sqlite3.Connection, garmin: GarminClient, row: dict, cfg: dict
+) -> None:
+    source_id = row["source_garmin_activity_id"]
+    try:
+        _apply_metadata(conn, garmin, source_id, row, cfg, write_summary=True)
+    except ActivityGone:
+        hevy_db.set_workout_status(conn, row["hevy_id"], "needs_review",
+                                   error="watch activity deleted on Garmin")
+        return
+    hevy_db.link_target(conn, row["hevy_id"], source_id, "describe")
+    hevy_db.set_workout_status(conn, row["hevy_id"], "described")
+    hevy_db.set_applied(conn, row["hevy_id"], "garmin", row["source_updated_at"])
+
+
+def execute_replace(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
+                    cfg: dict) -> None:
+    hevy_db.set_workout_status(conn, row["hevy_id"], "syncing")
+    op = hevy_db.get_open_operation(conn, row["hevy_id"])
+    if op is None:
+        op_id = hevy_db.open_operation(conn, row["hevy_id"], "replace",
+                                       row["source_garmin_activity_id"], [])
+        if op_id is None:
+            return  # another open operation owns this workout or source
+        op = hevy_db.get_open_operation(conn, row["hevy_id"])
+    advance_operation(conn, garmin, row, op, cfg)
+
+
+def execute_passive(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
+                    cfg: dict) -> None:
+    hevy_db.set_workout_status(conn, row["hevy_id"], "syncing")
+    op = hevy_db.get_open_operation(conn, row["hevy_id"])
+    if op is None:
+        op_id = hevy_db.open_operation(conn, row["hevy_id"], "upload_passive",
+                                       None, [])
+        if op_id is None:
+            return
+        op = hevy_db.get_open_operation(conn, row["hevy_id"])
+    advance_operation(conn, garmin, row, op, cfg)
+
+
+# -- operation journal state machine -----------------------------------------
+
+
+def _overlapping_any_type(conn: sqlite3.Connection, row: dict) -> str | None:
+    """Type of any local activity overlapping the workout window, or None.
+    The passive path's wrong-type guard: a blind upload would duplicate a
+    session that WAS recorded, just under another type."""
+    start = parse_timestamp(row["start_time"])
+    end = parse_timestamp(row["end_time"])
+    if not start or not end:
+        return None
+    for activity in db.list_activities(conn):
+        act_start = parse_timestamp(activity["start_time"])
+        if act_start is None:
+            continue
+        duration = db.activity_duration_seconds(activity)
+        act_end = act_start + timedelta(seconds=duration)
+        if act_start < end and act_end > start:
+            return activity["activity_type"]
+    return None
+
+
+def _park_operation(conn: sqlite3.Connection, op: dict, row: dict,
+                    error: str) -> None:
+    hevy_db.set_operation_outcome(
+        conn, op["id"], row["hevy_id"], "needs_review", "needs_review", error)
+
+
+def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
+                      op: dict, cfg: dict) -> None:
+    """Drive one operation as far as it can go this tick. Every transition is
+    persisted before the next side effect, so a crash resumes exactly where
+    it stopped. submission_unknown is entered ONLY from the upload call
+    itself and is never auto-resubmitted."""
+    hevy_id = row["hevy_id"]
+    while True:
+        op = hevy_db.get_open_operation(conn, hevy_id)
+        if op is None:
+            return
+        phase = op["phase"]
+        kind = op["kind"]
+        source = op["source_activity_id"]
+
+        if phase == "preparing":
+            if kind == "replace":
+                fit_bytes = garmin.download_fit(source)
+                existing = garmin.get_exercise_sets(source)
+                hevy_db.save_backup(conn, source, hevy_id, existing, fit_bytes)
+                settings = db.get_config_value(conn, "settings", default={}) or {}
+                stored_identity = settings.get("hevy_device_identity") or {}
+                # Product 0 is the generic no-watch fallback. Upgrade it as
+                # soon as a real watch FIT makes per-user detection possible.
+                if not stored_identity or stored_identity.get("product") in (0, "0"):
+                    detected = identity_from_fit(fit_bytes)
+                    if detected:
+                        _persist_identity(conn, detected)
+                activity = db.get_activity(conn, source)
+                if activity and activity.get("strava_activity_id"):
+                    _park_operation(conn, op, row,
+                                    "source activity already published to Strava")
+                    return
+            else:
+                wrong_type = _overlapping_any_type(conn, row)
+                if wrong_type:
+                    _park_operation(
+                        conn, op, row,
+                        f"overlapping {wrong_type} activity exists — passive "
+                        "upload would duplicate it")
+                    return
+            snapshot = garmin.list_activity_ids_near(row["start_time"])
+            hevy_db.update_operation(conn, op["id"], phase="uploading",
+                                     pre_upload_ids=snapshot)
+            continue
+
+        if phase == "uploading":
+            # Everything before the upload call is pre-submission: a
+            # deterministic failure here closes the operation instead of
+            # wedging it open in `uploading` forever.
+            try:
+                resolved = resolve_exercises(conn, _payload_of(row))
+                start_dt = parse_timestamp(row["start_time"])
+                end_dt = parse_timestamp(row["end_time"])
+                if kind == "replace":
+                    backup = hevy_db.get_backup(conn, source)
+                    fit_bytes = backup["original_fit"] if backup else None
+                    hr = (hr_sources.extract_fit_hr(
+                        fit_bytes, round(start_dt.timestamp() * 1000))
+                        if fit_bytes and start_dt else [])
+                else:
+                    hr = (hr_sources.passive_hr_for_window(garmin, start_dt, end_dt)
+                          if start_dt and end_dt else [])
+                profile = _profile_from_cfg(cfg)
+                identity = _identity_for_build(conn, cfg)
+                tmp_dir_ctx = tempfile.TemporaryDirectory(prefix="activsync-fit-")
+                with tmp_dir_ctx as tmp_dir:
+                    fit_path = f"{tmp_dir}/hevy_{hevy_id}.fit"
+                    build_result = build_fit(
+                        _payload_of(row),
+                        resolved,
+                        hr or None,
+                        profile,
+                        identity,
+                        fit_path,
+                    )
+                    hevy_db.update_operation(
+                        conn,
+                        op["id"],
+                        generated_calories=build_result.get("calories"),
+                        generated_avg_hr=build_result.get("avg_hr"),
+                    )
+                    upload_error: Exception | None = None
+                    try:
+                        result = garmin.upload_fit(fit_path)
+                    except Exception as exc:
+                        upload_error = exc
+            except MappingMiss as miss:
+                hevy_db.set_operation_outcome(
+                    conn, op["id"], hevy_id, "failed", "needs_mapping",
+                    f"unmapped exercises: {miss.title}")
+                return
+            except Exception as exc:
+                hevy_db.set_operation_outcome(
+                    conn, op["id"], hevy_id, "failed", "failed",
+                    f"FIT build failed: {exc}")
+                return
+
+            if upload_error is not None:
+                if isinstance(upload_error, GarminUploadRejected):
+                    hevy_db.set_operation_outcome(
+                        conn, op["id"], hevy_id, "failed", "failed",
+                        str(upload_error))
+                    return
+                # Outcome unknown — record and wait; NEVER resubmit.
+                hevy_db.update_operation(conn, op["id"],
+                                         phase="submission_unknown",
+                                         next_step="resolve",
+                                         last_error=str(upload_error))
+                return
+
+            new_id = result.get("activity_id")
+            pre_ids = set(op["pre_upload_ids"])
+            if new_id and new_id not in pre_ids and new_id != source:
+                hevy_db.update_operation(conn, op["id"], phase="finalizing",
+                                         next_step="metadata",
+                                         target_activity_id=new_id,
+                                         upload_id=result.get("upload_id"))
+                continue
+            # Accepted but not yet resolvable — let Garmin finish processing.
+            hevy_db.update_operation(conn, op["id"], phase="submission_unknown",
+                                     next_step="resolve",
+                                     upload_id=result.get("upload_id"))
+            return
+
+        if phase == "submission_unknown":
+            candidates = _resolution_candidates(
+                garmin.list_activities_near(row["start_time"]), row,
+                set(op["pre_upload_ids"]), source)
+            if len(candidates) == 1:
+                hevy_db.update_operation(conn, op["id"], phase="finalizing",
+                                         next_step="metadata",
+                                         target_activity_id=candidates.pop())
+                continue
+            if len(candidates) > 1:
+                _park_operation(
+                    conn, op, row,
+                    f"ambiguous upload result: candidates {sorted(candidates)}")
+                return
+            attempts = op["attempt_count"] + 1
+            if attempts >= 5:
+                _park_operation(conn, op, row,
+                                "upload outcome unresolved after 5 checks")
+                return
+            hevy_db.update_operation(conn, op["id"], attempt_count=attempts)
+            return
+
+        if phase == "finalizing":
+            # Sub-steps persist through next_step so a crash resumes exactly
+            # where it stopped: metadata → delete → finalize.
+            target = op["target_activity_id"]
+            next_step = op["next_step"] or "metadata"
+
+            if next_step == "metadata":
+                _apply_metadata(
+                    conn,
+                    garmin,
+                    target,
+                    row,
+                    cfg,
+                    write_summary=(
+                        kind != "replace"
+                        or bool(cfg.get("hevy_summary_on_structured", True))
+                    ),
+                    generated_metrics={
+                        "calories": op.get("generated_calories"),
+                        "avg_hr": op.get("generated_avg_hr"),
+                    },
+                )
+                hevy_db.update_operation(conn, op["id"], next_step="delete")
+                next_step = "delete"
+
+            if next_step == "delete":
+                if kind == "replace" and source and target != source:
+                    try:
+                        garmin.delete_activity(source)
+                    except Exception as exc:
+                        if _is_not_found(exc):
+                            # Already gone — a crash after a successful delete
+                            # replays here; 404 IS the success signal.
+                            pass
+                        else:
+                            deletes = op["delete_attempt_count"] + 1
+                            if deletes >= 3:
+                                _park_operation(
+                                    conn, op, row,
+                                    f"could not delete watch activity "
+                                    f"{source}: {exc}")
+                                return
+                            hevy_db.update_operation(
+                                conn, op["id"], delete_attempt_count=deletes,
+                                last_error=str(exc))
+                            return
+                hevy_db.update_operation(conn, op["id"], next_step="finalize")
+
+            strategy = "replace" if kind == "replace" else "passive"
+            status = "replaced" if kind == "replace" else "uploaded_passive"
+            # Terminal transition is atomic: op done + link + status + applied
+            # land in one transaction (a split would strand an unlinked
+            # replacement behind a closed journal → duplicate upload later).
+            hevy_db.complete_operation(conn, op["id"], hevy_id, target,
+                                       strategy, status,
+                                       row["source_updated_at"])
+            return
+
+        return  # done/failed/needs_review — nothing to drive
+
+
+_RESOLUTION_DRIFT_MIN = 10
+_RESOLUTION_TYPES = ("strength_training", "other")
+
+
+def _resolution_candidates(activities: list[dict], row: dict,
+                           pre_upload_ids: set, source: int | None) -> set[int]:
+    """Strict matching for submission_unknown resolution: an unknown-outcome
+    upload may only be adopted if the candidate looks like OUR upload — new
+    id, strength/other type, start near the workout's start, plausible
+    duration. A new run appearing in the 3-day window must never be adopted,
+    renamed, and have the watch activity deleted under it."""
+    hevy_start = parse_timestamp(row["start_time"])
+    hevy_end = parse_timestamp(row["end_time"])
+    if not hevy_start or not hevy_end:
+        return set()
+    hevy_duration = (hevy_end - hevy_start).total_seconds()
+    if hevy_duration <= 0:
+        return set()
+
+    normalized_pre_ids: set[int] = set()
+    for raw_id in pre_upload_ids:
+        try:
+            normalized_pre_ids.add(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+    try:
+        normalized_source = int(source) if source is not None else None
+    except (TypeError, ValueError):
+        normalized_source = None
+
+    candidates: set[int] = set()
+    for act in activities:
+        try:
+            activity_id = int(act.get("activityId"))
+        except (TypeError, ValueError):
+            continue
+        if activity_id in normalized_pre_ids or activity_id == normalized_source:
+            continue
+        act_type = (act.get("activityType") or {}).get("typeKey", "")
+        if act_type not in _RESOLUTION_TYPES:
+            continue
+        act_start = parse_timestamp(act.get("startTimeGMT", ""))
+        if act_start is None:
+            continue
+        drift_s = abs((act_start - hevy_start).total_seconds())
+        if drift_s > _RESOLUTION_DRIFT_MIN * 60:
+            continue
+        try:
+            duration = float(act.get("duration"))
+        except (TypeError, ValueError):
+            continue
+        if duration <= 0:
+            continue
+        ratio = duration / hevy_duration
+        if not (0.25 <= ratio <= 4.0):
+            continue
+        candidates.add(activity_id)
+    return candidates

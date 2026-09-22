@@ -4,24 +4,43 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from activsync import config, db, dev_mock
+from activsync import config, db, dev_mock, hevy_db
 
-SEED_VERSION = 7
+SEED_VERSION = 11
+
+_HEVY_TABLES = ("hevy_workouts", "hevy_operations", "exercise_templates",
+                "exercise_mappings", "merge_backups", "hevy_events_seen")
 
 
-def seed(conn: sqlite3.Connection) -> None:
-    """Insert repeatable, multi-month activity data into the dev database."""
+def seed(conn: sqlite3.Connection, *, mark_onboarded: bool = False) -> None:
+    """Insert repeatable, multi-month activity data into the dev database.
+
+    ``mark_onboarded`` is applied on every call that clears the non-dev-database
+    guard below, independent of the version-gate that follows it: the E2E dev
+    DB persists across local runs, so if it was already seeded (matching
+    ``SEED_VERSION``) before the caller started asking for onboarding to be
+    marked complete, the early return must not skip that. Applying it there is
+    safe — it is idempotent.
+    """
+    existing = db.list_activities(conn)
+    if existing and not all(
+        str(row["content_hash"]).startswith("dev-") for row in existing
+    ):
+        # Never touch a database containing non-dev activity IDs — including
+        # via mark_onboarded, which must be refused on the same terms as
+        # every other seed write.
+        return
+    if mark_onboarded:
+        _mark_onboarding_complete(conn)
     if db.get_config_value(conn, "dev_seed_version") == SEED_VERSION:
         return
-    existing = db.list_activities(conn)
     if existing:
-        # Rebuild an older version of this generated-only database if needed;
-        # never touch a database containing non-dev activity IDs.
-        if not all(str(row["content_hash"]).startswith("dev-") for row in existing):
-            return
+        # Rebuild an older version of this generated-only database.
         conn.execute("DELETE FROM activities")
+        for table in _HEVY_TABLES:
+            conn.execute(f"DELETE FROM {table}")
         conn.commit()
 
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -76,8 +95,122 @@ def seed(conn: sqlite3.Connection) -> None:
                 f"dev-{activity_id}", status, now, json.dumps(data),
             )
 
-    db.set_config_value(conn, "settings", config.DEFAULT_CONFIG)
+    _seed_hevy(conn, now)
+
+    db.set_config_value(
+        conn,
+        "settings",
+        {**config.DEFAULT_CONFIG, "hevy_match_mode": "review"},
+    )
     # One source of truth with the fake Garmin client, so a seeded dev DB
     # and a refreshed one show the same categories.
     db.set_config_value(conn, "garmin_activity_types", dev_mock.garmin_activity_types())
     db.set_config_value(conn, "dev_seed_version", SEED_VERSION)
+
+
+def _mark_onboarding_complete(conn: sqlite3.Connection) -> None:
+    """Skip the first-run wizard for a seeded dev DB.
+
+    ``onboarding.setup_step`` short-circuits to "onboarding complete" the
+    moment ``initial_sync_done`` is truthy, before it looks at Garmin/Strava
+    connection state or the Hevy step — see
+    ``src/activsync/onboarding.py::setup_step``. That single key is also
+    exactly what ``/api/v1/app`` reads into ``setup.complete``
+    (``src/activsync/api_routes.py``), so it is the only config key that
+    needs to be set here.
+    """
+    db.set_config_value(conn, "initial_sync_done", True)
+
+
+def _garmin_time(iso_time: str) -> str:
+    """Hevy ISO timestamp → the space-separated format activities rows use."""
+    return iso_time.replace("T", " ").split("+")[0]
+
+
+def _seed_hevy(conn: sqlite3.Connection, now: datetime) -> None:
+    """The four demo scenarios the manual dev pass must show: merge badge,
+    mapping queue, passive flag, and the publish interlock on a claimed watch
+    activity. Rows are seeded in their end states because the poller (and so
+    the Hevy leg) does not run in mock mode."""
+    workouts = {w["id"]: w for w in dev_mock.dev_hevy_workouts(now)}
+
+    for template in dev_mock.dev_hevy_templates():
+        hevy_db.upsert_template(conn, {
+            "exercise_template_id": template["id"],
+            "title": template["title"],
+            "primary_muscle_group": template["primary_muscle_group"],
+            "secondary_muscle_groups": template["secondary_muscle_groups"],
+            "equipment_category": template["equipment_category"],
+            "is_custom": template["is_custom"],
+        })
+
+    # Two mapping states the ported tables cannot produce on their own, so the
+    # mapping screen shows the remaining shapes it has to render:
+    # table-resolved, user-overridden, and never mapped.
+    #
+    # "Triceps Pushdown (Cable)" has no entry in HEVY_TO_GARMIN, so without a
+    # saved mapping it would read as needs-mapping rather than as an override.
+    hevy_db.save_mapping(
+        conn, dev_mock.HEVY_DEV_OVERRIDDEN_TEMPLATE_ID, 30, 3
+    )
+
+    def seed_workout(workout: dict) -> None:
+        hevy_db.upsert_workout(
+            conn, workout["id"], workout["title"], workout["start_time"],
+            workout["end_time"], workout["updated_at"], workout,
+        )
+
+    def seed_activity(activity_id: int, title: str, start_iso: str,
+                      duration_s: int, publish_status: str) -> None:
+        data = {"duration": duration_s, "avg_hr": 128, "calories": 380,
+                "total_sets": 15, "total_reps": 75}
+        db.insert_activity(
+            conn, activity_id, "strength_training", title, "",
+            _garmin_time(start_iso), f"dev-{activity_id}", publish_status, now,
+            json.dumps(data),
+        )
+
+    # 1. Merged: watch activity enriched by Hevy — shows the merge badge.
+    merged = workouts[dev_mock.HEVY_DEV_MERGED_ID]
+    seed_activity(dev_mock.HEVY_DEV_MERGED_ACTIVITY_ID, "Gym session (watch)",
+                  merged["start_time"], 3600, "pending")
+    seed_workout(merged)
+    hevy_db.claim_source(conn, merged["id"], dev_mock.HEVY_DEV_MERGED_ACTIVITY_ID)
+    hevy_db.link_target(conn, merged["id"], dev_mock.HEVY_DEV_MERGED_ACTIVITY_ID,
+                        "merge")
+    hevy_db.set_workout_status(conn, merged["id"], "merged")
+    hevy_db.set_applied(conn, merged["id"], "garmin", merged["updated_at"])
+
+    # 2. Unmapped custom exercise — populates the mapping queue.
+    unmapped = workouts[dev_mock.HEVY_DEV_UNMAPPED_ID]
+    seed_workout(unmapped)
+    hevy_db.set_workout_status(
+        conn, unmapped["id"], "needs_mapping",
+        error="unmapped exercises: Bulgarian Ring Row")
+
+    # 3. Graceless passive upload — visibly flagged on its fresh activity.
+    passive = workouts[dev_mock.HEVY_DEV_PASSIVE_ID]
+    seed_activity(dev_mock.HEVY_DEV_PASSIVE_ACTIVITY_ID, "Forgot the watch (Hevy)",
+                  passive["start_time"], 3600, "pending")
+    seed_workout(passive)
+    hevy_db.link_target(conn, passive["id"], dev_mock.HEVY_DEV_PASSIVE_ACTIVITY_ID,
+                        "passive")
+    hevy_db.set_workout_status(conn, passive["id"], "uploaded_passive")
+    hevy_db.set_applied(conn, passive["id"], "garmin", passive["updated_at"])
+
+    # 4. Midnight-spanning workout still waiting for its watch activity.
+    seed_workout(workouts[dev_mock.HEVY_DEV_MIDNIGHT_ID])
+
+    # 5. Reviewed match holding the interlock: the claimed watch activity is
+    #    unpublishable until the user chooses merge, replace, or describe.
+    syncing = workouts[dev_mock.HEVY_DEV_SYNCING_ID]
+    seed_activity(dev_mock.HEVY_DEV_SYNCING_ACTIVITY_ID, "Strength (watch)",
+                  syncing["start_time"], 3600, "pending")
+    seed_workout(syncing)
+    hevy_db.claim_source(conn, syncing["id"], dev_mock.HEVY_DEV_SYNCING_ACTIVITY_ID)
+    hevy_db.set_workout_status(
+        conn,
+        syncing["id"],
+        "awaiting_match",
+        error="Choose how to apply this Hevy workout.",
+    )

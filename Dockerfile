@@ -1,4 +1,16 @@
 # syntax=docker/dockerfile:1.7
+
+# The SPA is built here rather than copied in: build/ is git-ignored and
+# .dockerignore'd, so an image that did not build it would serve 404 on every
+# page (server.spa() needs web/index.html to exist).
+FROM node:24-slim AS web
+WORKDIR /web
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+COPY app ./app
+COPY react-router.config.ts vite.config.ts tsconfig.json ./
+RUN npm run build
+
 FROM python:3.14-slim
 
 ARG VERSION=dev
@@ -17,6 +29,9 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY src ./src
+# Must land before pip install: setuptools package-data ships web/ into the
+# installed package.
+COPY --from=web /web/build/client ./src/activsync/web
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install .

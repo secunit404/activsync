@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 from activsync import update_check
-from activsync.update_check import UpdateChecker, UpdateStatus
+from activsync.update_check import UpdateChecker
 
 
 @pytest.fixture(autouse=True)

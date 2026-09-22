@@ -1,0 +1,89 @@
+"""User physiology profile for FIT calorie estimation, synced from Garmin.
+
+Cached in its own app_config row under `garmin_user_profile`, refreshed daily.
+Manual override values in `profile_override` win field-by-field; hard-coded
+defaults are the last resort.
+"""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+from datetime import datetime, timedelta
+
+from activsync import db
+from activsync.fit_builder import Profile
+from activsync.timeutil import parse_timestamp
+
+logger = logging.getLogger("activsync.hevy_profile")
+
+CACHE_KEY = "garmin_user_profile"
+OVERRIDE_KEY = "profile_override"
+CACHE_MAX_AGE = timedelta(hours=24)
+
+PROFILE_DEFAULTS = {"weight_kg": 80.0, "birth_year": 1990, "vo2max": 45.0,
+                    "sex": "male"}
+
+
+class ProfileFetchFailed(RuntimeError):
+    """Garmin returned nothing usable for the profile."""
+
+
+def _refresh_cache(conn: sqlite3.Connection, garmin, now: datetime) -> dict:
+    """Fetch from Garmin and persist; returns the new cache entry.
+    Raises on fetch failure — the caller decides the fallback."""
+    fetched = garmin.fetch_user_profile()
+    fresh = {key: fetched.get(key) for key in PROFILE_DEFAULTS
+             if fetched.get(key) is not None}
+    if not fresh:
+        # fetch_user_profile logs and swallows its own failures, answering
+        # all-None rather than raising, so an outage arrives here looking like
+        # a successful empty fetch. Persisting it would drop the last good
+        # values and quietly serve defaults until the cache next expires.
+        raise ProfileFetchFailed("garmin returned no usable profile fields")
+    # Merge rather than replace. fetch_user_profile reads the profile and the
+    # vo2max metric independently, so half of it can fail while the other half
+    # succeeds; writing only what came back would drop the rest of a good
+    # cached snapshot.
+    cached = db.get_config_value(conn, CACHE_KEY, default={}) or {}
+    entry = {key: cached[key] for key in PROFILE_DEFAULTS
+             if cached.get(key) is not None}
+    entry.update(fresh)
+    entry["fetched_at"] = now.isoformat()
+    # Cache state has its own row: a slow Garmin request must never write an
+    # old snapshot of the user's settings over a concurrent form save.
+    db.set_config_value(conn, CACHE_KEY, entry)
+    return entry
+
+
+def get_profile(conn: sqlite3.Connection, garmin, now: datetime) -> Profile:
+    """The profile used for calorie estimation. Never raises: falls back to
+    the cached values, then to defaults, logging a warning on the way down."""
+    cache = db.get_config_value(conn, CACHE_KEY, default={}) or {}
+    fetched_at = parse_timestamp(cache.get("fetched_at"))
+
+    if fetched_at is None or now - fetched_at >= CACHE_MAX_AGE:
+        try:
+            cache = _refresh_cache(conn, garmin, now)
+        except Exception as exc:
+            if cache:
+                logger.warning(
+                    "garmin profile fetch failed (%s); using cached profile", exc)
+            else:
+                logger.warning(
+                    "garmin profile fetch failed (%s); using default profile", exc)
+
+    # Read overrides after the potentially slow fetch, so a settings save that
+    # completed while Garmin was responding applies to this very build.
+    settings = db.get_config_value(conn, "settings", default={}) or {}
+    override = settings.get(OVERRIDE_KEY) or {}
+    merged = dict(PROFILE_DEFAULTS)
+    for source in (cache, override):
+        for key in PROFILE_DEFAULTS:
+            if source.get(key) is not None:
+                merged[key] = source[key]
+
+    return Profile(weight_kg=float(merged["weight_kg"]),
+                   birth_year=int(merged["birth_year"]),
+                   vo2max=float(merged["vo2max"]),
+                   sex=str(merged["sex"]))

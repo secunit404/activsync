@@ -75,7 +75,8 @@ _LOG_FORMAT = "%(asctime)s  %(levelname)-7s %(component)-8s %(message)s"
 _UVICORN_LOGGERS = ("uvicorn", "uvicorn.access", "uvicorn.error")
 
 _HEALTH_PATH = "/health"
-_STATIC_PREFIX = "/static/"
+_ASSET_PREFIX = "/assets/"
+_FAVICON_PATH = "/favicon.ico"
 
 # uvicorn's access records carry the request as args rather than a formatted
 # string: (client_addr, method, path_with_query, http_version, status_code).
@@ -90,7 +91,11 @@ def _is_routine_path(path: str) -> bool:
     static assets come a dozen at a time with each page load — which the page's
     own access line already reported.
     """
-    return path == _HEALTH_PATH or path.startswith(_STATIC_PREFIX)
+    return (
+        path == _HEALTH_PATH
+        or path == _FAVICON_PATH
+        or path.startswith(_ASSET_PREFIX)
+    )
 
 
 class AccessNoiseFilter(logging.Filter):

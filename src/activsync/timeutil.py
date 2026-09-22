@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 GARMIN_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -55,34 +55,62 @@ def common_timezones() -> list[str]:
     return [tz for tz in _COMMON_TIMEZONES if is_valid_timezone(tz)]
 
 
+def parse_timestamp(value: object) -> datetime | None:
+    """Any timestamp this app reads, normalized to timezone-aware UTC.
+
+    Covers ISO-8601 with or without a trailing Z, a bare date, and Garmin's
+    space-separated "YYYY-MM-DD HH:MM:SS" (always UTC). A naive value is read
+    as UTC. None for anything unparseable — callers treat that as "no value",
+    never as an error.
+    """
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    try:
+        parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = datetime.strptime(cleaned, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def format_local_time(start_time: str, tz_name: str) -> str:
     """Convert a Garmin UTC start_time string ("%Y-%m-%d %H:%M:%S") to a
     display string in tz_name, e.g. "2026-07-09 11:00"."""
-    local_dt = _to_local(start_time, tz_name)
+    local_dt = to_local(start_time, tz_name)
     return local_dt.strftime("%Y-%m-%d %H:%M")
 
 
-def _to_local(start_time: str, tz_name: str) -> datetime:
+def to_local(start_time: str, tz_name: str) -> datetime:
+    """Convert a Garmin UTC start_time string ("%Y-%m-%d %H:%M:%S") to an
+    aware datetime in tz_name."""
     dt_utc = datetime.strptime(start_time, GARMIN_TIME_FORMAT).replace(tzinfo=timezone.utc)
     return dt_utc.astimezone(ZoneInfo(tz_name))
 
 
+def to_local_now(tz_name: str) -> datetime:
+    """The current time, converted to tz_name. Used for period boundaries
+    (e.g. "this week") that must be computed in the display timezone."""
+    return datetime.now(timezone.utc).astimezone(ZoneInfo(tz_name))
+
+
 def format_local_date(start_time: str, tz_name: str) -> str:
     """Format the local activity date compactly, e.g. ``9 Jul``."""
-    local_dt = _to_local(start_time, tz_name)
+    local_dt = to_local(start_time, tz_name)
     return f"{local_dt.day} {local_dt.strftime('%b')}"
-
-
-def format_local_year(start_time: str, tz_name: str) -> str:
-    """Format the local activity year."""
-    return str(_to_local(start_time, tz_name).year)
 
 
 def format_local_month_year(start_time: str, tz_name: str) -> str:
     """Format the local activity month and year, e.g. ``July 2026``."""
-    return _to_local(start_time, tz_name).strftime("%B %Y")
+    return to_local(start_time, tz_name).strftime("%B %Y")
 
 
 def format_local_clock(start_time: str, tz_name: str) -> str:
     """Format the local activity time without its date, e.g. ``11:00``."""
-    return _to_local(start_time, tz_name).strftime("%H:%M")
+    return to_local(start_time, tz_name).strftime("%H:%M")

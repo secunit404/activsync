@@ -1,0 +1,162 @@
+"""Tests for the Hevy API client."""
+
+import pytest
+
+from activsync.hevy_client import HevyAuthError, HevyClient
+
+
+def test_requires_api_key():
+    with pytest.raises(ValueError):
+        HevyClient(api_key="")
+
+
+def test_iter_events_since_paginates(monkeypatch):
+    client = HevyClient(api_key="k")
+    pages = {
+        1: {"page": 1, "page_count": 2, "events": [
+            {"type": "updated", "workout": {"id": "b", "updated_at": "2026-07-18T10:00:00Z"}}]},
+        2: {"page": 2, "page_count": 2, "events": [
+            {"type": "deleted", "id": "a", "deleted_at": "2026-07-18T09:00:00Z"}]},
+    }
+    monkeypatch.setattr(client, "_get", lambda path, params=None: pages[params["page"]])
+    events = client.iter_events_since("2026-07-01T00:00:00Z")
+    assert len(events) == 2 and events[1]["type"] == "deleted"
+
+
+def test_iter_events_since_skips_malformed(monkeypatch):
+    client = HevyClient(api_key="k")
+    page = {"page": 1, "page_count": 1, "events": [
+        {"type": "updated", "workout": {"id": "ok", "updated_at": "2026-07-18T10:00:00Z"}},
+        {"type": "updated", "workout": {"updated_at": "2026-07-18T10:00:00Z"}},  # no id
+        {"type": "updated"},                                # no workout at all
+        {"type": "deleted", "deleted_at": "2026-07-18T09:00:00Z"},  # no id
+        {"type": "renamed", "id": "x"},                     # unknown type
+        "not-a-dict",
+    ]}
+    monkeypatch.setattr(client, "_get", lambda path, params=None: page)
+    events = client.iter_events_since("2026-07-01T00:00:00Z")
+    assert [e["workout"]["id"] for e in events] == ["ok"]
+
+
+def test_iter_events_since_empty(monkeypatch):
+    client = HevyClient(api_key="k")
+    monkeypatch.setattr(
+        client, "_get",
+        lambda path, params=None: {"page": 1, "page_count": 1, "events": []})
+    assert client.iter_events_since("2026-07-01T00:00:00Z") == []
+
+
+def test_auth_error_on_401(monkeypatch):
+    client = HevyClient(api_key="bad")
+
+    class StubResponse:
+        status_code = 401
+        headers = {}
+
+        def raise_for_status(self):
+            raise AssertionError("should not be reached")
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(client.session, "get",
+                        lambda url, params=None, timeout=None: StubResponse())
+    with pytest.raises(HevyAuthError):
+        client.get_user_info()
+
+
+def test_get_workout_unwraps_and_handles_missing(monkeypatch):
+    import requests
+
+    client = HevyClient(api_key="k")
+    monkeypatch.setattr(client, "_get",
+                        lambda path, params=None: {"workout": {"id": "w1"}})
+    assert client.get_workout("w1")["id"] == "w1"
+
+    class Resp404:
+        status_code = 404
+
+    def gone(path, params=None):
+        raise requests.HTTPError("404 Client Error", response=Resp404())
+    monkeypatch.setattr(client, "_get", gone)
+    assert client.get_workout("gone") is None
+
+
+def test_get_workout_outage_propagates(monkeypatch):
+    # A timeout/500 must NOT read as "workout deleted".
+    import requests
+
+    client = HevyClient(api_key="k")
+
+    class Resp500:
+        status_code = 500
+
+    def boom(path, params=None):
+        raise requests.HTTPError("500 Server Error", response=Resp500())
+    monkeypatch.setattr(client, "_get", boom)
+    with pytest.raises(requests.HTTPError):
+        client.get_workout("w1")
+
+    def timeout(path, params=None):
+        raise requests.Timeout("timed out")
+    monkeypatch.setattr(client, "_get", timeout)
+    with pytest.raises(requests.Timeout):
+        client.get_workout("w1")
+
+
+def test_iter_all_exercise_templates_paginates(monkeypatch):
+    client = HevyClient(api_key="k")
+    pages = {
+        1: {"page": 1, "page_count": 2,
+            "exercise_templates": [{"id": "t1", "title": "Bench"}]},
+        2: {"page": 2, "page_count": 2,
+            "exercise_templates": [{"id": "t2", "title": "Squat"}]},
+    }
+    monkeypatch.setattr(client, "_get", lambda path, params=None: pages[params["page"]])
+    templates = client.iter_all_exercise_templates()
+    assert [t["id"] for t in templates] == ["t1", "t2"]
+
+
+def test_retry_covers_429():
+    client = HevyClient(api_key="k")
+    adapter = client.session.get_adapter("https://api.hevyapp.com/v1/workouts")
+    assert 429 in adapter.max_retries.status_forcelist
+
+
+def test_get_workout_count_reads_the_total(monkeypatch):
+    client = HevyClient(api_key="k")
+    monkeypatch.setattr(client, "_get", lambda path, params=None: {"workout_count": 340})
+    assert client.get_workout_count() == 340
+
+
+@pytest.mark.parametrize("payload", [
+    {},                          # field absent
+    {"workout_count": None},
+    {"workout_count": "many"},   # not an integer
+    {"workout_count": -1},       # not a plausible total
+    "not-a-dict",
+])
+def test_get_workout_count_returns_none_when_unusable(monkeypatch, payload):
+    """A total that cannot be trusted must not bound a scan — callers fall
+    back to the paging the API reports."""
+    client = HevyClient(api_key="k")
+    monkeypatch.setattr(client, "_get", lambda path, params=None: payload)
+    assert client.get_workout_count() is None
+
+
+def test_iter_events_stops_when_page_count_is_not_a_number(monkeypatch):
+    """A malformed page_count must not be trusted into an endless walk."""
+    client = HevyClient(api_key="k")
+    calls = []
+
+    def fake_get(path, params=None):
+        calls.append(params["page"])
+        return {"page_count": "lots", "events": [
+            {"type": "deleted", "id": f"w{params['page']}",
+             "deleted_at": "2026-07-18T09:00:00Z"}]}
+
+    monkeypatch.setattr(client, "_get", fake_get)
+    events = client.iter_events_since("2026-07-01T00:00:00Z")
+
+    assert calls == [1]
+    assert len(events) == 1

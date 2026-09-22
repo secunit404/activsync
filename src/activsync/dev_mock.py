@@ -25,13 +25,239 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import json
+from dataclasses import fields as dataclass_fields
+from pathlib import Path
 
 from activsync import db
-from activsync.garmin_client import MfaRequired
+from activsync.garmin_client import ActivityRecord, MfaRequired, SubcategoryRejected
 
 MFA_TRIGGER_PASSWORD = "mfa"
 MFA_REJECT_CODE = "000000"
+
+# -- Hevy demo fixtures -------------------------------------------------------
+# Five canned workouts covering the demo scenarios the dev pass must show:
+# a merge onto a seeded watch activity, an unmapped custom exercise (mapping
+# queue), a graceless passive upload, a midnight-spanning session, and an
+# in-flight sync holding the publish interlock on its watch activity.
+HEVY_DEV_MERGED_ID = "hw-dev-merged"
+HEVY_DEV_UNMAPPED_ID = "hw-dev-unmapped"
+HEVY_DEV_PASSIVE_ID = "hw-dev-passive"
+HEVY_DEV_MIDNIGHT_ID = "hw-dev-midnight"
+HEVY_DEV_SYNCING_ID = "hw-dev-syncing"
+HEVY_DEV_CUSTOM_TEMPLATE_ID = "tpl-dev-custom"
+
+# Three more, added for Task 16 (backfill). The five above are all seeded into
+# `hevy_workouts` by `dev_seed._seed_hevy` (looked up there by id, one at a
+# time — see that function), so `hevy_backfill.preview_items` short-circuits
+# every one of them to `"already tracked"` before it ever reaches the
+# mapping-miss check. That leaves no reachable `needs_mapping` (locked) row
+# for the backfill screen to demo or for `e2e/backfill.spec.ts` to click
+# through — these exist to fix that, and are deliberately left OUT of
+# `dev_seed._seed_hevy` (which only looks up the five ids above by name) so
+# they stay "unseen" and land in a backfill preview as fresh workouts.
+# - UNMAPPED reuses the same custom exercise/template as HEVY_DEV_UNMAPPED_ID
+#   above, so `missing_template_ids` comes back non-empty: `["tpl-dev-custom"]`.
+# - UNMAPPABLE's exercise has no `exercise_template_id` at all (Hevy sends a
+#   falsy one for some entries) *and* a title with no built-in name mapping,
+#   so it also fails to resolve — but `missing_template_ids` stays empty,
+#   since `hevy_backfill.preview_items` only appends a template id when one
+#   exists. This is the "locked with nothing to link" edge case Task 4 added
+#   (`missingTemplateIds` can disagree with `action`) — without this fixture
+#   that path is untestable in a real browser, unit tests only.
+HEVY_DEV_BACKFILL_UNMAPPED_ID = "hw-dev-backfill-unmapped"
+HEVY_DEV_BACKFILL_UNMAPPABLE_ID = "hw-dev-backfill-unmappable"
+
+# A third backfill fixture, and the only one of the three that can actually be
+# imported: untracked like the two above, but on a template that resolves, so
+# it comes back unlocked with an enabled checkbox. Both fixtures above are
+# deliberately locked, which left the preview demoing nothing but guardrails —
+# no row to tick, so "select some and import" was unreachable in a browser
+# (and `e2e/backfill.spec.ts` had no importable row to click). Dated between
+# them so the preview's date ordering interleaves importable and locked rows
+# rather than grouping them, which is what a real scan looks like.
+HEVY_DEV_BACKFILL_IMPORTABLE_ID = "hw-dev-backfill-importable"
+
+# Watch/upload activity ids the seeded scenarios link against.
+HEVY_DEV_MERGED_ACTIVITY_ID = 910001
+HEVY_DEV_SYNCING_ACTIVITY_ID = 910002
+HEVY_DEV_PASSIVE_ACTIVITY_ID = 910050
+# Putting exercise sets onto this activity 400s, exercising the
+# subcategory-rejection path end to end in dev.
+HEVY_SUBCATEGORY_REJECT_ACTIVITY_ID = HEVY_DEV_SYNCING_ACTIVITY_ID
+
+_DEV_GARMIN_ACTIVITIES_KEY = "dev_garmin_remote_activities"
+_DEV_GARMIN_DELETED_KEY = "dev_garmin_deleted_activity_ids"
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+def _bench_sets() -> list[dict]:
+    return [{"type": "normal", "weight_kg": 80.0, "reps": 5} for _ in range(3)]
+
+
+def dev_hevy_workouts(now: datetime | None = None) -> list[dict]:
+    """The canned Hevy workouts, timestamped relative to `now` so the demo
+    stays fresh no matter when the dev DB was seeded."""
+    now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
+    midnight_start = (now - timedelta(days=1)).replace(hour=23, minute=30, second=0)
+    return [
+        {
+            "id": HEVY_DEV_MERGED_ID,
+            "title": "Push day (Hevy)",
+            "start_time": _iso(now - timedelta(hours=3)),
+            "end_time": _iso(now - timedelta(hours=2)),
+            "updated_at": _iso(now - timedelta(hours=2)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_UNMAPPED_ID,
+            "title": "Ring circuit (Hevy)",
+            "start_time": _iso(now - timedelta(hours=6)),
+            "end_time": _iso(now - timedelta(hours=5)),
+            "updated_at": _iso(now - timedelta(hours=5)),
+            "exercises": [{
+                "title": "Bulgarian Ring Row",
+                "exercise_template_id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_PASSIVE_ID,
+            "title": "Forgot the watch (Hevy)",
+            "start_time": _iso(now - timedelta(hours=27)),
+            "end_time": _iso(now - timedelta(hours=26)),
+            "updated_at": _iso(now - timedelta(hours=26)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_MIDNIGHT_ID,
+            "title": "Midnight session (Hevy)",
+            "start_time": _iso(midnight_start),
+            "end_time": _iso(midnight_start + timedelta(minutes=75)),
+            "updated_at": _iso(midnight_start + timedelta(minutes=75)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_SYNCING_ID,
+            "title": "Leg day (Hevy)",
+            "start_time": _iso(now - timedelta(minutes=90)),
+            "end_time": _iso(now - timedelta(minutes=30)),
+            "updated_at": _iso(now - timedelta(minutes=30)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_BACKFILL_IMPORTABLE_ID,
+            "title": "Old push day (Hevy)",
+            "start_time": _iso(now - timedelta(days=4, minutes=41)),
+            "end_time": _iso(now - timedelta(days=4, minutes=41) + timedelta(hours=1)),
+            "updated_at": _iso(now - timedelta(days=4, minutes=41) + timedelta(hours=1)),
+            "exercises": [{
+                "title": "Bench Press (Barbell)",
+                "exercise_template_id": "tpl-dev-bench",
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_BACKFILL_UNMAPPED_ID,
+            "title": "Old ring circuit (Hevy)",
+            "start_time": _iso(now - timedelta(days=5, minutes=17)),
+            "end_time": _iso(now - timedelta(days=5, minutes=17) + timedelta(hours=1)),
+            "updated_at": _iso(now - timedelta(days=5, minutes=17) + timedelta(hours=1)),
+            "exercises": [{
+                "title": "Bulgarian Ring Row",
+                "exercise_template_id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
+                "sets": _bench_sets(),
+            }],
+        },
+        {
+            "id": HEVY_DEV_BACKFILL_UNMAPPABLE_ID,
+            "title": "Old mystery session (Hevy)",
+            "start_time": _iso(now - timedelta(days=6, minutes=23)),
+            "end_time": _iso(now - timedelta(days=6, minutes=23) + timedelta(hours=1)),
+            "updated_at": _iso(now - timedelta(days=6, minutes=23) + timedelta(hours=1)),
+            "exercises": [{
+                "title": "Mystery Movement",
+                "exercise_template_id": None,
+                "sets": _bench_sets(),
+            }],
+        },
+    ]
+
+
+# Titles here must match `hevy_mapper.HEVY_TO_GARMIN` keys exactly, or they
+# resolve to nothing and the mapping screen shows a wall of needs-mapping rows
+# instead of the realistic mix. Verified against that table.
+_DEV_RESOLVING_TEMPLATES: list[tuple[str, str, str, str]] = [
+    ("tpl-dev-bench", "Bench Press (Barbell)", "chest", "barbell"),
+    ("tpl-dev-squat", "Squat (Barbell)", "quadriceps", "barbell"),
+    ("tpl-dev-deadlift", "Deadlift (Barbell)", "hamstrings", "barbell"),
+    ("tpl-dev-curl", "Bicep Curl (Dumbbell)", "biceps", "dumbbell"),
+    ("tpl-dev-pulldown", "Lat Pulldown (Cable)", "lats", "cable"),
+    ("tpl-dev-ohp", "Overhead Press (Barbell)", "shoulders", "barbell"),
+    ("tpl-dev-plank", "Plank", "abdominals", "none"),
+    ("tpl-dev-pullup", "Pull Up", "lats", "none"),
+    ("tpl-dev-rdl", "Romanian Deadlift (Barbell)", "hamstrings", "barbell"),
+]
+
+# Seeded with a saved user mapping (see dev_seed) so the mapping screen has a
+# row whose pair someone actually chose, not just table-resolved ones.
+HEVY_DEV_OVERRIDDEN_TEMPLATE_ID = "tpl-dev-pushdown"
+
+
+def dev_hevy_templates() -> list[dict]:
+    """A realistic spread for the mapping screen: mostly built-ins the ported
+    tables resolve on their own, one the user overrode, and one custom
+    exercise nothing can place."""
+    templates = [
+        {
+            "id": template_id,
+            "title": title,
+            "primary_muscle_group": muscle,
+            "secondary_muscle_groups": [],
+            "equipment_category": equipment,
+            "is_custom": False,
+        }
+        for template_id, title, muscle, equipment in _DEV_RESOLVING_TEMPLATES
+    ]
+    templates.append({
+        "id": HEVY_DEV_OVERRIDDEN_TEMPLATE_ID,
+        "title": "Triceps Pushdown (Cable)",
+        "primary_muscle_group": "triceps",
+        "secondary_muscle_groups": [],
+        "equipment_category": "cable",
+        "is_custom": False,
+    })
+    templates.append({
+        "id": HEVY_DEV_CUSTOM_TEMPLATE_ID,
+        "title": "Bulgarian Ring Row",
+        "primary_muscle_group": "upper_back",
+        "secondary_muscle_groups": ["biceps"],
+        "equipment_category": "other",
+        "is_custom": True,
+    })
+    return templates
+
 # Keep the local publish request on screen long enough to exercise the button's
 # busy state. This fake is only wired in when mock mode is enabled.
 DEV_PUBLISH_DELAY_SECONDS = 1.0
@@ -212,7 +438,8 @@ def garmin_activity_types() -> list[dict]:
 
 
 class _FakePendingAuth:
-    """Stand-in for ``garmin_auth.GarminAuth`` during a simulated MFA challenge."""
+    """Stand-in for :class:`~activsync.garmin_client.PendingLogin` during a
+    simulated MFA challenge."""
 
     def resume_login(self, mfa_code: str):
         if mfa_code == MFA_REJECT_CODE:
@@ -234,12 +461,70 @@ def complete_login(pending_auth, mfa_code: str):
 
 
 class FakeGarminClient:
-    """No-network Garmin client. Activities come from :mod:`activsync.dev_seed`,
-    so the recent-activity fetch returns nothing new; only the methods the
-    wizard and sync actually call are stubbed."""
+    """No-network Garmin client backed by seeded and DB-persisted remote state.
+
+    Uploads, metadata edits, and deletions survive the fresh client instance
+    built for the next request, so multi-tick workflows behave like Garmin.
+    """
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
+        # Per-instance recording (a fresh client is built per request):
+        # lets tests and the dev pass inspect what a merge would have PUT.
+        self.recorded_exercise_sets: list[tuple[int, dict]] = []
+
+    def _remote_activities(self) -> dict[str, dict]:
+        return db.get_config_value(
+            self._conn, _DEV_GARMIN_ACTIVITIES_KEY, default={}
+        ) or {}
+
+    def _save_remote_activities(self, activities: dict[str, dict]) -> None:
+        db.set_config_value(self._conn, _DEV_GARMIN_ACTIVITIES_KEY, activities)
+
+    def _deleted_ids(self) -> set[int]:
+        return {
+            int(activity_id)
+            for activity_id in db.get_config_value(
+                self._conn, _DEV_GARMIN_DELETED_KEY, default=[]
+            ) or []
+        }
+
+    def _ensure_remote_activity(self, activity_id: int) -> tuple[dict, dict]:
+        activities = self._remote_activities()
+        key = str(activity_id)
+        activity = activities.get(key)
+        if activity is None:
+            row = db.get_activity(self._conn, activity_id)
+            if row is None:
+                activity = {
+                    "garmin_activity_id": activity_id,
+                    "activity_type": "strength_training",
+                    "title": "Strength Training",
+                    "description": "",
+                    "start_time": datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "duration": 3600.0,
+                }
+            else:
+                try:
+                    data = json.loads(row.get("garmin_data") or "{}")
+                except (ValueError, TypeError):
+                    data = {}
+                activity = {
+                    "garmin_activity_id": activity_id,
+                    "activity_type": row["activity_type"],
+                    "title": row["title"],
+                    "description": row.get("description") or "",
+                    "start_time": row["start_time"],
+                    **{key: data.get(key) for key in {
+                        field.name for field in dataclass_fields(ActivityRecord)
+                    } if key not in {
+                        "garmin_activity_id", "activity_type", "title",
+                        "description", "start_time",
+                    }},
+                }
+        return activities, dict(activity)
 
     def fetch_activity_types(self) -> list[dict]:
         # Report the taxonomy, the way the real client reports what Garmin
@@ -248,8 +533,47 @@ class FakeGarminClient:
         # the one thing the button exists to do went untested.
         return garmin_activity_types()
 
-    def fetch_recent_activities(self, lookback_days: int) -> list:
-        return []
+    def fetch_recent_activities(self, lookback_days: int) -> list[ActivityRecord]:
+        # Echo the local table back as what "Garmin" holds. Returning [] (as
+        # this used to) made sync_garmin's removal pass mark every seeded
+        # activity inside the lookback window as deleted from Garmin — which
+        # wiped the recent Hevy demo activities on the wizard's initial sync.
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        optional_keys = {
+            field.name for field in dataclass_fields(ActivityRecord)
+        } - {"garmin_activity_id", "activity_type", "title", "description",
+             "start_time"}
+        deleted = self._deleted_ids()
+        records: dict[int, ActivityRecord] = {}
+        for row in db.list_activities(self._conn):
+            if row["garmin_activity_id"] in deleted or row["start_time"] < cutoff:
+                continue
+            try:
+                data = json.loads(row.get("garmin_data") or "{}")
+            except (ValueError, TypeError):
+                data = {}
+            record = ActivityRecord(
+                garmin_activity_id=row["garmin_activity_id"],
+                activity_type=row["activity_type"],
+                title=row["title"],
+                description=row.get("description") or "",
+                start_time=row["start_time"],
+                **{key: data.get(key) for key in optional_keys},
+            )
+            records[record.garmin_activity_id] = record
+        # Remote overlays represent uploads and metadata mutations. They win
+        # over the local echo until sync_garmin reconciles the same values.
+        for raw in self._remote_activities().values():
+            activity_id = int(raw["garmin_activity_id"])
+            if activity_id in deleted or raw["start_time"] < cutoff:
+                continue
+            records[activity_id] = ActivityRecord(
+                **{field.name: raw.get(field.name)
+                   for field in dataclass_fields(ActivityRecord)}
+            )
+        return list(records.values())
 
     def download_fit(self, garmin_activity_id: int) -> bytes:
         return b""
@@ -257,7 +581,103 @@ class FakeGarminClient:
     def update_activity_metadata(
         self, garmin_activity_id: int, title: str, description: str
     ) -> None:
+        activities, activity = self._ensure_remote_activity(garmin_activity_id)
+        activity.update({"title": title, "description": description})
+        activities[str(garmin_activity_id)] = activity
+        self._save_remote_activities(activities)
+
+    # -- Hevy-integration surface ---------------------------------------------
+
+    def upload_fit(self, fit_path: str) -> dict:
+        # DB-backed sequence so ids stay fresh across requests (each request
+        # builds a new client instance).
+        sequence = int(
+            db.get_config_value(self._conn, "dev_upload_seq", default=0)
+        ) + 1
+        db.set_config_value(self._conn, "dev_upload_seq", sequence)
+        activity_id = 950000 + sequence
+        start_time = datetime.now(timezone.utc)
+        duration = 3600.0
+        try:
+            from activsync.fit_builder import decode_fit
+
+            messages = decode_fit(Path(fit_path).read_bytes())
+            session = messages["session_mesgs"][0]
+            start_time = session["start_time"]
+            duration = float(session["total_elapsed_time"])
+        except Exception:
+            # Surface tests may pass a placeholder path; the fake still needs
+            # a coherent activity record for later reconciliation.
+            pass
+        activities = self._remote_activities()
+        activities[str(activity_id)] = {
+            "garmin_activity_id": activity_id,
+            "activity_type": "strength_training",
+            "title": "Strength Training",
+            "description": "",
+            "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "duration": duration,
+        }
+        self._save_remote_activities(activities)
+        return {"upload_id": f"dev-upload-{sequence}",
+                "activity_id": activity_id}
+
+    def get_exercise_sets(self, activity_id: int) -> dict:
+        return {"exerciseSets": []}
+
+    def put_exercise_sets(self, activity_id: int, payload: dict) -> None:
+        if activity_id == HEVY_SUBCATEGORY_REJECT_ACTIVITY_ID:
+            raise SubcategoryRejected(
+                "dev mock: Garmin rejects this category/subcategory pair")
+        self.recorded_exercise_sets.append((activity_id, payload))
         return None
+
+    def set_title(self, activity_id: int, title: str) -> None:
+        activities, activity = self._ensure_remote_activity(activity_id)
+        activity["title"] = title
+        activities[str(activity_id)] = activity
+        self._save_remote_activities(activities)
+
+    def set_description(self, activity_id: int, description: str) -> None:
+        activities, activity = self._ensure_remote_activity(activity_id)
+        activity["description"] = description
+        activities[str(activity_id)] = activity
+        self._save_remote_activities(activities)
+
+    def delete_activity(self, activity_id: int) -> None:
+        deleted = self._deleted_ids()
+        deleted.add(int(activity_id))
+        db.set_config_value(self._conn, _DEV_GARMIN_DELETED_KEY, sorted(deleted))
+
+    def get_daily_heart_rates(self, date_str: str) -> dict:
+        return {"heartRateValues": []}
+
+    def fetch_user_profile(self) -> dict:
+        return {"weight_kg": 80.0, "birth_year": 1990, "sex": "male", "vo2max": 45.0}
+
+    def list_activity_ids_near(self, start_time: str) -> list[int]:
+        return [
+            activity["activityId"] for activity in self.list_activities_near(start_time)
+        ]
+
+    def list_activities_near(self, start_time: str) -> list[dict]:
+        target = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+        activities = []
+        for record in self.fetch_recent_activities(3):
+            actual = datetime.strptime(
+                record.start_time, "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone.utc)
+            if abs((actual.date() - target.date()).days) > 1:
+                continue
+            activities.append({
+                "activityId": record.garmin_activity_id,
+                "activityType": {"typeKey": record.activity_type},
+                "startTimeGMT": record.start_time,
+                "duration": record.duration,
+            })
+        return activities
 
 
 class FakeStravaClient:
@@ -330,3 +750,52 @@ class FakeStravaClient:
         self, strava_activity_id: int, name: str, description: str
     ) -> None:
         return None
+
+
+class MockHevyClient:
+    """No-network Hevy client serving the canned demo workouts/templates.
+    Any API key validates, so the wizard step and the settings card can be
+    walked without a Hevy Pro account."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get_user_info(self) -> dict:
+        return {"id": "dev-user", "username": "dev"}
+
+    def get_workout(self, workout_id: str) -> dict | None:
+        for workout in dev_hevy_workouts():
+            if workout["id"] == workout_id:
+                return workout
+        return None
+
+    def get_workout_count(self) -> int | None:
+        return len(dev_hevy_workouts())
+
+    def get_workouts_page(self, page: int = 1, page_size: int = 10) -> dict:
+        workouts = dev_hevy_workouts() if page == 1 else []
+        return {"page": page, "page_count": 1, "workouts": workouts}
+
+    def get_events(self, since: str, page: int = 1, page_size: int = 10) -> dict:
+        events = [
+            {"type": "updated", "workout": workout}
+            for workout in dev_hevy_workouts()
+            if page == 1 and workout["updated_at"] > since
+        ]
+        return {"page": page, "page_count": 1, "events": events}
+
+    def iter_events_since(self, since: str) -> list[dict]:
+        return self.get_events(since)["events"]
+
+    def get_exercise_template(self, template_id: str) -> dict | None:
+        for template in dev_hevy_templates():
+            if template["id"] == template_id:
+                return template
+        return None
+
+    def get_exercise_templates_page(self, page: int = 1, page_size: int = 10) -> dict:
+        templates = dev_hevy_templates() if page == 1 else []
+        return {"page": page, "page_count": 1, "exercise_templates": templates}
+
+    def iter_all_exercise_templates(self) -> list[dict]:
+        return dev_hevy_templates()

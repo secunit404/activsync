@@ -1,0 +1,389 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/archivo";
+@import "@fontsource-variable/jetbrains-mono";
+
+/*
+ * This app is dark-only: the token values below ARE the dark theme, and
+ * `color-scheme: dark` tells the UA so. But Tailwind's stock `dark:` variant
+ * resolves to `@media (prefers-color-scheme: dark)`, which tracks the OS
+ * setting — so on a light-mode machine every `dark:` utility silently did
+ * nothing. That left shadcn primitives rendering their light-mode fallbacks
+ * on dark surfaces: `input`/`textarea`/`native-select` fell back to
+ * `bg-transparent`, and `checkbox` lost `data-checked:bg-primary` entirely.
+ *
+ * Binding the variant to "always on" makes `dark:` mean what it says in a
+ * single-theme app, and keeps future shadcn components correct as-pasted
+ * rather than needing each one hand-edited.
+ */
+@custom-variant dark (&);
+
+:root {
+  color-scheme: dark;
+  /*
+   * Always reserve the scrollbar gutter. Pages differ in length — Activities
+   * and Settings scroll, the Hevy hub usually does not — and without this the
+   * viewport is 15px wider on the short ones, shifting every centred
+   * `PageContainer` column sideways by ~7px as you move between tabs. Same
+   * width on every screen, so the only honest fix is to stop the available
+   * width changing.
+   */
+  scrollbar-gutter: stable;
+  font-family: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --activ: #5caadb;
+  --sync: #fb8946;
+  /*
+   * Surface elevation ramp. Every surface below is one blue-grey family
+   * (oklch hue 254) stepped evenly in *perceptual* lightness — ~0.025 L per
+   * level, which is roughly where two dark surfaces stop reading as the same
+   * sheet. The previous values were spaced by eye in hex and landed inside a
+   * 1.5-point luminance band (background 0.65% -> input 2.16%), so a card on a
+   * page and a panel inside that card were physically distinct and visually
+   * identical. This spans 0.39% -> 5.16% instead.
+   *
+   * Each token owns exactly ONE job. Surfaces encode absolute elevation and
+   * nothing else:
+   *
+   *   rail        app chrome (rail, tab bar)
+   *   background  page canvas
+   *   card        primary container (cards, tables, overlays, stat tiles)
+   *   popover     floats above a card (dialogs, menus, rail active pill)
+   *   muted       nested panel inside a card — solid, never an opacity
+   *   secondary   objects sitting on a surface (pills, chips, badges)
+   *   input       control fills
+   *
+   * States are NOT surfaces. "One step lighter than whatever I happen to sit
+   * on" is not expressible as an absolute token, which is exactly why
+   * `bg-muted/40` got drafted into the hover role and ended up meaning both
+   * "clickable" and "nested section" in different files. Hover is a relative
+   * tint (`hover:bg-foreground/[0.04]`) so it composes on any level; `accent`
+   * stays the one selected/active fill.
+   *
+   * WELLS GO DOWN, NOT UP. A nested *panel* rises toward the viewer and takes
+   * `muted`. A *well* — a text editor, a preview of generated output, a
+   * segmented-control track, a mono readout — is a hole punched in the
+   * surface, and in a dark UI a hole is darker, not brighter. Wells take
+   * `background`, which already sits one step below `card`. Getting this
+   * backwards is what made every editor and preview box the brightest thing
+   * on screen: they were the deepest content but painted the highest level.
+   */
+  --rail: #090d11;
+  --background: #11161b;
+  --card: #1b2028;
+  --popover: #20272e;
+  --muted: #262c35;
+  --secondary: #2d343d;
+  /* Above every surface it divides, so it never disappears against one side. */
+  --border: #2f363f;
+  --accent: #333b44;
+  --input: #39414b;
+  --foreground: #e7eaee;
+  --card-foreground: #f1f3f6;
+  --popover-foreground: #f1f3f6;
+  --primary: #f26b38;
+  --primary-foreground: #111317;
+  --secondary-foreground: #e7eaee;
+  --muted-foreground: #949cab;
+  --accent-foreground: #f1f3f6;
+  --destructive: #ff6b5e;
+  --ring: #f26b38;
+  --radius: 0.75rem;
+  --success: #7cd992;
+  --warning: #f2c14e;
+  --info: #63b8ee;
+  --shadow-frame: 0 40px 90px rgb(0 0 0 / 50%);
+  --shadow-toast: 0 18px 40px rgb(0 0 0 / 45%);
+  /*
+   * Fallback for the mobile toast's bottom clearance (see `sonner.tsx`'s
+   * `mobileOffset`) — `AppTabBar`'s fixed 74px height (app-tab-bar.tsx),
+   * the same constant `AppLayout` reserves via `pb-[74px]`. `BulkActionBar`
+   * overwrites this to its own measured height for as long as it occupies
+   * that slot instead (see its docstring) and restores this default on
+   * unmount.
+   */
+  --bottom-bar-height: 74px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  /*
+   * The app owns the overscroll at the top of the page: `PullToRefresh` reads
+   * that drag as its gesture, and without this the native rubber-band (and
+   * Chrome's own pull-to-refresh) runs at the same time and fights it.
+   */
+  overscroll-behavior-y: contain;
+  /*
+   * The other half of `viewport-fit=cover` (root.tsx): with it, content is
+   * allowed under the status bar as well as under the home indicator, so the
+   * page header would start beneath the clock in a home-screen app. Fixed
+   * bottom chrome positions against the viewport rather than this box, so it
+   * carries its own `env(safe-area-inset-bottom)` term instead.
+   *
+   * Only the top is paid back here. The horizontal insets matter solely in
+   * landscape on a notched phone, which this portrait-shaped dashboard has
+   * no real use for.
+   */
+  padding-top: env(safe-area-inset-top);
+  background:
+    radial-gradient(circle at top right, rgb(242 107 56 / 12%), transparent 32rem),
+    var(--background);
+}
+
+/*
+ * In `@layer base` so utility classes win. Unlayered CSS beats anything in
+ * Tailwind's `@layer utilities` regardless of specificity, so as a bare rule
+ * this quietly repainted every link that carried its own colour — including
+ * `<Button asChild><Link/></Button>`, where a `warning` or `outline` button
+ * rendered its text in the blue brand colour instead of the variant's. The
+ * default still applies to any link that does not ask for something else.
+ */
+@layer base {
+  a {
+    color: var(--activ);
+    font-weight: 600;
+    text-underline-offset: 0.2em;
+  }
+}
+
+.brand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.brand > :first-child {
+  color: var(--activ);
+}
+
+.brand > :last-child {
+  color: var(--sync);
+}
+
+.app-loading,
+.error-page {
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+  min-height: 100vh;
+  padding: 2rem;
+  text-align: center;
+}
+
+.loading-bar {
+  width: 8rem;
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.loading-bar::after {
+  display: block;
+  width: 45%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--sync);
+  content: "";
+  animation: loading 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes loading {
+  to {
+    transform: translateX(125%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar::after {
+    animation: none;
+  }
+}
+
+/*
+ * Overlay scroll regions. The handoff called for hiding the scrollbar chrome
+ * entirely, but that left no signal at all that a long body continued — and
+ * no signal of *how far*, which only a thumb's size and position convey. A
+ * thin, tinted scrollbar is the honest middle: it reads as chrome-less until
+ * there is something to say.
+ *
+ * This is the whole treatment. Scroll shadows at the edges were tried and
+ * removed: at an opacity low enough not to smear, they were invisible against
+ * a near-black --card, and at one high enough to see, they looked like a
+ * rendering fault.
+ */
+.overlay-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 50%) transparent;
+}
+
+
+/*
+ * ResponsiveOverlay's enter/exit is a slide (from the right for the mobile
+ * cover, up from the bottom for the sheet) driven by tw-animate-css custom
+ * properties. Under reduced motion we neutralise the movement and the zoom but
+ * keep the opacity fade, which is not motion. These rules sit outside every
+ * cascade layer on purpose so they win over the Tailwind utilities that set the
+ * same variables.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="responsive-overlay"],
+  [data-slot="responsive-overlay-backdrop"] {
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+    --tw-enter-scale: 1;
+    --tw-exit-scale: 1;
+  }
+}
+
+/*
+ * `ui/skeleton.tsx`'s `animate-pulse` is a continuous, indefinite animation —
+ * exactly what `prefers-reduced-motion` exists to suppress (unlike the
+ * one-shot overlay enter/exit above, which is why this drops the animation
+ * entirely rather than neutralising a transform). Unlayered for the same
+ * reason as the overlay rule: Tailwind v4 puts `animate-pulse` in
+ * `@layer utilities`, which always loses to an unlayered author rule
+ * regardless of selector specificity or source order.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="skeleton"] {
+    animation: none;
+  }
+}
+
+/*
+ * Toast restyle (design handoff frame `5b`). `sonner` self-injects its base
+ * stylesheet as a plain, unlayered `<style>` tag appended to `<head>` at
+ * module load (see `__insertCSS` in `sonner/dist/index.mjs`) — it lands
+ * after this file's own `<link>` in the document, and outside every
+ * Tailwind `@layer` entirely. `toastOptions.classNames` can only hand it
+ * Tailwind utility classes, which Tailwind puts in `@layer utilities`; an
+ * unlayered rule always wins over a layered one regardless of specificity
+ * or source order (same reasoning as the reduced-motion overrides above),
+ * so a `classNames`-only approach can't reliably beat sonner's own colors.
+ * These rules are written directly, unlayered, against sonner's public
+ * `[data-sonner-*]` attribute hooks instead — the same selectors its own
+ * shipped stylesheet uses, and the documented "vanilla CSS" customization
+ * surface for consumers not using their Tailwind plugin — with `!important`
+ * where a property needs to beat sonner's later-injected rule of equal
+ * selector specificity.
+ */
+[data-sonner-toast] {
+  align-items: flex-start !important;
+  gap: 12px !important;
+  padding: 14px 16px !important;
+  /* A toast floats above everything, so it takes the `popover` level. Written
+     as literals rather than `var(--popover)` only because these rules must
+     stay unlayered to beat sonner's own injected stylesheet — keep them in
+     step with the ramp above. */
+  background: #20272e !important;
+  border-color: #39414b !important;
+  box-shadow: var(--shadow-toast) !important;
+}
+
+[data-sonner-toast][data-type="error"] {
+  background: #1a1310 !important;
+  border-color: #4a2f1e !important;
+}
+
+[data-sonner-toast] [data-icon] {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 22px !important;
+  height: 22px !important;
+  margin: 0 !important;
+  border-radius: 999px;
+}
+
+[data-sonner-toast] [data-title] {
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: var(--foreground) !important;
+}
+
+[data-sonner-toast] [data-description] {
+  font-size: 12px !important;
+  color: var(--muted-foreground) !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+  position: static !important;
+  transform: none !important;
+  order: 3;
+  align-self: flex-start;
+  flex-shrink: 0;
+  width: 16px !important;
+  height: 16px !important;
+  border: none !important;
+  background: transparent !important;
+  color: #7a838f !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--foreground) !important;
+}
+
+@theme inline {
+  --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --font-heading: var(--font-sans);
+  --color-rail: var(--rail);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+}

@@ -8,17 +8,27 @@ from contextlib import asynccontextmanager
 from activsync import config, db, logging_setup, timeutil
 from activsync.dev_seed import seed as seed_dev_data
 from activsync.garmin_client import GarminClient, get_client as get_garmin_raw_client
+from activsync.hevy_client import HevyClient
 from activsync.poller import Poller
 from activsync.server import create_app
 from activsync.strava_client import StravaClient
 from activsync.update_check import UpdateChecker
 
 
-def _env_value(name: str, legacy_name: str) -> str | None:
+def _env_value(name: str, legacy_name: str = "") -> str | None:
     return os.environ.get(name) or os.environ.get(legacy_name)
 
 
-MOCK_MODE = (_env_value("ACTIVSYNC_DEV_MOCK_DATA", "G2S_DEV_MOCK_DATA") or "").lower() in ("1", "true", "yes")
+def _env_enabled(name: str, legacy_name: str = "") -> bool:
+    return (_env_value(name, legacy_name) or "").lower() in ("1", "true", "yes")
+
+
+MOCK_MODE = _env_enabled("ACTIVSYNC_DEV_MOCK_DATA", "G2S_DEV_MOCK_DATA")
+MANUAL_ONLY = _env_enabled("ACTIVSYNC_MANUAL_ONLY")
+# Opt-in signal set only by the Playwright E2E server (npm run dev:e2e), never
+# by `make dev` / `make dev-fresh`, so a fresh mock DB can boot straight past
+# the first-run wizard for E2E specs while local dev still starts at it.
+E2E_SEED_ONBOARDED = (_env_value("ACTIVSYNC_DEV_E2E_ONBOARDED") or "").lower() in ("1", "true", "yes")
 
 
 def _default_db_path() -> str:
@@ -34,7 +44,11 @@ GARMIN_TOKEN_DIR = _env_value("ACTIVSYNC_GARMIN_TOKEN_DIR", "G2S_GARMIN_TOKEN_DI
 
 _conn = db.connect(DB_PATH)
 if MOCK_MODE:
-    seed_dev_data(_conn)
+    # mark_onboarded only ever applies inside this MOCK_MODE branch, so the
+    # env var alone can't reach a real database. seed_dev_data's own guard
+    # (never touch a DB holding non-dev activity IDs) is what protects a real
+    # database pointed at by ACTIVSYNC_DB_PATH if MOCK_MODE is set against it.
+    seed_dev_data(_conn, mark_onboarded=E2E_SEED_ONBOARDED)
 
 
 def _resolve_log_timezone() -> str:
@@ -54,10 +68,7 @@ logging_setup.configure_logging(
 
 
 def _garmin_factory() -> GarminClient:
-    creds = db.get_config_value(_conn, "garmin_credentials")
-    if not creds:
-        raise RuntimeError("Garmin credentials are not configured")
-    raw = get_garmin_raw_client(creds["email"], creds["password"], GARMIN_TOKEN_DIR)
+    raw = get_garmin_raw_client(GARMIN_TOKEN_DIR)
     return GarminClient(raw)
 
 
@@ -66,21 +77,44 @@ def _strava_factory() -> StravaClient:
     return StravaClient(_conn, creds.get("client_id", ""), creds.get("client_secret", ""))
 
 
-_poller = Poller(_conn, garmin_factory=_garmin_factory, strava_factory=_strava_factory)
+def _hevy_factory() -> HevyClient:
+    api_key = db.get_config_value(_conn, "hevy_api_key")
+    if not api_key:
+        raise RuntimeError("Hevy API key is not configured")
+    return HevyClient(api_key=api_key)
+
+
+_poller = Poller(
+    _conn,
+    garmin_factory=_garmin_factory,
+    strava_factory=_strava_factory,
+    hevy_factory=_hevy_factory,
+    garmin_polling_enabled=not MANUAL_ONLY,
+    strava_polling_enabled=not MANUAL_ONLY,
+)
 _update_checker = UpdateChecker()
 
 
 @asynccontextmanager
 async def _lifespan(app):
-    if not MOCK_MODE:
+    poller_enabled = not MOCK_MODE
+    update_checker_enabled = not MOCK_MODE and not MANUAL_ONLY
+    if poller_enabled:
         _poller.start()
+    if update_checker_enabled:
         _update_checker.start()
     try:
         yield
     finally:
-        if not MOCK_MODE:
+        if poller_enabled:
             _poller.stop()
+        if update_checker_enabled:
             _update_checker.stop()
 
 
-app = create_app(_conn, lifespan=_lifespan)
+app = create_app(
+    _conn,
+    lifespan=_lifespan,
+    apply_hevy_match=_poller.apply_hevy_match,
+    process_hevy_workout=_poller.process_hevy_workout,
+)

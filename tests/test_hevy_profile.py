@@ -1,0 +1,188 @@
+"""Garmin-synced user profile: 24 h cache, override precedence, fallbacks."""
+
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
+
+import pytest
+
+from activsync import db, hevy_profile
+
+NOW = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+
+FETCHED = {"weight_kg": 72.5, "birth_year": 1988, "sex": "female", "vo2max": 52.0}
+
+
+@pytest.fixture
+def conn(tmp_path):
+    return db.connect(str(tmp_path / "test.db"))
+
+
+def _garmin(profile=None, fail=False):
+    garmin = MagicMock()
+    if fail:
+        garmin.fetch_user_profile.side_effect = RuntimeError("garmin down")
+    else:
+        garmin.fetch_user_profile.return_value = dict(profile or FETCHED)
+    return garmin
+
+
+def _seed_cache(conn, fetched_at, **values):
+    db.set_config_value(
+        conn,
+        hevy_profile.CACHE_KEY,
+        {**values, "fetched_at": fetched_at.isoformat()},
+    )
+
+
+def test_fetch_populates_cache_and_returns_profile(conn):
+    garmin = _garmin()
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.weight_kg == 72.5
+    assert profile.birth_year == 1988
+    assert profile.sex == "female"
+    assert profile.vo2max == 52.0
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY)
+    assert cached["fetched_at"] == NOW.isoformat()
+    assert cached["weight_kg"] == 72.5
+
+
+def test_fresh_cache_skips_the_garmin_fetch(conn):
+    _seed_cache(conn, NOW - timedelta(hours=23), weight_kg=70.0)
+    garmin = _garmin()
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert garmin.fetch_user_profile.call_count == 0
+    assert profile.weight_kg == 70.0
+
+
+def test_stale_cache_refetches(conn):
+    _seed_cache(conn, NOW - timedelta(hours=25), weight_kg=70.0)
+    garmin = _garmin()
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert garmin.fetch_user_profile.call_count == 1
+    assert profile.weight_kg == 72.5
+
+
+def test_override_wins_field_by_field(conn):
+    _seed_cache(conn, NOW - timedelta(hours=1), weight_kg=70.0, birth_year=1985)
+    settings = db.get_config_value(conn, "settings", default={}) or {}
+    settings["profile_override"] = {"weight_kg": 90.0}
+    db.set_config_value(conn, "settings", settings)
+
+    profile = hevy_profile.get_profile(conn, _garmin(), NOW)
+
+    assert profile.weight_kg == 90.0, "override field must win"
+    assert profile.birth_year == 1985, "non-overridden field comes from the cache"
+
+
+def test_fetch_failure_falls_back_to_stale_cache(conn):
+    _seed_cache(conn, NOW - timedelta(days=3), weight_kg=70.0, sex="male")
+
+    profile = hevy_profile.get_profile(conn, _garmin(fail=True), NOW)
+
+    assert profile.weight_kg == 70.0
+    assert profile.sex == "male"
+
+
+def test_fetch_failure_without_cache_falls_back_to_defaults(conn, caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="activsync.hevy_profile"):
+        profile = hevy_profile.get_profile(conn, _garmin(fail=True), NOW)
+
+    assert (profile.weight_kg, profile.birth_year, profile.vo2max, profile.sex) == (
+        80.0, 1990, 45.0, "male")
+    assert any("profile" in r.getMessage() for r in caplog.records), \
+        "falling back to defaults must warn"
+
+
+def test_partial_fetch_fills_missing_fields_with_defaults(conn):
+    garmin = _garmin(profile={"weight_kg": 75.0, "birth_year": None,
+                              "sex": None, "vo2max": None})
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.weight_kg == 75.0
+    assert profile.birth_year == 1990
+    assert profile.vo2max == 45.0
+    assert profile.sex == "male"
+
+
+def test_profile_fetch_does_not_clobber_settings_saved_during_network_call(conn):
+    db.set_config_value(conn, "settings", {"hevy_watch_strategy": "merge"})
+    garmin = MagicMock()
+
+    def fetch_and_save():
+        db.set_config_value(conn, "settings", {
+            "hevy_watch_strategy": "describe",
+            "profile_override": {"weight_kg": 91.0},
+        })
+        return dict(FETCHED)
+
+    garmin.fetch_user_profile.side_effect = fetch_and_save
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    settings = db.get_config_value(conn, "settings")
+    assert settings["hevy_watch_strategy"] == "describe"
+    assert settings["profile_override"] == {"weight_kg": 91.0}
+    assert profile.weight_kg == 91.0
+
+
+def test_stale_cache_survives_a_garmin_outage(conn):
+    """fetch_user_profile swallows its own errors and answers all-None, so an
+    outage reaches _refresh_cache as an empty result rather than a raise. It
+    must not overwrite the last good values."""
+    _seed_cache(conn, NOW - timedelta(hours=48), **FETCHED)
+    garmin = _garmin({"weight_kg": None, "birth_year": None,
+                      "sex": None, "vo2max": None})
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.weight_kg == 72.5
+    assert profile.birth_year == 1988
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={})
+    assert cached["weight_kg"] == 72.5
+
+
+def test_empty_fetch_without_a_cache_falls_back_to_defaults(conn):
+    garmin = _garmin({"weight_kg": None, "birth_year": None,
+                      "sex": None, "vo2max": None})
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.weight_kg == hevy_profile.PROFILE_DEFAULTS["weight_kg"]
+
+
+def test_a_partial_fetch_is_still_cached(conn):
+    """Some fields missing is a real answer, not an outage."""
+    garmin = _garmin({"weight_kg": 70.0, "birth_year": None,
+                      "sex": None, "vo2max": None})
+
+    hevy_profile.get_profile(conn, garmin, NOW)
+
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={})
+    assert cached["weight_kg"] == 70.0
+    assert "fetched_at" in cached
+
+
+def test_a_partial_fetch_keeps_the_fields_it_did_not_return(conn):
+    """fetch_user_profile reads the profile and vo2max independently, so one
+    half can fail while the other succeeds. The half that failed must not take
+    the cached values down with it."""
+    _seed_cache(conn, NOW - timedelta(hours=48), **FETCHED)
+    garmin = _garmin({"weight_kg": None, "birth_year": None,
+                      "sex": None, "vo2max": 60.0})
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.vo2max == 60.0
+    assert profile.weight_kg == 72.5
+    assert profile.birth_year == 1988
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={})
+    assert cached["weight_kg"] == 72.5

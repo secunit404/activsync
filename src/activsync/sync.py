@@ -9,7 +9,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from activsync import db
+from activsync import config, db, hevy_db, timeutil
 from activsync.garmin_client import ActivityRecord, GarminClient
 from activsync.strava_client import StravaClient, match_closest_activity
 
@@ -67,6 +67,16 @@ class GarminSyncStats:
 class PublishStats:
     published: int = 0
     failed: int = 0
+    blocked: int = 0
+    blocked_reasons: tuple[str, ...] = ()
+
+
+class PublishBlocked(Exception):
+    """Publishing is unsafe until the associated Hevy work is resolved."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 @dataclass
@@ -107,9 +117,55 @@ def _garmin_data_json(act: ActivityRecord) -> str:
     return json.dumps(data) if data else "{}"
 
 
-def _publish_row(conn: sqlite3.Connection, garmin: GarminClient, strava: StravaClient,
-                  garmin_activity_id: int, now: datetime) -> None:
+def _under_hevy_settlement_hold(conn: sqlite3.Connection, row: dict) -> bool:
+    cfg = config.load_config(conn)
+    if not cfg["hevy_enabled"]:
+        return False
+    if row["activity_type"] not in ("strength_training", "other"):
+        return False
+    if hevy_db.linked_workout_for_activity(conn, row["garmin_activity_id"]):
+        return False
+
+    try:
+        garmin_data = json.loads(row.get("garmin_data") or "{}")
+    except (TypeError, ValueError):
+        return True
+    duration = garmin_data.get("duration") if isinstance(garmin_data, dict) else None
+    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration < 0:
+        # Without an end time, no successful poll can be proven late enough.
+        return True
+
+    interval = cfg["hevy_poll_interval_minutes"]
+    try:
+        interval_minutes = max(0.0, float(interval))
+    except (TypeError, ValueError):
+        interval_minutes = float(config.DEFAULT_CONFIG["hevy_poll_interval_minutes"])
+    activity_end = _parse_start_time(row) + timedelta(seconds=duration)
+    release_after = activity_end + timedelta(minutes=interval_minutes + 5)
+    last_success = timeutil.parse_timestamp(
+        db.get_config_value(conn, "hevy_last_success_at")
+    )
+    return last_success is None or last_success < release_after
+
+
+def _publish_row(
+    conn: sqlite3.Connection,
+    garmin: GarminClient,
+    strava: StravaClient,
+    garmin_activity_id: int,
+    now: datetime,
+    *,
+    manual: bool = False,
+) -> None:
+    blocking = hevy_db.blocking_workout_for_activity(conn, garmin_activity_id)
+    if blocking is not None:
+        raise PublishBlocked(
+            f"hevy workout {blocking['hevy_id']} is {blocking['status']}"
+        )
+
     row = db.get_activity(conn, garmin_activity_id)
+    if not manual and _under_hevy_settlement_hold(conn, row):
+        raise PublishBlocked("settlement hold")
     start_time = datetime.strptime(row["start_time"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
     existing_strava_id = strava.find_existing_activity(start_time)
@@ -147,8 +203,6 @@ def sync_garmin(
     the table keeps whatever status the user left it in.
     """
     held_types = set(cfg["held_activity_types"])
-    marker = cfg["hevy2garmin_marker"]
-    marker_active = cfg["hevy2garmin_marker_enabled"] and bool(marker)
     lookback = cfg["lookback_days"] if lookback_days is None else lookback_days
     hold_cutoff = (
         None if hold_before is None
@@ -194,15 +248,6 @@ def sync_garmin(
             continue
 
         status = existing["publish_status"]
-        # The Hevy marker promotes a CATEGORY-held row to pending. A backlog-held
-        # row is held because it predates the normal window, not because of its
-        # category — an edit must not sneak the outage backlog past the hold.
-        if (
-            status == "held"
-            and existing.get("hold_reason") != HOLD_BACKLOG
-            and marker_active and marker in act.description
-        ):
-            status = "pending"
         db.update_activity_content(
             conn, act.garmin_activity_id, act.title, act.description,
             act.activity_type, new_hash, status, garmin_data,
@@ -266,13 +311,34 @@ def publish_pending(
             if manual and row["garmin_activity_id"] not in garmin_activity_ids:
                 continue
             try:
-                _publish_row(conn, garmin, strava, row["garmin_activity_id"], now)
+                _publish_row(
+                    conn,
+                    garmin,
+                    strava,
+                    row["garmin_activity_id"],
+                    now,
+                    manual=manual,
+                )
                 stats.published += 1
+            except PublishBlocked as exc:
+                stats.blocked += 1
+                stats.blocked_reasons += (exc.reason,)
+                log = logger.info if manual else logger.debug
+                log(
+                    "publish blocked for activity %s: %s",
+                    row["garmin_activity_id"],
+                    exc.reason,
+                )
             except Exception:
                 logger.exception("publish failed for activity %s", row["garmin_activity_id"])
                 stats.failed += 1
-    if stats.published or stats.failed:
-        logger.info("strava publish: %d published, %d failed", stats.published, stats.failed)
+    if stats.published or stats.failed or (manual and stats.blocked):
+        logger.info(
+            "strava publish: %d published, %d failed, %d blocked",
+            stats.published,
+            stats.failed,
+            stats.blocked,
+        )
     return stats
 
 
@@ -369,7 +435,7 @@ def publish_now(
     conn: sqlite3.Connection, garmin: GarminClient, strava: StravaClient,
     garmin_activity_id: int, now: datetime,
 ) -> None:
-    _publish_row(conn, garmin, strava, garmin_activity_id, now)
+    _publish_row(conn, garmin, strava, garmin_activity_id, now, manual=True)
 
 
 def edit_activity_metadata(
@@ -508,10 +574,8 @@ def exclude(conn: sqlite3.Connection, garmin_activity_id: int) -> None:
 def unexclude(conn: sqlite3.Connection, garmin_activity_id: int, cfg: dict) -> None:
     row = db.get_activity(conn, garmin_activity_id)
     held_types = set(cfg["held_activity_types"])
-    marker = cfg["hevy2garmin_marker"]
-    marker_active = cfg["hevy2garmin_marker_enabled"] and bool(marker)
 
-    if row["activity_type"] in held_types and not (marker_active and marker in row["description"]):
+    if row["activity_type"] in held_types:
         db.set_publish_status(conn, garmin_activity_id, "held", HOLD_CATEGORY)
     else:
         db.set_publish_status(conn, garmin_activity_id, "pending")

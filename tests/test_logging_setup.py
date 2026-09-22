@@ -145,10 +145,10 @@ def test_successful_static_asset_requests_are_not_logged():
     page request itself didn't already say."""
     log_filter = logging_setup.AccessNoiseFilter()
 
-    assert log_filter.filter(_access_record("/static/css/base.css?v=1.2.1", 200)) is False
-    assert log_filter.filter(_access_record("/static/favicon.png", 200)) is False
+    assert log_filter.filter(_access_record("/assets/app-a1b2c3.js", 200)) is False
+    assert log_filter.filter(_access_record("/favicon.ico", 200)) is False
     # A cache revalidation is just as routine as a fresh 200.
-    assert log_filter.filter(_access_record("/static/favicon.png", 304)) is False
+    assert log_filter.filter(_access_record("/favicon.ico", 304)) is False
 
 
 def test_failed_static_asset_requests_are_still_logged():
@@ -156,17 +156,17 @@ def test_failed_static_asset_requests_are_still_logged():
     lines carry real information."""
     log_filter = logging_setup.AccessNoiseFilter()
 
-    assert log_filter.filter(_access_record("/static/css/base.css?v=1.2.1", 404)) is True
-    assert log_filter.filter(_access_record("/static/css/base.css", 500)) is True
+    assert log_filter.filter(_access_record("/assets/app-a1b2c3.js", 404)) is True
+    assert log_filter.filter(_access_record("/assets/app-a1b2c3.js", 500)) is True
 
 
 def test_noise_filter_does_not_swallow_lookalike_paths():
     """Matching on the parsed path, not the message text, so these survive."""
     log_filter = logging_setup.AccessNoiseFilter()
 
-    assert log_filter.filter(_access_record("/staticky", 200)) is True
+    assert log_filter.filter(_access_record("/assets-lookalike", 200)) is True
     assert log_filter.filter(_access_record("/healthz", 200)) is True
-    assert log_filter.filter(_access_record("/api/static/thing", 200)) is True
+    assert log_filter.filter(_access_record("/api/assets/thing", 200)) is True
 
 
 def test_verbose_filter_keeps_everything():
@@ -175,7 +175,7 @@ def test_verbose_filter_keeps_everything():
     log_filter = logging_setup.AccessNoiseFilter(verbose=True)
 
     assert log_filter.filter(_access_record("/health", 200)) is True
-    assert log_filter.filter(_access_record("/static/css/base.css", 200)) is True
+    assert log_filter.filter(_access_record("/assets/app.js", 200)) is True
 
 
 def test_configure_logging_at_debug_keeps_routine_access_lines(capsys):
@@ -183,11 +183,11 @@ def test_configure_logging_at_debug_keeps_routine_access_lines(capsys):
     access = logging.getLogger("uvicorn.access")
 
     access.handle(_access_record("/health", 200))
-    access.handle(_access_record("/static/css/base.css", 200))
+    access.handle(_access_record("/assets/app.js", 200))
 
     out = capsys.readouterr().out
     assert "/health" in out
-    assert "/static/css/base.css" in out
+    assert "/assets/app.js" in out
     logging_setup.configure_logging(level="INFO", tz_name="UTC")
 
 
@@ -195,11 +195,11 @@ def test_configure_logging_silences_static_assets_end_to_end(capsys):
     logging_setup.configure_logging(level="INFO", tz_name="UTC")
     access = logging.getLogger("uvicorn.access")
 
-    access.handle(_access_record("/static/css/base.css?v=1.2.1", 200))
+    access.handle(_access_record("/assets/app-a1b2c3.js", 200))
     access.handle(_access_record("/", 200))
 
     out = capsys.readouterr().out
-    assert "/static/css/base.css" not in out
+    assert "/assets/app-a1b2c3.js" not in out
     assert '"GET / HTTP/1.1" 200' in out
 
 

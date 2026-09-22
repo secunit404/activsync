@@ -21,6 +21,25 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - run: python -m venv .venv && .venv/bin/pip install -e ".[dev]"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
@@ -35,3 +54,23 @@ jobs:
           tags: activsync:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # Building the image proved nothing about the SPA: the frontend is built
+      # in its own stage and shipped as package data, so a missing build step
+      # only shows up as a 404 at runtime.
+      - name: Smoke test the built image
+        run: |
+          docker run -d --name activsync-ci -p 8381:8381 activsync:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8381/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8381/health >/dev/null
+          code=$(curl -s -o /tmp/index.html -w '%{http_code}' http://localhost:8381/)
+          if [ "$code" != "200" ]; then
+            echo "GET / returned $code (expected 200) — is the SPA in the image?"
+            docker logs activsync-ci
+            exit 1
+          fi
+          grep -q '__reactRouterContext' /tmp/index.html \
+            || { echo "served page is not the React shell"; exit 1; }
+          docker rm -f activsync-ci

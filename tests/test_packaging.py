@@ -1,6 +1,6 @@
 import ast
 import re
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).parents[1]
@@ -14,18 +14,15 @@ def _package_data_patterns() -> list[str]:
     return ast.literal_eval(match.group(1))
 
 
-def test_all_template_assets_are_included_in_package_data():
+def test_runtime_icons_are_declared_as_package_data():
     patterns = _package_data_patterns()
-    template_assets = (
-        path.relative_to(PACKAGE_ROOT).as_posix()
-        for path in (PACKAGE_ROOT / "templates").rglob("*")
-        if path.is_file()
-    )
+    assert "static/favicon.png" in patterns
+    assert "static/apple-touch-icon.png" in patterns
+    assert (PACKAGE_ROOT / "static" / "favicon.png").is_file()
+    assert (PACKAGE_ROOT / "static" / "apple-touch-icon.png").is_file()
 
-    missing = [
-        asset
-        for asset in template_assets
-        if not any(PurePosixPath(asset).match(pattern) for pattern in patterns)
-    ]
 
-    assert missing == []
+def test_react_build_output_is_declared_as_package_data():
+    patterns = _package_data_patterns()
+    assert "web/*" in patterns
+    assert "web/assets/*" in patterns

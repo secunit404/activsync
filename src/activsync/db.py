@@ -4,7 +4,102 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+from contextlib import contextmanager
 from datetime import datetime
+
+# `check_same_thread=False` (below) only disables Python's ownership check —
+# it does NOT make the sqlite3 module safe for concurrent use of one
+# Connection from multiple threads. FastAPI runs every sync route handler in
+# a worker thread pool, and this app shares a single Connection across all of
+# them (see main.py's module-level `_conn`), so two requests landing at the
+# same moment reliably corrupted each other's reads: observed
+# `sqlite3.InterfaceError: bad parameter or other API misuse` and rows from
+# one query silently showing up in another's result under concurrent
+# requests (e.g. plain `curl` fired in parallel at /api/v1/app).
+#
+# The actual corruption source was the stdlib's per-connection LRU cache of
+# *compiled statement objects* (keyed by SQL text) that `cached_statements=0`
+# below now disables — two concurrent calls executing the same SQL text with
+# different bind parameters could be handed the same not-thread-safe
+# statement object mid-bind/step. SQLite itself is compiled serialized
+# (`sqlite3.threadsafety == 3`), so with that cache gone, a plain per-call
+# lock around `execute`/`commit`/etc. is enough to keep single-statement
+# calls safe on this shared connection.
+#
+# It is an `RLock`, not a plain `Lock`, for a different reason than a stale
+# version of this comment used to claim: `Connection.execute` does NOT
+# internally call `self.cursor()` (verified against CPython 3.14 — it never
+# instantiates our old cursor subclass). The real reentrancy need comes from
+# `transaction()` below: it holds `_DB_LOCK` across an entire multi-statement
+# unit of work, including the `execute()`/`commit()` calls made from inside
+# that `with` block — and those calls independently re-acquire `_DB_LOCK` via
+# the overrides just below. A plain `Lock` would deadlock on that nesting.
+_DB_LOCK = threading.RLock()
+
+
+class _LockingConnection(sqlite3.Connection):
+    """Serializes all statement execution and fetching against `_DB_LOCK` —
+    see the module docstring above `_DB_LOCK` for why a shared, multi-thread
+    Connection needs this. Every call site in this codebase goes through
+    `conn.execute(...)`/`conn.executemany(...)`/`conn.executescript(...)`/
+    `conn.commit()`/`conn.rollback()` (no call site holds its own
+    `.cursor()`), so overriding those five covers the whole app without
+    touching any of those call sites."""
+
+    def execute(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().execute(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().executemany(*args, **kwargs)
+
+    def executescript(self, *args, **kwargs):
+        with _DB_LOCK:
+            return super().executescript(*args, **kwargs)
+
+    def commit(self):
+        with _DB_LOCK:
+            return super().commit()
+
+    def rollback(self):
+        with _DB_LOCK:
+            return super().rollback()
+
+
+@contextmanager
+def transaction(conn: sqlite3.Connection):
+    """Hold `_DB_LOCK` across an entire multi-statement unit of work, from
+    before its first statement through its final `commit()`/`rollback()`.
+
+    With `isolation_level=""` (the sqlite3 default we use), the implicit
+    `BEGIN` opened by the first write is connection-global. On a connection
+    shared across threads, a second thread's unrelated `commit()` landing
+    between two statements of a "single" logical unit commits that unit's
+    first statement early — the second thread didn't ask to commit someone
+    else's half-finished work, but `sqlite3.Connection.commit()` doesn't know
+    the difference. Per-call locking on `execute`/`commit` (above) doesn't
+    prevent this: each call takes and releases the lock individually, so
+    another thread can still slip a full execute+commit cycle of its own in
+    between two calls of the "atomic" unit.
+
+    Usage — replace the unit's own `commit()`/`rollback()` with this:
+
+        with db.transaction(conn):
+            conn.execute(...)
+            conn.execute(...)
+            # no manual commit() — this context manager commits on a clean
+            # exit and rolls back (then re-raises) on any exception.
+    """
+    with _DB_LOCK:
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS activities (
@@ -31,7 +126,22 @@ CREATE TABLE IF NOT EXISTS app_config (
 
 
 def connect(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False)
+    # cached_statements=0: the stdlib sqlite3 module keeps a per-connection
+    # LRU cache of *compiled statement objects* keyed by SQL text, reused
+    # across calls that pass the same SQL string (e.g. every
+    # `get_config_value` call executes the identical
+    # "SELECT value FROM app_config WHERE key = ?"). Two concurrent
+    # get_config_value calls for *different keys* could be handed that same
+    # shared, not-thread-safe statement object mid-bind/step, mixing one
+    # call's row into the other's — this is what actually produced the
+    # `sqlite3.InterfaceError`s and cross-contaminated config reads under
+    # concurrent requests (SQLite itself is compiled serialized/thread-safe
+    # here — `sqlite3.threadsafety == 3` — so the corruption was in this
+    # Python-level cache, not the C library). Disabling the cache forces a
+    # fresh compile per call, which is fine at this app's request volume.
+    conn = sqlite3.connect(
+        path, check_same_thread=False, cached_statements=0, factory=_LockingConnection
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
@@ -54,6 +164,9 @@ def connect(path: str) -> sqlite3.Connection:
     conn.execute("DROP TABLE IF EXISTS sessions")
     conn.execute("DELETE FROM app_config WHERE key = 'auth'")
     conn.commit()
+    # Hevy sync tables live in their own module; local import avoids a cycle.
+    from activsync import hevy_db
+    hevy_db.init_schema(conn)
     return conn
 
 
@@ -172,6 +285,28 @@ def set_published(
         (strava_activity_id, now.isoformat(), garmin_activity_id),
     )
     conn.commit()
+
+
+def activity_duration_seconds(activity: dict | None) -> float:
+    """Duration from the garmin_data JSON column; 0.0 when it is absent,
+    unparseable, or not a number. Callers use it to build a time window, so a
+    bad blob has to read as "unknown", never raise."""
+    if not activity:
+        return 0.0
+    try:
+        return float(json.loads(activity["garmin_data"] or "{}").get("duration") or 0)
+    except (ValueError, TypeError, KeyError, IndexError):
+        return 0.0
+
+
+def is_published(activity: dict | None) -> bool:
+    """A row that actually reached Strava. Both halves matter: publish_status
+    can read "published" while strava_activity_id is still unset."""
+    return bool(
+        activity
+        and activity.get("publish_status") == "published"
+        and activity.get("strava_activity_id") is not None
+    )
 
 
 def list_activities(
