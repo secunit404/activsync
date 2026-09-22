@@ -8,7 +8,11 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from garminconnect import Garmin, GarminConnectAuthenticationError
+from garminconnect import (
+    Garmin,
+    GarminConnectAuthenticationError,
+    GarminConnectNotFoundError,
+)
 
 from activsync.rate_limit import RateLimiter
 from activsync.timeutil import parse_iso_utc
@@ -55,10 +59,19 @@ def _is_subcategory_rejection(exc: Exception) -> bool:
 
 
 def _is_not_found(exc: Exception) -> bool:
-    response = getattr(exc, "response", None)
-    if response is not None and getattr(response, "status_code", None) == 404:
+    """A definitive 404, read from the status code rather than the message.
+
+    garminconnect stringifies transport failures as "Connection error: {e}"
+    with the request URL embedded, and that URL carries the activity id — so a
+    substring match answered True for any id containing "404" whenever Garmin
+    was merely down. Callers escalate ActivityGone to destructive recovery
+    (completing a replace, offering resync-fresh), so it must never stand in
+    for an outage.
+    """
+    if isinstance(exc, GarminConnectNotFoundError):
         return True
-    return "404" in str(exc)
+    response = _exception_response(exc)
+    return getattr(response, "status_code", None) == 404
 
 
 def _exception_response(exc: Exception):

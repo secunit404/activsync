@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from garminconnect import GarminConnectNotFoundError
 
 from activsync import db, hevy_db, hevy_sync
 from activsync.fit_builder import DeviceIdentity
@@ -777,7 +778,7 @@ def test_finalize_resume_from_delete_step_treats_404_as_done():
     """Crash after the delete happened: retry sees 404 → success, not parking."""
     conn = make_conn()
     garmin = StubGarmin()
-    garmin.delete_exc = RuntimeError("404 Not Found for url")
+    garmin.delete_exc = GarminConnectNotFoundError("404 Not Found for url")
     row = seed_row(conn)
     seed_activity(conn, 111)
     assert hevy_db.claim_source(conn, "w1", 111)

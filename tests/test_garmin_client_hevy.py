@@ -1,6 +1,9 @@
 """Tests for the Hevy-integration extensions on GarminClient."""
 
+from types import SimpleNamespace
+
 import pytest
+from garminconnect import GarminConnectNotFoundError
 
 from activsync import garmin_client as gc_module
 from activsync.garmin_client import (
@@ -159,7 +162,7 @@ def test_put_exercise_sets_subcategory_rejection():
 
 def test_put_exercise_sets_404_raises_activity_gone():
     raw = StubRaw()
-    raw.set_sets_exc = RuntimeError("404 Not Found for url")
+    raw.set_sets_exc = GarminConnectNotFoundError("404 Not Found for url")
     client = GarminClient(raw)
     with pytest.raises(ActivityGone):
         client.put_exercise_sets(99, {"exerciseSets": []})
@@ -195,7 +198,7 @@ def test_activity_specific_wrappers_translate_404(method, args):
     raw = StubRaw()
 
     def gone(*_args, **_kwargs):
-        raise RuntimeError("404 Not Found")
+        raise GarminConnectNotFoundError("activity not found")
 
     raw.get_activity_exercise_sets = gone
     raw.set_activity_name = gone
@@ -282,3 +285,46 @@ def test_put_exercise_sets_goes_through_limiter(monkeypatch):
     client = GarminClient(raw)
     client.put_exercise_sets(99, {"exerciseSets": []})
     assert calls, "put_exercise_sets bypassed the shared limiter"
+
+
+# -- 404 detection ----------------------------------------------------------
+
+def test_outage_on_an_activity_whose_id_contains_404_is_not_read_as_gone():
+    """garminconnect wraps transport failures as "Connection error: {e}" where
+    the text carries the request URL — and the URL carries the activity id. A
+    substring match turns an outage into "deleted on Garmin", which unlocks
+    destructive recovery paths."""
+    raw = StubRaw()
+    raw.set_sets_exc = RuntimeError(
+        "Connection error: 503 Server Error for url: "
+        "https://connectapi.garmin.com/activity-service/activity/19404773/exerciseSets"
+    )
+    client = GarminClient(raw)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        client.put_exercise_sets(19404773, {"exerciseSets": []})
+    assert not isinstance(exc_info.value, ActivityGone)
+
+
+def test_a_real_404_response_is_still_read_as_gone():
+    raw = StubRaw()
+    exc = RuntimeError("not found")
+    exc.response = SimpleNamespace(status_code=404)
+    raw.set_sets_exc = exc
+    client = GarminClient(raw)
+
+    with pytest.raises(ActivityGone):
+        client.put_exercise_sets(99, {"exerciseSets": []})
+
+
+def test_a_wrapped_404_is_read_as_gone_through_the_cause_chain():
+    raw = StubRaw()
+    inner = RuntimeError("404 Client Error")
+    inner.response = SimpleNamespace(status_code=404)
+    outer = RuntimeError("Connection error: 404 Client Error")
+    outer.__cause__ = inner
+    raw.set_sets_exc = outer
+    client = GarminClient(raw)
+
+    with pytest.raises(ActivityGone):
+        client.put_exercise_sets(99, {"exerciseSets": []})
