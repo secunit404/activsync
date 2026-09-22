@@ -2,7 +2,9 @@ name: dev-image
 
 on:
   push:
-    branches-ignore: [main]
+    # release-please's PR branch only ever carries a version bump and a
+    # changelog, so a multi-arch build of it on every release is waste.
+    branches-ignore: [main, "release-please--**"]
   delete:
   workflow_dispatch:
 
