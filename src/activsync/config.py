@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import contextmanager
 
 from activsync import db
 from activsync.hevy_description import (
@@ -54,3 +55,18 @@ def _development_mode() -> bool:
 
 def save_config(conn: sqlite3.Connection, cfg: dict) -> None:
     db.set_config_value(conn, "settings", cfg)
+
+
+@contextmanager
+def editing(conn: sqlite3.Connection):
+    """Edit the config as one unit: load, mutate, save, all under the DB lock.
+
+    Read and write have to be held together. The poller writes the same
+    `settings` blob (a detected device identity), so a load here and a save
+    there interleave into a lost update — whichever writes second drops the
+    other's change.
+    """
+    with db.transaction(conn):
+        cfg = load_config(conn)
+        yield cfg
+        save_config(conn, cfg)

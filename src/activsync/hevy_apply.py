@@ -83,11 +83,15 @@ def _profile_from_cfg(cfg: dict) -> Profile:
 
 
 def _persist_identity(conn: sqlite3.Connection, identity) -> None:
-    stored = db.get_config_value(conn, "settings", default={}) or {}
-    stored["hevy_device_identity"] = {
-        "manufacturer": identity.manufacturer, "product": identity.product,
-        "serial": identity.serial}
-    db.set_config_value(conn, "settings", stored)
+    # Read and write as one unit: a settings save from the request thread
+    # landing between them would be overwritten by this stale copy. The raw
+    # blob is used rather than load_config so defaults are not baked into it.
+    with db.transaction(conn):
+        stored = db.get_config_value(conn, "settings", default={}) or {}
+        stored["hevy_device_identity"] = {
+            "manufacturer": identity.manufacturer, "product": identity.product,
+            "serial": identity.serial}
+        db.set_config_value(conn, "settings", stored)
 
 
 def _identity_for_build(conn: sqlite3.Connection, cfg: dict):

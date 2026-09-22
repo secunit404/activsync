@@ -40,6 +40,20 @@ def _valid_event(event: object) -> bool:
     return False
 
 
+def _more_pages(data: object, page: int) -> bool:
+    """Whether a paged response says there is anything after `page`.
+
+    A page_count that is missing or not an integer stops the walk here rather
+    than being trusted as a number: continuing would page forever against a
+    malformed response, and pretending it equals `page` is what silently
+    truncated the backfill scan.
+    """
+    if not isinstance(data, dict):
+        return False
+    page_count = data.get("page_count")
+    return isinstance(page_count, int) and page < page_count
+
+
 class HevyClient:
     """HTTP client for the Hevy API v1."""
 
@@ -145,8 +159,7 @@ class HevyClient:
                     events.append(event)
                 else:
                     logger.warning("skipping malformed hevy event: %.200s", event)
-            page_count = data.get("page_count", page)
-            if page >= page_count:
+            if not _more_pages(data, page):
                 break
             page += 1
         return events
@@ -174,8 +187,7 @@ class HevyClient:
         while True:
             data = self.get_exercise_templates_page(page, page_size=100)
             templates.extend(data.get("exercise_templates", []))
-            page_count = data.get("page_count", page)
-            if page >= page_count:
+            if not _more_pages(data, page):
                 break
             page += 1
         return templates

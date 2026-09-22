@@ -577,33 +577,32 @@ def create_router(
                 status_code=400,
                 detail="Device identity override needs all three numbers — or none.",
             )
-        cfg = config.load_config(conn)
-        cfg.update(
-            {
-                "hevy_enabled": payload.enabled,
-                "hevy_watch_strategy": payload.watch_strategy,
-                "hevy_match_mode": payload.match_mode,
-                "hevy_title_template": payload.title_template,
-                "hevy_description_template": payload.description_template,
-                "hevy_summary_on_structured": payload.summary_on_structured,
-                "hevy_grace_minutes": payload.grace_minutes,
-                "hevy_poll_interval_minutes": payload.poll_interval_minutes,
-                # Its own key: blanking the form must not wipe the identity
-                # detected from the watch (hevy_device_identity).
-                "hevy_device_identity_override": identity_values if provided
-                else None,
+        with config.editing(conn) as cfg:
+            cfg.update(
+                {
+                    "hevy_enabled": payload.enabled,
+                    "hevy_watch_strategy": payload.watch_strategy,
+                    "hevy_match_mode": payload.match_mode,
+                    "hevy_title_template": payload.title_template,
+                    "hevy_description_template": payload.description_template,
+                    "hevy_summary_on_structured": payload.summary_on_structured,
+                    "hevy_grace_minutes": payload.grace_minutes,
+                    "hevy_poll_interval_minutes": payload.poll_interval_minutes,
+                    # Its own key: blanking the form must not wipe the identity
+                    # detected from the watch (hevy_device_identity).
+                    "hevy_device_identity_override": identity_values if provided
+                    else None,
+                }
+            )
+            profile = {
+                key: value
+                for key, value in payload.profile_override.model_dump().items()
+                if value is not None
             }
-        )
-        profile = {
-            key: value
-            for key, value in payload.profile_override.model_dump().items()
-            if value is not None
-        }
-        if profile:
-            cfg["profile_override"] = profile
-        else:
-            cfg.pop("profile_override", None)
-        config.save_config(conn, cfg)
+            if profile:
+                cfg["profile_override"] = profile
+            else:
+                cfg.pop("profile_override", None)
         events.bus.publish("refresh")
         return action("Hevy settings saved.")
 

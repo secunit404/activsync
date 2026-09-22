@@ -149,3 +149,21 @@ def test_get_workout_count_returns_none_when_unusable(monkeypatch, payload):
     client = HevyClient(api_key="k")
     monkeypatch.setattr(client, "_get", lambda path, params=None: payload)
     assert client.get_workout_count() is None
+
+
+def test_iter_events_stops_when_page_count_is_not_a_number(monkeypatch):
+    """A malformed page_count must not be trusted into an endless walk."""
+    client = HevyClient(api_key="k")
+    calls = []
+
+    def fake_get(path, params=None):
+        calls.append(params["page"])
+        return {"page_count": "lots", "events": [
+            {"type": "deleted", "id": f"w{params['page']}",
+             "deleted_at": "2026-07-18T09:00:00Z"}]}
+
+    monkeypatch.setattr(client, "_get", fake_get)
+    events = client.iter_events_since("2026-07-01T00:00:00Z")
+
+    assert calls == [1]
+    assert len(events) == 1
