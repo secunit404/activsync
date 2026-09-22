@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/secunit404/activsync/compare/v1.2.4...v1.3.0) (2026-09-22)
+
+
+### Features
+
+* report the running build in the footer ([#45](https://github.com/secunit404/activsync/issues/45)) ([32bb91f](https://github.com/secunit404/activsync/commit/32bb91f1e7835111409990a48d2caaec578b1d03))
+
 ## [1.2.4](https://github.com/secunit404/activsync/compare/v1.2.3...v1.2.4) (2026-07-17)
 
 
