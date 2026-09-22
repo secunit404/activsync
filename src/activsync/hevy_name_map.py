@@ -6,8 +6,14 @@ auto-generated TEMPLATE_TO_GARMIN table, which is also re-copied verbatim, so
 corrections belong here rather than edited into it.
 
 The (category, subcategory) ids are FIT profile values; their names live in
-`fit_profile`, which reads them from Garmin's SDK. Kept apart from the lookup
-logic in `hevy_mapper` because the two change for entirely different reasons.
+`fit_profile`, which reads them from Garmin's SDK. Section banners group by
+Hevy exercise family, which is how you find a row; they say nothing about the
+FIT category, because a family routinely spans several (chest dips are
+TRICEPS_EXTENSION, banded raises are BANDED_EXERCISES). Each row's own trailing
+comment is the category claim, and a test holds it to the value it sits on.
+
+Kept apart from the lookup logic in `hevy_mapper` because the two change for
+entirely different reasons.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ from __future__ import annotations
 HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
 
     # ======================================================================= #
-    #  CHEST – Bench Press (category 0)
+    #  CHEST – Bench Press
     # ======================================================================= #
     "Bench Press (Barbell)":                    (0, 1),    # bench_press / barbell_bench_press
     "Bench Press (Cable)":                      (0, 20),   # bench_press / single_arm_cable_chest_press (closest cable bench)
@@ -45,7 +51,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Plate Squeeze (Svend Press)":              (0, 12),   # bench_press / kettlebell_chest_press (closest svend press)
 
     # ======================================================================= #
-    #  CHEST – Flyes (category 9)
+    #  CHEST – Flyes
     # ======================================================================= #
     "Butterfly (Pec Deck)":                     (9, 2),    # flye / dumbbell_flye (closest pec deck)
     "Cable Fly Crossovers":                     (9, 0),    # flye / cable_crossover
@@ -60,7 +66,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Single Arm Cable Crossover":               (9, 0),    # flye / cable_crossover (single arm)
 
     # ======================================================================= #
-    #  CHEST – Push Ups (category 22)
+    #  CHEST – Push Ups
     # ======================================================================= #
     "Clap Push Ups":                            (22, 7),   # push_up / clapping_push_up
     "Decline Push Up":                          (22, 13),  # push_up / decline_push_up
@@ -76,7 +82,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Ring Push Up":                             (22, 75),  # push_up / ring_push_up
 
     # ======================================================================= #
-    #  CHEST – Dips (category 30 – triceps_extension)
+    #  CHEST – Dips
     # ======================================================================= #
     "Bench Dip":                                (30, 0),   # triceps_extension / bench_dip
     "Chest Dip":                                (30, 2),   # triceps_extension / body_weight_dip
@@ -84,13 +90,13 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Chest Dip (Weighted)":                     (30, 40),  # triceps_extension / weighted_dip
 
     # ======================================================================= #
-    #  CHEST – Pullovers (category 21 – pull_up)
+    #  CHEST – Pullovers
     # ======================================================================= #
     "Pullover (Dumbbell)":                      (21, 8),   # pull_up / ez_bar_pullover (closest pullover)
     "Pullover (Machine)":                       (21, 8),   # pull_up / ez_bar_pullover (closest)
 
     # ======================================================================= #
-    #  BACK – Rows (category 23)
+    #  BACK – Rows
     # ======================================================================= #
     "Bent Over Row (Band)":                     (23, 65535), # row / no_name
     "Bent Over Row (Barbell)":                  (23, 46),  # row / bent_over_row_with_barbell
@@ -117,7 +123,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "T Bar Row":                                (23, 28),  # row / t_bar_row
 
     # ======================================================================= #
-    #  BACK – Pull Ups / Lat Pulldown (category 21)
+    #  BACK – Pull Ups / Lat Pulldown
     # ======================================================================= #
     "Chin Up":                                  (21, 39),  # pull_up / chin_up
     "Chin Up (Assisted)":                       (21, 2),   # pull_up / band_assisted_chin_up (closest; FIT only names the band-assisted variant)
@@ -144,7 +150,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Wide Pull Up":                             (21, 26),  # pull_up / wide_grip_pull_up
 
     # ======================================================================= #
-    #  BACK – Hyperextension (category 13)
+    #  BACK – Hyperextension
     # ======================================================================= #
     "Back Extension (Hyperextension)":          (13, 25),  # hyperextension / spine_extension
     "Back Extension (Machine)":                 (13, 25),  # hyperextension / spine_extension (machine)
@@ -152,7 +158,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Reverse Hyperextension":                   (13, 4),   # hyperextension / bent_knee_reverse_hyperextension
 
     # ======================================================================= #
-    #  SHOULDERS – Shoulder Press (category 24)
+    #  SHOULDERS – Shoulder Press
     # ======================================================================= #
     "Arnold Press (Dumbbell)":                  (24, 1),   # shoulder_press / arnold_press
     "Kettlebell Shoulder Press":                (24, 15),  # shoulder_press / overhead_dumbbell_press (closest KB)
@@ -169,7 +175,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Standing Military Press (Barbell)":        (24, 25),  # shoulder_press / military_press
 
     # ======================================================================= #
-    #  SHOULDERS – Lateral Raise (category 14)
+    #  SHOULDERS – Lateral Raise
     # ======================================================================= #
     "Around The World":                         (14, 32),  # lateral_raise / arm_circles (closest)
     "Chest Supported Y Raise (Dumbbell)":       (25, 20),  # shoulder_stability / incline_y_raise
@@ -190,7 +196,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Ring Dips":                                (14, 17),  # lateral_raise / ring_dip
 
     # ======================================================================= #
-    #  SHOULDERS – Reverse Flyes / Rear Delt (category 9)
+    #  SHOULDERS – Reverse Flyes / Rear Delt
     # ======================================================================= #
     "Chest Supported Reverse Fly (Dumbbell)":   (9, 5),    # flye / kneeling_rear_flye (closest)
     "Rear Delt Reverse Fly (Cable)":            (9, 6),    # flye / single_arm_standing_cable_reverse_flye
@@ -201,13 +207,13 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Band Pullaparts":                          (9, 5),    # flye / kneeling_rear_flye (closest band)
 
     # ======================================================================= #
-    #  SHOULDERS – Shoulder Stability (category 25)
+    #  SHOULDERS – Shoulder Stability
     # ======================================================================= #
     "Shoulder Extension":                       (25, 3),   # shoulder_stability / bent_arm_lateral_raise_and_external_rotation
     "Shoulder Taps":                            (25, 3),   # shoulder_stability / bent_arm_lateral_raise_and_external_rotation (closest)
 
     # ======================================================================= #
-    #  SHOULDERS – Shrugs & Upright Rows (category 26)
+    #  SHOULDERS – Shrugs & Upright Rows
     # ======================================================================= #
     "Shrug (Barbell)":                          (26, 1),   # shrug / barbell_shrug
     "Shrug (Cable)":                            (26, 5),   # shrug / dumbbell_shrug (closest cable)
@@ -220,7 +226,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Jump Shrug":                               (26, 0),   # shrug / barbell_jump_shrug
 
     # ======================================================================= #
-    #  BICEPS – Curls (category 7)
+    #  BICEPS – Curls
     # ======================================================================= #
     "21s Bicep Curl":                           (7, 3),    # curl / barbell_biceps_curl (21s variant)
     "Behind the Back Bicep Wrist Curl (Barbell)": (7, 4),  # curl / barbell_reverse_wrist_curl
@@ -261,7 +267,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Zottman Curl (Dumbbell)":                  (7, 42),   # curl / twisting_standing_dumbbell_biceps_curl
 
     # ======================================================================= #
-    #  TRICEPS – Extensions (category 30)
+    #  TRICEPS – Extensions
     # ======================================================================= #
     "Floor Triceps Dip":                        (30, 0),   # triceps_extension / bench_dip (closest floor dip)
     "One-Arm Cable Cross Body Triceps Extension": (30, 3), # triceps_extension / cable_kickback
@@ -288,7 +294,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Wide-Elbow Triceps Press (Dumbbell)":      (30, 15),  # triceps_extension / overhead_dumbbell_triceps_extension (closest)
 
     # ======================================================================= #
-    #  LEGS – Squat (category 28)
+    #  LEGS – Squat
     # ======================================================================= #
     "Assisted Pistol Squats":                   (28, 47),  # squat / pistol_squat (assisted)
     "Belt Squat (Machine)":                     (28, 61),  # squat / squat (belt squat variant)
@@ -327,7 +333,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Zercher Squat":                            (28, 86),  # squat / zercher_squat
 
     # ======================================================================= #
-    #  LEGS – Step Ups (category 28)
+    #  LEGS – Step Ups
     # ======================================================================= #
     "Dumbbell Step Up":                         (28, 32),  # squat / dumbbell_step_up
     "Step Up":                                  (28, 66),  # squat / step_up
@@ -335,7 +341,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Stair Machine (Steps)":                    (47, 0),   # stair_stepper / stair_stepper
 
     # ======================================================================= #
-    #  LEGS – Lunges (category 17)
+    #  LEGS – Lunges
     # ======================================================================= #
     "Bulgarian Split Squat":                    (17, 7),   # lunge / barbell_bulgarian_split_squat (closest)
     "Curtsy Lunge (Dumbbell)":                  (17, 21),  # lunge / dumbbell_lunge (closest curtsy)
@@ -353,7 +359,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Walking Lunge (Dumbbell)":                 (17, 77),  # lunge / walking_dumbbell_lunge
 
     # ======================================================================= #
-    #  LEGS – Deadlift (category 8)
+    #  LEGS – Deadlift
     # ======================================================================= #
     "Deadlift (Band)":                          (37, 9),   # banded_exercises / deadlift
     "Deadlift (Barbell)":                       (8, 0),    # deadlift / barbell_deadlift
@@ -370,7 +376,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Sumo Deadlift":                            (8, 15),   # deadlift / sumo_deadlift
 
     # ======================================================================= #
-    #  LEGS – Leg Curl (category 15)
+    #  LEGS – Leg Curl
     # ======================================================================= #
     "Good Morning (Barbell)":                   (15, 2),   # leg_curl / good_morning
     "Lying Leg Curl (Machine)":                 (15, 0),   # leg_curl / leg_curl
@@ -385,7 +391,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Single Leg Extensions":                    (6, 33),   # crunch / leg_extensions (single leg)
 
     # ======================================================================= #
-    #  LEGS – Calf Raise (category 1)
+    #  LEGS – Calf Raise
     # ======================================================================= #
     "Calf Extension (Machine)":                 (1, 18),   # calf_raise / standing_calf_raise (closest)
     "Calf Press (Machine)":                     (1, 6),    # calf_raise / seated_calf_raise (closest; a machine calf press is seated)
@@ -401,7 +407,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Standing Calf Raise (Smith)":              (1, 17),   # calf_raise / standing_barbell_calf_raise (smith)
 
     # ======================================================================= #
-    #  LEGS – Hip Raise / Glutes (category 10)
+    #  LEGS – Hip Raise / Glutes
     # ======================================================================= #
     "Frog Pumps (Dumbbell)":                    (10, 11),  # hip_raise / hip_raise (closest frog pump)
     "Glute Bridge":                             (10, 11),  # hip_raise / hip_raise
@@ -416,7 +422,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Single Leg Hip Thrust (Dumbbell)":         (10, 30),  # hip_raise / single_leg_hip_raise (dumbbell)
 
     # ======================================================================= #
-    #  LEGS – Hip Stability (category 11)
+    #  LEGS – Hip Stability
     # ======================================================================= #
     "Clamshell":                                (10, 44),  # hip_raise / clams
     "Fire Hydrants":                            (11, 5),   # hip_stability / fire_hydrant_kicks
@@ -430,12 +436,12 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Standing Cable Glute Kickbacks":           (11, 30),  # hip_stability / standing_rear_leg_raise (cable)
 
     # ======================================================================= #
-    #  LEGS – Hip Swing (category 12)
+    #  LEGS – Hip Swing
     # ======================================================================= #
     "Kettlebell Swing":                         (10, 23),  # hip_raise / kettlebell_swing
 
     # ======================================================================= #
-    #  CORE – Core (category 5)
+    #  CORE – Core
     # ======================================================================= #
     "Ab Scissors":                              (5, 65),   # core / scissors
     "Cable Core Palloff Press":                 (5, 46),   # core / russian_twist (closest anti-rotation)
@@ -448,7 +454,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Torso Rotation":                           (4, 2),    # chop / cable_woodchop (closest)
 
     # ======================================================================= #
-    #  CORE – Crunch (category 6)
+    #  CORE – Crunch
     # ======================================================================= #
     "Ab Wheel":                                 (5, 18),   # core / kneeling_ab_wheel
     "Bicycle Crunch":                           (6, 0),    # crunch / bicycle_crunch
@@ -467,7 +473,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Toes to Bar":                              (6, 81),   # crunch / toes_to_bar
 
     # ======================================================================= #
-    #  CORE – Sit Up (category 27)
+    #  CORE – Sit Up
     # ======================================================================= #
     "Elbow to Knee":                            (6, 11),   # crunch / elbow_to_knee_crunch
     "Jackknife Sit Up":                         (27, 37),  # sit_up / sit_up (jackknife variant)
@@ -477,7 +483,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "V Up":                                     (27, 31),  # sit_up / v_up
 
     # ======================================================================= #
-    #  CORE – Leg Raise (category 16)
+    #  CORE – Leg Raise
     # ======================================================================= #
     "Dragon Flag":                              (16, 1),   # leg_raise / hanging_leg_raise (closest)
     "Dragonfly":                                (16, 1),   # leg_raise / hanging_leg_raise (closest)
@@ -489,7 +495,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Lying Leg Raise":                          (16, 8),   # leg_raise / lying_straight_leg_raise
 
     # ======================================================================= #
-    #  CORE – Plank (category 19)
+    #  CORE – Plank
     # ======================================================================= #
     "Mountain Climber":                         (19, 34),  # plank / mountain_climber
     "Plank":                                    (19, 43),  # plank / plank
@@ -498,12 +504,12 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Spiderman":                                (19, 90),  # plank / spiderman_plank
 
     # ======================================================================= #
-    #  CORE – Hyperextension / Superman (category 13)
+    #  CORE – Hyperextension / Superman
     # ======================================================================= #
     "Superman":                                 (13, 29),  # hyperextension / superman_from_floor
 
     # ======================================================================= #
-    #  OLYMPIC LIFTS (category 18)
+    #  OLYMPIC LIFTS
     # ======================================================================= #
     "Clean":                                    (18, 11),  # olympic_lift / clean
     "Clean Pull":                               (18, 11),  # olympic_lift / clean (pull phase)
@@ -522,7 +528,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Kettlebell High Pull":                     (18, 8),   # olympic_lift / barbell_high_pull (closest KB)
 
     # ======================================================================= #
-    #  PLYOMETRICS (category 20)
+    #  PLYOMETRICS
     # ======================================================================= #
     "Box Jump":                                 (20, 33),  # plyo / box_jump
     "Frog Jumps":                               (20, 3),   # plyo / body_weight_jump_squat (closest)
@@ -533,18 +539,18 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Sled Push":                                (45, 4),   # sled / push
 
     # ======================================================================= #
-    #  TOTAL BODY (category 29)
+    #  TOTAL BODY
     # ======================================================================= #
     "Burpee":                                   (29, 0),   # total_body / burpee
     "Burpee Over the Bar":                      (29, 18),  # total_body / total_body_burpee_over_bar
 
     # ======================================================================= #
-    #  CARRY (category 3)
+    #  CARRY
     # ======================================================================= #
     "Farmers Walk":                             (3, 1),    # carry / farmers_walk
 
     # ======================================================================= #
-    #  WARM UP (category 31)
+    #  WARM UP
     # ======================================================================= #
     "Warm Up":                                  (31, 65535), # warm_up / no_name
 
@@ -603,7 +609,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Cable Pull Through":                       (4, 0),    # chop / cable_pull_through
 
     # ======================================================================= #
-    #  RUNNING (category 32)
+    #  RUNNING
     # ======================================================================= #
     "Running":                                  (32, 0),   # run / run
     "Walking":                                  (32, 1),   # run / walk
