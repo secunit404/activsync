@@ -4,6 +4,7 @@
     ".": {
       "release-type": "python",
       "package-name": "activsync",
+      "release-as": "2.0.0",
       "changelog-path": "CHANGELOG.md",
       "include-v-in-tag": true,
       "include-component-in-tag": false,
