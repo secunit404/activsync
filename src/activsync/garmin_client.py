@@ -414,43 +414,6 @@ class GarminClient:
         return [int(act["activityId"]) for act in (activities or [])
                 if act.get("activityId") is not None]
 
-    def find_activity_near(
-        self,
-        start_time: str,
-        exclude_ids: set,
-        window_minutes: int = 10,
-    ) -> int | None:
-        """A strength_training/other activity starting within window_minutes
-        of start_time, searching the date ±1 day (timezone edges). Excluded
-        ids are skipped. Ported from upstream find_activity_by_start_time."""
-        target = _parse_garmin_time(start_time) or parse_iso_utc(start_time)
-        if target is None:
-            return None
-        date_from = (target - timedelta(days=1)).date().isoformat()
-        date_to = (target + timedelta(days=1)).date().isoformat()
-        try:
-            activities = _limiter.call(
-                self._client.get_activities_by_date, date_from, date_to)
-        except Exception as exc:
-            logger.warning("activity search failed: %s", exc)
-            return None
-
-        excluded = {str(x) for x in (exclude_ids or set())}
-        for act in activities or []:
-            activity_id = act.get("activityId")
-            if str(activity_id) in excluded:
-                continue
-            act_type = act.get("activityType", {}).get("typeKey", "")
-            if act_type and act_type not in ("strength_training", "other"):
-                continue
-            act_start = (_parse_garmin_time(act.get("startTimeGMT", ""))
-                         or parse_iso_utc(act.get("startTimeGMT", "")))
-            if act_start is None:
-                continue
-            if abs((act_start - target).total_seconds()) < window_minutes * 60:
-                return activity_id
-        return None
-
     def fetch_activity_types(self) -> list[dict]:
         """Garmin's canonical activity type taxonomy, as
         [{"type_key": "running", "label": "Running"}, ...], de-duplicated and
