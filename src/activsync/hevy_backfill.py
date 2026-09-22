@@ -7,8 +7,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from activsync import config, db, hevy_db, hevy_sync
-from activsync.hevy_apply import _parse_ts
 from activsync.hevy_mapper import MappingMiss, lookup_exercise
+from activsync.timeutil import parse_timestamp
 
 logger = logging.getLogger("activsync.hevy_backfill")
 
@@ -22,13 +22,8 @@ def _is_published(activity: dict | None) -> bool:
 
 
 def parse_since(raw: str) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(raw.strip())
-    except (ValueError, TypeError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    """The backfill start date a user typed, as UTC; None if unusable."""
+    return parse_timestamp(raw)
 
 
 PAGE_SIZE = 10
@@ -74,7 +69,7 @@ def workouts_since(
         workouts = data.get("workouts", []) or []
         older_seen = False
         for workout in workouts:
-            start = _parse_ts(workout.get("start_time"))
+            start = parse_timestamp(workout.get("start_time"))
             if start is None:
                 continue
             if start < since_dt:
@@ -94,13 +89,13 @@ def workouts_since(
 
 def twin_activity(conn: sqlite3.Connection, workout: dict) -> dict | None:
     """Return an existing strength activity at exactly the workout start."""
-    start = _parse_ts(workout.get("start_time"))
+    start = parse_timestamp(workout.get("start_time"))
     if start is None:
         return None
     for activity in db.list_activities(conn):
         if activity["activity_type"] not in ("strength_training", "other"):
             continue
-        if _parse_ts(activity["start_time"]) == start:
+        if parse_timestamp(activity["start_time"]) == start:
             return activity
     return None
 
@@ -207,7 +202,7 @@ def preview_items(
                         }
                     )
                     continue
-                end = _parse_ts(workout.get("end_time"))
+                end = parse_timestamp(workout.get("end_time"))
                 grace = timedelta(minutes=int(cfg["hevy_grace_minutes"]))
                 if end is not None and now - end < grace:
                     action = "waiting_watch"

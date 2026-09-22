@@ -55,14 +55,26 @@ def common_timezones() -> list[str]:
     return [tz for tz in _COMMON_TIMEZONES if is_valid_timezone(tz)]
 
 
-def parse_iso_utc(value: object) -> datetime | None:
-    """Parse an ISO-8601 timestamp and normalize it to timezone-aware UTC."""
-    if not isinstance(value, str) or not value:
+def parse_timestamp(value: object) -> datetime | None:
+    """Any timestamp this app reads, normalized to timezone-aware UTC.
+
+    Covers ISO-8601 with or without a trailing Z, a bare date, and Garmin's
+    space-separated "YYYY-MM-DD HH:MM:SS" (always UTC). A naive value is read
+    as UTC. None for anything unparseable — callers treat that as "no value",
+    never as an error.
+    """
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
         return None
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
     except ValueError:
-        return None
+        try:
+            parsed = datetime.strptime(cleaned, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)

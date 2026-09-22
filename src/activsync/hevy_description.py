@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from string import Formatter
+
+from activsync.timeutil import parse_timestamp
 
 DEFAULT_TITLE_TEMPLATE = "{clean_title}"
 
@@ -92,19 +93,8 @@ def generate_title(workout: dict, *, template: str | None = None) -> str:
 
 
 def _duration_minutes(workout: dict) -> int:
-    def parse(value) -> datetime | None:
-        if not isinstance(value, str) or not value:
-            return None
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
-
-    start = parse(workout.get("start_time"))
-    end = parse(workout.get("end_time"))
+    start = parse_timestamp(workout.get("start_time"))
+    end = parse_timestamp(workout.get("end_time"))
     if start is None or end is None:
         return 0
     return max(0, int((end - start).total_seconds()) // 60)

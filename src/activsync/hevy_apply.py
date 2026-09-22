@@ -13,9 +13,10 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from activsync import db, hevy_db, hr_sources
+from activsync.timeutil import parse_timestamp
 from activsync.hevy_description import generate_description, generate_title
 from activsync.fit_builder import (
     Profile,
@@ -40,23 +41,6 @@ from activsync.hevy_mapper import (
 )
 
 logger = logging.getLogger("activsync.hevy_apply")
-
-
-def _parse_ts(raw: str | None) -> datetime | None:
-    """ISO-8601 (with T/Z) or Garmin space-separated timestamp → UTC."""
-    if not raw or not isinstance(raw, str):
-        return None
-    cleaned = raw.strip()
-    try:
-        if "T" in cleaned:
-            parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        return datetime.strptime(cleaned, "%Y-%m-%d %H:%M:%S").replace(
-            tzinfo=timezone.utc)
-    except (ValueError, TypeError):
-        return None
 
 
 def resolve_exercises(
@@ -128,7 +112,7 @@ def build_exercise_sets_payload(
 ) -> dict:
     """Convert resolved exercises into a Garmin exerciseSets PUT payload,
     distributing synthetic set timing across the real activity window."""
-    act_start = _parse_ts(activity_start)
+    act_start = parse_timestamp(activity_start)
     if act_start is None:
         raise ValueError(f"unparseable activity start: {activity_start!r}")
     for exercise in resolved:
@@ -231,8 +215,8 @@ def _activity_window(conn: sqlite3.Connection, activity_id: int,
             duration = 0.0
         if duration > 0:
             return activity["start_time"], duration
-    start_dt = _parse_ts(row["start_time"])
-    end_dt = _parse_ts(row["end_time"])
+    start_dt = parse_timestamp(row["start_time"])
+    end_dt = parse_timestamp(row["end_time"])
     duration = (end_dt - start_dt).total_seconds() if start_dt and end_dt else 0.0
     return row["start_time"], duration
 
@@ -407,12 +391,12 @@ def _overlapping_any_type(conn: sqlite3.Connection, row: dict) -> str | None:
     """Type of any local activity overlapping the workout window, or None.
     The passive path's wrong-type guard: a blind upload would duplicate a
     session that WAS recorded, just under another type."""
-    start = _parse_ts(row["start_time"])
-    end = _parse_ts(row["end_time"])
+    start = parse_timestamp(row["start_time"])
+    end = parse_timestamp(row["end_time"])
     if not start or not end:
         return None
     for activity in db.list_activities(conn):
-        act_start = _parse_ts(activity["start_time"])
+        act_start = parse_timestamp(activity["start_time"])
         if act_start is None:
             continue
         try:
@@ -484,8 +468,8 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
             import tempfile
             try:
                 resolved = resolve_exercises(conn, _payload_of(row))
-                start_dt = _parse_ts(row["start_time"])
-                end_dt = _parse_ts(row["end_time"])
+                start_dt = parse_timestamp(row["start_time"])
+                end_dt = parse_timestamp(row["end_time"])
                 if kind == "replace":
                     backup = hevy_db.get_backup(conn, source)
                     fit_bytes = backup["original_fit"] if backup else None
@@ -651,8 +635,8 @@ def _resolution_candidates(activities: list[dict], row: dict,
     id, strength/other type, start near the workout's start, plausible
     duration. A new run appearing in the 3-day window must never be adopted,
     renamed, and have the watch activity deleted under it."""
-    hevy_start = _parse_ts(row["start_time"])
-    hevy_end = _parse_ts(row["end_time"])
+    hevy_start = parse_timestamp(row["start_time"])
+    hevy_end = parse_timestamp(row["end_time"])
     if not hevy_start or not hevy_end:
         return set()
     hevy_duration = (hevy_end - hevy_start).total_seconds()
@@ -681,7 +665,7 @@ def _resolution_candidates(activities: list[dict], row: dict,
         act_type = (act.get("activityType") or {}).get("typeKey", "")
         if act_type not in _RESOLUTION_TYPES:
             continue
-        act_start = _parse_ts(act.get("startTimeGMT", ""))
+        act_start = parse_timestamp(act.get("startTimeGMT", ""))
         if act_start is None:
             continue
         drift_s = abs((act_start - hevy_start).total_seconds())

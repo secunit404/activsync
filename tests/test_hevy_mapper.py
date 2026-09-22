@@ -173,3 +173,28 @@ def test_machine_cardio_uses_its_own_category():
     assert hevy_mapper.HEVY_TO_GARMIN["Stair Machine (Steps)"] == (47, 0)
     assert hevy_mapper.HEVY_TO_GARMIN["Rowing Machine"] == (42, 0)
     assert hevy_mapper.HEVY_TO_GARMIN["Bent Over Row (Barbell)"] == (23, 46)
+
+
+def test_mapping_tables_have_no_shadowed_entries():
+    """A repeated key in a dict literal silently keeps the last value. It cost
+    'Overhead Dumbbell Lunge' its exact LUNGE mapping, which an approximate
+    CARRY entry lower down overrode."""
+    import ast
+    import pathlib
+
+    source = pathlib.Path(hevy_mapper.__file__).read_text()
+    tree = ast.parse(source)
+    duplicates: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        seen: dict[str, int] = {}
+        for key in node.keys:
+            if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                continue
+            if key.value in seen:
+                duplicates.append(
+                    f"{key.value!r} (lines {seen[key.value]} and {key.lineno})")
+            seen[key.value] = key.lineno
+
+    assert not duplicates, "shadowed mapping keys: " + "; ".join(duplicates)

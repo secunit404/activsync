@@ -142,7 +142,7 @@ def _under_hevy_settlement_hold(conn: sqlite3.Connection, row: dict) -> bool:
         interval_minutes = float(config.DEFAULT_CONFIG["hevy_poll_interval_minutes"])
     activity_end = _parse_start_time(row) + timedelta(seconds=duration)
     release_after = activity_end + timedelta(minutes=interval_minutes + 5)
-    last_success = timeutil.parse_iso_utc(
+    last_success = timeutil.parse_timestamp(
         db.get_config_value(conn, "hevy_last_success_at")
     )
     return last_success is None or last_success < release_after

@@ -15,7 +15,7 @@ from garminconnect import (
 )
 
 from activsync.rate_limit import RateLimiter
-from activsync.timeutil import parse_iso_utc
+from activsync.timeutil import parse_timestamp
 
 logger = logging.getLogger("activsync.garmin_client")
 _limiter = RateLimiter(delay=1.0, max_retries=3, base_wait=30)
@@ -201,15 +201,6 @@ def complete_login(pending_auth: PendingLogin, mfa_code: str) -> Garmin:
     return result
 
 
-def _parse_garmin_time(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
-
-
 class GarminClient:
     """Thin wrapper around garminconnect.Garmin for what ActivSync needs."""
 
@@ -238,7 +229,7 @@ class GarminClient:
             reached_cutoff = False
             for act in batch:
                 start_time = act.get("startTimeGMT", "")
-                start_dt = _parse_garmin_time(start_time)
+                start_dt = parse_timestamp(start_time)
                 if start_dt is not None and start_dt < cutoff:
                     reached_cutoff = True
                     break
@@ -403,7 +394,7 @@ class GarminClient:
         """ALL activities (raw dicts) in start_time's date ±1 day — the
         journal's resolution primitive needs metadata (type, start, duration)
         for strict candidate matching, not bare ids. Failures PROPAGATE."""
-        target = _parse_garmin_time(start_time) or parse_iso_utc(start_time)
+        target = parse_timestamp(start_time)
         if target is None:
             raise ValueError(f"unparseable start_time: {start_time!r}")
         date_from = (target - timedelta(days=1)).date().isoformat()
@@ -417,7 +408,7 @@ class GarminClient:
         operation journal's pre/post-upload snapshot primitive. Failures
         PROPAGATE: an outage must never read as an empty snapshot, or a later
         submission_unknown diff would adopt the wrong activity."""
-        target = _parse_garmin_time(start_time) or parse_iso_utc(start_time)
+        target = parse_timestamp(start_time)
         if target is None:
             raise ValueError(f"unparseable start_time: {start_time!r}")
         date_from = (target - timedelta(days=1)).date().isoformat()

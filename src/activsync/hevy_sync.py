@@ -16,8 +16,8 @@ from datetime import datetime, timedelta
 
 from activsync import db, hevy_db
 from activsync.garmin_client import ActivityGone, GarminClient
+from activsync.timeutil import parse_timestamp
 from activsync.hevy_apply import (
-    _parse_ts,
     _activity_window,
     _activity_metrics,
     _apply_metadata,
@@ -116,7 +116,7 @@ def ingest_events(conn: sqlite3.Connection, hevy: HevyClient, now: datetime) -> 
         db.set_config_value(conn, CURSOR_KEY, now.isoformat())
         return 0
 
-    cursor_dt = _parse_ts(cursor)
+    cursor_dt = parse_timestamp(cursor)
     since = (cursor_dt - CURSOR_LAG).isoformat() if cursor_dt else cursor
     events = hevy.iter_events_since(since)
 
@@ -230,8 +230,8 @@ def find_watch_match(conn: sqlite3.Connection, row: dict):
     for several, "claimed" when candidates exist but other workouts own them
     all, None for no candidate. A candidate this row already claimed counts
     as its own match (idempotent re-runs)."""
-    hevy_start = _parse_ts(row["start_time"])
-    hevy_end = _parse_ts(row["end_time"])
+    hevy_start = parse_timestamp(row["start_time"])
+    hevy_end = parse_timestamp(row["end_time"])
     if not hevy_start or not hevy_end or hevy_end <= hevy_start:
         return None
     hevy_duration = (hevy_end - hevy_start).total_seconds()
@@ -250,7 +250,7 @@ def find_watch_match(conn: sqlite3.Connection, row: dict):
     for activity in db.list_activities(conn):
         if activity["activity_type"] not in ("strength_training", "other"):
             continue
-        act_start = _parse_ts(activity["start_time"])
+        act_start = parse_timestamp(activity["start_time"])
         if act_start is None:
             continue
         try:
@@ -364,7 +364,7 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
                 error="matching watch activity already claimed by another workout")
         else:
             grace_min = int(cfg.get("hevy_grace_minutes", GRACE_DEFAULT_MIN))
-            end_dt = _parse_ts(row["end_time"])
+            end_dt = parse_timestamp(row["end_time"])
             if end_dt and now - end_dt < timedelta(minutes=grace_min):
                 hevy_db.set_workout_status(conn, hevy_id, "waiting_watch")
             else:

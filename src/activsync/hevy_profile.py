@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from activsync import db
 from activsync.fit_builder import Profile
+from activsync.timeutil import parse_timestamp
 
 logger = logging.getLogger("activsync.hevy_profile")
 
@@ -22,18 +23,6 @@ CACHE_MAX_AGE = timedelta(hours=24)
 
 PROFILE_DEFAULTS = {"weight_kg": 80.0, "birth_year": 1990, "vo2max": 45.0,
                     "sex": "male"}
-
-
-def _parse_fetched_at(raw: str | None) -> datetime | None:
-    if not raw:
-        return None
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except (ValueError, TypeError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 class ProfileFetchFailed(RuntimeError):
@@ -63,7 +52,7 @@ def get_profile(conn: sqlite3.Connection, garmin, now: datetime) -> Profile:
     """The profile used for calorie estimation. Never raises: falls back to
     the cached values, then to defaults, logging a warning on the way down."""
     cache = db.get_config_value(conn, CACHE_KEY, default={}) or {}
-    fetched_at = _parse_fetched_at(cache.get("fetched_at"))
+    fetched_at = parse_timestamp(cache.get("fetched_at"))
 
     if fetched_at is None or now - fetched_at >= CACHE_MAX_AGE:
         try:
