@@ -50,14 +50,6 @@ _SYNCED_STATUSES = {"merged", "described", "replaced", "uploaded_passive",
                     "linked_existing", "syncing", "needs_review"}
 
 
-def _is_published_activity(activity: dict | None) -> bool:
-    return bool(
-        activity
-        and activity.get("publish_status") == "published"
-        and activity.get("strava_activity_id") is not None
-    )
-
-
 # -- event ingestion --------------------------------------------------------
 
 
@@ -253,10 +245,7 @@ def find_watch_match(conn: sqlite3.Connection, row: dict):
         act_start = parse_timestamp(activity["start_time"])
         if act_start is None:
             continue
-        try:
-            duration = float(json.loads(activity["garmin_data"]).get("duration") or 0)
-        except (ValueError, TypeError):
-            duration = 0.0
+        duration = db.activity_duration_seconds(activity)
         act_end = act_start + timedelta(seconds=duration)
 
         overlap_s = (min(hevy_end, act_end) - max(hevy_start, act_start)).total_seconds()
@@ -297,7 +286,7 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
             row["status"] == "awaiting_match"
             and (
                 cfg.get("hevy_match_mode", "automatic") == "review"
-                or _is_published_activity(
+                or db.is_published(
                     db.get_activity(conn, row["source_garmin_activity_id"])
                     if row.get("source_garmin_activity_id")
                     else None
@@ -328,7 +317,7 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
                 return
             row = hevy_db.get_workout(conn, hevy_id)
             matched_activity = db.get_activity(conn, match)
-            if _is_published_activity(matched_activity):
+            if db.is_published(matched_activity):
                 hevy_db.set_workout_status(
                     conn,
                     hevy_id,
@@ -407,7 +396,7 @@ def apply_match_choice(
         if hevy_db.get_open_operation(conn, hevy_id) is not None:
             raise ValueError("This workout already has an operation in progress.")
         source_activity = db.get_activity(conn, row["source_garmin_activity_id"])
-        if strategy == "replace" and _is_published_activity(source_activity):
+        if strategy == "replace" and db.is_published(source_activity):
             raise ValueError(
                 "Replace is unavailable because this activity is already on Strava. "
                 "Choose Merge or Description only."

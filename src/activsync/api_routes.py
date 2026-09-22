@@ -77,6 +77,16 @@ class UpdateState(ApiModel):
     repo_url: str
     release_url: str
 
+    @classmethod
+    def from_status(cls, status) -> "UpdateState":
+        """Build from update_check's status, which names the flag differently."""
+        return cls(
+            latest=status.latest,
+            available=status.update_available,
+            repo_url=status.repo_url,
+            release_url=status.release_url,
+        )
+
 
 class AppState(ApiModel):
     name: Literal["ActivSync"] = "ActivSync"
@@ -214,12 +224,7 @@ def create_router(
                 status=hevy["status"],
             ),
             catch_up_report=db.get_config_value(conn, "catch_up_report"),
-            update=UpdateState(
-                latest=update.latest,
-                available=update.update_available,
-                repo_url=update.repo_url,
-                release_url=update.release_url,
-            ),
+            update=UpdateState.from_status(update),
         )
 
     @router.delete("/catch-up-report", status_code=204)
@@ -273,12 +278,7 @@ def create_router(
             Activity.model_validate(
                 {
                     **activity,
-                    "strava_url": (
-                        f"https://www.strava.com/activities/{activity['strava_activity_id']}"
-                        if activity["publish_status"] == "published"
-                        and activity["strava_activity_id"] is not None
-                        else None
-                    ),
+                    "strava_url": view.strava_url_for(activity),
                 }
             )
             for activity in page_items

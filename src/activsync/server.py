@@ -32,6 +32,7 @@ from activsync.garmin_client import (
     complete_login as garmin_complete_login,
     get_client as get_garmin_raw_client,
 )
+from activsync.hevy_client import HevyClient
 from activsync.strava_client import StravaAuthError, StravaClient
 
 logger = logging.getLogger("activsync.server")
@@ -73,6 +74,12 @@ def _complete_garmin_login(pending_auth, mfa_code: str):
     if _mock_mode():
         return dev_mock.complete_login(pending_auth, mfa_code)
     return garmin_complete_login(pending_auth, mfa_code)
+
+
+def _build_hevy_client(conn: sqlite3.Connection, api_key: str):
+    if _mock_mode():
+        return dev_mock.MockHevyClient(conn)
+    return HevyClient(api_key=api_key)
 
 
 def _build_strava_client(conn: sqlite3.Connection):
@@ -123,6 +130,7 @@ def create_app(
             begin_garmin_login=_begin_garmin_login,
             complete_garmin_login=_complete_garmin_login,
             pending_garmin_mfa=pending_garmin_mfa,
+            build_hevy_client=_build_hevy_client,
         )
     )
     app.include_router(
@@ -130,6 +138,7 @@ def create_app(
             conn,
             mock_mode=_mock_mode,
             process_hevy_workout=process_hevy_workout,
+            build_hevy_client=_build_hevy_client,
         )
     )
     app.include_router(

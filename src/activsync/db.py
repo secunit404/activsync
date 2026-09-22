@@ -287,6 +287,28 @@ def set_published(
     conn.commit()
 
 
+def activity_duration_seconds(activity: dict | None) -> float:
+    """Duration from the garmin_data JSON column; 0.0 when it is absent,
+    unparseable, or not a number. Callers use it to build a time window, so a
+    bad blob has to read as "unknown", never raise."""
+    if not activity:
+        return 0.0
+    try:
+        return float(json.loads(activity["garmin_data"] or "{}").get("duration") or 0)
+    except (ValueError, TypeError, KeyError, IndexError):
+        return 0.0
+
+
+def is_published(activity: dict | None) -> bool:
+    """A row that actually reached Strava. Both halves matter: publish_status
+    can read "published" while strava_activity_id is still unset."""
+    return bool(
+        activity
+        and activity.get("publish_status") == "published"
+        and activity.get("strava_activity_id") is not None
+    )
+
+
 def list_activities(
     conn: sqlite3.Connection,
     status: str | None = None,

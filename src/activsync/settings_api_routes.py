@@ -15,7 +15,6 @@ from activsync import (
     build_info,
     config,
     db,
-    dev_mock,
     events,
     hevy_db,
     hevy_sync,
@@ -28,7 +27,7 @@ from activsync import (
 )
 from activsync.api_routes import ApiModel, Connections, UpdateState
 from activsync.garmin_client import GarminClient, MfaRequired
-from activsync.hevy_client import HevyAuthError, HevyClient
+from activsync.hevy_client import HevyAuthError
 from activsync.hevy_description import (
     DEFAULT_TEMPLATE,
     DEFAULT_TITLE_TEMPLATE,
@@ -196,6 +195,7 @@ def create_router(
     begin_garmin_login: Callable[[str, str], object],
     complete_garmin_login: Callable[[object, str], object],
     pending_garmin_mfa: dict,
+    build_hevy_client: Callable[[sqlite3.Connection, str], object],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["frontend-settings"])
 
@@ -238,16 +238,11 @@ def create_router(
         finalize_garmin_connect()
         return "ok"
 
-    def hevy_client(api_key: str):
-        if mock_mode():
-            return dev_mock.MockHevyClient(conn)
-        return HevyClient(api_key=api_key)
-
     def connect_hevy(api_key: str, *, in_setup: bool) -> None:
         api_key = api_key.strip()
         if not api_key:
             raise HTTPException(status_code=400, detail="Enter your Hevy API key.")
-        client = hevy_client(api_key)
+        client = build_hevy_client(conn, api_key)
         try:
             client.get_user_info()
         except HevyAuthError as exc:
@@ -312,12 +307,7 @@ def create_router(
         return SettingsState(
             version=build_info.display_version(),
             release=build_info.is_release(),
-            update=UpdateState(
-                latest=update.latest,
-                available=update.update_available,
-                repo_url=update.repo_url,
-                release_url=update.release_url,
-            ),
+            update=UpdateState.from_status(update),
             development=mock_mode(),
             setup=SetupProgress(
                 complete=step is None,

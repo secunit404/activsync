@@ -19,6 +19,12 @@ from activsync import db, hevy_db, hr_sources
 from activsync.timeutil import parse_timestamp
 from activsync.hevy_description import generate_description, generate_title
 from activsync.fit_builder import (
+    MAX_SCALE,
+    MIN_SCALE,
+    REST_BETWEEN_EXERCISES_S,
+    REST_BETWEEN_SETS_S,
+    WARMUP_SET_S,
+    WORKING_SET_S,
     Profile,
     ResolvedExercise,
     build_fit,
@@ -119,8 +125,8 @@ def build_exercise_sets_payload(
         if exercise.category == UNKNOWN_CATEGORY:
             raise ValueError(f"exercise {exercise.title!r} resolved to UNKNOWN")
 
-    working_set_s, warmup_set_s = 40, 25
-    rest_sets_s, rest_exercises_s = 75, 120
+    working_set_s, warmup_set_s = WORKING_SET_S, WARMUP_SET_S
+    rest_sets_s, rest_exercises_s = REST_BETWEEN_SETS_S, REST_BETWEEN_EXERCISES_S
 
     all_sets: list[dict] = []
     for ex_idx, exercise in enumerate(resolved):
@@ -145,7 +151,7 @@ def build_exercise_sets_payload(
 
     ideal_total = sum(si["set_dur"] + si["rest_dur"] for si in all_sets)
     scale = activity_duration_s / ideal_total if ideal_total > 0 else 1.0
-    scale = max(0.3, min(2.0, scale))
+    scale = max(MIN_SCALE, min(MAX_SCALE, scale))
 
     exercise_sets: list[dict] = []
     msg_idx = 0
@@ -209,10 +215,7 @@ def _activity_window(conn: sqlite3.Connection, activity_id: int,
     falling back to the Hevy workout's own window."""
     activity = db.get_activity(conn, activity_id)
     if activity:
-        try:
-            duration = float(json.loads(activity["garmin_data"]).get("duration") or 0)
-        except (ValueError, TypeError):
-            duration = 0.0
+        duration = db.activity_duration_seconds(activity)
         if duration > 0:
             return activity["start_time"], duration
     start_dt = parse_timestamp(row["start_time"])
@@ -399,10 +402,7 @@ def _overlapping_any_type(conn: sqlite3.Connection, row: dict) -> str | None:
         act_start = parse_timestamp(activity["start_time"])
         if act_start is None:
             continue
-        try:
-            duration = float(json.loads(activity["garmin_data"]).get("duration") or 0)
-        except (ValueError, TypeError):
-            duration = 0.0
+        duration = db.activity_duration_seconds(activity)
         act_end = act_start + timedelta(seconds=duration)
         if act_start < end and act_end > start:
             return activity["activity_type"]

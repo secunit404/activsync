@@ -118,12 +118,7 @@ def create_router(
             if row["source_garmin_activity_id"] is not None
             else None
         )
-        if (
-            payload.strategy == "replace"
-            and source_activity
-            and source_activity.get("publish_status") == "published"
-            and source_activity.get("strava_activity_id") is not None
-        ):
+        if payload.strategy == "replace" and db.is_published(source_activity):
             raise HTTPException(
                 status_code=409,
                 detail=(

@@ -10,7 +10,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from activsync import (
     db,
-    dev_mock,
     events,
     fit_profile,
     hevy_backfill,
@@ -19,7 +18,7 @@ from activsync import (
 )
 from activsync.api_routes import ApiModel
 from activsync.fit_profile import CATEGORY_NAMES, SUBCATEGORY_NAMES
-from activsync.hevy_client import HevyAuthError, HevyClient
+from activsync.hevy_client import HevyAuthError
 from activsync.hevy_workout_detail import HevyWorkoutDetail, workout_detail
 
 logger = logging.getLogger("activsync.hevy_tools_api_routes")
@@ -168,14 +167,10 @@ def create_router(
     conn: sqlite3.Connection,
     *,
     mock_mode: Callable[[], bool],
+    build_hevy_client: Callable[[sqlite3.Connection, str], object],
     process_hevy_workout: Callable[[str], str] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/settings/hevy", tags=["frontend-hevy"])
-
-    def client_for(api_key: str):
-        if mock_mode():
-            return dev_mock.MockHevyClient(conn)
-        return HevyClient(api_key=api_key)
 
     def require_api_key() -> str:
         api_key = db.get_config_value(conn, "hevy_api_key")
@@ -194,7 +189,7 @@ def create_router(
             raise HTTPException(
                 status_code=400, detail="Enter the backfill start date as YYYY-MM-DD."
             )
-        client = client_for(api_key)
+        client = build_hevy_client(conn, api_key)
         # Read once here: it both bounds the scan's paging and labels the
         # preview, and a second call would be a wasted round trip.
         total_count = hevy_backfill.account_workout_count(client)
@@ -242,15 +237,7 @@ def create_router(
                     and item["twin"].get("publish_status") == "published"
                     else None
                 ),
-                strava_url=(
-                    view.STRAVA_ACTIVITY_URL.format(
-                        item["twin"]["strava_activity_id"]
-                    )
-                    if item["twin"] is not None
-                    and item["twin"].get("publish_status") == "published"
-                    and item["twin"].get("strava_activity_id") is not None
-                    else None
-                ),
+                strava_url=view.strava_url_for(item["twin"]),
                 missing_template_ids=item.get("missing_template_ids", []),
                 workout=HevyWorkoutDetail.model_validate(
                     workout_detail(

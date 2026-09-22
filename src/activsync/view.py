@@ -15,6 +15,13 @@ STRAVA_ACTIVITY_URL = "https://www.strava.com/activities/{}"
 _GARMIN_EXERCISE_ACRONYMS = {"BOSU", "EZ", "GHD", "HIIT", "KBS", "RDL", "TRX"}
 
 
+def strava_url_for(activity: dict | None) -> str | None:
+    """The public Strava link for a row, or None if it never got published."""
+    if not db.is_published(activity):
+        return None
+    return STRAVA_ACTIVITY_URL.format(activity["strava_activity_id"])
+
+
 def garmin_exercise_label(enum_name: str) -> str:
     """Turn a Garmin FIT enum identifier into a sentence-case UI label.
 
@@ -226,15 +233,7 @@ def hevy_summary(conn: sqlite3.Connection) -> dict:
                         and matched_activity.get("publish_status") == "published"
                         else None
                     ),
-                    "matched_strava_url": (
-                        STRAVA_ACTIVITY_URL.format(
-                            matched_activity["strava_activity_id"]
-                        )
-                        if matched_activity
-                        and matched_activity.get("publish_status") == "published"
-                        and matched_activity.get("strava_activity_id") is not None
-                        else None
-                    ),
+                    "matched_strava_url": strava_url_for(matched_activity),
                 })
         return rows
 

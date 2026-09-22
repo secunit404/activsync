@@ -29,8 +29,8 @@ WORKING_SET_S = 40
 WARMUP_SET_S = 25
 REST_BETWEEN_SETS_S = 75
 REST_BETWEEN_EXERCISES_S = 120
-_MIN_SCALE = 0.3
-_MAX_SCALE = 2.0
+MIN_SCALE = 0.3
+MAX_SCALE = 2.0
 DEFAULT_HR_BPM = 90  # calorie fallback when no HR data at all
 
 
@@ -281,7 +281,7 @@ def build_fit(
     total_sets = len(all_sets_info)
     ideal_total = sum(si["set_dur"] + si["rest_dur"] for si in all_sets_info)
     if ideal_total > 0:
-        scale = max(_MIN_SCALE, min(_MAX_SCALE, duration_s / ideal_total))
+        scale = max(MIN_SCALE, min(MAX_SCALE, duration_s / ideal_total))
     else:
         scale = 1.0
 

@@ -13,14 +13,6 @@ from activsync.timeutil import parse_timestamp
 logger = logging.getLogger("activsync.hevy_backfill")
 
 
-def _is_published(activity: dict | None) -> bool:
-    return bool(
-        activity
-        and activity.get("publish_status") == "published"
-        and activity.get("strava_activity_id") is not None
-    )
-
-
 def parse_since(raw: str) -> datetime | None:
     """The backfill start date a user typed, as UTC; None if unusable."""
     return parse_timestamp(raw)
@@ -131,7 +123,7 @@ def preview_items(
                 if owner
                 else (
                     "awaiting_match"
-                    if _is_published(twin)
+                    if db.is_published(twin)
                     or cfg.get("hevy_match_mode") == "review"
                     else cfg["hevy_watch_strategy"]
                 )
@@ -172,7 +164,7 @@ def preview_items(
             )
             if isinstance(match, int):
                 twin = db.get_activity(conn, match)
-                if _is_published(twin) or cfg.get("hevy_match_mode") == "review":
+                if db.is_published(twin) or cfg.get("hevy_match_mode") == "review":
                     # Review happens before the mapping gate: Description only
                     # remains a valid choice even when structured sets cannot
                     # yet be mapped.
@@ -265,7 +257,7 @@ def run_items(conn: sqlite3.Connection, items: list[dict]) -> int:
             )
             continue
         if item["action"] == "awaiting_match":
-            published = _is_published(item["twin"])
+            published = db.is_published(item["twin"])
             hevy_db.set_workout_status(
                 conn,
                 hevy_id,
