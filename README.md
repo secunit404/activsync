@@ -1,6 +1,6 @@
 # ActivSync
 
-**Sync your Garmin activities to Strava — with review and publishing control.**
+**Sync your Garmin activities to Strava, and your Hevy workouts to Garmin — with review and publishing control.**
 
 [![CI](https://github.com/secunit404/activsync/actions/workflows/ci.yml/badge.svg)](https://github.com/secunit404/activsync/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/secunit404/activsync)](https://github.com/secunit404/activsync/releases)
@@ -11,12 +11,20 @@ your terms. Instead of publishing everything automatically, activities can be
 **held for review** so you decide what goes public — useful for keeping private
 or duplicate activities off your Strava feed.
 
+It also syncs strength training from [Hevy](https://www.hevyapp.com/): a logged
+Hevy workout is matched to the activity your watch recorded, and its exercises,
+sets and reps are written onto that Garmin activity as structured strength
+data.
+
 ## Features
 
 - Automatic Garmin → Strava synchronization on a configurable poll interval.
 - **Held-for-review** publishing: approve activities before they reach Strava.
 - First-run setup wizard for Garmin (incl. MFA) and Strava OAuth.
 - Per-activity-type rules and a configurable display timezone.
+- **Hevy → Garmin** strength sync: structured exercise sets, with matched
+  workouts held for your decision before anything is changed.
+- Backfill of historical Hevy workouts, previewed before any import.
 - Single self-contained container; state persisted to a mounted volume.
 
 ## Quick start (Docker)
@@ -78,6 +86,44 @@ The setup wizard shows the exact value to enter. Two things it can't tell you:
   built as `https://`. `*` trusts `X-Forwarded-Proto` from any client, so don't
   use it on a directly reachable container.
 
+## Hevy workouts
+
+Connect Hevy under **Settings → Connections** with an API key from your Hevy
+account — the first-run wizard also offers it as an optional step. The Hevy API
+requires a Hevy Pro subscription. ActivSync then polls for new workouts and
+tries to match each one to the Garmin activity your watch recorded for the same
+session.
+
+**A matched workout waits for you.** Before anything on Garmin changes, the
+Hevy page offers four choices:
+
+| Choice | What it does |
+|---|---|
+| **Merge** | Writes the Hevy exercise sets onto the watch activity, keeping its heart rate and duration |
+| **Replace** | Rebuilds the activity from the Hevy workout, carrying the watch's heart rate across |
+| **Description only** | Leaves the activity's data alone and writes the rendered summary |
+| **Skip** | Leaves the workout alone; it returns to the picker |
+
+Settings can switch match handling to **Automatic** and pick the default
+strategy, in which case matched workouts apply without pausing.
+
+An **unmatched** workout — a session your watch never recorded — uploads as
+its own Garmin activity once the configured grace period has passed.
+
+**Backfill** imports historical workouts. Give it a start date and it previews
+exactly what it would do to each workout, including any exercise it has no
+Garmin mapping for, before writing anything. Exercises that ActivSync cannot
+place are surfaced so you can map them yourself under **Hevy → Exercise
+mappings**.
+
+The **description template** is editable in Settings, with placeholders for the
+workout title, duration, calories, average heart rate, exercise summary, and
+the ActivSync marker; a live sample renders beside the editor. The shared
+Garmin/Strava description format is plain text — line breaks, Unicode, emoji
+and bullets all work, while Markdown and HTML stay literal. **Description
+only** always writes the summary; for **Merge** and **Replace** it can be
+switched off while still applying the structured sets.
+
 ## Development
 
 Local development uses the React dev server on port 8382 and the mock-only
@@ -109,30 +155,14 @@ make dev-real
 
 This uses the real `data/activsync.db` and Garmin token directory, serves the
 hot-reloading UI at <http://localhost:8382>, and disables the Garmin, Strava,
-and update-check background jobs. The Hevy polling leg remains active so the
-queue receives new workouts. When one Hevy workout matches one Garmin workout,
-development modes default to pausing before any change and offering **Merge**,
-**Replace**, **Description only**, or **Skip** on the Hevy page. Settings can
-switch match handling to **Automatic** and choose its default strategy. A
-historical backfill that finds one overlapping Garmin activity now enters this
-same review state immediately instead of being labelled as a new activity and
-waiting for another Hevy poll.
+and update-check background jobs. The Hevy polling leg stays active so the
+queue receives new workouts, and this mode always pauses on a match for your
+decision regardless of the Automatic setting — see
+[Hevy workouts](#hevy-workouts) for what the choices do.
 
-The Hevy description template is editable in Settings with placeholders for
-the workout title, duration, calories, average heart rate, exercise summary,
-and ActivSync marker. A live sample preview renders beside the editor. The
-shared Garmin/Strava format is plain text: line breaks, Unicode, emoji, and
-bullets are suitable, while Markdown and HTML markup remains literal text.
-**Description only** always writes the rendered summary;
-for **Merge** and **Replace**, writing it can be switched off while still
-applying the structured exercise sets. The queue's workout detail view shows
-the exact rendered preview before a match decision.
-
-An unmatched Hevy workout can still upload as a separate Garmin activity after
-the configured grace period. Matched workouts remain publish-blocked while
-waiting for your decision. The normal Strava publishing/status poll stays off,
-although the Hevy leg may refresh metadata on an already-linked Strava copy.
-The command refuses to start if the real database is missing or ActivSync is
+Matched workouts remain publish-blocked while waiting. The normal Strava
+publishing and status polls stay off, although the Hevy leg may still refresh
+metadata on an already-linked Strava copy. The command refuses to start if the real database is missing or ActivSync is
 still responding on port 8381. To use the legacy database filename explicitly,
 run `make dev-real REAL_DB_PATH=data/garmin2strava.db`.
 
