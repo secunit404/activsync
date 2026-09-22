@@ -273,9 +273,8 @@ def create_router(
             logger.exception("Hevy template prefetch after connect failed")
         if in_setup:
             db.set_config_value(conn, "setup_hevy_done", True)
-            cfg = config.load_config(conn)
-            cfg["hevy_enabled"] = True
-            config.save_config(conn, cfg)
+            with config.editing(conn) as cfg:
+                cfg["hevy_enabled"] = True
 
     def action(message: str, *, mfa_required: bool = False) -> ActionResult:
         return ActionResult(
@@ -358,11 +357,10 @@ def create_router(
             raise HTTPException(
                 status_code=400, detail="Enter your Garmin email and password."
             )
-        cfg = config.load_config(conn)
-        cfg["lookback_days"] = payload.lookback_days
-        if timeutil.is_valid_timezone(payload.detected_timezone):
-            cfg["display_timezone"] = payload.detected_timezone
-        config.save_config(conn, cfg)
+        with config.editing(conn) as cfg:
+            cfg["lookback_days"] = payload.lookback_days
+            if timeutil.is_valid_timezone(payload.detected_timezone):
+                cfg["display_timezone"] = payload.detected_timezone
         outcome = save_and_verify_garmin(email, password)
         if outcome == "mfa":
             return action("Garmin sent a verification code.", mfa_required=True)
@@ -486,9 +484,8 @@ def create_router(
                 status_code=400,
                 detail=f"Unknown timezone: {payload.display_timezone}",
             )
-        cfg = config.load_config(conn)
-        cfg.update(payload.model_dump())
-        config.save_config(conn, cfg)
+        with config.editing(conn) as cfg:
+            cfg.update(payload.model_dump())
         logging_setup.set_log_timezone(payload.display_timezone)
         events.bus.publish("refresh")
         return action("Preferences saved.")
@@ -509,9 +506,8 @@ def create_router(
         if unknown:
             raise HTTPException(status_code=400, detail="Unknown activity category.")
         held = sorted(known - requested)
-        cfg = config.load_config(conn)
-        cfg["held_activity_types"] = held
-        config.save_config(conn, cfg)
+        with config.editing(conn) as cfg:
+            cfg["held_activity_types"] = held
         sync.reconcile_held_activities(conn, held)
         events.bus.publish("refresh")
         return action("Autosync categories saved.")
@@ -609,9 +605,8 @@ def create_router(
     def disconnect_hevy() -> ActionResult:
         db.set_config_value(conn, "hevy_api_key", None)
         db.set_config_value(conn, "hevy_auth_ok", None)
-        cfg = config.load_config(conn)
-        cfg["hevy_enabled"] = False
-        config.save_config(conn, cfg)
+        with config.editing(conn) as cfg:
+            cfg["hevy_enabled"] = False
         events.bus.publish("refresh")
         return action("Hevy disconnected.")
 

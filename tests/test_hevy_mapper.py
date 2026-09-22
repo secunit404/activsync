@@ -200,3 +200,45 @@ def test_mapping_tables_have_no_shadowed_entries():
             seen[key.value] = key.lineno
 
     assert not duplicates, "shadowed mapping keys: " + "; ".join(duplicates)
+
+
+def test_mapping_comments_describe_the_value_they_sit_on():
+    """Each table entry carries a `# category / subcategory` comment. They are
+    the only readable form of a pair of magic numbers, so a comment that has
+    drifted from its value is how a wrong mapping hides — that is exactly how
+    'Overhead Dumbbell Lunge' shipped as a REVERSE lunge.
+
+    Two conventions are allowed: subcategory 0 is written `generic`, and an
+    entry marked `(closest)` is a deliberate approximation whose comment names
+    the intent rather than the enum.
+    """
+    import pathlib
+    import re
+
+    from activsync import hevy_name_map
+    from activsync.fit_profile import subcategory_name
+
+    source = pathlib.Path(hevy_name_map.__file__).read_text()
+    entry = re.compile(
+        r'^\s*"(?P<key>[^"]+)":\s*\((?P<cat>\d+),\s*(?P<sub>\d+)\),'
+        r'\s*#\s*(?P<comment_cat>[a-z_]+)\s*/\s*(?P<comment_sub>[a-z_0-9]+)'
+        r'(?P<rest>.*)$',
+        re.M,
+    )
+
+    drifted: list[str] = []
+    for match in entry.finditer(source):
+        if "(closest" in match["rest"]:
+            continue
+        category, subcategory = int(match["cat"]), int(match["sub"])
+        expected_cat = (CATEGORY_NAMES.get(category) or "").lower()
+        expected_sub = (subcategory_name(category, subcategory) or "").lower()
+        if subcategory == 0 and match["comment_sub"] == "generic":
+            expected_sub = "generic"
+        if (match["comment_cat"], match["comment_sub"]) != (expected_cat, expected_sub):
+            drifted.append(
+                f'{match["key"]!r} is ({category}, {subcategory}) = '
+                f'{expected_cat}/{expected_sub}, commented '
+                f'{match["comment_cat"]}/{match["comment_sub"]}')
+
+    assert not drifted, "comment does not match value:\n  " + "\n  ".join(drifted)

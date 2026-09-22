@@ -457,14 +457,6 @@ def update_operation(conn: sqlite3.Connection, op_id: int, **fields) -> None:
     conn.commit()
 
 
-def close_operation(conn: sqlite3.Connection, op_id: int, phase: str) -> None:
-    conn.execute(
-        "UPDATE hevy_operations SET phase = ?, updated_at = ? WHERE id = ?",
-        (phase, _now_iso(), op_id),
-    )
-    conn.commit()
-
-
 def set_operation_outcome(
     conn: sqlite3.Connection,
     op_id: int,

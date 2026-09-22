@@ -169,3 +169,20 @@ def test_a_partial_fetch_is_still_cached(conn):
     cached = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={})
     assert cached["weight_kg"] == 70.0
     assert "fetched_at" in cached
+
+
+def test_a_partial_fetch_keeps_the_fields_it_did_not_return(conn):
+    """fetch_user_profile reads the profile and vo2max independently, so one
+    half can fail while the other succeeds. The half that failed must not take
+    the cached values down with it."""
+    _seed_cache(conn, NOW - timedelta(hours=48), **FETCHED)
+    garmin = _garmin({"weight_kg": None, "birth_year": None,
+                      "sex": None, "vo2max": 60.0})
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.vo2max == 60.0
+    assert profile.weight_kg == 72.5
+    assert profile.birth_year == 1988
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={})
+    assert cached["weight_kg"] == 72.5

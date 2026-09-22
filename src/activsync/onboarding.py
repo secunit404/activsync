@@ -50,11 +50,10 @@ def store_garmin_categories(
         datetime.now(timezone.utc).isoformat(),
     )
     if hold_all:
-        cfg = config.load_config(conn)
-        cfg["held_activity_types"] = sorted(
-            item["type_key"] for item in activity_types
-        )
-        config.save_config(conn, cfg)
+        with config.editing(conn) as cfg:
+            cfg["held_activity_types"] = sorted(
+                item["type_key"] for item in activity_types
+            )
 
 
 def persist_strava_credentials(

@@ -344,11 +344,11 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Lunge":                                    (17, 32),  # lunge / lunge
     "Lunge (Barbell)":                          (17, 10),  # lunge / barbell_lunge
     "Lunge (Dumbbell)":                         (17, 21),  # lunge / dumbbell_lunge
-    "Overhead Dumbbell Lunge":                  (17, 40),  # lunge / overhead_dumbbell_lunge
+    "Overhead Dumbbell Lunge":                  (17, 83),  # lunge / overhead_dumbbell_lunge
     "Reverse Lunge":                            (17, 32),  # lunge / lunge (reverse variant)
     "Reverse Lunge (Barbell)":                  (17, 11),  # lunge / barbell_reverse_lunge
     "Reverse Lunge (Dumbbell)":                 (17, 21),  # lunge / dumbbell_lunge (reverse)
-    "Split Squat (Dumbbell)":                   (17, 28),  # lunge / dumbbell_split_squat
+    "Split Squat (Dumbbell)":                   (17, 28),  # lunge / gunslinger_lunge (closest; FIT has no lunge/dumbbell_split_squat)
     "Walking Lunge":                            (17, 78),  # lunge / walking_lunge
     "Walking Lunge (Dumbbell)":                 (17, 77),  # lunge / walking_dumbbell_lunge
 
