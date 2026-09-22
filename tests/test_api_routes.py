@@ -313,7 +313,7 @@ def test_skipping_an_awaiting_match_releases_its_garmin_claim(tmp_path):
     assert row["source_garmin_activity_id"] is None
 
 
-def test_hevy_queue_json_actions_preserve_workout_state_machine(tmp_path):
+def test_hevy_queue_json_actions_without_an_open_operation(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     for hevy_id, status, error in (
         ("needs-map", "needs_mapping", "Map an exercise"),

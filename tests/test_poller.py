@@ -70,15 +70,22 @@ def test_loop_runs_garmin_and_strava_independently_at_different_intervals(conn, 
     db.set_config_value(conn, "strava_tokens", {"refresh_token": "refresh"})
     garmin_calls = {"n": 0}
     strava_calls = {"n": 0}
+    # Wait on the condition, not on the clock: a fixed sleep asserts how fast
+    # this machine is, and fails under load for reasons unrelated to the poller.
+    strava_ran_twice = threading.Event()
 
     monkeypatch.setattr(
         "activsync.poller.sync.sync_garmin",
         lambda c, garmin, cfg, now: garmin_calls.update(n=garmin_calls["n"] + 1) or object(),
     )
-    monkeypatch.setattr(
-        "activsync.poller.sync.publish_pending",
-        lambda c, garmin, strava, now, garmin_activity_ids=None: strava_calls.update(n=strava_calls["n"] + 1) or SimpleNamespace(published=0, failed=0),
-    )
+
+    def count_publish(c, garmin, strava, now, garmin_activity_ids=None):
+        strava_calls["n"] += 1
+        if strava_calls["n"] >= 2:
+            strava_ran_twice.set()
+        return SimpleNamespace(published=0, failed=0)
+
+    monkeypatch.setattr("activsync.poller.sync.publish_pending", count_publish)
     monkeypatch.setattr(
         "activsync.poller.sync.check_strava_status",
         lambda c, strava, cfg, now: SimpleNamespace(flagged_missing=0, linked_existing=0),
@@ -91,7 +98,7 @@ def test_loop_runs_garmin_and_strava_independently_at_different_intervals(conn, 
         strava_interval_seconds_override=0.05,
     )
     poller.start()
-    time.sleep(0.3)
+    assert strava_ran_twice.wait(timeout=5), "strava leg never ran twice"
     poller.stop()
 
     assert garmin_calls["n"] == 1, "garmin should run once (long interval), not repeatedly"
@@ -112,12 +119,14 @@ def test_loop_checks_strava_immediately_after_garmin_changes(conn, monkeypatch):
         "activsync.poller.sync.publish_pending",
         lambda *args, **kwargs: SimpleNamespace(published=0, failed=0),
     )
-    monkeypatch.setattr(
-        "activsync.poller.sync.check_strava_status",
-        lambda *args: status_calls.update(n=status_calls["n"] + 1) or SimpleNamespace(
-            flagged_missing=0, linked_existing=1,
-        ),
-    )
+    status_ran = threading.Event()
+
+    def count_status(*args):
+        status_calls["n"] += 1
+        status_ran.set()
+        return SimpleNamespace(flagged_missing=0, linked_existing=1)
+
+    monkeypatch.setattr("activsync.poller.sync.check_strava_status", count_status)
 
     poller = Poller(
         conn, garmin_factory=lambda: MagicMock(), strava_factory=lambda: MagicMock(),
@@ -126,7 +135,7 @@ def test_loop_checks_strava_immediately_after_garmin_changes(conn, monkeypatch):
         strava_interval_seconds_override=1000,
     )
     poller.start()
-    time.sleep(0.15)
+    assert status_ran.wait(timeout=5), "status check never ran"
     poller.stop()
 
     assert status_calls["n"] == 1

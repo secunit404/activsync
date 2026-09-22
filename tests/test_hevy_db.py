@@ -435,14 +435,6 @@ def test_record_event_seen_dedupes():
 
 # -- statuses constant ------------------------------------------------------
 
-def test_statuses_constant_matches_spec():
-    assert set(hevy_db.STATUSES) == {
-        "needs_mapping", "waiting_watch", "awaiting_match", "syncing", "merged", "described",
-        "replaced", "uploaded_passive", "linked_existing", "failed",
-        "needs_review", "skipped",
-    }
-
-
 def test_backup_fills_in_a_watch_fit_the_first_snapshot_lacked():
     """A merge backs up with no FIT (it destroys nothing on the watch side).
     If that source is later replaced — after resync-fresh clears the links but

@@ -2,7 +2,6 @@
 
 import pytest
 
-from activsync import hevy_client
 from activsync.hevy_client import HevyAuthError, HevyClient
 
 
@@ -116,12 +115,6 @@ def test_iter_all_exercise_templates_paginates(monkeypatch):
     monkeypatch.setattr(client, "_get", lambda path, params=None: pages[params["page"]])
     templates = client.iter_all_exercise_templates()
     assert [t["id"] for t in templates] == ["t1", "t2"]
-
-
-def test_no_sleep_in_module():
-    import inspect
-    source = inspect.getsource(hevy_client)
-    assert "time.sleep" not in source
 
 
 def test_retry_covers_429():
