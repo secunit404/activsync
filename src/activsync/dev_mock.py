@@ -654,22 +654,6 @@ class FakeGarminClient:
     def fetch_user_profile(self) -> dict:
         return {"weight_kg": 80.0, "birth_year": 1990, "sex": "male", "vo2max": 45.0}
 
-    def find_activity_near(
-        self, start_time: str, exclude_ids: set, window_minutes: int = 10
-    ) -> int | None:
-        target = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-        if target.tzinfo is None:
-            target = target.replace(tzinfo=timezone.utc)
-        for activity in self.fetch_recent_activities(3):
-            if activity.garmin_activity_id in exclude_ids:
-                continue
-            actual = datetime.strptime(
-                activity.start_time, "%Y-%m-%d %H:%M:%S"
-            ).replace(tzinfo=timezone.utc)
-            if abs((actual - target).total_seconds()) <= window_minutes * 60:
-                return activity.garmin_activity_id
-        return None
-
     def list_activity_ids_near(self, start_time: str) -> list[int]:
         return [
             activity["activityId"] for activity in self.list_activities_near(start_time)

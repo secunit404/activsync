@@ -244,7 +244,7 @@ def test_get_daily_heart_rates_wraps():
     assert raw.calls[-1] == ("get_heart_rates", "2026-07-17")
 
 
-# -- find_activity_near -----------------------------------------------------
+# -- list_activity_ids_near (journal snapshots) -----------------------------
 
 ACTIVITIES = [
     {"activityId": 1, "startTimeGMT": "2026-07-17 06:02:00",
@@ -255,31 +255,6 @@ ACTIVITIES = [
      "activityType": {"typeKey": "strength_training"}},
 ]
 
-
-def test_find_activity_near_matches_strength_within_window():
-    raw = StubRaw()
-    raw.activities_by_date = ACTIVITIES
-    client = GarminClient(raw)
-    found = client.find_activity_near("2026-07-17 06:00:00", exclude_ids=set())
-    assert found == 2  # running excluded by type, 09:00 out of window
-
-
-def test_find_activity_near_respects_exclusions():
-    raw = StubRaw()
-    raw.activities_by_date = ACTIVITIES
-    client = GarminClient(raw)
-    found = client.find_activity_near("2026-07-17 06:00:00", exclude_ids={"2"})
-    assert found is None
-
-
-def test_find_activity_near_none_when_no_match():
-    raw = StubRaw()
-    raw.activities_by_date = []
-    client = GarminClient(raw)
-    assert client.find_activity_near("2026-07-17 06:00:00", exclude_ids=set()) is None
-
-
-# -- list_activity_ids_near (journal snapshots) -----------------------------
 
 def test_list_activity_ids_near_returns_all_ids_any_type():
     raw = StubRaw()
