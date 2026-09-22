@@ -1,0 +1,26 @@
+name: package-cleanup
+
+# The dev-image prune only covers versions older than an hour, so children
+# stranded by a build that raced it survive. This sweeps them up later.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # Children of a tagged multi-arch index are untagged themselves; the
+      # action resolves them and leaves them alone.
+      - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-untagged: true
+          older-than: 1 hour
