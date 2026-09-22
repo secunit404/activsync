@@ -3,22 +3,29 @@ name: dev-image
 on:
   push:
     branches-ignore: [main]
+  delete:
   workflow_dispatch:
 
-# One shared group, not per-branch: `dev` is a single moving tag, so the
-# newest push should cancel whatever is still building and win the tag.
+# Per-branch group: each branch owns its own tag, so only a newer push to the
+# same branch should cancel a build in flight.
 concurrency:
-  group: dev-image
+  group: dev-image-${{ github.event.ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
   publish:
+    if: github.event_name != 'delete'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v7
+      - name: Resolve branch tag
+        id: tag
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: echo "tag=$(scripts/dev-image-tag.sh "$BRANCH")" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -31,8 +38,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          # Single moving tag; never touches `latest` or the semver tags.
-          tags: type=raw,value=dev
+          # Never touches `latest` or the semver tags.
+          tags: type=raw,value=${{ steps.tag.outputs.tag }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -41,15 +48,35 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=dev-${{ github.ref_name }}
+            VERSION=${{ steps.tag.outputs.tag }}
             REVISION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # `dev` moves on every push, stranding the previous multi-arch children.
-      # Tagged versions are release images, so only untagged ones are pruned.
+      # Each push moves the branch tag, stranding the previous multi-arch
+      # children. The age floor keeps this run from deleting children another
+      # branch's build has pushed but not yet tied to its index manifest.
       - name: Prune orphaned image versions
         uses: dataaxiom/ghcr-cleanup-action@v1.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           delete-untagged: true
+          older-than: 1 hour
+
+  remove-branch-tag:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve branch tag
+        id: tag
+        env:
+          BRANCH: ${{ github.event.ref }}
+        run: echo "tag=$(scripts/dev-image-tag.sh "$BRANCH")" >> "$GITHUB_OUTPUT"
+      - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-tags: ${{ steps.tag.outputs.tag }}
