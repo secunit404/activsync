@@ -267,17 +267,8 @@ def create_router(
                 if template_id:
                     hevy_db.upsert_template(
                         conn,
-                        {
-                            "exercise_template_id": template_id,
-                            "title": template.get("title", ""),
-                            "primary_muscle_group": template.get("primary_muscle_group"),
-                            "secondary_muscle_groups": template.get(
-                                "secondary_muscle_groups", []
-                            ),
-                            "equipment_category": template.get("equipment_category")
-                            or template.get("equipment"),
-                            "is_custom": template.get("is_custom", False),
-                        },
+                        hevy_db.template_from_api(
+                            template, template_id=template_id),
                     )
         except Exception:
             logger.exception("Hevy template prefetch after connect failed")

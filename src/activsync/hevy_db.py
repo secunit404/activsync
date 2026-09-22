@@ -11,6 +11,7 @@ connection first, return plain dicts, and store times as ISO-8601 UTC strings.
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
@@ -351,7 +352,6 @@ def acquire_lease(
     while another holder's unexpired lease is in place. The token must be
     presented to release_lease — a worker whose lease expired and was taken
     over cannot clear the new holder's lease."""
-    import secrets
 
     token = secrets.token_hex(8)
     now_iso = now.isoformat()
@@ -626,6 +626,25 @@ def get_backup(conn: sqlite3.Connection, garmin_activity_id: int) -> dict | None
 
 
 # -- exercise_templates -----------------------------------------------------
+
+
+def template_from_api(template: dict, *, template_id: str = "",
+                      title: str = "") -> dict:
+    """Hevy's exercise_templates payload in this table's column shape.
+
+    Hevy has shipped the equipment field under two names, so both are read.
+    The fallbacks cover a template the API would not return at all, where the
+    caller knows only the id and the title it saw on the workout.
+    """
+    return {
+        "exercise_template_id": template.get("id", template_id),
+        "title": template.get("title", title),
+        "primary_muscle_group": template.get("primary_muscle_group"),
+        "secondary_muscle_groups": template.get("secondary_muscle_groups", []),
+        "equipment_category": (template.get("equipment_category")
+                               or template.get("equipment")),
+        "is_custom": template.get("is_custom", False),
+    }
 
 
 def upsert_template(conn: sqlite3.Connection, template: dict) -> None:

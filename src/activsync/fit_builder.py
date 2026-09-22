@@ -16,6 +16,7 @@ and field names used below are the profile's own, checked by `fit_profile.mesg`.
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,7 +57,6 @@ def new_fallback_identity() -> DeviceIdentity:
     """A generic Garmin identity with a fresh random serial. Generated once
     per install and persisted (hevy_device_identity), so installs don't share
     a serial while still avoiding any hardcoded user value."""
-    import secrets
 
     return DeviceIdentity(manufacturer=1, product=0,
                           serial=secrets.randbelow(2**31 - 1) + 1)

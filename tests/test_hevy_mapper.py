@@ -182,7 +182,9 @@ def test_mapping_tables_have_no_shadowed_entries():
     import ast
     import pathlib
 
-    source = pathlib.Path(hevy_mapper.__file__).read_text()
+    from activsync import hevy_name_map
+
+    source = pathlib.Path(hevy_name_map.__file__).read_text()
     tree = ast.parse(source)
     duplicates: list[str] = []
     for node in ast.walk(tree):

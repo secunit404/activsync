@@ -408,14 +408,8 @@ class GarminClient:
         operation journal's pre/post-upload snapshot primitive. Failures
         PROPAGATE: an outage must never read as an empty snapshot, or a later
         submission_unknown diff would adopt the wrong activity."""
-        target = parse_timestamp(start_time)
-        if target is None:
-            raise ValueError(f"unparseable start_time: {start_time!r}")
-        date_from = (target - timedelta(days=1)).date().isoformat()
-        date_to = (target + timedelta(days=1)).date().isoformat()
-        activities = _limiter.call(
-            self._client.get_activities_by_date, date_from, date_to)
-        return [int(act["activityId"]) for act in (activities or [])
+        return [int(act["activityId"])
+                for act in self.list_activities_near(start_time)
                 if act.get("activityId") is not None]
 
     def fetch_activity_types(self) -> list[dict]:

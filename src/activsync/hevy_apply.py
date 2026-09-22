@@ -11,11 +11,13 @@ this module's public names.
 from __future__ import annotations
 
 import json
+import tempfile
 import logging
 import sqlite3
 from datetime import timedelta
 
 from activsync import db, hevy_db, hr_sources
+from activsync.hevy_profile import PROFILE_DEFAULTS
 from activsync.timeutil import parse_timestamp
 from activsync.hevy_description import generate_description, generate_title
 from activsync.fit_builder import (
@@ -65,18 +67,14 @@ def resolve_exercises(
 
 # -- profile / identity helpers --------------------------------------------
 
-_PROFILE_DEFAULTS = {"weight_kg": 80.0, "birth_year": 1990, "vo2max": 45.0,
-                     "sex": "male"}
-
-
 def _profile_from_cfg(cfg: dict) -> Profile:
     """Profile for calorie estimation: cached Garmin values overridden
     field-by-field by the user's manual override, defaults as last resort.
     (Task 11's hevy_profile refreshes the cache; this only reads.)"""
-    merged = dict(_PROFILE_DEFAULTS)
+    merged = dict(PROFILE_DEFAULTS)
     for source_key in ("garmin_user_profile", "profile_override"):
         stored = cfg.get(source_key) or {}
-        for key in _PROFILE_DEFAULTS:
+        for key in PROFILE_DEFAULTS:
             if stored.get(key) is not None:
                 merged[key] = stored[key]
     return Profile(weight_kg=float(merged["weight_kg"]),
@@ -465,7 +463,6 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
             # Everything before the upload call is pre-submission: a
             # deterministic failure here closes the operation instead of
             # wedging it open in `uploading` forever.
-            import tempfile
             try:
                 resolved = resolve_exercises(conn, _payload_of(row))
                 start_dt = parse_timestamp(row["start_time"])

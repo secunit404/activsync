@@ -196,15 +196,8 @@ def apply_mapping_gate(
             # no actionable mapping row. The payload still gives us the stable
             # id/title; a later catalog refresh enriches this placeholder.
             template = template or {"id": template_id, "title": miss.title}
-            hevy_db.upsert_template(conn, {
-                "exercise_template_id": template.get("id", template_id),
-                "title": template.get("title", miss.title),
-                "primary_muscle_group": template.get("primary_muscle_group"),
-                "secondary_muscle_groups": template.get("secondary_muscle_groups", []),
-                "equipment_category": template.get("equipment_category")
-                                      or template.get("equipment"),
-                "is_custom": template.get("is_custom", False),
-            })
+            hevy_db.upsert_template(conn, hevy_db.template_from_api(
+                template, template_id=template_id, title=miss.title))
 
     titles = ", ".join(miss.title for miss in misses)
     hevy_db.set_workout_status(conn, row["hevy_id"], "needs_mapping",

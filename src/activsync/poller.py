@@ -4,6 +4,7 @@ on independent intervals, checked on a short shared tick."""
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -91,22 +92,25 @@ class Poller:
         status_stats = sync.check_strava_status(self._conn, strava, cfg, now)
         return publish_stats, status_stats
 
-    def run_hevy_once(self, now: datetime | None = None) -> bool:
-        """One Hevy leg pass. Returns whether anything changed. The profile
-        cache refresh runs first so the cfg snapshot the leg reads is current."""
-        now = now or datetime.now(timezone.utc)
+    def _hevy_context(self, now: datetime):
+        """Clients plus a config snapshot for a Hevy leg.
+
+        hevy_apply stays config-driven, so the already-merged cached+override
+        profile is injected into the snapshot under the cache key rather than
+        passed as an argument — and never written back to settings.
+        """
         garmin = self._get_garmin(now)
         hevy = self._hevy_factory()
         profile = hevy_profile.get_profile(self._conn, garmin, now)
         cfg = config.load_config(self._conn)
-        # hevy_apply remains pure/config-driven; inject the already merged
-        # cached+override profile without persisting cache data in settings.
-        cfg[hevy_profile.CACHE_KEY] = {
-            "weight_kg": profile.weight_kg,
-            "birth_year": profile.birth_year,
-            "vo2max": profile.vo2max,
-            "sex": profile.sex,
-        }
+        cfg[hevy_profile.CACHE_KEY] = asdict(profile)
+        return garmin, hevy, cfg
+
+    def run_hevy_once(self, now: datetime | None = None) -> bool:
+        """One Hevy leg pass. Returns whether anything changed. The profile
+        cache refresh runs first so the cfg snapshot the leg reads is current."""
+        now = now or datetime.now(timezone.utc)
+        garmin, hevy, cfg = self._hevy_context(now)
         strava = self._strava_factory() if self._strava_ready() else None
         changed = hevy_sync.run_hevy_leg(self._conn, garmin, hevy, cfg, now,
                                          strava=strava)
@@ -117,16 +121,7 @@ class Poller:
 
     def apply_hevy_match(self, hevy_id: str, strategy: str) -> str:
         now = datetime.now(timezone.utc)
-        garmin = self._get_garmin(now)
-        hevy = self._hevy_factory()
-        profile = hevy_profile.get_profile(self._conn, garmin, now)
-        cfg = config.load_config(self._conn)
-        cfg[hevy_profile.CACHE_KEY] = {
-            "weight_kg": profile.weight_kg,
-            "birth_year": profile.birth_year,
-            "vo2max": profile.vo2max,
-            "sex": profile.sex,
-        }
+        garmin, hevy, cfg = self._hevy_context(now)
         row = hevy_sync.apply_match_choice(
             self._conn, garmin, hevy, hevy_id, strategy, cfg, now
         )
@@ -147,16 +142,7 @@ class Poller:
         if row is None:
             raise ValueError(f"unknown Hevy workout: {hevy_id}")
         now = datetime.now(timezone.utc)
-        garmin = self._get_garmin(now)
-        hevy = self._hevy_factory()
-        profile = hevy_profile.get_profile(self._conn, garmin, now)
-        cfg = config.load_config(self._conn)
-        cfg[hevy_profile.CACHE_KEY] = {
-            "weight_kg": profile.weight_kg,
-            "birth_year": profile.birth_year,
-            "vo2max": profile.vo2max,
-            "sex": profile.sex,
-        }
+        garmin, hevy, cfg = self._hevy_context(now)
         hevy_sync.process_workout(self._conn, garmin, hevy, row, cfg, now)
         after = hevy_db.get_workout(self._conn, hevy_id)
         status = after["status"]

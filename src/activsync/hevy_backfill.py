@@ -92,6 +92,30 @@ def twin_activity(conn: sqlite3.Connection, workout: dict) -> dict | None:
     return None
 
 
+def _mapping_misses(conn: sqlite3.Connection,
+                    exercises: list[dict]) -> tuple[bool, list[str]]:
+    """Whether any exercise failed to resolve, and which distinct template ids
+    that involved. The two are tracked separately: a miss can occur for an
+    exercise with no (falsy) template id, in which case the boolean is True
+    but the id list stays empty — callers must branch on the boolean, not the
+    list."""
+    any_miss = False
+    missing: list[str] = []
+    for exercise in exercises:
+        try:
+            lookup_exercise(
+                conn,
+                exercise.get("title", ""),
+                exercise.get("exercise_template_id"),
+            )
+        except MappingMiss:
+            any_miss = True
+            template_id = exercise.get("exercise_template_id")
+            if template_id and template_id not in missing:
+                missing.append(template_id)
+    return any_miss, missing
+
+
 def preview_items(
     conn: sqlite3.Connection, client, since_dt: datetime,
     total_count: int | None = None,
@@ -132,28 +156,6 @@ def preview_items(
             strategy = cfg["hevy_watch_strategy"]
             exercises = workout.get("exercises", []) or []
 
-            def collect_mapping_misses() -> tuple[bool, list[str]]:
-                """Whether any exercise failed to resolve, and which distinct
-                template ids that involved. The two are tracked separately:
-                a miss can occur for an exercise with no (falsy) template id,
-                in which case the boolean is True but the id list stays
-                empty — callers must branch on the boolean, not the list."""
-                any_miss = False
-                missing: list[str] = []
-                for exercise in exercises:
-                    try:
-                        lookup_exercise(
-                            conn,
-                            exercise.get("title", ""),
-                            exercise.get("exercise_template_id"),
-                        )
-                    except MappingMiss:
-                        any_miss = True
-                        template_id = exercise.get("exercise_template_id")
-                        if template_id and template_id not in missing:
-                            missing.append(template_id)
-                return any_miss, missing
-
             match = hevy_sync.find_watch_match(
                 conn,
                 {
@@ -173,7 +175,7 @@ def preview_items(
                     has_mapping_miss, missing_ids = (
                         (False, [])
                         if strategy == "describe"
-                        else collect_mapping_misses()
+                        else _mapping_misses(conn, exercises)
                     )
                     action = "needs_mapping" if has_mapping_miss else strategy
             elif match in ("multiple", "claimed"):
@@ -182,7 +184,7 @@ def preview_items(
                 if strategy == "describe":
                     has_mapping_miss, missing_ids = False, []
                 else:
-                    has_mapping_miss, missing_ids = collect_mapping_misses()
+                    has_mapping_miss, missing_ids = _mapping_misses(conn, exercises)
                 if has_mapping_miss:
                     action = "needs_mapping"
                     items.append(
@@ -199,7 +201,7 @@ def preview_items(
                 if end is not None and now - end < grace:
                     action = "waiting_watch"
                 elif strategy == "describe":
-                    has_mapping_miss, missing_ids = collect_mapping_misses()
+                    has_mapping_miss, missing_ids = _mapping_misses(conn, exercises)
                     action = "needs_mapping" if has_mapping_miss else "passive"
                 else:
                     action = "passive"
