@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./app/test/setup.ts"],
-    exclude: [...defaultExclude, "e2e/**"],
+    // .claude/worktrees holds git worktrees with their own node_modules; a
+    // second React copy there fails every test it is scanned into.
+    exclude: [...defaultExclude, "e2e/**", ".claude/**"],
   },
 });
