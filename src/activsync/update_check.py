@@ -15,7 +15,7 @@ from typing import Callable
 
 import requests
 
-from activsync import __version__
+from activsync import __version__, build_info
 
 logger = logging.getLogger("activsync.update_check")
 
@@ -157,6 +157,10 @@ class UpdateChecker:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
+        # A dev image reports its branch tag, not a version, so there is no
+        # release to compare it against and nothing a pull would upgrade.
+        if not build_info.is_release():
+            return
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop_event.clear()

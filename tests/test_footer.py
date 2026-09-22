@@ -44,3 +44,14 @@ def test_footer_shows_update_icon_when_newer_release(tmp_path):
         assert 'href="https://github.com/secunit404/activsync/releases/latest"' in body
     finally:
         update_check.reset_cache()
+
+
+def test_footer_names_the_branch_build_without_a_version_prefix(tmp_path, monkeypatch):
+    update_check.reset_cache()
+    monkeypatch.setenv("ACTIVSYNC_BUILD", "dev-feat-hevy-react-frontend")
+    _conn, client = _client(tmp_path)
+
+    body = client.get("/").text
+
+    assert "ActivSync dev-feat-hevy-react-frontend" in body
+    assert f"ActivSync v{update_check._CURRENT_VERSION}" not in body
