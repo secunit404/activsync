@@ -208,9 +208,10 @@ def test_mapping_comments_describe_the_value_they_sit_on():
     drifted from its value is how a wrong mapping hides — that is exactly how
     'Overhead Dumbbell Lunge' shipped as a REVERSE lunge.
 
-    Two conventions are allowed: subcategory 0 is written `generic`, and an
-    entry marked `(closest)` is a deliberate approximation whose comment names
-    the intent rather than the enum.
+    Three conventions are allowed: subcategory 0 is written `generic`, FIT's
+    "no name" sentinel 65535 is written `no_name`, and an entry marked
+    `(closest)` is a deliberate approximation whose comment names the intent
+    rather than the enum.
     """
     import pathlib
     import re
@@ -235,6 +236,8 @@ def test_mapping_comments_describe_the_value_they_sit_on():
         expected_sub = (subcategory_name(category, subcategory) or "").lower()
         if subcategory == 0 and match["comment_sub"] == "generic":
             expected_sub = "generic"
+        if subcategory == 65535:  # FIT's "no name"
+            expected_sub = "no_name"
         if (match["comment_cat"], match["comment_sub"]) != (expected_cat, expected_sub):
             drifted.append(
                 f'{match["key"]!r} is ({category}, {subcategory}) = '
@@ -242,3 +245,36 @@ def test_mapping_comments_describe_the_value_they_sit_on():
                 f'{match["comment_cat"]}/{match["comment_sub"]}')
 
     assert not drifted, "comment does not match value:\n  " + "\n  ".join(drifted)
+
+
+def test_name_table_agrees_with_the_template_overrides():
+    """The name table is only consulted when the template id is unknown or
+    absent, so a disagreement means the same exercise uploads as two different
+    Garmin movements depending on whether Hevy returned its template. Each
+    override row names its exercise in a trailing comment; that name is the key
+    into the name table."""
+    import pathlib
+    import re
+
+    from activsync import hevy_name_map
+
+    source = pathlib.Path(hevy_name_map.__file__).read_text()
+    overrides = source.partition("TEMPLATE_OVERRIDES: dict")[2]
+    row = re.compile(r'^\s*"(?P<id>[0-9A-F]{8})":.*?#\s*(?P<name>.+?)\s*->', re.M)
+
+    disagreements = []
+    parsed = set()
+    for match in row.finditer(overrides):
+        name = match["name"]
+        parsed.add(match["id"])
+        override = hevy_mapper.TEMPLATE_OVERRIDES[match["id"]]
+        from_name = hevy_mapper.HEVY_TO_GARMIN.get(name)
+        if from_name is not None and from_name != override:
+            disagreements.append(f"{name!r}: override {override} vs name {from_name}")
+
+    assert parsed == set(hevy_mapper.TEMPLATE_OVERRIDES), (
+        "override rows the comment parser missed: "
+        f"{sorted(set(hevy_mapper.TEMPLATE_OVERRIDES) - parsed)}")
+    assert not disagreements, (
+        "name table disagrees with the template override:\n  "
+        + "\n  ".join(disagreements))

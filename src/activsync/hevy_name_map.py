@@ -6,8 +6,14 @@ auto-generated TEMPLATE_TO_GARMIN table, which is also re-copied verbatim, so
 corrections belong here rather than edited into it.
 
 The (category, subcategory) ids are FIT profile values; their names live in
-`fit_profile`, which reads them from Garmin's SDK. Kept apart from the lookup
-logic in `hevy_mapper` because the two change for entirely different reasons.
+`fit_profile`, which reads them from Garmin's SDK. Section banners group by
+Hevy exercise family, which is how you find a row; they say nothing about the
+FIT category, because a family routinely spans several (chest dips are
+TRICEPS_EXTENSION, banded raises are BANDED_EXERCISES). Each row's own trailing
+comment is the category claim, and a test holds it to the value it sits on.
+
+Kept apart from the lookup logic in `hevy_mapper` because the two change for
+entirely different reasons.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ from __future__ import annotations
 HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
 
     # ======================================================================= #
-    #  CHEST – Bench Press (category 0)
+    #  CHEST – Bench Press
     # ======================================================================= #
     "Bench Press (Barbell)":                    (0, 1),    # bench_press / barbell_bench_press
     "Bench Press (Cable)":                      (0, 20),   # bench_press / single_arm_cable_chest_press (closest cable bench)
@@ -33,10 +39,10 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Floor Press (Dumbbell)":                   (0, 7),    # bench_press / dumbbell_floor_press
     "Incline Bench Press (Barbell)":            (0, 8),    # bench_press / incline_barbell_bench_press
     "Incline Bench Press (Dumbbell)":           (0, 9),    # bench_press / incline_dumbbell_bench_press
-    "Incline Bench Press (Smith Machine)":      (0, 8),    # bench_press / incline_barbell_bench_press (closest)
+    "Incline Bench Press (Smith Machine)":      (0, 10),   # bench_press / incline_smith_machine_bench_press
     "Incline Chest Press (Machine)":            (0, 9),    # bench_press / incline_dumbbell_bench_press (closest machine)
     "Iso-Lateral Chest Press (Machine)":        (0, 6),    # bench_press / dumbbell_bench_press (closest)
-    "Chest Press (Band)":                       (0, 1),    # bench_press / barbell_bench_press (closest)
+    "Chest Press (Band)":                       (22, 0),   # push_up / chest_press_with_band
     "Chest Press (Machine)":                    (0, 6),    # bench_press / dumbbell_bench_press (closest machine press)
     "Dumbbell Squeeze Press":                   (0, 6),    # bench_press / dumbbell_bench_press (squeeze variant)
     "Hex Press (Dumbbell)":                     (0, 6),    # bench_press / dumbbell_bench_press (hex variant)
@@ -45,14 +51,14 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Plate Squeeze (Svend Press)":              (0, 12),   # bench_press / kettlebell_chest_press (closest svend press)
 
     # ======================================================================= #
-    #  CHEST – Flyes (category 9)
+    #  CHEST – Flyes
     # ======================================================================= #
     "Butterfly (Pec Deck)":                     (9, 2),    # flye / dumbbell_flye (closest pec deck)
     "Cable Fly Crossovers":                     (9, 0),    # flye / cable_crossover
     "Chest Fly (Band)":                         (9, 2),    # flye / dumbbell_flye (closest band fly)
     "Chest Fly (Dumbbell)":                     (9, 2),    # flye / dumbbell_flye
     "Chest Fly (Machine)":                      (9, 2),    # flye / dumbbell_flye (closest machine fly)
-    "Chest Fly (Suspension)":                   (9, 2),    # flye / dumbbell_flye (closest)
+    "Chest Fly (Suspension)":                   (49, 0),   # suspension / chest_fly
     "Decline Chest Fly (Dumbbell)":             (9, 1),    # flye / decline_dumbbell_flye
     "Incline Chest Fly (Dumbbell)":             (9, 3),    # flye / incline_dumbbell_flye
     "Low Cable Fly Crossovers":                 (9, 0),    # flye / cable_crossover (low angle)
@@ -60,7 +66,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Single Arm Cable Crossover":               (9, 0),    # flye / cable_crossover (single arm)
 
     # ======================================================================= #
-    #  CHEST – Push Ups (category 22)
+    #  CHEST – Push Ups
     # ======================================================================= #
     "Clap Push Ups":                            (22, 7),   # push_up / clapping_push_up
     "Decline Push Up":                          (22, 13),  # push_up / decline_push_up
@@ -68,7 +74,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Incline Push Ups":                         (22, 27),  # push_up / incline_push_up
     "Kneeling Push Up":                         (22, 33),  # push_up / kneeling_push_up
     "One Arm Push Up":                          (22, 38),  # push_up / one_arm_push_up
-    "Pike Pushup":                              (22, 49),  # push_up / shoulder_push_up (closest pike)
+    "Pike Pushup":                              (22, 84),  # push_up / pike_push_up
     "Plank Pushup":                             (22, 77),  # push_up / push_up (plank-to-pushup)
     "Push Up":                                  (22, 77),  # push_up / push_up
     "Push Up (Weighted)":                       (22, 40),  # push_up / weighted_push_up
@@ -76,7 +82,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Ring Push Up":                             (22, 75),  # push_up / ring_push_up
 
     # ======================================================================= #
-    #  CHEST – Dips (category 30 – triceps_extension)
+    #  CHEST – Dips
     # ======================================================================= #
     "Bench Dip":                                (30, 0),   # triceps_extension / bench_dip
     "Chest Dip":                                (30, 2),   # triceps_extension / body_weight_dip
@@ -84,22 +90,22 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Chest Dip (Weighted)":                     (30, 40),  # triceps_extension / weighted_dip
 
     # ======================================================================= #
-    #  CHEST – Pullovers (category 21 – pull_up)
+    #  CHEST – Pullovers
     # ======================================================================= #
     "Pullover (Dumbbell)":                      (21, 8),   # pull_up / ez_bar_pullover (closest pullover)
     "Pullover (Machine)":                       (21, 8),   # pull_up / ez_bar_pullover (closest)
 
     # ======================================================================= #
-    #  BACK – Rows (category 23)
+    #  BACK – Rows
     # ======================================================================= #
-    "Bent Over Row (Band)":                     (23, 0),   # row / barbell_straight_leg_deadlift_to_row (closest band row)
+    "Bent Over Row (Band)":                     (23, 65535), # row / no_name
     "Bent Over Row (Barbell)":                  (23, 46),  # row / bent_over_row_with_barbell
-    "Bent Over Row (Dumbbell)":                 (23, 2),   # row / dumbbell_row
+    "Bent Over Row (Dumbbell)":                 (23, 47),  # row / bent_over_row_with_dumbell
     "Chest Supported Incline Row (Dumbbell)":   (23, 40),  # row / chest_supported_dumbbell_row
     "Dumbbell Row":                             (23, 2),   # row / dumbbell_row
     "Face Pull":                                (23, 5),   # row / face_pull
     "Gorilla Row (Kettlebell)":                 (23, 9),   # row / kettlebell_row (closest)
-    "Inverted Row":                             (23, 10),  # row / modified_inverted_row
+    "Inverted Row":                             (23, 35),  # row / inverted_row
     "Iso-Lateral High Row (Machine)":           (23, 18),  # row / seated_cable_row (closest)
     "Iso-Lateral Low Row":                      (23, 18),  # row / seated_cable_row (closest)
     "Iso-Lateral Row (Machine)":                (23, 2),   # row / dumbbell_row (closest)
@@ -117,11 +123,11 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "T Bar Row":                                (23, 28),  # row / t_bar_row
 
     # ======================================================================= #
-    #  BACK – Pull Ups / Lat Pulldown (category 21)
+    #  BACK – Pull Ups / Lat Pulldown
     # ======================================================================= #
-    "Chin Up":                                  (21, 3),   # pull_up / close_grip_chin_up
-    "Chin Up (Assisted)":                       (21, 3),   # pull_up / close_grip_chin_up (assisted)
-    "Chin Up (Weighted)":                       (21, 4),   # pull_up / weighted_close_grip_chin_up
+    "Chin Up":                                  (21, 39),  # pull_up / chin_up
+    "Chin Up (Assisted)":                       (21, 2),   # pull_up / band_assisted_chin_up (closest; FIT only names the band-assisted variant)
+    "Chin Up (Weighted)":                       (21, 41),  # pull_up / weighted_chin_up
     "Kipping Pull Up":                          (21, 32),  # pull_up / kipping_pull_up
     "Kneeling Pulldown (band)":                 (21, 11),  # pull_up / kneeling_lat_pulldown
     "Lat Pulldown (Band)":                      (21, 13),  # pull_up / lat_pulldown (closest)
@@ -144,7 +150,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Wide Pull Up":                             (21, 26),  # pull_up / wide_grip_pull_up
 
     # ======================================================================= #
-    #  BACK – Hyperextension (category 13)
+    #  BACK – Hyperextension
     # ======================================================================= #
     "Back Extension (Hyperextension)":          (13, 25),  # hyperextension / spine_extension
     "Back Extension (Machine)":                 (13, 25),  # hyperextension / spine_extension (machine)
@@ -152,7 +158,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Reverse Hyperextension":                   (13, 4),   # hyperextension / bent_knee_reverse_hyperextension
 
     # ======================================================================= #
-    #  SHOULDERS – Shoulder Press (category 24)
+    #  SHOULDERS – Shoulder Press
     # ======================================================================= #
     "Arnold Press (Dumbbell)":                  (24, 1),   # shoulder_press / arnold_press
     "Kettlebell Shoulder Press":                (24, 15),  # shoulder_press / overhead_dumbbell_press (closest KB)
@@ -163,34 +169,34 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Seated Overhead Press (Barbell)":          (24, 16),  # shoulder_press / seated_barbell_shoulder_press
     "Seated Overhead Press (Dumbbell)":         (24, 17),  # shoulder_press / seated_dumbbell_shoulder_press
     "Seated Shoulder Press (Machine)":          (24, 20),  # shoulder_press / smith_machine_overhead_press (closest machine)
-    "Shoulder Press (Dumbbell)":                (24, 15),  # shoulder_press / overhead_dumbbell_press
+    "Shoulder Press (Dumbbell)":                (24, 24),  # shoulder_press / dumbbell_shoulder_press
     "Shoulder Press (Machine Plates)":          (24, 20),  # shoulder_press / smith_machine_overhead_press (closest)
     "Single Arm Landmine Press (Barbell)":      (24, 18),  # shoulder_press / single_arm_dumbbell_shoulder_press (closest)
-    "Standing Military Press (Barbell)":        (24, 14),  # shoulder_press / overhead_barbell_press
+    "Standing Military Press (Barbell)":        (24, 25),  # shoulder_press / military_press
 
     # ======================================================================= #
-    #  SHOULDERS – Lateral Raise (category 14)
+    #  SHOULDERS – Lateral Raise
     # ======================================================================= #
     "Around The World":                         (14, 32),  # lateral_raise / arm_circles (closest)
-    "Chest Supported Y Raise (Dumbbell)":       (14, 10),  # lateral_raise / front_raise (closest Y-raise)
+    "Chest Supported Y Raise (Dumbbell)":       (25, 20),  # shoulder_stability / incline_y_raise
     "Front Raise (Band)":                       (14, 10),  # lateral_raise / front_raise
     "Front Raise (Barbell)":                    (14, 10),  # lateral_raise / front_raise
     "Front Raise (Cable)":                      (14, 5),   # lateral_raise / cable_front_raise
-    "Front Raise (Dumbbell)":                   (14, 10),  # lateral_raise / front_raise
+    "Front Raise (Dumbbell)":                   (24, 28),  # shoulder_press / dumbbell_front_raise
     "Front Raise (Suspension)":                 (14, 10),  # lateral_raise / front_raise (suspension)
-    "Lateral Raise (Band)":                     (14, 11),  # lateral_raise / leaning_dumbbell_lateral_raise (closest band)
+    "Lateral Raise (Band)":                     (37, 25),  # banded_exercises / lateral_raise
     "Lateral Raise (Cable)":                    (14, 14),  # lateral_raise / one_arm_cable_lateral_raise
-    "Lateral Raise (Dumbbell)":                 (14, 11),  # lateral_raise / leaning_dumbbell_lateral_raise
+    "Lateral Raise (Dumbbell)":                 (14, 34),  # lateral_raise / dumbbell_lateral_raise
     "Lateral Raise (Machine)":                  (14, 24),  # lateral_raise / seated_lateral_raise
     "Overhead Plate Raise":                     (14, 16),  # lateral_raise / plate_raises
-    "Plate Front Raise":                        (14, 16),  # lateral_raise / plate_raises
+    "Plate Front Raise":                        (24, 23),  # shoulder_press / weight_plate_front_raise
     "Seated Lateral Raise (Dumbbell)":          (14, 24),  # lateral_raise / seated_lateral_raise
     "Single Arm Lateral Raise (Cable)":         (14, 14),  # lateral_raise / one_arm_cable_lateral_raise
     "Muscle Up":                                (14, 13),  # lateral_raise / muscle_up
     "Ring Dips":                                (14, 17),  # lateral_raise / ring_dip
 
     # ======================================================================= #
-    #  SHOULDERS – Reverse Flyes / Rear Delt (category 9)
+    #  SHOULDERS – Reverse Flyes / Rear Delt
     # ======================================================================= #
     "Chest Supported Reverse Fly (Dumbbell)":   (9, 5),    # flye / kneeling_rear_flye (closest)
     "Rear Delt Reverse Fly (Cable)":            (9, 6),    # flye / single_arm_standing_cable_reverse_flye
@@ -201,13 +207,13 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Band Pullaparts":                          (9, 5),    # flye / kneeling_rear_flye (closest band)
 
     # ======================================================================= #
-    #  SHOULDERS – Shoulder Stability (category 25)
+    #  SHOULDERS – Shoulder Stability
     # ======================================================================= #
     "Shoulder Extension":                       (25, 3),   # shoulder_stability / bent_arm_lateral_raise_and_external_rotation
     "Shoulder Taps":                            (25, 3),   # shoulder_stability / bent_arm_lateral_raise_and_external_rotation (closest)
 
     # ======================================================================= #
-    #  SHOULDERS – Shrugs & Upright Rows (category 26)
+    #  SHOULDERS – Shrugs & Upright Rows
     # ======================================================================= #
     "Shrug (Barbell)":                          (26, 1),   # shrug / barbell_shrug
     "Shrug (Cable)":                            (26, 5),   # shrug / dumbbell_shrug (closest cable)
@@ -215,25 +221,25 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Shrug (Machine)":                          (26, 5),   # shrug / dumbbell_shrug (closest machine)
     "Shrug (Smith Machine)":                    (26, 1),   # shrug / barbell_shrug (closest)
     "Upright Row (Barbell)":                    (26, 2),   # shrug / barbell_upright_row
-    "Upright Row (Cable)":                      (26, 6),   # shrug / dumbbell_upright_row (closest cable)
+    "Upright Row (Cable)":                      (26, 24),  # shrug / upright_row
     "Upright Row (Dumbbell)":                   (26, 6),   # shrug / dumbbell_upright_row
     "Jump Shrug":                               (26, 0),   # shrug / barbell_jump_shrug
 
     # ======================================================================= #
-    #  BICEPS – Curls (category 7)
+    #  BICEPS – Curls
     # ======================================================================= #
     "21s Bicep Curl":                           (7, 3),    # curl / barbell_biceps_curl (21s variant)
     "Behind the Back Bicep Wrist Curl (Barbell)": (7, 4),  # curl / barbell_reverse_wrist_curl
     "Behind the Back Curl (Cable)":             (7, 7),    # curl / behind_the_back_one_arm_cable_curl
     "Bicep Curl (Barbell)":                     (7, 3),    # curl / barbell_biceps_curl
     "Bicep Curl (Cable)":                       (7, 8),    # curl / cable_biceps_curl
-    "Bicep Curl (Dumbbell)":                    (7, 37),   # curl / standing_dumbbell_biceps_curl
+    "Bicep Curl (Dumbbell)":                    (7, 46),   # curl / dumbbell_biceps_curl
     "Bicep Curl (Machine)":                     (7, 8),    # curl / cable_biceps_curl (closest machine)
     "Bicep Curl (Suspension)":                  (7, 37),   # curl / standing_dumbbell_biceps_curl (closest)
-    "Concentration Curl":                       (7, 37),   # curl / standing_dumbbell_biceps_curl (closest concentration)
+    "Concentration Curl":                       (7, 44),   # curl / one_arm_concentration_curl
     "Cross Body Hammer Curl":                   (7, 12),   # curl / cross_body_dumbbell_hammer_curl
     "Drag Curl":                                (7, 3),    # curl / barbell_biceps_curl (drag variant)
-    "EZ Bar Biceps Curl":                       (7, 19),   # curl / ez_bar_preacher_curl (closest EZ bar)
+    "EZ Bar Biceps Curl":                       (7, 38),   # curl / standing_ez_bar_biceps_curl
     "Hammer Curl (Band)":                       (7, 16),   # curl / dumbbell_hammer_curl (closest band)
     "Hammer Curl (Cable)":                      (7, 9),    # curl / cable_hammer_curl
     "Hammer Curl (Dumbbell)":                   (7, 16),   # curl / dumbbell_hammer_curl
@@ -245,15 +251,15 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Preacher Curl (Dumbbell)":                 (7, 26),   # curl / one_arm_preacher_curl
     "Preacher Curl (Machine)":                  (7, 28),   # curl / preacher_curl_with_cable (closest machine)
     "Reverse Curl (Barbell)":                   (7, 31),   # curl / reverse_grip_barbell_biceps_curl
-    "Reverse Curl (Cable)":                     (7, 31),   # curl / reverse_grip_barbell_biceps_curl (closest cable)
-    "Reverse Curl (Dumbbell)":                  (7, 31),   # curl / reverse_grip_barbell_biceps_curl (closest)
+    "Reverse Curl (Cable)":                     (7, 65535), # curl / no_name
+    "Reverse Curl (Dumbbell)":                  (7, 34),   # curl / seated_reverse_dumbbell_curl (closest; FIT only names the seated variant)
     "Reverse EZ-Bar Curl":                      (7, 29),   # curl / reverse_ez_bar_curl
     "Reverse Grip Concentration Curl":          (7, 31),   # curl / reverse_grip_barbell_biceps_curl (closest)
     "Rope Cable Curl":                          (7, 8),    # curl / cable_biceps_curl (rope attachment)
     "Seated Incline Curl (Dumbbell)":           (7, 22),   # curl / incline_dumbbell_biceps_curl
     "Seated Palms Up Wrist Curl":               (7, 5),    # curl / barbell_wrist_curl
     "Seated Wrist Extension (Barbell)":         (7, 4),    # curl / barbell_reverse_wrist_curl
-    "Single Arm Curl (Cable)":                  (7, 7),    # curl / behind_the_back_one_arm_cable_curl (closest single arm)
+    "Single Arm Curl (Cable)":                  (7, 8),    # curl / cable_biceps_curl
     "Spider Curl (Barbell)":                    (7, 3),    # curl / barbell_biceps_curl (spider variant)
     "Spider Curl (Dumbbell)":                   (7, 37),   # curl / standing_dumbbell_biceps_curl (spider variant)
     "Waiter Curl (Dumbbell)":                   (7, 37),   # curl / standing_dumbbell_biceps_curl (waiter variant)
@@ -261,7 +267,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Zottman Curl (Dumbbell)":                  (7, 42),   # curl / twisting_standing_dumbbell_biceps_curl
 
     # ======================================================================= #
-    #  TRICEPS – Extensions (category 30)
+    #  TRICEPS – Extensions
     # ======================================================================= #
     "Floor Triceps Dip":                        (30, 0),   # triceps_extension / bench_dip (closest floor dip)
     "One-Arm Cable Cross Body Triceps Extension": (30, 3), # triceps_extension / cable_kickback
@@ -279,7 +285,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Triceps Extension (Cable)":                (30, 5),   # triceps_extension / cable_overhead_triceps_extension
     "Triceps Extension (Dumbbell)":             (30, 15),  # triceps_extension / overhead_dumbbell_triceps_extension
     "Triceps Extension (Machine)":              (30, 5),   # triceps_extension / cable_overhead_triceps_extension (closest)
-    "Triceps Extension (Suspension)":           (30, 5),   # triceps_extension / cable_overhead_triceps_extension (closest)
+    "Triceps Extension (Suspension)":           (49, 33),  # suspension / tricep_press
     "Triceps Kickback (Cable)":                 (30, 3),   # triceps_extension / cable_kickback
     "Triceps Kickback (Dumbbell)":              (30, 6),   # triceps_extension / dumbbell_kickback
     "Triceps Pressdown":                        (30, 39),  # triceps_extension / triceps_pressdown
@@ -288,7 +294,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Wide-Elbow Triceps Press (Dumbbell)":      (30, 15),  # triceps_extension / overhead_dumbbell_triceps_extension (closest)
 
     # ======================================================================= #
-    #  LEGS – Squat (category 28)
+    #  LEGS – Squat
     # ======================================================================= #
     "Assisted Pistol Squats":                   (28, 47),  # squat / pistol_squat (assisted)
     "Belt Squat (Machine)":                     (28, 61),  # squat / squat (belt squat variant)
@@ -327,7 +333,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Zercher Squat":                            (28, 86),  # squat / zercher_squat
 
     # ======================================================================= #
-    #  LEGS – Step Ups (category 28)
+    #  LEGS – Step Ups
     # ======================================================================= #
     "Dumbbell Step Up":                         (28, 32),  # squat / dumbbell_step_up
     "Step Up":                                  (28, 66),  # squat / step_up
@@ -335,7 +341,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Stair Machine (Steps)":                    (47, 0),   # stair_stepper / stair_stepper
 
     # ======================================================================= #
-    #  LEGS – Lunges (category 17)
+    #  LEGS – Lunges
     # ======================================================================= #
     "Bulgarian Split Squat":                    (17, 7),   # lunge / barbell_bulgarian_split_squat (closest)
     "Curtsy Lunge (Dumbbell)":                  (17, 21),  # lunge / dumbbell_lunge (closest curtsy)
@@ -347,30 +353,30 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Overhead Dumbbell Lunge":                  (17, 83),  # lunge / overhead_dumbbell_lunge
     "Reverse Lunge":                            (17, 32),  # lunge / lunge (reverse variant)
     "Reverse Lunge (Barbell)":                  (17, 11),  # lunge / barbell_reverse_lunge
-    "Reverse Lunge (Dumbbell)":                 (17, 21),  # lunge / dumbbell_lunge (reverse)
-    "Split Squat (Dumbbell)":                   (17, 28),  # lunge / gunslinger_lunge (closest; FIT has no lunge/dumbbell_split_squat)
+    "Reverse Lunge (Dumbbell)":                 (17, 82),  # lunge / dumbbell_reverse_lunge
+    "Split Squat (Dumbbell)":                   (28, 28),  # squat / dumbbell_split_squat
     "Walking Lunge":                            (17, 78),  # lunge / walking_lunge
     "Walking Lunge (Dumbbell)":                 (17, 77),  # lunge / walking_dumbbell_lunge
 
     # ======================================================================= #
-    #  LEGS – Deadlift (category 8)
+    #  LEGS – Deadlift
     # ======================================================================= #
-    "Deadlift (Band)":                          (8, 0),    # deadlift / barbell_deadlift (closest band)
+    "Deadlift (Band)":                          (37, 9),   # banded_exercises / deadlift
     "Deadlift (Barbell)":                       (8, 0),    # deadlift / barbell_deadlift
     "Deadlift (Dumbbell)":                      (8, 2),    # deadlift / dumbbell_deadlift
     "Deadlift (Smith Machine)":                 (8, 0),    # deadlift / barbell_deadlift (smith)
     "Deadlift (Trap bar)":                      (8, 17),   # deadlift / trap_bar_deadlift
     "Deadlift High Pull":                       (8, 16),   # deadlift / sumo_deadlift_high_pull (closest)
     "Rack Pull":                                (8, 7),    # deadlift / rack_pull
-    "Romanian Deadlift (Barbell)":              (8, 1),    # deadlift / barbell_straight_leg_deadlift
-    "Romanian Deadlift (Dumbbell)":             (8, 4),    # deadlift / dumbbell_straight_leg_deadlift
+    "Romanian Deadlift (Barbell)":              (8, 23),   # deadlift / romanian_deadlift
+    "Romanian Deadlift (Dumbbell)":             (8, 23),   # deadlift / romanian_deadlift
     "Single Leg Romanian Deadlift (Barbell)":   (8, 10),   # deadlift / single_leg_barbell_deadlift
     "Single Leg Romanian Deadlift (Dumbbell)":  (8, 14),   # deadlift / single_leg_romanian_deadlift_with_dumbbell
-    "Straight Leg Deadlift":                    (8, 1),    # deadlift / barbell_straight_leg_deadlift
+    "Straight Leg Deadlift":                    (8, 25),   # deadlift / straight_leg_deadlift
     "Sumo Deadlift":                            (8, 15),   # deadlift / sumo_deadlift
 
     # ======================================================================= #
-    #  LEGS – Leg Curl (category 15)
+    #  LEGS – Leg Curl
     # ======================================================================= #
     "Good Morning (Barbell)":                   (15, 2),   # leg_curl / good_morning
     "Lying Leg Curl (Machine)":                 (15, 0),   # leg_curl / leg_curl
@@ -385,10 +391,10 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Single Leg Extensions":                    (6, 33),   # crunch / leg_extensions (single leg)
 
     # ======================================================================= #
-    #  LEGS – Calf Raise (category 1)
+    #  LEGS – Calf Raise
     # ======================================================================= #
     "Calf Extension (Machine)":                 (1, 18),   # calf_raise / standing_calf_raise (closest)
-    "Calf Press (Machine)":                     (1, 18),   # calf_raise / standing_calf_raise (closest)
+    "Calf Press (Machine)":                     (1, 6),    # calf_raise / seated_calf_raise (closest; a machine calf press is seated)
     "Seated Calf Raise":                        (1, 6),    # calf_raise / seated_calf_raise
     "Single Leg Standing Calf Raise":           (1, 15),   # calf_raise / single_leg_standing_calf_raise
     "Single Leg Standing Calf Raise (Barbell)": (1, 15),   # calf_raise / single_leg_standing_calf_raise (barbell)
@@ -401,7 +407,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Standing Calf Raise (Smith)":              (1, 17),   # calf_raise / standing_barbell_calf_raise (smith)
 
     # ======================================================================= #
-    #  LEGS – Hip Raise / Glutes (category 10)
+    #  LEGS – Hip Raise / Glutes
     # ======================================================================= #
     "Frog Pumps (Dumbbell)":                    (10, 11),  # hip_raise / hip_raise (closest frog pump)
     "Glute Bridge":                             (10, 11),  # hip_raise / hip_raise
@@ -416,7 +422,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Single Leg Hip Thrust (Dumbbell)":         (10, 30),  # hip_raise / single_leg_hip_raise (dumbbell)
 
     # ======================================================================= #
-    #  LEGS – Hip Stability (category 11)
+    #  LEGS – Hip Stability
     # ======================================================================= #
     "Clamshell":                                (10, 44),  # hip_raise / clams
     "Fire Hydrants":                            (11, 5),   # hip_stability / fire_hydrant_kicks
@@ -424,20 +430,20 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Glute Kickback on Floor":                  (11, 17),  # hip_stability / quadruped_hip_extension
     "Hip Abduction (Machine)":                  (11, 28),  # hip_stability / standing_hip_abduction
     "Hip Adduction (Machine)":                  (11, 25),  # hip_stability / standing_adduction
-    "Lateral Band Walks":                       (11, 11),  # hip_stability / lateral_walks_with_band_at_ankles
+    "Lateral Band Walks":                       (37, 24),  # banded_exercises / lateral_band_walks
     "Lateral Leg Raises":                       (11, 21),  # hip_stability / side_lying_leg_raise
     "Rear Kick (Machine)":                      (11, 30),  # hip_stability / standing_rear_leg_raise
     "Standing Cable Glute Kickbacks":           (11, 30),  # hip_stability / standing_rear_leg_raise (cable)
 
     # ======================================================================= #
-    #  LEGS – Hip Swing (category 12)
+    #  LEGS – Hip Swing
     # ======================================================================= #
     "Kettlebell Swing":                         (10, 23),  # hip_raise / kettlebell_swing
 
     # ======================================================================= #
-    #  CORE – Core (category 5)
+    #  CORE – Core
     # ======================================================================= #
-    "Ab Scissors":                              (5, 49),   # core / bicycle (closest scissors)
+    "Ab Scissors":                              (5, 65),   # core / scissors
     "Cable Core Palloff Press":                 (5, 46),   # core / russian_twist (closest anti-rotation)
     "Cable Twist (Down to up)":                 (4, 2),    # chop / cable_woodchop (twist variant)
     "Cable Twist (Up to down)":                 (4, 2),    # chop / cable_woodchop (twist variant)
@@ -448,14 +454,14 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Torso Rotation":                           (4, 2),    # chop / cable_woodchop (closest)
 
     # ======================================================================= #
-    #  CORE – Crunch (category 6)
+    #  CORE – Crunch
     # ======================================================================= #
     "Ab Wheel":                                 (5, 18),   # core / kneeling_ab_wheel
     "Bicycle Crunch":                           (6, 0),    # crunch / bicycle_crunch
     "Bicycle Crunch Raised Legs":               (6, 0),    # crunch / bicycle_crunch (raised legs)
     "Cable Crunch":                             (6, 1),    # crunch / cable_crunch
     "Crunch":                                   (6, 83),   # crunch / crunch
-    "Crunch (Machine)":                         (6, 28),   # crunch / kneeling_cable_crunch (closest machine)
+    "Crunch (Machine)":                         (6, 79),   # crunch / weighted_crunch
     "Crunch (Weighted)":                        (6, 79),   # crunch / weighted_crunch
     "Decline Crunch":                           (6, 83),   # crunch / crunch (decline variant)
     "Decline Crunch (Weighted)":                (6, 79),   # crunch / weighted_crunch (decline)
@@ -467,9 +473,9 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Toes to Bar":                              (6, 81),   # crunch / toes_to_bar
 
     # ======================================================================= #
-    #  CORE – Sit Up (category 27)
+    #  CORE – Sit Up
     # ======================================================================= #
-    "Elbow to Knee":                            (27, 37),  # sit_up / sit_up (elbow-to-knee variant)
+    "Elbow to Knee":                            (6, 11),   # crunch / elbow_to_knee_crunch
     "Jackknife Sit Up":                         (27, 37),  # sit_up / sit_up (jackknife variant)
     "Sit Up":                                   (27, 37),  # sit_up / sit_up
     "Sit Up (Weighted)":                        (27, 34),  # sit_up / weighted_sit_up
@@ -477,7 +483,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "V Up":                                     (27, 31),  # sit_up / v_up
 
     # ======================================================================= #
-    #  CORE – Leg Raise (category 16)
+    #  CORE – Leg Raise
     # ======================================================================= #
     "Dragon Flag":                              (16, 1),   # leg_raise / hanging_leg_raise (closest)
     "Dragonfly":                                (16, 1),   # leg_raise / hanging_leg_raise (closest)
@@ -489,27 +495,27 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Lying Leg Raise":                          (16, 8),   # leg_raise / lying_straight_leg_raise
 
     # ======================================================================= #
-    #  CORE – Plank (category 19)
+    #  CORE – Plank
     # ======================================================================= #
     "Mountain Climber":                         (19, 34),  # plank / mountain_climber
     "Plank":                                    (19, 43),  # plank / plank
-    "Reverse Plank":                            (19, 43),  # plank / plank (reverse variant)
+    "Reverse Plank":                            (19, 28),  # plank / lying_reverse_plank
     "Side Plank":                               (19, 66),  # plank / side_plank
     "Spiderman":                                (19, 90),  # plank / spiderman_plank
 
     # ======================================================================= #
-    #  CORE – Hyperextension / Superman (category 13)
+    #  CORE – Hyperextension / Superman
     # ======================================================================= #
     "Superman":                                 (13, 29),  # hyperextension / superman_from_floor
 
     # ======================================================================= #
-    #  OLYMPIC LIFTS (category 18)
+    #  OLYMPIC LIFTS
     # ======================================================================= #
     "Clean":                                    (18, 11),  # olympic_lift / clean
     "Clean Pull":                               (18, 11),  # olympic_lift / clean (pull phase)
     "Clean and Jerk":                           (18, 5),   # olympic_lift / clean_and_jerk
-    "Clean and Press":                          (18, 5),   # olympic_lift / clean_and_jerk (closest)
-    "Dumbbell Snatch":                          (18, 16),  # olympic_lift / single_arm_dumbbell_snatch
+    "Clean and Press":                          (18, 27),  # olympic_lift / clean_and_press
+    "Dumbbell Snatch":                          (18, 25),  # olympic_lift / dumbbell_snatch
     "Hang Clean":                               (18, 0),   # olympic_lift / barbell_hang_power_clean
     "Hang Snatch":                              (18, 6),   # olympic_lift / barbell_hang_power_snatch
     "Kettlebell Clean":                         (18, 11),  # olympic_lift / clean (kettlebell)
@@ -517,50 +523,50 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Power Clean":                              (18, 2),   # olympic_lift / barbell_power_clean
     "Power Snatch":                             (18, 3),   # olympic_lift / barbell_power_snatch
     "Press Under":                              (18, 11),  # olympic_lift / clean (press-under variant)
-    "Snatch":                                   (18, 9),   # olympic_lift / barbell_snatch
-    "Split Jerk":                               (18, 10),  # olympic_lift / barbell_split_jerk
+    "Snatch":                                   (18, 28),  # olympic_lift / snatch
+    "Split Jerk":                               (18, 19),  # olympic_lift / split_jerk
     "Kettlebell High Pull":                     (18, 8),   # olympic_lift / barbell_high_pull (closest KB)
 
     # ======================================================================= #
-    #  PLYOMETRICS (category 20)
+    #  PLYOMETRICS
     # ======================================================================= #
-    "Box Jump":                                 (20, 13),  # plyo / high_box_jump
+    "Box Jump":                                 (20, 33),  # plyo / box_jump
     "Frog Jumps":                               (20, 3),   # plyo / body_weight_jump_squat (closest)
     "High Knee Skips":                          (20, 3),   # plyo / body_weight_jump_squat (closest)
-    "Jump Squat":                               (20, 3),   # plyo / body_weight_jump_squat
-    "Lateral Box Jump":                         (20, 19),  # plyo / lateral_plyo_squats (closest)
+    "Jump Squat":                               (20, 37),  # plyo / jump_squat
+    "Lateral Box Jump":                         (20, 33),  # plyo / box_jump (closest; FIT has no lateral box jump)
     "Ball Slams":                               (20, 25),  # plyo / medicine_ball_slam
-    "Sled Push":                                (20, 29),  # plyo / squat_jump_onto_box (closest heavy plyo)
+    "Sled Push":                                (45, 4),   # sled / push
 
     # ======================================================================= #
-    #  TOTAL BODY (category 29)
+    #  TOTAL BODY
     # ======================================================================= #
     "Burpee":                                   (29, 0),   # total_body / burpee
-    "Burpee Over the Bar":                      (29, 0),   # total_body / burpee (over bar variant)
+    "Burpee Over the Bar":                      (29, 18),  # total_body / total_body_burpee_over_bar
 
     # ======================================================================= #
-    #  CARRY (category 3)
+    #  CARRY
     # ======================================================================= #
     "Farmers Walk":                             (3, 1),    # carry / farmers_walk
 
     # ======================================================================= #
-    #  WARM UP (category 31)
+    #  WARM UP
     # ======================================================================= #
-    "Warm Up":                                  (31, 0),   # warm_up / generic warm up
+    "Warm Up":                                  (31, 65535), # warm_up / no_name
 
     # ======================================================================= #
     #  FLEXIBILITY / STABILITY – mapped to known FIT categories
     # ======================================================================= #
     "Bird Dog":                                 (11, 1),   # hip_stability / dead_bug (closest quadruped stability)
     "Dead Bug":                                 (11, 1),   # hip_stability / dead_bug
-    "Dead Hang":                                (21, 38),  # pull_up / pull_up (hang variant – grip/lat endurance)
-    "Downward Dog":                             (31, 0),   # warm_up / generic (yoga pose)
-    "Front Lever Hold":                         (21, 38),  # pull_up / pull_up (front lever)
-    "Front Lever Raise":                        (21, 38),  # pull_up / pull_up (front lever)
+    "Dead Hang":                                (21, 65535), # pull_up / no_name
+    "Downward Dog":                             (36, 21),  # pose / downward_facing_dog
+    "Front Lever Hold":                         (5, 20),   # core / modified_front_lever (closest; FIT only names the modified lever)
+    "Front Lever Raise":                        (5, 20),   # core / modified_front_lever (closest; FIT only names the modified lever)
     "Handstand Hold":                           (22, 25),  # push_up / handstand_push_up (hold variant)
     "Handstand Push Up":                        (22, 25),  # push_up / handstand_push_up
-    "Jack Knife (Suspension)":                  (6, 83),   # crunch / crunch (jackknife on suspension)
-    "L-Sit Hold":                               (16, 1),   # leg_raise / hanging_leg_raise (L-sit hold)
+    "Jack Knife (Suspension)":                  (49, 11),  # suspension / knee_to_chest
+    "L-Sit Hold":                               (5, 88),   # core / l_sit
     "Landmine 180":                             (4, 2),    # chop / cable_woodchop (rotational)
     "Lying Neck Curls":                         (65534, 0), # unknown – no FIT neck category
     "Lying Neck Curls (Weighted)":              (65534, 0), # unknown – no FIT neck category
@@ -572,38 +578,38 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     # ======================================================================= #
     "Kettlebell Around the World":              (5, 46),   # core / russian_twist (closest rotational KB)
     "Kettlebell Halo":                          (25, 3),   # shoulder_stability / bent_arm_lateral_raise (closest)
-    "Kettlebell Turkish Get Up":                (29, 0),   # total_body / burpee (closest full-body KB)
+    "Kettlebell Turkish Get Up":                (5, 89),   # core / turkish_get_up
 
     # ======================================================================= #
     #  CARDIO / MACHINES — uses newer FIT SDK categories (33+) where available
     # ======================================================================= #
-    "Aerobics":                                 (2, 0),    # cardio / generic
+    "Aerobics":                                 (2, 65535), # cardio / no_name
     "Air Bike":                                 (41, 0),   # indoor_bike / air_bike
-    "Battle Ropes":                             (38, 0),   # battle_rope / alternating_figure_eight
+    "Battle Ropes":                             (38, 65535), # battle_rope / no_name
     "Boxing":                                   (2, 42),   # cardio / punch
-    "Climbing":                                 (2, 0),    # cardio / generic
+    "Climbing":                                 (2, 65535), # cardio / no_name
     "Cycling":                                  (33, 0),   # bike / bike
     "Elliptical Trainer":                       (39, 0),   # elliptical / elliptical
-    "HIIT":                                     (2, 0),    # cardio / generic
+    "HIIT":                                     (2, 65535), # cardio / no_name
     "Hiking":                                   (32, 1),   # run / walk (hiking = walking)
     "Jump Rope":                                (2, 6),    # cardio / jump_rope
     "Jumping Jack":                             (2, 12),   # cardio / jumping_jacks
-    "Pilates":                                  (2, 0),    # cardio / generic
+    "Pilates":                                  (2, 65535), # cardio / no_name
     "Rowing Machine":                           (42, 0),   # indoor_row / rowing_machine
-    "Skating":                                  (2, 0),    # cardio / generic
-    "Skiing":                                   (2, 0),    # cardio / generic
-    "Snowboarding":                             (2, 0),    # cardio / generic
+    "Skating":                                  (2, 65535), # cardio / no_name
+    "Skiing":                                   (2, 65535), # cardio / no_name
+    "Snowboarding":                             (2, 65535), # cardio / no_name
     "Spinning":                                 (41, 3),   # indoor_bike / stationary_bike
     "Stretching":                               (31, 0),   # warm_up / generic (stretching)
-    "Swimming":                                 (2, 0),    # cardio / generic
+    "Swimming":                                 (2, 65535), # cardio / no_name
     "Treadmill":                                (52, 1),   # run_indoor / treadmill
-    "Yoga":                                     (36, 0),   # pose / all_fours
-    "High Knees":                               (2, 0),    # cardio / generic
+    "Yoga":                                     (36, 65535), # pose / no_name
+    "High Knees":                               (31, 26),  # warm_up / walking_high_knees (closest; FIT only names the walking variant)
     "Sprints":                                  (32, 3),   # run / sprint
-    "Cable Pull Through":                       (10, 11),  # hip_raise / hip_raise (cable pull-through = hip hinge)
+    "Cable Pull Through":                       (4, 0),    # chop / cable_pull_through
 
     # ======================================================================= #
-    #  RUNNING (category 32)
+    #  RUNNING
     # ======================================================================= #
     "Running":                                  (32, 0),   # run / run
     "Walking":                                  (32, 1),   # run / walk
@@ -659,7 +665,7 @@ TEMPLATE_OVERRIDES: dict[str, tuple[int, int]] = {
     "EAC7D9C5": (22, 0),        # Chest Press (Band) -> PUSH_UP/CHEST_PRESS_WITH_BAND (was BENCH_PRESS/BARBELL_BENCH_PRESS)
     "F21D5693": (25, 20),       # Chest Supported Y Raise (Dumbbell) -> SHOULDER_STABILITY/INCLINE_Y_RAISE (was LATERAL_RAISE/FRONT_RAISE)
     "E23F1F2B": (2, 65535),     # Climbing -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
-    "EB43ADD4": (6, 83),        # Crunch (Machine) -> CRUNCH/CRUNCH (was CRUNCH/KNEELING_CABLE_CRUNCH)
+    "EB43ADD4": (6, 79),        # Crunch (Machine) -> CRUNCH/WEIGHTED_CRUNCH (was CRUNCH/KNEELING_CABLE_CRUNCH)
     "B9380898": (21, 65535),    # Dead Hang -> PULL_UP/(no name) (was PULL_UP/PULL_UP)
     "99507114": (37, 9),        # Deadlift (Band) -> BANDED_EXERCISES/DEADLIFT (was DEADLIFT/BARBELL_DEADLIFT)
     "7DA843A3": (36, 21),       # Downward Dog -> POSE/DOWNWARD_FACING_DOG (was WARM_UP/QUADRUPED_ROCKING)
@@ -669,7 +675,7 @@ TEMPLATE_OVERRIDES: dict[str, tuple[int, int]] = {
     "30F03BF0": (5, 20),        # Front Lever Raise -> CORE/MODIFIED_FRONT_LEVER (was PULL_UP/PULL_UP)
     "023947AB": (2, 65535),     # HIIT -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
     "150E076B": (31, 26),       # High Knees -> WARM_UP/WALKING_HIGH_KNEES (was CARDIO/BOB_AND_WEAVE_CIRCLE)
-    "D410F649": (5, 25),        # Jack Knife (Suspension) -> CORE/SWISS_BALL_JACKKNIFE (was CRUNCH/CRUNCH)
+    "D410F649": (49, 11),       # Jack Knife (Suspension) -> SUSPENSION/KNEE_TO_CHEST (was CRUNCH/CRUNCH)
     "5F8903BF": (5, 89),        # Kettlebell Turkish Get Up -> CORE/TURKISH_GET_UP (was TOTAL_BODY/BURPEE)
     "6D54A050": (5, 88),        # L-Sit Hold -> CORE/L_SIT (was LEG_RAISE/HANGING_LEG_RAISE)
     "EC02979E": (37, 24),       # Lateral Band Walks -> BANDED_EXERCISES/LATERAL_BAND_WALKS (was HIP_STABILITY/LATERAL_WALKS_WITH_BAND_AT_ANKLES)
