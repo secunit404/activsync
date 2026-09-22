@@ -113,6 +113,7 @@ export function SettingsView({
     <SettingsShell
       development={state.development}
       version={state.version}
+      release={state.release}
       update={state.update}
       title="Settings"
       description="Manage connections, decide what publishes automatically, and tune each sync leg."

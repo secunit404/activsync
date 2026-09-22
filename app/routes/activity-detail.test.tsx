@@ -69,6 +69,7 @@ const fixture: Activity = {
 const appStateFixture: AppState = {
   name: "ActivSync",
   version: "0.1.0",
+  release: true,
   development: true,
   setup: { complete: true, step: null },
   connections: {

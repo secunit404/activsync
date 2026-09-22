@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from activsync import (
-    __version__,
+    build_info,
     config,
     db,
     events,
@@ -81,6 +81,7 @@ class UpdateState(ApiModel):
 class AppState(ApiModel):
     name: Literal["ActivSync"] = "ActivSync"
     version: str
+    release: bool
     development: bool
     setup: SetupState
     connections: Connections
@@ -202,7 +203,8 @@ def create_router(
         cfg = config.load_config(conn)
         update = update_check.get_status()
         return AppState(
-            version=__version__,
+            version=build_info.display_version(),
+            release=build_info.is_release(),
             development=mock_mode(),
             setup=SetupState(complete=step is None, step=step),
             connections=Connections.model_validate(connections),

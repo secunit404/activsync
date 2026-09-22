@@ -37,7 +37,11 @@ export default function AppLayout() {
     <div className="min-h-screen bg-background">
       <PullToRefresh />
       <AppRail>
-        {data ? <AppVersionFooter version={data.version} update={data.update} /> : null}
+        {data ? <AppVersionFooter
+            version={data.version}
+            release={data.release}
+            update={data.update}
+          /> : null}
       </AppRail>
       {/* The dock's 74px slot plus the home-indicator inset it now floats
           above (root.tsx's `viewport-fit=cover`) — without the env() term the

@@ -28,6 +28,7 @@ export function SettingsShell({
   title,
   description,
   version,
+  release,
   update,
   children,
 }: {
@@ -35,6 +36,7 @@ export function SettingsShell({
   title: string;
   description: string;
   version?: string;
+  release?: boolean;
   update?: UpdateState;
   children: ReactNode;
 }) {
@@ -54,7 +56,9 @@ export function SettingsShell({
         // footer here would duplicate the version at every width the rail
         // is visible — leaving exactly one on screen at any given width.
         <footer className="flex flex-wrap items-center justify-center gap-2 border-t py-6 text-xs text-muted-foreground md:hidden">
-          <span>ActivSync v{version}</span>
+          <span className="max-w-[60vw] truncate" title={`ActivSync ${version}`}>
+            ActivSync {release ? `v${version}` : version}
+          </span>
           <span aria-hidden="true">·</span>
           <a
             className="underline-offset-4 hover:text-foreground hover:underline"

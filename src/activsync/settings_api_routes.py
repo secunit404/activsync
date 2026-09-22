@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
 from activsync import (
-    __version__,
+    build_info,
     config,
     db,
     dev_mock,
@@ -112,6 +112,7 @@ class HevySettingsState(ApiModel):
 
 class SettingsState(ApiModel):
     version: str
+    release: bool
     update: UpdateState
     development: bool
     setup: SetupProgress
@@ -309,7 +310,8 @@ def create_router(
         held = set(cfg["held_activity_types"])
         hevy_view = view.hevy_settings_view(conn)
         return SettingsState(
-            version=__version__,
+            version=build_info.display_version(),
+            release=build_info.is_release(),
             update=UpdateState(
                 latest=update.latest,
                 available=update.update_available,

@@ -31,6 +31,7 @@ const activityTypes: SettingsState["activityTypes"] = [
 
 const connectedState: SettingsState = {
   version: "0.1.0",
+  release: true,
   update: {
     latest: null,
     available: false,

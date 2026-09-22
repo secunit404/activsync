@@ -23,11 +23,17 @@ function GithubMark() {
 
 export function AppVersionFooter({
   version,
+  release,
   update,
 }: {
   version: string;
+  release: boolean;
   update: UpdateState;
 }) {
+  // A branch tag is far too long for the rail, and truncating it leaves an
+  // unreadable stub, so it collapses to "dev" and the tooltip carries the
+  // whole name.
+  const label = release ? `v${version}` : "dev";
   return (
     <div className="mt-auto flex flex-col items-center gap-2.5">
       <a
@@ -40,8 +46,11 @@ export function AppVersionFooter({
         <GithubMark />
       </a>
       <div className="flex items-center gap-1">
-        <span className="font-mono text-[9px] text-muted-foreground/70">
-          v{version}
+        <span
+          className="font-mono text-[9px] text-muted-foreground/70"
+          title={`ActivSync ${label === "dev" ? version : label}`}
+        >
+          {label}
         </span>
         {update.available && update.latest ? (
           <a

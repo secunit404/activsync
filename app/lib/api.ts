@@ -24,6 +24,7 @@ export type ServiceConnection = {
 export type AppState = {
   name: "ActivSync";
   version: string;
+  release: boolean;
   development: boolean;
   setup: {
     complete: boolean;
@@ -158,6 +159,7 @@ export type HevyWorkoutDetail = {
 
 export type SettingsState = {
   version: string;
+  release: boolean;
   update: UpdateState;
   development: boolean;
   setup: {
