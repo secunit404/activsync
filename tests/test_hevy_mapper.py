@@ -258,11 +258,6 @@ def test_name_table_agrees_with_the_template_overrides():
 
     from activsync import hevy_name_map
 
-    # Exercises where neither value is clearly right — see the PR that fixed
-    # the other 65. A suspension jackknife is not a swiss-ball one, but FIT
-    # only names it under SUSPENSION as PIKE/KNEE_TO_CHEST.
-    undecided = {"Jack Knife (Suspension)"}
-
     source = pathlib.Path(hevy_name_map.__file__).read_text()
     overrides = source.partition("TEMPLATE_OVERRIDES: dict")[2]
     row = re.compile(r'^\s*"(?P<id>[0-9A-F]{8})":.*?#\s*(?P<name>.+?)\s*->', re.M)
@@ -272,8 +267,6 @@ def test_name_table_agrees_with_the_template_overrides():
     for match in row.finditer(overrides):
         name = match["name"]
         parsed.add(match["id"])
-        if name in undecided:
-            continue
         override = hevy_mapper.TEMPLATE_OVERRIDES[match["id"]]
         from_name = hevy_mapper.HEVY_TO_GARMIN.get(name)
         if from_name is not None and from_name != override:

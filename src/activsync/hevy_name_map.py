@@ -455,7 +455,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Bicycle Crunch Raised Legs":               (6, 0),    # crunch / bicycle_crunch (raised legs)
     "Cable Crunch":                             (6, 1),    # crunch / cable_crunch
     "Crunch":                                   (6, 83),   # crunch / crunch
-    "Crunch (Machine)":                         (6, 83),   # crunch / crunch
+    "Crunch (Machine)":                         (6, 79),   # crunch / weighted_crunch
     "Crunch (Weighted)":                        (6, 79),   # crunch / weighted_crunch
     "Decline Crunch":                           (6, 83),   # crunch / crunch (decline variant)
     "Decline Crunch (Weighted)":                (6, 79),   # crunch / weighted_crunch (decline)
@@ -559,7 +559,7 @@ HEVY_TO_GARMIN: dict[str, tuple[int, int]] = {
     "Front Lever Raise":                        (5, 20),   # core / modified_front_lever (closest; FIT only names the modified lever)
     "Handstand Hold":                           (22, 25),  # push_up / handstand_push_up (hold variant)
     "Handstand Push Up":                        (22, 25),  # push_up / handstand_push_up
-    "Jack Knife (Suspension)":                  (6, 83),   # crunch / crunch (jackknife on suspension)
+    "Jack Knife (Suspension)":                  (49, 11),  # suspension / knee_to_chest
     "L-Sit Hold":                               (5, 88),   # core / l_sit
     "Landmine 180":                             (4, 2),    # chop / cable_woodchop (rotational)
     "Lying Neck Curls":                         (65534, 0), # unknown – no FIT neck category
@@ -659,7 +659,7 @@ TEMPLATE_OVERRIDES: dict[str, tuple[int, int]] = {
     "EAC7D9C5": (22, 0),        # Chest Press (Band) -> PUSH_UP/CHEST_PRESS_WITH_BAND (was BENCH_PRESS/BARBELL_BENCH_PRESS)
     "F21D5693": (25, 20),       # Chest Supported Y Raise (Dumbbell) -> SHOULDER_STABILITY/INCLINE_Y_RAISE (was LATERAL_RAISE/FRONT_RAISE)
     "E23F1F2B": (2, 65535),     # Climbing -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
-    "EB43ADD4": (6, 83),        # Crunch (Machine) -> CRUNCH/CRUNCH (was CRUNCH/KNEELING_CABLE_CRUNCH)
+    "EB43ADD4": (6, 79),        # Crunch (Machine) -> CRUNCH/WEIGHTED_CRUNCH (was CRUNCH/KNEELING_CABLE_CRUNCH)
     "B9380898": (21, 65535),    # Dead Hang -> PULL_UP/(no name) (was PULL_UP/PULL_UP)
     "99507114": (37, 9),        # Deadlift (Band) -> BANDED_EXERCISES/DEADLIFT (was DEADLIFT/BARBELL_DEADLIFT)
     "7DA843A3": (36, 21),       # Downward Dog -> POSE/DOWNWARD_FACING_DOG (was WARM_UP/QUADRUPED_ROCKING)
@@ -669,7 +669,7 @@ TEMPLATE_OVERRIDES: dict[str, tuple[int, int]] = {
     "30F03BF0": (5, 20),        # Front Lever Raise -> CORE/MODIFIED_FRONT_LEVER (was PULL_UP/PULL_UP)
     "023947AB": (2, 65535),     # HIIT -> CARDIO/(no name) (was CARDIO/BOB_AND_WEAVE_CIRCLE)
     "150E076B": (31, 26),       # High Knees -> WARM_UP/WALKING_HIGH_KNEES (was CARDIO/BOB_AND_WEAVE_CIRCLE)
-    "D410F649": (5, 25),        # Jack Knife (Suspension) -> CORE/SWISS_BALL_JACKKNIFE (was CRUNCH/CRUNCH)
+    "D410F649": (49, 11),       # Jack Knife (Suspension) -> SUSPENSION/KNEE_TO_CHEST (was CRUNCH/CRUNCH)
     "5F8903BF": (5, 89),        # Kettlebell Turkish Get Up -> CORE/TURKISH_GET_UP (was TOTAL_BODY/BURPEE)
     "6D54A050": (5, 88),        # L-Sit Hold -> CORE/L_SIT (was LEG_RAISE/HANGING_LEG_RAISE)
     "EC02979E": (37, 24),       # Lateral Band Walks -> BANDED_EXERCISES/LATERAL_BAND_WALKS (was HIP_STABILITY/LATERAL_WALKS_WITH_BAND_AT_ANKLES)
