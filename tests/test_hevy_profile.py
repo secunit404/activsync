@@ -132,3 +132,40 @@ def test_profile_fetch_does_not_clobber_settings_saved_during_network_call(conn)
     assert settings["hevy_watch_strategy"] == "describe"
     assert settings["profile_override"] == {"weight_kg": 91.0}
     assert profile.weight_kg == 91.0
+
+
+def test_stale_cache_survives_a_garmin_outage(conn):
+    """fetch_user_profile swallows its own errors and answers all-None, so an
+    outage reaches _refresh_cache as an empty result rather than a raise. It
+    must not overwrite the last good values."""
+    _seed_cache(conn, NOW - timedelta(hours=48), **FETCHED)
+    garmin = _garmin({"weight_kg": None, "birth_year": None,
+                      "sex": None, "vo2max": None})
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.weight_kg == 72.5
+    assert profile.birth_year == 1988
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={})
+    assert cached["weight_kg"] == 72.5
+
+
+def test_empty_fetch_without_a_cache_falls_back_to_defaults(conn):
+    garmin = _garmin({"weight_kg": None, "birth_year": None,
+                      "sex": None, "vo2max": None})
+
+    profile = hevy_profile.get_profile(conn, garmin, NOW)
+
+    assert profile.weight_kg == hevy_profile.PROFILE_DEFAULTS["weight_kg"]
+
+
+def test_a_partial_fetch_is_still_cached(conn):
+    """Some fields missing is a real answer, not an outage."""
+    garmin = _garmin({"weight_kg": 70.0, "birth_year": None,
+                      "sex": None, "vo2max": None})
+
+    hevy_profile.get_profile(conn, garmin, NOW)
+
+    cached = db.get_config_value(conn, hevy_profile.CACHE_KEY, default={})
+    assert cached["weight_kg"] == 70.0
+    assert "fetched_at" in cached

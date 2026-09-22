@@ -36,12 +36,22 @@ def _parse_fetched_at(raw: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+class ProfileFetchFailed(RuntimeError):
+    """Garmin returned nothing usable for the profile."""
+
+
 def _refresh_cache(conn: sqlite3.Connection, garmin, now: datetime) -> dict:
     """Fetch from Garmin and persist; returns the new cache entry.
     Raises on fetch failure — the caller decides the fallback."""
     fetched = garmin.fetch_user_profile()
     entry = {key: fetched.get(key) for key in PROFILE_DEFAULTS
              if fetched.get(key) is not None}
+    if not entry:
+        # fetch_user_profile logs and swallows its own failures, answering
+        # all-None rather than raising, so an outage arrives here looking like
+        # a successful empty fetch. Persisting it would drop the last good
+        # values and quietly serve defaults until the cache next expires.
+        raise ProfileFetchFailed("garmin returned no usable profile fields")
     entry["fetched_at"] = now.isoformat()
     # Cache state has its own row: a slow Garmin request must never write an
     # old snapshot of the user's settings over a concurrent form save.
