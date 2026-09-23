@@ -3,7 +3,7 @@
 # The SPA is built here rather than copied in: build/ is git-ignored and
 # .dockerignore'd, so an image that did not build it would serve 404 on every
 # page (server.spa() needs web/index.html to exist).
-FROM node:24-slim AS web
+FROM node:25-slim AS web
 WORKDIR /web
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
