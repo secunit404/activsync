@@ -11,10 +11,14 @@ on:
   delete:
   workflow_dispatch:
 
-# Per-branch group: each branch owns its own tag, so only a newer push to the
-# same branch should cancel a build in flight.
+# Per-branch group: each branch owns its own tag, so only a newer push to, or
+# the deletion of, the same branch should cancel a build in flight. A delete
+# payload's `ref` is the bare branch name while a push's is `refs/heads/...`,
+# so both are normalised to the full ref — otherwise a branch deleted on merge
+# mid-build gets its cleanup run before the build pushes, and the tag outlives
+# the branch.
 concurrency:
-  group: dev-image-${{ github.event.ref || github.ref }}
+  group: dev-image-${{ github.event_name == 'delete' && format('refs/heads/{0}', github.event.ref) || github.ref }}
   cancel-in-progress: true
 
 jobs:
