@@ -3,8 +3,11 @@ name: dev-image
 on:
   push:
     # release-please's PR branch only ever carries a version bump and a
-    # changelog, so a multi-arch build of it on every release is waste.
-    branches-ignore: [main, "release-please--**"]
+    # changelog, and a dependabot branch only a dependency bump, so a
+    # multi-arch build of either is an image nobody pulls. CI's docker-build
+    # job already builds and smoke-tests the image on every PR, so nothing is
+    # lost by skipping them — including for Dockerfile bumps.
+    branches-ignore: [main, "release-please--**", "dependabot/**"]
   delete:
   workflow_dispatch:
 
