@@ -42,7 +42,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           # Never touches `latest` or the semver tags.
           tags: type=raw,value=${{ steps.tag.outputs.tag }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
