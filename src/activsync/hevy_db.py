@@ -202,6 +202,18 @@ def list_workouts(conn: sqlite3.Connection, status: str | None = None) -> list[d
     return [dict(row) for row in rows]
 
 
+def has_workouts_with_status(conn: sqlite3.Connection, status: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM hevy_workouts WHERE status = ? LIMIT 1", (status,)
+    ).fetchone() is not None
+
+
+def has_unresolved_upload(conn: sqlite3.Connection) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM hevy_operations WHERE phase = 'submission_unknown' LIMIT 1"
+    ).fetchone() is not None
+
+
 _BLOCKING_STATUSES = (
     "needs_mapping",
     "waiting_watch",
@@ -539,8 +551,8 @@ def wake_needs_mapping(
     *,
     template_id: str | None = None,
     hevy_id: str | None = None,
-) -> int:
-    """Wake only mapping rows affected by one concrete change.
+) -> list[str]:
+    """Wake only mapping rows affected by one concrete change; returns their ids.
 
     A saved mapping targets workouts containing that template; a newer Hevy
     revision targets its own workout. Waking every parked row would also retry
@@ -568,7 +580,7 @@ def wake_needs_mapping(
             affected.append(row["hevy_id"])
 
     if not affected:
-        return 0
+        return []
     now = _now_iso()
     with db.transaction(conn):
         conn.executemany(
@@ -584,7 +596,7 @@ def wake_needs_mapping(
                WHERE hevy_id = ? AND status = 'needs_mapping'""",
             [(now, workout_id) for workout_id in affected],
         )
-    return len(affected)
+    return affected
 
 
 # -- merge_backups ----------------------------------------------------------

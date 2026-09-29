@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from activsync import config, db
+from activsync import config, db, hevy_db
 from activsync.fit_builder import Profile
 from activsync.hevy_client import HevyAuthError
 from activsync.poller import Poller
@@ -34,6 +34,8 @@ def _make_poller(
     leg=None,
     garmin_interval=100000,
     garmin_polling_enabled=True,
+    hevy_interval=0,
+    garmin_new=0,
 ):
     """Poller with stubbed sync legs; returns (poller, calls dict)."""
     calls = {"hevy": 0, "garmin": 0}
@@ -53,7 +55,7 @@ def _make_poller(
     monkeypatch.setattr(
         "activsync.poller.sync.sync_garmin",
         lambda c, garmin, cfg, now: calls.update(garmin=calls["garmin"] + 1)
-        or MagicMock(new=0, updated=0, removed=0),
+        or MagicMock(new=garmin_new, updated=0, removed=0),
     )
     poller = Poller(
         conn,
@@ -61,7 +63,7 @@ def _make_poller(
         strava_factory=lambda: MagicMock(),
         hevy_factory=lambda: MagicMock(),
         garmin_interval_seconds_override=garmin_interval,
-        hevy_interval_seconds_override=0,
+        hevy_interval_seconds_override=hevy_interval,
         garmin_polling_enabled=garmin_polling_enabled,
     )
     return poller, calls
@@ -213,6 +215,68 @@ def test_hevy_leg_not_run_without_factory(conn, monkeypatch):
 def test_config_defaults_cover_the_hevy_settings():
     assert config.DEFAULT_CONFIG["hevy_enabled"] is False
     assert config.DEFAULT_CONFIG["hevy_watch_strategy"] == "replace"
-    assert config.DEFAULT_CONFIG["hevy_poll_interval_minutes"] == 10
+    assert config.DEFAULT_CONFIG["hevy_poll_interval_minutes"] == 5
     assert config.DEFAULT_CONFIG["hevy_grace_minutes"] == 120
     assert config.DEFAULT_CONFIG["hevy_device_identity"] is None
+
+
+def _seed_waiting_workout(conn):
+    workout = {"id": "w1", "title": "Push",
+               "start_time": "2026-07-19T11:00:00+00:00",
+               "end_time": "2026-07-19T11:50:00+00:00",
+               "updated_at": "2026-07-19T11:55:00+00:00"}
+    hevy_db.upsert_workout(conn, "w1", workout["title"], workout["start_time"],
+                           workout["end_time"], workout["updated_at"], workout)
+
+
+def _seed_unresolved_upload(conn):
+    _seed_waiting_workout(conn)
+    op_id = hevy_db.open_operation(conn, "w1", "replace", 111, [111])
+    hevy_db.update_operation(conn, op_id, phase="submission_unknown")
+
+
+def test_workout_waiting_for_watch_fetches_garmin_this_tick(conn, monkeypatch):
+    _hevy_ready(conn)
+    _seed_waiting_workout(conn)
+    poller, calls = _make_poller(conn, monkeypatch)
+    poller._last_garmin_run = START - timedelta(seconds=30)
+
+    poller._loop_once(START)
+
+    assert calls["garmin"] == 1, "the watch activity may already be on Garmin"
+
+
+def test_new_garmin_activity_wakes_a_waiting_workout(conn, monkeypatch):
+    _hevy_ready(conn)
+    _seed_waiting_workout(conn)
+    poller, calls = _make_poller(conn, monkeypatch, hevy_interval=100000,
+                                 garmin_new=1)
+
+    poller._loop_once(START)
+    poller._loop_once(START + timedelta(minutes=1))
+
+    assert calls["hevy"] == 2, "the match must not wait out the Hevy interval"
+
+
+def test_new_garmin_activity_without_waiting_workouts_leaves_hevy_alone(
+    conn, monkeypatch
+):
+    _hevy_ready(conn)
+    poller, calls = _make_poller(conn, monkeypatch, hevy_interval=100000,
+                                 garmin_new=1)
+
+    poller._loop_once(START)
+    poller._loop_once(START + timedelta(minutes=1))
+
+    assert calls["hevy"] == 1
+
+
+def test_unresolved_upload_is_rechecked_every_tick(conn, monkeypatch):
+    _hevy_ready(conn)
+    _seed_unresolved_upload(conn)
+    poller, calls = _make_poller(conn, monkeypatch, hevy_interval=600)
+
+    poller._loop_once(START)
+    poller._loop_once(START + timedelta(minutes=1))
+
+    assert calls["hevy"] == 2

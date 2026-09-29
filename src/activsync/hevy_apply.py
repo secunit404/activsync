@@ -50,6 +50,10 @@ from activsync.hevy_mapper import (
 
 logger = logging.getLogger("activsync.hevy_apply")
 
+# The poller rechecks an unresolved upload every tick (about a minute), so this
+# budget is roughly how long Garmin gets to finish importing before we park.
+RESOLVE_MAX_CHECKS = 15
+
 
 def resolve_exercises(
     conn: sqlite3.Connection, workout_payload: dict
@@ -557,9 +561,10 @@ def advance_operation(conn: sqlite3.Connection, garmin: GarminClient, row: dict,
                     f"ambiguous upload result: candidates {sorted(candidates)}")
                 return
             attempts = op["attempt_count"] + 1
-            if attempts >= 5:
-                _park_operation(conn, op, row,
-                                "upload outcome unresolved after 5 checks")
+            if attempts >= RESOLVE_MAX_CHECKS:
+                _park_operation(
+                    conn, op, row,
+                    f"upload outcome unresolved after {RESOLVE_MAX_CHECKS} checks")
                 return
             hevy_db.update_operation(conn, op["id"], attempt_count=attempts)
             return

@@ -27,6 +27,7 @@ from activsync.strava_client import StravaClient, StravaRateLimitError
 logger = logging.getLogger("activsync.poller")
 
 _DEFAULT_TICK_SECONDS = 60
+_HEVY_UPLOAD_RECHECK_SECONDS = 60
 
 
 class Poller:
@@ -163,8 +164,15 @@ class Poller:
 
     def _hevy_interval_seconds(self) -> float:
         if self._hevy_interval_seconds_override is not None:
-            return self._hevy_interval_seconds_override
-        return config.load_config(self._conn)["hevy_poll_interval_minutes"] * 60
+            interval = self._hevy_interval_seconds_override
+        else:
+            interval = config.load_config(self._conn)["hevy_poll_interval_minutes"] * 60
+        if hevy_db.has_unresolved_upload(self._conn):
+            return min(interval, _HEVY_UPLOAD_RECHECK_SECONDS)
+        return interval
+
+    def _hevy_waiting_for_watch(self) -> bool:
+        return hevy_db.has_workouts_with_status(self._conn, "waiting_watch")
 
     def _due(self, last_run: datetime | None, now: datetime, interval_seconds: float) -> bool:
         return last_run is None or (now - last_run).total_seconds() >= interval_seconds
@@ -234,15 +242,20 @@ class Poller:
         # The Hevy leg runs before the Garmin block: when it changed anything
         # on Garmin, clearing _last_garmin_run makes the Garmin leg due THIS
         # tick, so the enriched activity flows into the Strava pipeline
-        # immediately instead of after the Garmin interval.
+        # immediately instead of after the Garmin interval. A workout still
+        # waiting for its watch activity forces the same fetch: matching only
+        # reads the local activity table, and the watch has usually synced.
         if self._hevy_polling_enabled and self._hevy_ready() and self._due(
             self._last_hevy_run, now, self._hevy_interval_seconds()
         ):
             try:
-                if self.run_hevy_once(now):
+                hevy_changed = self.run_hevy_once(now)
+                if hevy_changed:
                     changed = True
-                    if self._garmin_polling_enabled:
-                        self._last_garmin_run = None
+                if self._garmin_polling_enabled and (
+                    hevy_changed or self._hevy_waiting_for_watch()
+                ):
+                    self._last_garmin_run = None
             except HevyAuthError:
                 db.set_config_value(self._conn, "hevy_auth_ok", False)
                 logger.warning(
@@ -263,6 +276,10 @@ class Poller:
                 garmin_changed = any(
                     getattr(stats, field, 0) for field in ("new", "updated", "removed")
                 )
+                if stats.new and self._hevy_waiting_for_watch():
+                    # Only new activities: "updated" can recur on every poll
+                    # and would ping-pong the two legs each tick.
+                    self._last_hevy_run = None
                 if garmin_changed:
                     changed = True
                     if (
