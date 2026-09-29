@@ -39,7 +39,7 @@ export function PreferencesSettings({
           <NumberField
             id="garmin-poll"
             label="Garmin sync interval (min)"
-            description="How often ActivSync checks Garmin. Recommended minimum: 10."
+            description="How often ActivSync checks Garmin when idle. For 2 hours after a workout it checks every 5 minutes."
             value={draft.garminPollIntervalMinutes}
             onChange={(value) => update({ garminPollIntervalMinutes: value })}
           />

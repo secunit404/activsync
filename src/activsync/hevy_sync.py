@@ -74,6 +74,10 @@ def _apply_updated(conn: sqlite3.Connection, event: dict) -> None:
         workout,
     )
     after = hevy_db.get_workout(conn, workout["id"])
+    if before is None and after is not None:
+        logger.info("hevy workout %s (%s) received, ended %s",
+                    workout["id"], workout.get("title", ""),
+                    workout.get("end_time", ""))
     # A Hevy edit can itself remove or replace the exercise that required a
     # mapping. Wake this workout when this event is its current revision. The
     # equality also makes a crash after upsert but before wake safe on replay.
@@ -267,6 +271,16 @@ def find_watch_match(conn: sqlite3.Connection, row: dict):
 # -- per-workout decision flow -----------------------------------------------
 
 
+def _log_transition(conn: sqlite3.Connection, hevy_id: str,
+                    before_status: str) -> None:
+    after = hevy_db.get_workout(conn, hevy_id)
+    if after is None or after["status"] == before_status:
+        return
+    reason = f" ({after['error']})" if after["error"] else ""
+    logger.info("hevy workout %s (%s): %s -> %s%s", hevy_id, after["title"],
+                before_status, after["status"], reason)
+
+
 def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
                     hevy: HevyClient, row: dict, cfg: dict,
                     now: datetime) -> None:
@@ -274,6 +288,7 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
     token = hevy_db.acquire_lease(conn, hevy_id, now)
     if not token:
         return
+    before_status = row["status"]
     try:
         if (
             row["status"] == "awaiting_match"
@@ -363,6 +378,7 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
         hevy_db.set_workout_status(conn, hevy_id, status, error=str(exc))
     finally:
         hevy_db.release_lease(conn, hevy_id, token)
+        _log_transition(conn, hevy_id, before_status)
 
 
 def apply_match_choice(
@@ -415,6 +431,7 @@ def apply_match_choice(
         raise
     finally:
         hevy_db.release_lease(conn, hevy_id, token)
+        _log_transition(conn, hevy_id, "awaiting_match")
 
 
 # -- post-sync edits ---------------------------------------------------------
@@ -471,6 +488,7 @@ def _reapply(conn: sqlite3.Connection, garmin: GarminClient, hevy: HevyClient,
         hevy_db.set_workout_status(conn, hevy_id, row["status"], error=str(exc))
     finally:
         hevy_db.release_lease(conn, hevy_id, token)
+        _log_transition(conn, hevy_id, row["status"])
 
 
 # -- the leg -----------------------------------------------------------------

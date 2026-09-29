@@ -1,12 +1,13 @@
 """Tests for hevy_sync part 2: strategies + the operation journal."""
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from garminconnect import GarminConnectNotFoundError
 
-from activsync import db, hevy_db, hevy_sync
+from activsync import db, hevy_apply, hevy_db, hevy_sync
 from activsync.fit_builder import DeviceIdentity
 from activsync.garmin_client import ActivityGone, GarminUploadRejected, SubcategoryRejected
 
@@ -534,6 +535,26 @@ def test_replace_crash_resume_no_second_upload():
     assert len(garmin.called("upload_fit")) == 1  # NEVER auto-resubmitted
 
 
+def test_submission_unknown_keeps_checking_before_parking():
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = replace_setup(conn, garmin)
+    garmin.upload_exc = RuntimeError("timeout")
+    process(conn, garmin, row, base_cfg(hevy_watch_strategy="replace"))
+    garmin.upload_exc = None
+
+    for _ in range(hevy_apply.RESOLVE_MAX_CHECKS - 1):
+        result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
+                         base_cfg(hevy_watch_strategy="replace"))
+        assert result["status"] == "syncing"
+
+    result = process(conn, garmin, hevy_db.get_workout(conn, "w1"),
+                     base_cfg(hevy_watch_strategy="replace"))
+    assert result["status"] == "needs_review"
+    assert hevy_apply.RESOLVE_MAX_CHECKS >= 10, \
+        "checks run every tick now, so the budget must cover several minutes"
+
+
 def test_submission_unknown_multiple_candidates_parks():
     conn = make_conn()
     garmin = StubGarmin()
@@ -870,7 +891,7 @@ def test_needs_mapping_rows_wait_for_explicit_wake():
                                error="unmapped exercises: Other Custom")
 
     # Explicit targeted wake (mapping saved) re-enters only the affected flow.
-    assert hevy_db.wake_needs_mapping(conn, template_id="79D0BB3A") == 1
+    assert hevy_db.wake_needs_mapping(conn, template_id="79D0BB3A") == ["w1"]
     hevy_sync.run_hevy_leg(conn, garmin, NoHevy(), base_cfg(), NOW)
     assert hevy_db.get_workout(conn, "w1")["status"] == "merged"
     assert hevy_db.get_workout(conn, "w2")["status"] == "needs_mapping"
@@ -1014,7 +1035,7 @@ def test_post_sync_mapping_wake_keeps_original_strategy():
     assert hevy_db.get_template(conn, "CUSTOM01")["title"] == "Custom Press"
 
     hevy_db.save_mapping(conn, "CUSTOM01", 0, 1)
-    assert hevy_db.wake_needs_mapping(conn, template_id="CUSTOM01") == 1
+    assert hevy_db.wake_needs_mapping(conn, template_id="CUSTOM01") == ["w1"]
     assert hevy_db.get_workout(conn, "w1")["status"] == "merged"
 
     hevy_sync.run_hevy_leg(
@@ -1026,3 +1047,41 @@ def test_post_sync_mapping_wake_keeps_original_strategy():
     assert garmin.called("put_exercise_sets")
     assert garmin.called("upload_fit") == []
     assert garmin.called("delete_activity") == []
+
+
+def test_status_transitions_are_logged(caplog):
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+
+    with caplog.at_level(logging.INFO, logger="activsync.hevy_sync"):
+        process(conn, garmin, row, base_cfg())
+
+    assert "hevy workout w1 (Push Day): waiting_watch -> merged" in caplog.text
+
+
+def test_parking_for_a_mapping_logs_the_reason(caplog):
+    conn = make_conn()
+    garmin = StubGarmin()
+    garmin.put_exc = SubcategoryRejected("400 invalid sub-category")
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+
+    with caplog.at_level(logging.INFO, logger="activsync.hevy_sync"):
+        process(conn, garmin, row, base_cfg())
+
+    assert "waiting_watch -> needs_mapping" in caplog.text
+    assert hevy_db.get_workout(conn, "w1")["error"] in caplog.text
+
+
+def test_unchanged_status_is_not_logged_every_tick(caplog):
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn, start="2026-07-18T11:00:00Z", end="2026-07-18T11:50:00Z")
+
+    with caplog.at_level(logging.INFO, logger="activsync.hevy_sync"):
+        process(conn, garmin, row, base_cfg())
+
+    assert hevy_db.get_workout(conn, "w1")["status"] == "waiting_watch"
+    assert "hevy workout w1" not in caplog.text

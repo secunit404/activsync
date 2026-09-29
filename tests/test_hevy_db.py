@@ -417,7 +417,7 @@ def test_waking_mapping_row_preserves_applied_strategy(strategy, expected_status
         hevy_db.link_target(conn, "w1", 901, strategy)
     hevy_db.set_workout_status(conn, "w1", "needs_mapping")
 
-    assert hevy_db.wake_needs_mapping(conn, hevy_id="w1") == 1
+    assert hevy_db.wake_needs_mapping(conn, hevy_id="w1") == ["w1"]
     assert hevy_db.get_workout(conn, "w1")["status"] == expected_status
 
 

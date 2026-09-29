@@ -180,6 +180,18 @@ def create_router(
             )
         return api_key
 
+    def start_woken_workouts(
+        hevy_ids: list[str], background_tasks: BackgroundTasks
+    ) -> list[str]:
+        """Hand freshly unblocked workouts to the poller now rather than
+        leaving them for the next scheduled Hevy interval."""
+        if process_hevy_workout is not None:
+            for hevy_id in hevy_ids:
+                row = hevy_db.get_workout(conn, hevy_id)
+                if row is not None and row["status"] == "waiting_watch":
+                    background_tasks.add_task(process_hevy_workout, hevy_id)
+        return hevy_ids
+
     def build_backfill(
         since: str,
     ) -> tuple[list[dict], list[BackfillItem], int | None]:
@@ -308,7 +320,9 @@ def create_router(
         response_model=ToolActionResult,
     )
     def save_mapping(
-        template_id: str, payload: MappingRequest
+        template_id: str,
+        payload: MappingRequest,
+        background_tasks: BackgroundTasks,
     ) -> ToolActionResult:
         if (
             payload.category not in CATEGORY_NAMES
@@ -327,7 +341,10 @@ def create_router(
         hevy_db.save_mapping(
             conn, template_id, payload.category, payload.subcategory
         )
-        woken = hevy_db.wake_needs_mapping(conn, template_id=template_id)
+        woken = len(start_woken_workouts(
+            hevy_db.wake_needs_mapping(conn, template_id=template_id),
+            background_tasks,
+        ))
         events.bus.publish("refresh")
         suffix = f" {woken} waiting workout{'s' if woken != 1 else ''} resumed." if woken else ""
         return ToolActionResult(message=f"Exercise mapping saved.{suffix}")
@@ -336,7 +353,9 @@ def create_router(
         "/mappings/{template_id}",
         response_model=ToolActionResult,
     )
-    def delete_mapping(template_id: str) -> ToolActionResult:
+    def delete_mapping(
+        template_id: str, background_tasks: BackgroundTasks
+    ) -> ToolActionResult:
         mapping = next(
             (
                 row
@@ -350,7 +369,10 @@ def create_router(
         hevy_db.delete_mapping(conn, template_id)
         restored_standard = bool(mapping["has_standard_mapping"])
         woken = (
-            hevy_db.wake_needs_mapping(conn, template_id=template_id)
+            len(start_woken_workouts(
+                hevy_db.wake_needs_mapping(conn, template_id=template_id),
+                background_tasks,
+            ))
             if restored_standard
             else 0
         )

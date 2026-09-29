@@ -325,6 +325,15 @@ def list_activities(
     return [dict(row) for row in rows]
 
 
+def list_activities_started_since(
+    conn: sqlite3.Connection, window_start: str
+) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM activities WHERE start_time >= ?", (window_start,)
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def list_active_ids_since(conn: sqlite3.Connection, window_start: str) -> set[int]:
     """Activity ids that started at or after window_start.
 

@@ -477,6 +477,49 @@ def test_hevy_mapping_tools_save_remove_and_wake_waiting_workouts(
     assert hevy_db.get_mapping(conn, "custom-1") is None
 
 
+def test_saving_a_mapping_starts_the_woken_workout_immediately(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "1")
+    conn = db.connect(str(tmp_path / "settings-api.db"))
+    started: list[str] = []
+    client = TestClient(
+        create_app(conn, process_hevy_workout=started.append),
+        follow_redirects=False,
+    )
+    _complete_setup(conn)
+    hevy_db.upsert_template(
+        conn,
+        {
+            "exercise_template_id": "custom-1",
+            "title": "Landmine Press",
+            "primary_muscle_group": "chest",
+            "secondary_muscle_groups": [],
+            "equipment_category": "barbell",
+            "is_custom": True,
+        },
+    )
+    for hevy_id, template_id in (("workout-1", "custom-1"), ("workout-2", "other")):
+        hevy_db.upsert_workout(
+            conn,
+            hevy_id,
+            "Push",
+            "2026-07-18T10:00:00Z",
+            "2026-07-18T11:00:00Z",
+            "2026-07-18T12:00:00Z",
+            {"exercises": [{"exercise_template_id": template_id, "title": "X"}]},
+        )
+        hevy_db.set_workout_status(conn, hevy_id, "needs_mapping", error="unmapped")
+
+    saved = client.put(
+        "/api/v1/settings/hevy/mappings/custom-1",
+        json={"category": 0, "subcategory": 1},
+    )
+
+    assert saved.status_code == 200
+    assert started == ["workout-1"]
+
+
 def test_hevy_mapping_tools_reset_override_to_standard_table(tmp_path, monkeypatch):
     conn, client = _client(tmp_path, monkeypatch)
     _complete_setup(conn)
