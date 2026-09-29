@@ -18,6 +18,7 @@ from activsync import (
     hevy_profile,
     hevy_sync,
     logging_setup,
+    poll_activity,
     sync,
 )
 from activsync.garmin_client import GarminClient, GarminSessionExpired
@@ -152,10 +153,13 @@ class Poller:
         events.bus.publish("refresh")
         return status
 
-    def _garmin_interval_seconds(self) -> float:
+    def _garmin_interval_seconds(self, now: datetime) -> float:
         if self._garmin_interval_seconds_override is not None:
             return self._garmin_interval_seconds_override
-        return config.load_config(self._conn)["garmin_poll_interval_minutes"] * 60
+        interval = config.load_config(self._conn)["garmin_poll_interval_minutes"] * 60
+        if poll_activity.recently_active(self._conn, now):
+            return min(interval, poll_activity.ACTIVE_GARMIN_INTERVAL_SECONDS)
+        return interval
 
     def _strava_interval_seconds(self) -> float:
         if self._strava_interval_seconds_override is not None:
@@ -269,7 +273,7 @@ class Poller:
         # interval (up to an hour) before the first sync; leaving it stale means
         # the very next tick is due, so the list catches up within the minute.
         if self._garmin_polling_enabled and self._garmin_ready() and self._due(
-            self._last_garmin_run, now, self._garmin_interval_seconds()
+            self._last_garmin_run, now, self._garmin_interval_seconds(now)
         ):
             try:
                 stats = self.run_garmin_once(now)

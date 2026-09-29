@@ -202,6 +202,15 @@ def list_workouts(conn: sqlite3.Connection, status: str | None = None) -> list[d
     return [dict(row) for row in rows]
 
 
+def list_workouts_started_since(
+    conn: sqlite3.Connection, window_start: str
+) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM hevy_workouts WHERE start_time >= ?", (window_start,)
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def has_workouts_with_status(conn: sqlite3.Connection, status: str) -> bool:
     return conn.execute(
         "SELECT 1 FROM hevy_workouts WHERE status = ? LIMIT 1", (status,)

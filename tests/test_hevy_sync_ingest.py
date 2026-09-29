@@ -1,6 +1,7 @@
 """Tests for hevy_sync part 1: event ingestion, mapping gate, watch matching."""
 
 import json
+import logging
 from datetime import datetime, timezone
 
 import pytest
@@ -330,3 +331,18 @@ def test_newer_hevy_edit_wakes_its_needs_mapping_workout():
     updated = hevy_db.get_workout(conn, "w1")
     assert updated["status"] == "waiting_watch"
     assert updated["error"] is None
+
+
+def test_new_workout_is_logged_once(caplog):
+    conn = make_conn()
+    set_cursor(conn)
+    hevy = FakeHevy(events=[updated_event("w1", "2026-07-18T11:05:00Z")])
+
+    with caplog.at_level(logging.INFO, logger="activsync.hevy_sync"):
+        hevy_sync.ingest_events(conn, hevy, NOW)
+        hevy.events = [updated_event("w1", "2026-07-18T11:10:00Z")]
+        hevy_sync.ingest_events(conn, hevy, NOW)
+
+    received = [r for r in caplog.records if "received" in r.getMessage()]
+    assert len(received) == 1
+    assert "hevy workout w1 (Push Day) received" in received[0].getMessage()

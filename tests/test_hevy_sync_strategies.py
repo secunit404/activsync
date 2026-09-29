@@ -1,6 +1,7 @@
 """Tests for hevy_sync part 2: strategies + the operation journal."""
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -1046,3 +1047,41 @@ def test_post_sync_mapping_wake_keeps_original_strategy():
     assert garmin.called("put_exercise_sets")
     assert garmin.called("upload_fit") == []
     assert garmin.called("delete_activity") == []
+
+
+def test_status_transitions_are_logged(caplog):
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+
+    with caplog.at_level(logging.INFO, logger="activsync.hevy_sync"):
+        process(conn, garmin, row, base_cfg())
+
+    assert "hevy workout w1 (Push Day): waiting_watch -> merged" in caplog.text
+
+
+def test_parking_for_a_mapping_logs_the_reason(caplog):
+    conn = make_conn()
+    garmin = StubGarmin()
+    garmin.put_exc = SubcategoryRejected("400 invalid sub-category")
+    row = seed_row(conn)
+    seed_activity(conn, 111)
+
+    with caplog.at_level(logging.INFO, logger="activsync.hevy_sync"):
+        process(conn, garmin, row, base_cfg())
+
+    assert "waiting_watch -> needs_mapping" in caplog.text
+    assert hevy_db.get_workout(conn, "w1")["error"] in caplog.text
+
+
+def test_unchanged_status_is_not_logged_every_tick(caplog):
+    conn = make_conn()
+    garmin = StubGarmin()
+    row = seed_row(conn, start="2026-07-18T11:00:00Z", end="2026-07-18T11:50:00Z")
+
+    with caplog.at_level(logging.INFO, logger="activsync.hevy_sync"):
+        process(conn, garmin, row, base_cfg())
+
+    assert hevy_db.get_workout(conn, "w1")["status"] == "waiting_watch"
+    assert "hevy workout w1" not in caplog.text
