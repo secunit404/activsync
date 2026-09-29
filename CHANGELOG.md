@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.1](https://github.com/secunit404/activsync/compare/v2.0.0...v2.0.1) (2026-09-29)
+
+
+### Performance Improvements
+
+* faster Hevy matching and adaptive Garmin polling ([#67](https://github.com/secunit404/activsync/issues/67)) ([043756b](https://github.com/secunit404/activsync/commit/043756bebbd22aaa3328aec8e559b83e47bb69a5))
+
+
+### Code Refactoring
+
+* simplify the mobile tab bar to a static glass capsule ([#64](https://github.com/secunit404/activsync/issues/64)) ([dbb783b](https://github.com/secunit404/activsync/commit/dbb783b3bfba5d3def2e831b0b14b94796f68f53))
+
 ## [2.0.0](https://github.com/secunit404/activsync/compare/v1.3.0...v2.0.0) (2026-09-23)
 
 
