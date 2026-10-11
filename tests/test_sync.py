@@ -933,3 +933,59 @@ def test_check_strava_status_does_not_link_two_activities_to_the_same_strava_ent
     ]
     assert linked.count(9500) == 1
     assert stats.linked_existing == 1
+
+
+def test_strength_publish_carries_garmin_current_sets_to_strava(conn, cfg, monkeypatch):
+    db.insert_activity(
+        conn, garmin_activity_id=20, activity_type="strength_training", title="Strength Training",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="held", now=NOW,
+    )
+    garmin = _fake_garmin([], fit_bytes=b"WATCH-FIT")
+    garmin.get_exercise_sets.return_value = {"exerciseSets": ["..."]}
+    strava = _fake_strava(strava_activity_id=4005)
+    seen = []
+
+    def fake_with_current_sets(fit_bytes, exercise_sets):
+        seen.append((fit_bytes, exercise_sets))
+        return b"REWRITTEN-FIT"
+
+    monkeypatch.setattr(sync.strava_sets, "with_current_sets", fake_with_current_sets)
+
+    sync.publish_now(conn, garmin, strava, garmin_activity_id=20, now=NOW)
+
+    garmin.get_exercise_sets.assert_called_once_with(20)
+    assert seen == [(b"WATCH-FIT", {"exerciseSets": ["..."]})]
+    strava.publish.assert_called_once_with(
+        20, b"REWRITTEN-FIT", name="Strength Training", description=None)
+
+
+def test_strength_publish_falls_back_to_original_fit_when_sets_fetch_fails(conn, cfg):
+    db.insert_activity(
+        conn, garmin_activity_id=21, activity_type="strength_training", title="Strength Training",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="held", now=NOW,
+    )
+    garmin = _fake_garmin([], fit_bytes=b"WATCH-FIT")
+    garmin.get_exercise_sets.side_effect = RuntimeError("garmin down")
+    strava = _fake_strava(strava_activity_id=4006)
+
+    sync.publish_now(conn, garmin, strava, garmin_activity_id=21, now=NOW)
+
+    strava.publish.assert_called_once_with(
+        21, b"WATCH-FIT", name="Strength Training", description=None)
+
+
+def test_non_strength_publish_does_not_fetch_exercise_sets(conn, cfg):
+    db.insert_activity(
+        conn, garmin_activity_id=22, activity_type="running", title="Run",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="held", now=NOW,
+    )
+    garmin = _fake_garmin([], fit_bytes=b"RUN-FIT")
+    strava = _fake_strava(strava_activity_id=4007)
+
+    sync.publish_now(conn, garmin, strava, garmin_activity_id=22, now=NOW)
+
+    garmin.get_exercise_sets.assert_not_called()
+    strava.publish.assert_called_once_with(22, b"RUN-FIT", name="Run", description=None)

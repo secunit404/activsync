@@ -9,7 +9,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from activsync import config, db, hevy_db, timeutil
+from activsync import config, db, hevy_db, strava_sets, timeutil
 from activsync.garmin_client import ActivityRecord, GarminClient
 from activsync.strava_client import StravaClient, match_closest_activity
 
@@ -148,6 +148,31 @@ def _under_hevy_settlement_hold(conn: sqlite3.Connection, row: dict) -> bool:
     return last_success is None or last_success < release_after
 
 
+def _carries_exercise_sets(conn: sqlite3.Connection, row: dict) -> bool:
+    """Whether Garmin may hold sets the watch's original FIT lacks: any
+    strength activity (edited in Connect, or merged from Hevy)."""
+    return (row["activity_type"] == "strength_training"
+            or hevy_db.linked_workout_for_activity(
+                conn, row["garmin_activity_id"]) is not None)
+
+
+def _with_garmin_sets(
+    garmin: GarminClient, garmin_activity_id: int, fit_bytes: bytes
+) -> bytes:
+    """Strava reads exercises from the FIT's set messages, but Garmin's
+    original download never reflects a Hevy merge or a Connect edit — so
+    carry Garmin's current sets into the upload. Any failure falls back to
+    the watch's own file rather than blocking the publish."""
+    try:
+        exercise_sets = garmin.get_exercise_sets(garmin_activity_id)
+        return strava_sets.with_current_sets(fit_bytes, exercise_sets)
+    except Exception:
+        logger.warning(
+            "could not carry Garmin exercise sets for %s; uploading the "
+            "original FIT", garmin_activity_id, exc_info=True)
+        return fit_bytes
+
+
 def _publish_row(
     conn: sqlite3.Connection,
     garmin: GarminClient,
@@ -174,6 +199,8 @@ def _publish_row(
         return
 
     fit_bytes = garmin.download_fit(garmin_activity_id)
+    if _carries_exercise_sets(conn, row):
+        fit_bytes = _with_garmin_sets(garmin, garmin_activity_id, fit_bytes)
     strava_activity_id = strava.publish(
         garmin_activity_id, fit_bytes,
         name=row["title"],
