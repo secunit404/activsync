@@ -165,12 +165,19 @@ def _with_garmin_sets(
     the watch's own file rather than blocking the publish."""
     try:
         exercise_sets = garmin.get_exercise_sets(garmin_activity_id)
-        return strava_sets.with_current_sets(fit_bytes, exercise_sets)
+        rewritten = strava_sets.with_current_sets(fit_bytes, exercise_sets)
     except Exception:
         logger.warning(
             "could not carry Garmin exercise sets for %s; uploading the "
             "original FIT", garmin_activity_id, exc_info=True)
         return fit_bytes
+    if rewritten is fit_bytes:
+        logger.info("strava upload %s: no Garmin sets to carry; original FIT",
+                    garmin_activity_id)
+    else:
+        logger.info("strava upload %s: carried Garmin's current exercise sets",
+                    garmin_activity_id)
+    return rewritten
 
 
 def _publish_row(
@@ -195,6 +202,8 @@ def _publish_row(
 
     existing_strava_id = strava.find_existing_activity(start_time)
     if existing_strava_id is not None:
+        logger.info("garmin %s already on strava as %s; linked, not re-uploaded",
+                    garmin_activity_id, existing_strava_id)
         db.set_published(conn, garmin_activity_id, existing_strava_id, now)
         return
 
