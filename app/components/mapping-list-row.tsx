@@ -43,6 +43,14 @@ export function MappingListRow({ mapping }: { mapping: MappingRowData }) {
             ) : null}
           </p>
         )}
+        {mapping.stravaExerciseName ? (
+          <p className="truncate font-mono text-xs text-muted-foreground">
+            Strava › {mapping.stravaExerciseName}
+            {mapping.stravaSource === "user" ? (
+              <span className="ml-1.5 text-muted-foreground/60">· Your override</span>
+            ) : null}
+          </p>
+        ) : null}
       </div>
       <Button
         asChild

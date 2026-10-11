@@ -33,6 +33,10 @@ function mapping(overrides: Partial<Mapping> = {}): Mapping {
     subcategory: 2,
     categoryName: "Strength",
     subcategoryName: "Press",
+    stravaExerciseType: null,
+    stravaExerciseName: null,
+    stravaSource: "",
+    stravaStandardExerciseType: null,
     ...overrides,
   };
 }
@@ -53,6 +57,7 @@ const toolsState: HevyToolsState = {
     mapping({ templateId: "tpl-3", title: "Sled Push", muscleGroup: "full_body" }),
   ],
   categories: [],
+  stravaGroups: [],
 };
 
 beforeEach(() => {
@@ -190,7 +195,7 @@ test("an empty result explains itself", async () => {
 });
 
 test("an empty mapping list does not look like a failed load", async () => {
-  getHevyTools.mockResolvedValue({ mappings: [], categories: [] });
+  getHevyTools.mockResolvedValue({ mappings: [], categories: [], stravaGroups: [] });
   renderMappings();
   expect(await screen.findByText(/No exercises match/)).toBeVisible();
 });

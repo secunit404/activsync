@@ -247,11 +247,24 @@ export type HevyToolsState = {
     subcategory: number | null;
     categoryName: string | null;
     subcategoryName: string | null;
+    /** The Strava exercise a Hevy-linked activity uploads this as. */
+    stravaExerciseType: string | null;
+    stravaExerciseName: string | null;
+    /**
+     * Who chose the Strava exercise: `"user"`, the built-in `"standard"`
+     * table, derived from the `"garmin"` mapping, or `""` when none applies.
+     */
+    stravaSource: "user" | "standard" | "garmin" | "";
+    stravaStandardExerciseType: string | null;
   }>;
   categories: Array<{
     value: number;
     label: string;
     subcategories: Array<{ value: number; label: string }>;
+  }>;
+  stravaGroups: Array<{
+    label: string;
+    exercises: Array<{ value: string; label: string }>;
   }>;
 };
 
@@ -504,6 +517,23 @@ export function saveExerciseMapping(
 export function removeExerciseMapping(templateId: string) {
   return requestJson<{ message: string }>(
     "/api/v1/settings/hevy/mappings/" + encodeURIComponent(templateId),
+    { method: "DELETE" },
+  );
+}
+
+export function saveStravaExerciseMapping(templateId: string, exerciseType: string) {
+  return requestJson<{ message: string }>(
+    "/api/v1/settings/hevy/mappings/" + encodeURIComponent(templateId) + "/strava",
+    {
+      method: "PUT",
+      body: JSON.stringify({ exerciseType }),
+    },
+  );
+}
+
+export function removeStravaExerciseMapping(templateId: string) {
+  return requestJson<{ message: string }>(
+    "/api/v1/settings/hevy/mappings/" + encodeURIComponent(templateId) + "/strava",
     { method: "DELETE" },
   );
 }

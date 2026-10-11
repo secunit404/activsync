@@ -5,13 +5,19 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  NativeSelect,
+  NativeSelectOptGroup,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
 import {
   getHevyTools,
   removeExerciseMapping,
+  removeStravaExerciseMapping,
   saveExerciseMapping,
+  saveStravaExerciseMapping,
   type HevyToolsState,
 } from "@/lib/api";
 import type { HevyOutletContext } from "./hevy";
@@ -20,6 +26,14 @@ import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
 type Mapping = HevyToolsState["mappings"][number];
 type Category = HevyToolsState["categories"][number];
+type StravaGroup = HevyToolsState["stravaGroups"][number];
+
+type SaveRequest = {
+  category: number;
+  subcategory: number;
+  saveGarmin: boolean;
+  stravaExerciseType: string | null;
+};
 
 /**
  * Exercise mapping editor. Opens for any exercise, not just the unresolved
@@ -59,8 +73,14 @@ export default function HevyMapping() {
   };
 
   const save = useMutation({
-    mutationFn: ({ category, subcategory }: { category: number; subcategory: number }) =>
-      saveExerciseMapping(templateId ?? "", category, subcategory),
+    mutationFn: async ({ category, subcategory, saveGarmin, stravaExerciseType }: SaveRequest) => {
+      const id = templateId ?? "";
+      const garmin = saveGarmin ? await saveExerciseMapping(id, category, subcategory) : null;
+      const strava = stravaExerciseType
+        ? await saveStravaExerciseMapping(id, stravaExerciseType)
+        : null;
+      return garmin ?? strava ?? { message: "Nothing to save." };
+    },
     onSuccess: (result) => {
       toast.success(result.message);
       void queryClient.invalidateQueries({ queryKey: queryKeys.hevyTools });
@@ -78,7 +98,12 @@ export default function HevyMapping() {
   });
 
   const reset = useMutation({
-    mutationFn: () => removeExerciseMapping(templateId ?? ""),
+    mutationFn: async ({ garmin, strava }: { garmin: boolean; strava: boolean }) => {
+      const id = templateId ?? "";
+      const garminResult = garmin ? await removeExerciseMapping(id) : null;
+      const stravaResult = strava ? await removeStravaExerciseMapping(id) : null;
+      return garminResult ?? stravaResult ?? { message: "Nothing to reset." };
+    },
     onSuccess: (result) => {
       toast.success(result.message);
       void queryClient.invalidateQueries({ queryKey: queryKeys.hevyTools });
@@ -141,12 +166,13 @@ export default function HevyMapping() {
     <ExerciseMappingForm
       mapping={mapping}
       categories={tools.data.categories}
+      stravaGroups={tools.data.stravaGroups}
       saving={save.isPending}
       resetting={reset.isPending}
       onCancel={close}
       onOpenChange={handleOpenChange}
-      onSave={(category, subcategory) => save.mutate({ category, subcategory })}
-      onReset={() => reset.mutate()}
+      onSave={(request) => save.mutate(request)}
+      onReset={(scope) => reset.mutate(scope)}
     />
   );
 }
@@ -154,6 +180,7 @@ export default function HevyMapping() {
 function ExerciseMappingForm({
   mapping,
   categories,
+  stravaGroups,
   saving,
   resetting,
   onCancel,
@@ -163,12 +190,13 @@ function ExerciseMappingForm({
 }: {
   mapping: Mapping;
   categories: Category[];
+  stravaGroups: StravaGroup[];
   saving: boolean;
   resetting: boolean;
   onCancel: () => void;
   onOpenChange: (open: boolean) => void;
-  onSave: (category: number, subcategory: number) => void;
-  onReset: () => void;
+  onSave: (request: SaveRequest) => void;
+  onReset: (scope: { garmin: boolean; strava: boolean }) => void;
 }) {
   const [category, setCategory] = useState(
     mapping.category !== null ? String(mapping.category) : "",
@@ -176,6 +204,7 @@ function ExerciseMappingForm({
   const [subcategory, setSubcategory] = useState(
     mapping.subcategory !== null ? String(mapping.subcategory) : "",
   );
+  const [stravaExercise, setStravaExercise] = useState(mapping.stravaExerciseType ?? "");
 
   // Re-seed the draft whenever the editor lands on a different exercise —
   // render-time state adjustment (not a `useEffect`; this repo's ESLint
@@ -189,6 +218,7 @@ function ExerciseMappingForm({
     setAppliedTemplateId(mapping.templateId);
     setCategory(mapping.category !== null ? String(mapping.category) : "");
     setSubcategory(mapping.subcategory !== null ? String(mapping.subcategory) : "");
+    setStravaExercise(mapping.stravaExerciseType ?? "");
   }
 
   const selectedCategory = categories.find((option) => String(option.value) === category);
@@ -232,17 +262,46 @@ function ExerciseMappingForm({
   const draftDiffersFromStandard =
     mapping.hasStandardMapping &&
     (category !== standardCategory || subcategory !== standardSubcategory);
-  const canReset =
+  const garminCanReset =
     mapping.hasStandardMapping && (hasPersistedOverride || draftDiffersFromStandard);
+  const stravaStandard = mapping.stravaStandardExerciseType ?? "";
+  const hasPersistedStravaOverride = mapping.stravaSource === "user";
+  const stravaCanReset =
+    stravaStandard !== "" &&
+    (hasPersistedStravaOverride || stravaExercise !== stravaStandard);
+  const canReset = garminCanReset || stravaCanReset;
+  const stravaChanged = stravaExercise !== (mapping.stravaExerciseType ?? "");
   const busy = saving || resetting;
 
   function handleReset() {
-    if (hasPersistedOverride) {
-      onReset();
+    const scope = {
+      garmin: garminCanReset && hasPersistedOverride,
+      strava: stravaCanReset && hasPersistedStravaOverride,
+    };
+    if (scope.garmin || scope.strava) {
+      onReset(scope);
       return;
     }
-    setCategory(standardCategory);
-    setSubcategory(standardSubcategory);
+    if (garminCanReset) {
+      setCategory(standardCategory);
+      setSubcategory(standardSubcategory);
+    }
+    if (stravaCanReset) {
+      setStravaExercise(stravaStandard);
+    }
+  }
+
+  function handleSave() {
+    // Saving only a new Strava exercise must not turn the standard Garmin
+    // pair into a user override it was never meant to be.
+    const garminUnchanged =
+      category === String(mapping.category) && subcategory === String(mapping.subcategory);
+    onSave({
+      category: Number(category),
+      subcategory: Number(subcategory),
+      saveGarmin: !(mapping.source === "automatic" && garminUnchanged && stravaChanged),
+      stravaExerciseType: stravaChanged && stravaExercise !== "" ? stravaExercise : null,
+    });
   }
 
   return (
@@ -289,7 +348,7 @@ function ExerciseMappingForm({
             type="button"
             className="flex-1 md:flex-none"
             disabled={!canSave || busy}
-            onClick={() => onSave(Number(category), Number(subcategory))}
+            onClick={handleSave}
           >
             {saving ? <Spinner data-icon="inline-start" /> : null}
             {saving ? "Saving…" : "Save mapping"}
@@ -355,6 +414,34 @@ function ExerciseMappingForm({
           </NativeSelect>
         </Field>
 
+        <Field>
+          <FieldLabel
+            htmlFor="mapping-strava-exercise"
+            className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase"
+          >
+            Strava exercise
+          </FieldLabel>
+          <NativeSelect
+            id="mapping-strava-exercise"
+            className="w-full"
+            value={stravaExercise}
+            disabled={busy}
+            onChange={(event) => setStravaExercise(event.target.value)}
+          >
+            <NativeSelectOption value="">
+              {mapping.stravaExerciseType ? "Select a Strava exercise…" : "Not set — uses the FIT upload"}
+            </NativeSelectOption>
+            {stravaGroups.map((group) => (
+              <NativeSelectOptGroup key={group.label} label={group.label}>
+                {group.exercises.map((option) => (
+                  <NativeSelectOption key={option.value} value={option.value}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelectOptGroup>
+            ))}
+          </NativeSelect>
+        </Field>
       </div>
     </ResponsiveOverlay>
   );

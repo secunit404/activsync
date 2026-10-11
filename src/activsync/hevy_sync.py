@@ -436,7 +436,7 @@ def apply_match_choice(
 
 # -- post-sync edits ---------------------------------------------------------
 
-_TERMINAL_APPLIED = ("merged", "described", "replaced", "uploaded_passive")
+_TERMINAL_APPLIED = hevy_db.APPLIED_STATUSES
 
 
 def _reapply(conn: sqlite3.Connection, garmin: GarminClient, hevy: HevyClient,

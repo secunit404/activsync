@@ -8,15 +8,30 @@ import type { HevyToolsState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import HevyMapping from "./hevy-mapping";
 
-const { getHevyTools, removeExerciseMapping, saveExerciseMapping } = vi.hoisted(() => ({
+const {
+  getHevyTools,
+  removeExerciseMapping,
+  removeStravaExerciseMapping,
+  saveExerciseMapping,
+  saveStravaExerciseMapping,
+} = vi.hoisted(() => ({
   getHevyTools: vi.fn(),
   removeExerciseMapping: vi.fn(),
+  removeStravaExerciseMapping: vi.fn(),
   saveExerciseMapping: vi.fn(),
+  saveStravaExerciseMapping: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, getHevyTools, removeExerciseMapping, saveExerciseMapping };
+  return {
+    ...actual,
+    getHevyTools,
+    removeExerciseMapping,
+    removeStravaExerciseMapping,
+    saveExerciseMapping,
+    saveStravaExerciseMapping,
+  };
 });
 
 type Mapping = HevyToolsState["mappings"][number];
@@ -38,6 +53,10 @@ function mapping(overrides: Partial<Mapping>): Mapping {
     subcategory: null,
     categoryName: null,
     subcategoryName: null,
+    stravaExerciseType: null,
+    stravaExerciseName: null,
+    stravaSource: "",
+    stravaStandardExerciseType: null,
     ...overrides,
   };
 }
@@ -109,6 +128,42 @@ const toolsState: HevyToolsState = {
       subcategoryName: "Back Squat",
     }),
     mapping({
+      templateId: "tmpl-strava-standard",
+      title: "Hack Squat",
+      mapped: true,
+      unmapped: false,
+      source: "automatic",
+      hasStandardMapping: true,
+      standardCategory: 12,
+      standardSubcategory: 120,
+      category: 12,
+      subcategory: 120,
+      categoryName: "Squat",
+      subcategoryName: "Back Squat",
+      stravaExerciseType: "MACHINE_HACK_SQUAT",
+      stravaExerciseName: "Machine hack squat",
+      stravaSource: "standard",
+      stravaStandardExerciseType: "MACHINE_HACK_SQUAT",
+    }),
+    mapping({
+      templateId: "tmpl-strava-user",
+      title: "Squat (Barbell)",
+      mapped: true,
+      unmapped: false,
+      source: "automatic",
+      hasStandardMapping: true,
+      standardCategory: 12,
+      standardSubcategory: 120,
+      category: 12,
+      subcategory: 120,
+      categoryName: "Squat",
+      subcategoryName: "Back Squat",
+      stravaExerciseType: "MACHINE_HACK_SQUAT",
+      stravaExerciseName: "Machine hack squat",
+      stravaSource: "user",
+      stravaStandardExerciseType: "BARBELL_BACK_SQUAT",
+    }),
+    mapping({
       templateId: "tmpl-user",
       title: "Front Squat",
       mapped: true,
@@ -124,6 +179,15 @@ const toolsState: HevyToolsState = {
     }),
   ],
   categories,
+  stravaGroups: [
+    {
+      label: "Squat",
+      exercises: [
+        { value: "BARBELL_BACK_SQUAT", label: "Barbell back squat" },
+        { value: "MACHINE_HACK_SQUAT", label: "Machine hack squat" },
+      ],
+    },
+  ],
 };
 
 getHevyTools.mockResolvedValue(toolsState);
@@ -392,4 +456,35 @@ test("an existing mapping pointing at a since-filtered, subcategory-less categor
   const select = await screen.findByLabelText("Category");
   expect(select).toHaveValue("33");
   expect(within(select).getByRole("option", { name: "Cycling" })).toBeInTheDocument();
+});
+
+test("choosing only a Strava exercise saves it without overriding the standard Garmin pair", async () => {
+  saveStravaExerciseMapping.mockResolvedValue({ message: "Strava exercise saved." });
+  saveExerciseMapping.mockClear();
+  renderMapping("tmpl-strava-standard");
+
+  expect(await screen.findByLabelText("Strava exercise")).toHaveValue("MACHINE_HACK_SQUAT");
+  await userEvent.selectOptions(screen.getByLabelText("Strava exercise"), "BARBELL_BACK_SQUAT");
+  await userEvent.click(screen.getByRole("button", { name: "Save mapping" }));
+
+  await waitFor(() =>
+    expect(saveStravaExerciseMapping).toHaveBeenCalledWith(
+      "tmpl-strava-standard",
+      "BARBELL_BACK_SQUAT",
+    ),
+  );
+  expect(saveExerciseMapping).not.toHaveBeenCalled();
+});
+
+test("reset removes a Strava override and leaves the standard Garmin pair alone", async () => {
+  removeStravaExerciseMapping.mockResolvedValue({ message: "Standard Strava exercise restored." });
+  removeExerciseMapping.mockClear();
+  renderMapping("tmpl-strava-user");
+
+  await userEvent.click(await screen.findByRole("button", { name: "Reset to standard" }));
+
+  await waitFor(() =>
+    expect(removeStravaExerciseMapping).toHaveBeenCalledWith("tmpl-strava-user"),
+  );
+  expect(removeExerciseMapping).not.toHaveBeenCalled();
 });
