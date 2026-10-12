@@ -17,3 +17,6 @@ services:
       # Strava callback URL is built as https:// — see the README. Only enable
       # this when the container is reachable solely through the proxy.
       # - FORWARDED_ALLOW_IPS=*
+      # Your public address, once it is reachable from the internet — see
+      # "Exposing ActivSync publicly" in the README.
+      # - ACTIVSYNC_PUBLIC_URL=https://activsync.example.com
