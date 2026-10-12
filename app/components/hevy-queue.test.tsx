@@ -182,7 +182,7 @@ test("loads and shows the actual Hevy workout only after opening details", async
         ],
       },
     ],
-    descriptionPreview: "🏋️ Leg Day\n\n• Back Squat (Barbell): 1 set · 100.0kg × 8",
+    descriptionPreview: "🏋️ Leg Day\n\n• Back Squat (Barbell): 1 set - 100.0kg × 8",
   });
   renderQueue(
     emptyQueue({
