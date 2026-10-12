@@ -80,10 +80,9 @@ test("an unlocked row shows its kind badge and no Map control", () => {
     "href",
     "https://connect.garmin.com/modern/activity/42",
   );
-  expect(screen.getByRole("link", { name: /Strava/ })).toHaveAttribute(
-    "href",
-    "https://www.strava.com/activities/84",
-  );
+  const strava = screen.getByRole("link", { name: "View on Strava" });
+  expect(strava).toHaveAttribute("href", "https://www.strava.com/activities/84");
+  expect(strava).toHaveClass("font-bold");
   expect(screen.getByText("On Strava")).toBeVisible();
   expect(screen.queryByRole("link", { name: /Map/ })).toBeNull();
   expect(screen.queryByRole("button", { name: /Map/ })).toBeNull();

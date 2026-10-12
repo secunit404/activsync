@@ -54,9 +54,9 @@ export function ActivityDetailView({ activity }: { activity: Activity }) {
           </a>
         </Button>
         {activity.stravaUrl ? (
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="font-bold">
             <a href={activity.stravaUrl} target="_blank" rel="noreferrer">
-              Strava
+              View on Strava
               <ExternalLinkIcon data-icon="inline-end" />
             </a>
           </Button>

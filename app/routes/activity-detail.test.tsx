@@ -175,12 +175,11 @@ test("does not render a Strava link when stravaUrl is null", () => {
   expect(screen.queryByRole("link", { name: /Strava/ })).not.toBeInTheDocument();
 });
 
-test("renders a Strava link once the activity is published", () => {
+test("renders a View on Strava link once the activity is published", () => {
   renderDetail({ ...fixture, publishStatus: "published", stravaUrl: "https://strava.com/activities/1" });
-  expect(screen.getByRole("link", { name: /Strava/ })).toHaveAttribute(
-    "href",
-    "https://strava.com/activities/1",
-  );
+  const link = screen.getByRole("link", { name: "View on Strava" });
+  expect(link).toHaveAttribute("href", "https://strava.com/activities/1");
+  expect(link).toHaveClass("font-bold");
 });
 
 test("an id not present in the current list shows a real not-found message, not a blank overlay", () => {

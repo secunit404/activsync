@@ -162,9 +162,9 @@ export function BackfillRow({
             </Button>
           ) : null}
           {item.stravaUrl ? (
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm" className="font-bold">
               <a href={item.stravaUrl} target="_blank" rel="noreferrer">
-                Strava ↗
+                View on Strava <span aria-hidden="true">↗</span>
               </a>
             </Button>
           ) : null}
