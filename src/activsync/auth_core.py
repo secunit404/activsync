@@ -114,28 +114,43 @@ def verify_password(conn: sqlite3.Connection, password: str) -> bool:
     return True
 
 
-def throttle_wait(conn: sqlite3.Connection, now: float) -> int:
-    state = db.get_config_value(conn, THROTTLE_KEY) or {}
+def bucket_wait(state: dict, now: float) -> int:
     next_allowed_at = state.get("next_allowed_at")
     if not next_allowed_at or next_allowed_at <= now:
         return 0
     return math.ceil(next_allowed_at - now)
 
 
+def bucket_after_failure(state: dict, now: float) -> dict:
+    failures = int(state.get("failures", 0)) + 1
+    delay = (
+        min(2 ** (failures - FREE_FAILURES), MAX_DELAY_SECONDS)
+        if failures >= FREE_FAILURES
+        else 0
+    )
+    return {**state, "failures": failures, "next_allowed_at": now + delay if delay else None}
+
+
+def throttle_wait(conn: sqlite3.Connection, now: float) -> int:
+    return bucket_wait(db.get_config_value(conn, THROTTLE_KEY) or {}, now)
+
+
 def record_failure(conn: sqlite3.Connection, now: float) -> None:
     with db.transaction(conn):
         state = db.get_config_value(conn, THROTTLE_KEY) or {}
-        failures = int(state.get("failures", 0)) + 1
-        delay = (
-            min(2 ** (failures - FREE_FAILURES), MAX_DELAY_SECONDS)
-            if failures >= FREE_FAILURES
-            else 0
-        )
-        db.set_config_value(
-            conn,
-            THROTTLE_KEY,
-            {"failures": failures, "next_allowed_at": now + delay if delay else None},
-        )
+        db.set_config_value(conn, THROTTLE_KEY, bucket_after_failure(state, now))
+
+
+def reserve_attempt(conn: sqlite3.Connection, now: float) -> int:
+    """Return the seconds to wait, or 0 after counting this attempt as a
+    failure up front, so parallel guesses cannot all pass one check while
+    argon2 runs. Success undoes it with `reset_throttle`."""
+    with db.transaction(conn):
+        state = db.get_config_value(conn, THROTTLE_KEY) or {}
+        wait = bucket_wait(state, now)
+        if not wait:
+            db.set_config_value(conn, THROTTLE_KEY, bucket_after_failure(state, now))
+    return wait
 
 
 def reset_throttle(conn: sqlite3.Connection) -> None:

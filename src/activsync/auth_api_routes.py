@@ -11,12 +11,13 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import Field
 
-from activsync import auth_core, db
+from activsync import auth_core, auth_devices, db
 from activsync.api_routes import ApiModel
 from activsync.auth_middleware import (
     AuthState,
     clear_session_cookie,
     client_ip,
+    device_cookie_name,
     start_session,
 )
 
@@ -124,20 +125,24 @@ def create_router(
                 headers={"Retry-After": str(wait)},
             )
 
-    def require_password(password: str, *, wrong_status: int) -> None:
-        """Account-wide backoff first, so a throttled guess is never verified."""
-        now = time.time()
-        wait = auth_core.throttle_wait(conn, now)
-        if wait:
+    def trusted_device(request: Request) -> str | None:
+        device_id = request.cookies.get(device_cookie_name(request.scope))
+        return device_id if auth_devices.is_trusted(conn, device_id) else None
+
+    def require_password(
+        password: str, *, wrong_status: int, device_id: str | None
+    ) -> None:
+        check = auth_devices.check_password(
+            conn, password, time.time(), device_id=device_id
+        )
+        if check.retry_after:
             raise HTTPException(
                 status_code=429,
-                detail=f"Too many wrong passwords. Try again in {wait} seconds.",
-                headers={"Retry-After": str(wait)},
+                detail=f"Too many wrong passwords. Try again in {check.retry_after} seconds.",
+                headers={"Retry-After": str(check.retry_after)},
             )
-        if not auth_core.verify_password(conn, password):
-            auth_core.record_failure(conn, now)
+        if not check.verified:
             raise HTTPException(status_code=wrong_status, detail="Wrong password.")
-        auth_core.reset_throttle(conn)
 
     def require_session(request: Request) -> AuthState:
         auth = _current_auth(request)
@@ -171,8 +176,10 @@ def create_router(
     def login(payload: LoginRequest, request: Request, response: Response) -> AuthStatus:
         if not auth_core.owner_claimed(conn):
             raise HTTPException(status_code=409, detail="ActivSync is not claimed yet.")
-        limit_client(request)
-        require_password(payload.password, wrong_status=401)
+        device_id = trusted_device(request)
+        if device_id is None:
+            limit_client(request)
+        require_password(payload.password, wrong_status=401, device_id=device_id)
         start_session(conn, request, response, "password")
         return status_for(AuthState(method="password"))
 
@@ -212,17 +219,21 @@ def create_router(
     def revoke_others(request: Request) -> AuthActionResult:
         auth = require_session(request)
         revoked = auth_core.revoke_all(conn, keep_token_hash=auth.token_hash)
+        auth_devices.clear_trusted_devices(conn)
         return AuthActionResult(message=f"Signed out {revoked} other session(s).")
 
     @router.put("/auth/password", response_model=AuthActionResult)
     def change_password(payload: PasswordChangeRequest, request: Request) -> AuthActionResult:
         auth = require_session(request)
-        require_password(payload.current, wrong_status=400)
+        require_password(
+            payload.current, wrong_status=400, device_id=trusted_device(request)
+        )
         problem = auth_core.password_problem(payload.new)
         if problem:
             raise HTTPException(status_code=400, detail=problem)
         auth_core.set_password(conn, payload.new, time.time())
         auth_core.revoke_all(conn, keep_token_hash=auth.token_hash)
+        auth_devices.clear_trusted_devices(conn)
         return AuthActionResult(message="Password changed. Other sessions were signed out.")
 
     @router.get("/auth/settings", response_model=AuthSettingsState)

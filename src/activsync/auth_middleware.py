@@ -21,7 +21,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 
-from activsync import auth_core
+from activsync import auth_core, auth_devices
 
 logger = logging.getLogger("activsync.auth")
 
@@ -43,6 +43,8 @@ UNKNOWN_HOST_MESSAGE = (
 
 SESSION_COOKIE = "activsync_session"
 SECURE_SESSION_COOKIE = "__Host-activsync_session"
+DEVICE_COOKIE = "activsync_device"
+SECURE_DEVICE_COOKIE = "__Host-activsync_device"
 
 
 def is_public(method: str, path: str) -> bool:
@@ -71,6 +73,10 @@ def session_cookie_name(scope: Mapping) -> str:
     return SECURE_SESSION_COOKIE if is_https(scope) else SESSION_COOKIE
 
 
+def device_cookie_name(scope: Mapping) -> str:
+    return SECURE_DEVICE_COOKIE if is_https(scope) else DEVICE_COOKIE
+
+
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else ""
 
@@ -79,7 +85,7 @@ def start_session(
     conn: sqlite3.Connection, request: Request, response: Response, method: str
 ) -> None:
     """Rotate on every login: drop whatever cookie the browser arrived with,
-    then issue a fresh token."""
+    then issue a fresh token. Every sign-in also trusts this browser."""
     cookie_name = session_cookie_name(request.scope)
     previous = request.cookies.get(cookie_name)
     if previous:
@@ -95,6 +101,23 @@ def start_session(
         cookie_name,
         token,
         max_age=auth_core.SESSION_ABSOLUTE_SECONDS,
+        path="/",
+        secure=is_https(request.scope),
+        httponly=True,
+        samesite="lax",
+    )
+    issue_device_cookie(conn, request, response)
+
+
+def issue_device_cookie(conn: sqlite3.Connection, request: Request, response: Response) -> None:
+    cookie_name = device_cookie_name(request.scope)
+    device_id = auth_devices.trust_device(
+        conn, time.time(), replacing=request.cookies.get(cookie_name)
+    )
+    response.set_cookie(
+        cookie_name,
+        device_id,
+        max_age=auth_devices.DEVICE_COOKIE_MAX_AGE,
         path="/",
         secure=is_https(request.scope),
         httponly=True,

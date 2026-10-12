@@ -1,3 +1,4 @@
+import threading
 import time
 
 import pytest
@@ -151,8 +152,10 @@ def test_one_client_is_limited_to_ten_attempts_a_minute(app, conn):
     _claim(conn)
     client = _anonymous(app)
     for _ in range(10):
+        client.cookies.clear()
         _login(client)
 
+    client.cookies.clear()
     response = _login(client)
 
     assert response.status_code == 429
@@ -263,3 +266,183 @@ def test_dev_unclaim_is_mock_only(app, monkeypatch):
     assert response.status_code == 200
     assert response.json()["setupCode"] == app.state.setup_code.current
     assert _anonymous(app).get("/api/v1/auth/status").json()["ownerClaimed"] is False
+
+
+def _devices(conn):
+    return db.get_config_value(conn, "auth_trusted_devices") or []
+
+
+def _cookie_header(response, name):
+    return next(
+        value
+        for key, value in response.headers.multi_items()
+        if key == "set-cookie" and value.startswith(f"{name}=")
+    )
+
+
+def test_login_issues_a_one_year_device_cookie_over_http(app, conn):
+    _claim(conn)
+
+    response = _login(_anonymous(app))
+
+    cookie = _cookie_header(response, "activsync_device")
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+    assert "Path=/" in cookie
+    assert "Max-Age=31536000" in cookie
+    assert "Secure" not in cookie
+    device_id = response.cookies["activsync_device"]
+    assert [entry["hash"] for entry in _devices(conn)] == [auth_core.hash_token(device_id)]
+
+
+def test_https_uses_a_host_prefixed_secure_device_cookie(app, conn):
+    _claim(conn)
+    client = TestClient(app, base_url="https://testserver")
+    client.headers.update({**CSRF_HEADERS, "Origin": "https://testserver"})
+
+    cookie = _cookie_header(_login(client), "__Host-activsync_device")
+
+    assert "Secure" in cookie
+    assert "Max-Age=31536000" in cookie
+
+
+def test_claim_issues_a_device_cookie(app, conn):
+    client = _anonymous(app)
+
+    response = client.post(
+        "/api/v1/auth/claim",
+        json={"setupCode": app.state.setup_code.current, "password": OWNER_PASSWORD},
+    )
+
+    assert response.status_code == 200
+    device_id = response.cookies["activsync_device"]
+    assert _devices(conn)[0]["hash"] == auth_core.hash_token(device_id)
+
+
+def test_signing_in_again_replaces_this_browsers_device(app, conn):
+    _claim(conn)
+    client = _anonymous(app)
+
+    _login(client)
+    first = client.cookies["activsync_device"]
+    _login(client)
+
+    assert client.cookies["activsync_device"] != first
+    assert len(_devices(conn)) == 1
+
+
+def test_exhausted_shared_bucket_does_not_block_a_trusted_device(app, conn):
+    _claim(conn)
+    known = _anonymous(app)
+    assert _login(known).status_code == 200
+    for _ in range(20):
+        auth_core.record_failure(conn, time.time())
+
+    assert _login(_anonymous(app)).status_code == 429
+    assert _login(known, "nope").status_code == 401
+    assert _login(known).status_code == 200
+
+
+def test_trusted_device_skips_the_per_client_limiter(app, conn):
+    _claim(conn)
+    known = _anonymous(app)
+    assert _login(known).status_code == 200
+    stranger = _anonymous(app)
+    for _ in range(9):
+        stranger.cookies.clear()
+        _login(stranger)
+    stranger.cookies.clear()
+
+    assert _login(stranger).status_code == 429
+    assert _login(known).status_code == 200
+
+
+def test_forged_device_cookie_is_limited_like_any_client(app, conn):
+    _claim(conn)
+    for _ in range(20):
+        auth_core.record_failure(conn, time.time())
+    client = _anonymous(app)
+    client.cookies.set("activsync_device", "forged")
+
+    assert _login(client).status_code == 429
+
+
+def test_ten_device_failures_drop_trust(app, conn):
+    _claim(conn)
+    client = _anonymous(app)
+    _login(client)
+    device_id = client.cookies["activsync_device"]
+    db.set_config_value(
+        conn,
+        "auth_trusted_devices",
+        [{**entry, "failures": 9, "next_allowed_at": None} for entry in _devices(conn)],
+    )
+
+    assert _login(client, "nope").status_code == 401
+
+    assert _devices(conn) == []
+    assert client.cookies["activsync_device"] == device_id
+    for _ in range(20):
+        auth_core.record_failure(conn, time.time())
+    assert _login(client).status_code == 429
+
+
+def test_password_change_clears_trusted_devices(app, conn):
+    _claim(conn)
+    client = _anonymous(app)
+    _login(client)
+    other = _anonymous(app)
+    _login(other)
+    assert len(_devices(conn)) == 2
+
+    changed = client.put(
+        "/api/v1/auth/password",
+        json={"current": OWNER_PASSWORD, "new": "a different long passphrase"},
+    )
+
+    assert changed.status_code == 200
+    assert _devices(conn) == []
+
+
+def test_signing_out_everywhere_clears_trusted_devices(app, conn):
+    _claim(conn)
+    client = _anonymous(app)
+    _login(client)
+
+    assert client.delete("/api/v1/auth/sessions").status_code == 200
+
+    assert _devices(conn) == []
+
+
+def test_concurrent_wrong_logins_are_all_counted(app, conn, monkeypatch):
+    _claim(conn)
+    attempts = 10
+    verified = []
+    lock = threading.Lock()
+
+    def slow_wrong(*_args):
+        with lock:
+            verified.append(1)
+        time.sleep(0.05)
+        return False
+
+    monkeypatch.setattr(auth_core, "verify_password", slow_wrong)
+    barrier = threading.Barrier(attempts)
+    statuses = []
+
+    def guess():
+        client = _anonymous(app)
+        barrier.wait()
+        status = _login(client, "nope").status_code
+        with lock:
+            statuses.append(status)
+
+    threads = [threading.Thread(target=guess) for _ in range(attempts)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    failures = db.get_config_value(conn, "auth_login_throttle")["failures"]
+    assert sorted(statuses) == [401] * 5 + [429] * 5
+    assert failures == len(verified) == statuses.count(401)
