@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { StravaConnectButton } from "@/components/strava-connect-button";
+import { useStravaConnectUrl } from "@/hooks/use-strava-authorize-url";
 import type { SettingsState } from "@/lib/api";
 
 export type StravaStepProps = {
@@ -20,6 +22,10 @@ export type StravaStepProps = {
 export function StravaStep({ state, pending, onSave }: StravaStepProps) {
   const [clientId, setClientId] = useState(state.credentials.stravaClientId);
   const [clientSecret, setClientSecret] = useState("");
+  const saved =
+    Boolean(state.credentials.stravaClientId) && state.credentials.stravaClientSecretSaved;
+  const dirty = clientId !== state.credentials.stravaClientId || Boolean(clientSecret);
+  const authorize = useStravaConnectUrl(state.credentials.stravaClientId, saved);
   return (
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
@@ -38,7 +44,7 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
         className="grid max-w-[440px] gap-5"
         onSubmit={(event) => {
           event.preventDefault();
-          void onSave({ clientId, clientSecret });
+          void onSave({ clientId, clientSecret }).then(() => setClientSecret(""));
         }}
       >
         <FieldGroup>
@@ -81,8 +87,12 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
         </Alert>
         <Button type="submit" className="h-12 sm:w-fit" disabled={pending}>
           {pending ? <Spinner /> : null}
-          {pending ? "Saving…" : "Save and authorize"}
+          {pending ? "Saving…" : "Save credentials"}
         </Button>
+        <StravaConnectButton
+          href={saved && !dirty ? (authorize.data?.url ?? null) : null}
+          error={authorize.error?.message}
+        />
         <p className="text-sm text-muted-foreground">
           Need the keys? See{" "}
           <a

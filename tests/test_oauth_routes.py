@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlparse
 
-from auth_helpers import owner_client
+from fastapi.testclient import TestClient
+
+from auth_helpers import CSRF_HEADERS, owner_client
 
 from activsync import db
 from activsync import server as server_module
@@ -23,6 +25,9 @@ def _complete_setup(conn):
     db.set_config_value(conn, "initial_sync_done", True)
 
 
+CONNECT_URL = "/api/v1/settings/strava/authorize"
+
+
 def test_strava_connect_issues_and_persists_oauth_state(tmp_path, monkeypatch):
     conn = db.connect(str(tmp_path / "oauth.db"))
     _complete_setup(conn)
@@ -32,16 +37,63 @@ def test_strava_connect_issues_and_persists_oauth_state(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(server_module, "_build_strava_client", lambda _conn: fake_strava)
 
-    response = owner_client(create_app(conn)).get(
-        "/strava/connect",
-        follow_redirects=False,
-    )
+    response = owner_client(create_app(conn)).post(CONNECT_URL)
 
-    assert response.status_code == 307
+    assert response.status_code == 200
     state = db.get_config_value(conn, "strava_oauth_state")
     assert state
-    assert f"state={state}" in response.headers["location"]
-    assert "strava/callback" in response.headers["location"]
+    assert f"state={state}" in response.json()["url"]
+    assert "strava/callback" in response.json()["url"]
+
+
+def test_strava_connect_url_points_straight_at_strava_with_the_shared_scope(tmp_path):
+    conn = db.connect(str(tmp_path / "oauth.db"))
+    _complete_setup(conn)
+
+    url = owner_client(create_app(conn)).post(CONNECT_URL).json()["url"]
+
+    parsed = urlparse(url)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == (
+        "https://www.strava.com/oauth/authorize"
+    )
+    assert "client_id=client-id" in url
+    assert "scope=read,activity:write,activity:read_all" in url
+    assert "redirect_uri=http://testserver/strava/callback" in url
+
+
+def test_strava_connect_without_saved_credentials_is_a_json_error(tmp_path):
+    conn = db.connect(str(tmp_path / "oauth.db"))
+
+    response = owner_client(create_app(conn)).post(CONNECT_URL)
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Save your Strava client ID and client secret before connecting."
+    }
+    assert db.get_config_value(conn, "strava_oauth_state") is None
+
+
+def test_strava_connect_requires_a_session_and_the_csrf_header(tmp_path):
+    conn = db.connect(str(tmp_path / "oauth.db"))
+    _complete_setup(conn)
+    app = create_app(conn)
+    owner = owner_client(app)
+
+    anonymous = TestClient(app).post(CONNECT_URL, headers=CSRF_HEADERS)
+    cross_site = owner.post(CONNECT_URL, headers={"X-ActivSync-Request": ""})
+
+    assert anonymous.status_code == 401
+    assert cross_site.status_code == 403
+    assert db.get_config_value(conn, "strava_oauth_state") is None
+
+
+def test_the_old_connect_redirect_is_gone(tmp_path):
+    conn = db.connect(str(tmp_path / "oauth.db"))
+    _complete_setup(conn)
+
+    response = owner_client(create_app(conn)).get("/strava/connect", follow_redirects=False)
+
+    assert response.status_code == 404
 
 
 def test_strava_callback_rejects_mismatched_and_replayed_state(tmp_path, monkeypatch):
@@ -138,8 +190,8 @@ def test_strava_connect_builds_the_callback_from_the_public_url(tmp_path, monkey
     monkeypatch.setattr(server_module, "_build_strava_client", lambda _conn: fake_strava)
     client = owner_client(create_app(conn), base_url="https://activsync.example.com")
 
-    response = client.get("/strava/connect", follow_redirects=False)
+    response = client.post(CONNECT_URL)
 
-    assert response.headers["location"] == (
+    assert response.json()["url"] == (
         "https://strava.test/oauth?redirect=https://activsync.example.com/strava/callback"
     )

@@ -353,9 +353,9 @@ def test_mock_setup_can_complete_through_json_contract(tmp_path, monkeypatch):
     )
     assert credentials.status_code == 200
 
-    connect = client.get("/strava/connect")
-    assert connect.status_code == 307
-    callback = client.get(connect.headers["location"])
+    connect = client.post("/api/v1/settings/strava/authorize")
+    assert connect.status_code == 200
+    callback = client.get(connect.json()["url"])
     assert callback.status_code == 303
 
     skipped = client.post("/api/v1/setup/hevy/skip")

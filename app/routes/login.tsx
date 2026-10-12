@@ -4,19 +4,16 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 
 import { AppBrand } from "@/components/app-shell";
+import { StravaConnectButton } from "@/components/strava-connect-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuthStatus } from "@/hooks/use-auth-status";
+import { useStravaLoginUrl } from "@/hooks/use-strava-authorize-url";
 import { LOGIN_ERRORS } from "@/lib/auth-errors";
-import {
-  login,
-  oidcLoginUrl,
-  stravaLoginUrl,
-  type AuthStatus,
-} from "@/lib/auth-api";
+import { login, oidcLoginUrl, type AuthStatus } from "@/lib/auth-api";
 import { queryKeys } from "@/lib/query-keys";
 import type { Route } from "./+types/login";
 
@@ -134,15 +131,22 @@ export function LoginView({
               <a href={oidcLoginUrl(next)}>Sign in with {oidc.label}</a>
             </Button>
           ) : null}
-          {status.login.strava ? (
-            <Button asChild size="lg" variant="outline" className="h-11">
-              <a href={stravaLoginUrl(next)}>Sign in with Strava</a>
-            </Button>
-          ) : null}
+          {status.login.strava ? <StravaLogin next={next} /> : null}
         </div>
       ) : null}
       <PasswordForm next={next} />
     </LoginCard>
+  );
+}
+
+function StravaLogin({ next }: { next: string }) {
+  const authorize = useStravaLoginUrl(next);
+  return (
+    <StravaConnectButton
+      className="justify-self-center"
+      href={authorize.data?.url ?? null}
+      error={authorize.error?.message}
+    />
   );
 }
 

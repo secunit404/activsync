@@ -499,6 +499,15 @@ export function disconnectHevy() {
   });
 }
 
+export type AuthorizeUrl = { url: string };
+
+export function startStravaConnect(signal?: AbortSignal): Promise<AuthorizeUrl> {
+  return requestJson<AuthorizeUrl>("/api/v1/settings/strava/authorize", {
+    method: "POST",
+    signal,
+  });
+}
+
 export function disconnectStrava() {
   return requestJson<SettingsActionResult>("/api/v1/settings/strava", {
     method: "DELETE",

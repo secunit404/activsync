@@ -102,10 +102,10 @@ def test_full_setup_completes_end_to_end(mock_env, seeded_conn):
     )
     assert credentials.status_code == 200
 
-    connect = client.get("/strava/connect")
-    assert connect.status_code == 307
-    assert "/strava/callback?code=dev-mock-code" in connect.headers["location"]
-    callback = client.get(connect.headers["location"])
+    connect = client.post("/api/v1/settings/strava/authorize")
+    assert connect.status_code == 200
+    assert "/strava/callback?code=dev-mock-code" in connect.json()["url"]
+    callback = client.get(connect.json()["url"])
     assert callback.status_code == 303
     assert callback.headers["location"] == "/setup"
     assert view.connection_status(conn)["strava"]["connected"] is True

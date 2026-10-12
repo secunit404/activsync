@@ -81,18 +81,6 @@ def create_router(
         await run_in_threadpool(start_session, conn, request, response, "oidc")
         return response
 
-    @router.get("/strava/login", name="strava_login")
-    def strava_login(request: Request, next: str = "/"):
-        if not auth_strava_login.enabled(conn):
-            return _login_error("strava_unavailable")
-        url = auth_strava_login.begin(
-            request,
-            build_strava_client(conn),
-            redirect_uri=external_url(request, "strava_login_callback", public_url),
-            next_path=safe_next(next),
-        )
-        return RedirectResponse(url, status_code=303)
-
     @router.get("/strava/callback", name="strava_login_callback")
     def strava_login_callback(
         request: Request,

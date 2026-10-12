@@ -9,7 +9,7 @@ from activsync import auth_core, db, dev_mock, view
 from activsync import server as server_module
 from activsync.server import create_app
 from activsync.strava_client import StravaClient
-from auth_helpers import owner_client
+from auth_helpers import CSRF_HEADERS, owner_client
 
 OWNER_ATHLETE = dev_mock.DEV_STRAVA_ATHLETE_ID
 OLD_TOKENS = {
@@ -57,11 +57,22 @@ def strava(conn, monkeypatch):
     return fake
 
 
-def _login(app, *, scope="read,activity:write,activity:read_all", state=None):
+LOGIN_URL = "/api/v1/auth/strava/authorize"
+
+
+def _anonymous(app) -> TestClient:
     client = TestClient(app, follow_redirects=False)
-    started = client.get("/auth/strava/login?next=%2Fsettings")
-    assert started.status_code == 303
-    callback = urlsplit(started.headers["location"])
+    client.headers.update(CSRF_HEADERS)
+    return client
+
+
+def _login(
+    app, *, scope="read,activity:write,activity:read_all", state=None, next="/settings"
+):
+    client = _anonymous(app)
+    started = client.post(LOGIN_URL, json={"next": next})
+    assert started.status_code == 200
+    callback = urlsplit(started.json()["url"])
     params = {key: values[0] for key, values in parse_qs(callback.query).items()}
     if state is not None:
         params["state"] = state
@@ -70,13 +81,18 @@ def _login(app, *, scope="read,activity:write,activity:read_all", state=None):
     return client, client.get(callback.path, params=params)
 
 
-def test_login_redirect_uses_the_shared_scope_and_the_auth_callback(conn, monkeypatch):
+def test_login_url_goes_straight_to_strava_with_the_shared_scope_and_the_auth_callback(
+    conn, monkeypatch
+):
     real = StravaClient(conn, "cid", "secret")
     monkeypatch.setattr(server_module, "_build_strava_client", lambda _conn: real)
 
-    started = TestClient(create_app(conn), follow_redirects=False).get("/auth/strava/login")
+    started = _anonymous(create_app(conn)).post(LOGIN_URL, json={})
 
-    location = started.headers["location"]
+    assert started.status_code == 200
+    location = started.json()["url"]
+    assert location.startswith("https://www.strava.com/oauth/authorize?")
+    assert "client_id=cid" in location
     assert "scope=read,activity:write,activity:read_all" in location
     assert "approval_prompt=auto" in location
     assert "redirect_uri=http://testserver/auth/strava/callback" in location
@@ -140,8 +156,11 @@ def test_the_button_is_offered_only_when_enabled_and_possible(conn, strava):
     assert anonymous.get("/api/v1/auth/status").json()["login"]["strava"] is True
     db.set_config_value(conn, "strava_tokens", {**OLD_TOKENS, "athlete_id": None})
     assert anonymous.get("/api/v1/auth/status").json()["login"]["strava"] is False
-    started = TestClient(app, follow_redirects=False).get("/auth/strava/login")
-    assert started.headers["location"] == "/login?error=strava_unavailable"
+    started = _anonymous(app).post(LOGIN_URL, json={"next": "/settings"})
+    assert started.status_code == 409
+    assert started.json() == {
+        "detail": "Sign in with Strava is not available right now. Use your password instead."
+    }
 
 
 def test_enabling_waits_for_the_athlete_id(conn, strava):
@@ -156,3 +175,22 @@ def test_enabling_waits_for_the_athlete_id(conn, strava):
     assert refused.json()["detail"] == "Waiting for the next Strava sync."
     assert settings["stravaLoginBlocker"] == "Waiting for the next Strava sync."
     assert settings["stravaLogin"] is False
+
+
+@pytest.mark.parametrize("unsafe", ["//evil.test", "https://evil.test", "/\\evil.test"])
+def test_next_is_made_safe_on_the_server(conn, strava, unsafe):
+    _, response = _login(create_app(conn), next=unsafe)
+
+    assert response.headers["location"] == "/"
+
+
+def test_starting_a_strava_login_needs_the_csrf_header(conn, strava):
+    response = TestClient(create_app(conn)).post(LOGIN_URL, json={"next": "/"})
+
+    assert response.status_code == 403
+
+
+def test_the_old_login_redirect_is_gone(conn, strava):
+    response = owner_client(create_app(conn)).get("/auth/strava/login")
+
+    assert response.status_code == 404

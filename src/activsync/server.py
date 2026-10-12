@@ -35,6 +35,7 @@ from activsync import (
     onboarding,
     settings_api_routes,
 )
+from activsync.auth_api_routes import AuthorizeUrl
 from activsync.garmin_client import (
     GarminClient,
     begin_login as garmin_begin_login,
@@ -180,6 +181,7 @@ def create_app(
             public_url=public_url,
             proxy=proxy,
             mock_mode=_mock_mode,
+            build_strava_client=_build_strava_client,
         )
     )
     app.include_router(
@@ -240,18 +242,19 @@ def create_app(
         query = urlencode({"stravaError": message})
         return RedirectResponse(f"{strava_landing_target()}?{query}", status_code=303)
 
-    @app.get("/strava/connect")
-    def strava_connect(request: Request):
+    @app.post("/api/v1/settings/strava/authorize", response_model=AuthorizeUrl)
+    def strava_connect(request: Request) -> AuthorizeUrl:
         credentials = db.get_config_value(conn, "strava_credentials") or {}
         if not credentials.get("client_id") or not credentials.get("client_secret"):
-            return strava_error(
-                "Save your Strava client ID and client secret before connecting."
+            raise HTTPException(
+                status_code=409,
+                detail="Save your Strava client ID and client secret before connecting.",
             )
         strava = _build_strava_client(conn)
         redirect_uri = auth_middleware.external_url(request, "strava_callback", public_url)
         state = secrets.token_urlsafe(32)
         db.set_config_value(conn, "strava_oauth_state", state)
-        return RedirectResponse(strava.authorize_url(redirect_uri, state))
+        return AuthorizeUrl(url=strava.authorize_url(redirect_uri, state))
 
     @app.get("/strava/callback")
     def strava_callback(

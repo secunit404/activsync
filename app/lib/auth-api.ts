@@ -1,4 +1,4 @@
-import { requestJson } from "@/lib/api";
+import { requestJson, type AuthorizeUrl } from "@/lib/api";
 
 export type AuthMethod = "password" | "oidc" | "strava" | "proxy" | "disabled";
 
@@ -134,6 +134,10 @@ export function oidcLoginUrl(next: string, intent: "login" | "link" = "login") {
   return `/auth/oidc/login?${params.toString()}`;
 }
 
-export function stravaLoginUrl(next: string) {
-  return `/auth/strava/login?${new URLSearchParams({ next }).toString()}`;
+export function startStravaLogin(next: string, signal?: AbortSignal): Promise<AuthorizeUrl> {
+  return requestJson<AuthorizeUrl>("/api/v1/auth/strava/authorize", {
+    method: "POST",
+    body: JSON.stringify({ next }),
+    signal,
+  });
 }

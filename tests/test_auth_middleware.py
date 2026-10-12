@@ -17,7 +17,7 @@ EXPECTED_PUBLIC_ROUTES = {
     ("POST", "/api/v1/auth/claim"),
     ("GET", "/auth/oidc/login"),
     ("GET", "/auth/oidc/callback"),
-    ("GET", "/auth/strava/login"),
+    ("POST", "/api/v1/auth/strava/authorize"),
     ("GET", "/auth/strava/callback"),
 }
 SPA_ROUTE = "/{path:path}"

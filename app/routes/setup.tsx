@@ -166,7 +166,6 @@ export function SetupView({
             pending={strava.isPending}
             onSave={async (payload) => {
               await strava.mutateAsync(payload);
-              window.location.assign("/strava/connect");
             }}
           />
         ) : null}

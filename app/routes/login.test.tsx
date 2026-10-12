@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -9,15 +9,19 @@ import type { AuthStatus } from "@/lib/auth-api";
 import { LOGIN_ERRORS } from "@/lib/auth-errors";
 import Login, { safeNext } from "./login";
 
-const { getAuthStatus, login } = vi.hoisted(() => ({
+const { getAuthStatus, login, startStravaLogin } = vi.hoisted(() => ({
   getAuthStatus: vi.fn(),
   login: vi.fn(),
+  startStravaLogin: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth-api")>();
-  return { ...actual, getAuthStatus, login };
+  return { ...actual, getAuthStatus, login, startStravaLogin };
 });
+
+const STRAVA_AUTHORIZE =
+  "https://www.strava.com/oauth/authorize?client_id=1234&state=issued";
 
 function status(overrides: Partial<AuthStatus> = {}): AuthStatus {
   return {
@@ -53,6 +57,7 @@ function renderAt(path: string) {
 beforeEach(() => {
   getAuthStatus.mockReset();
   login.mockReset();
+  startStravaLogin.mockReset();
 });
 
 afterEach(() => {
@@ -92,6 +97,7 @@ test("maps error codes to fixed copy, never provider text", async () => {
 });
 
 test("offers each enabled provider with next passed through", async () => {
+  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
   getAuthStatus.mockResolvedValue(
     status({
       login: {
@@ -106,10 +112,55 @@ test("offers each enabled provider with next passed through", async () => {
     "href",
     "/auth/oidc/login?intent=login&next=%2Fhevy",
   );
-  expect(screen.getByRole("link", { name: "Sign in with Strava" })).toHaveAttribute(
+  expect(await screen.findByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
     "href",
-    "/auth/strava/login?next=%2Fhevy",
+    STRAVA_AUTHORIZE,
   );
+  expect(startStravaLogin).toHaveBeenCalledWith("/hevy", expect.anything());
+});
+
+test("Strava sign-in is the official 48px button, fetched once per visit", async () => {
+  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
+  renderAt("/login");
+
+  const link = await screen.findByRole("link", { name: "Connect with Strava" });
+  const image = within(link).getByRole("img", { name: "Connect with Strava" });
+  expect(image).toHaveAttribute("height", "48");
+  expect(image.getAttribute("src")).toMatch(/btn_strava_connect_with_orange.*\.svg$/);
+  await userEvent.type(screen.getByLabelText("Password"), "typing re-renders");
+  expect(startStravaLogin).toHaveBeenCalledTimes(1);
+});
+
+test("the Strava button is disabled while its link loads", async () => {
+  startStravaLogin.mockReturnValue(new Promise(() => {}));
+  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
+  renderAt("/login");
+
+  expect(await screen.findByRole("img", { name: "Connect with Strava" })).toBeVisible();
+  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
+});
+
+test("a refused Strava sign-in stays disabled and says why", async () => {
+  startStravaLogin.mockRejectedValue(
+    new ApiError("Sign in with Strava is not available right now.", 409),
+  );
+  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
+  renderAt("/login");
+
+  expect(
+    await screen.findByText("Sign in with Strava is not available right now."),
+  ).toBeVisible();
+  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
+});
+
+test("no Strava link is requested when Strava sign-in is off", async () => {
+  getAuthStatus.mockResolvedValue(status());
+  renderAt("/login");
+
+  expect(await screen.findByLabelText("Password")).toBeVisible();
+  expect(screen.queryByRole("img", { name: "Connect with Strava" })).toBeNull();
+  expect(startStravaLogin).not.toHaveBeenCalled();
 });
 
 test("?local=1 shows the password form and skips auto-redirect", async () => {

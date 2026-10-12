@@ -98,7 +98,7 @@ The setup wizard shows the exact value to enter. Two things it can't tell you:
 
 - **Reachable at more than one address?** (say a public domain *and* a LAN IP)
   Only one can be registered, and subdomains of it are fine but an unrelated
-  address is not. Always start **Connect Strava** from the address you
+  address is not. Always press **Connect with Strava** from the address you
   registered — everything else works on either.
 - **Behind an HTTPS proxy?** Set `FORWARDED_ALLOW_IPS` to the proxy's address
   (or its Docker network, e.g. `172.18.0.0/16`) so the callback URL is built as
@@ -127,7 +127,8 @@ the same limits Grafana uses by default.
   account you link can sign in, so another account at the same provider is
   refused.
 - **Sign in with Strava.** Uses the Strava app you already connected, so
-  nothing changes on Strava's side. Only the athlete ActivSync is connected to
+  nothing changes on Strava's side. The sign-in page shows it as the
+  **Connect with Strava** button. Only the athlete ActivSync is connected to
   can sign in. Signing out never disconnects Strava.
 - **Trusted proxy header.** For an authenticating reverse proxy. Set the three
   `ACTIVSYNC_AUTH_PROXY_*` variables; ActivSync refuses to start if one is
@@ -188,7 +189,7 @@ signed in before.
 Upgrading from a version without sign-in: the first start stops at the claim
 step, even though setup was finished before. Read the code from the log as
 above. ActivSync now also asks Strava for the `read` scope, so the first
-Strava **Reconnect** in **Settings → Connections** after upgrading shows
+**Connect with Strava** in **Settings → Connections** after upgrading shows
 Strava's consent screen once.
 
 ## Hevy workouts

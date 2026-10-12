@@ -12,6 +12,7 @@ const {
   completeGarminMfa,
   cancelGarminMfa,
   saveStravaCredentials,
+  startStravaConnect,
   setupHevy,
   skipHevy,
   runInitialSync,
@@ -20,6 +21,7 @@ const {
   completeGarminMfa: vi.fn(),
   cancelGarminMfa: vi.fn(),
   saveStravaCredentials: vi.fn(),
+  startStravaConnect: vi.fn(),
   setupHevy: vi.fn(),
   skipHevy: vi.fn(),
   runInitialSync: vi.fn(),
@@ -33,6 +35,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     completeGarminMfa,
     cancelGarminMfa,
     saveStravaCredentials,
+    startStravaConnect,
     setupHevy,
     skipHevy,
     runInitialSync,
@@ -213,6 +216,49 @@ test("renders the Strava step", () => {
     screen.getByRole("heading", { name: "Authorize Strava" }),
   ).toBeInTheDocument();
   expect(screen.getByLabelText("Strava client ID")).toBeInTheDocument();
+});
+
+const STRAVA_AUTHORIZE =
+  "https://www.strava.com/oauth/authorize?client_id=1234&state=issued";
+
+test("the Strava step keeps Connect with Strava disabled until credentials are saved", async () => {
+  renderSetup({ ...baseState, setup: { ...baseState.setup, step: "strava" } });
+
+  expect(screen.getByRole("img", { name: "Connect with Strava" })).toBeVisible();
+  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
+  expect(startStravaConnect).not.toHaveBeenCalled();
+
+  saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
+  await userEvent.type(screen.getByLabelText("Strava client ID"), "1234");
+  await userEvent.type(screen.getByLabelText("Strava client secret"), "secret");
+  await userEvent.click(screen.getByRole("button", { name: "Save credentials" }));
+  expect(saveStravaCredentials).toHaveBeenCalledWith(
+    { clientId: "1234", clientSecret: "secret" },
+    expect.anything(),
+  );
+});
+
+test("the Strava step links Connect with Strava straight to Strava once saved", async () => {
+  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  renderSetup({
+    ...baseState,
+    setup: { ...baseState.setup, step: "strava" },
+    credentials: {
+      ...baseState.credentials,
+      stravaClientId: "1234",
+      stravaClientSecretSaved: true,
+    },
+  });
+
+  expect(await screen.findByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
+    "href",
+    STRAVA_AUTHORIZE,
+  );
+  expect(startStravaConnect).toHaveBeenCalledTimes(1);
+
+  await userEvent.type(screen.getByLabelText("Strava client ID"), "5");
+  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
+  expect(startStravaConnect).toHaveBeenCalledTimes(1);
 });
 
 test("renders the Hevy step with a skip option", async () => {

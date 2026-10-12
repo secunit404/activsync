@@ -19,7 +19,9 @@ from activsync.auth_middleware import (
     clear_session_cookie,
     client_ip,
     device_cookie_name,
+    external_url,
     own_origin,
+    safe_next,
     start_session,
 )
 
@@ -52,6 +54,14 @@ class ClaimRequest(ApiModel):
 
 class LoginRequest(ApiModel):
     password: str = Field(max_length=1024)
+
+
+class StravaLoginRequest(ApiModel):
+    next: str = Field(default="/", max_length=2048)
+
+
+class AuthorizeUrl(ApiModel):
+    url: str
 
 
 class PasswordChangeRequest(ApiModel):
@@ -131,6 +141,7 @@ def create_router(
     public_url: str | None,
     proxy: ProxyAuthConfig | None,
     mock_mode: Callable[[], bool],
+    build_strava_client: Callable[[sqlite3.Connection], object],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["auth"])
 
@@ -222,6 +233,24 @@ def create_router(
         require_password(payload.password, wrong_status=401, device_id=device_id)
         start_session(conn, request, response, "password")
         return status_for(AuthState(method="password"))
+
+    @router.post("/auth/strava/authorize", response_model=AuthorizeUrl)
+    def start_strava_login(payload: StravaLoginRequest, request: Request) -> AuthorizeUrl:
+        if not auth_strava_login.enabled(conn):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Sign in with Strava is not available right now. "
+                    "Use your password instead."
+                ),
+            )
+        url = auth_strava_login.begin(
+            request,
+            build_strava_client(conn),
+            redirect_uri=external_url(request, "strava_login_callback", public_url),
+            next_path=safe_next(payload.next),
+        )
+        return AuthorizeUrl(url=url)
 
     @router.post("/auth/logout", status_code=204)
     def logout(request: Request, response: Response) -> None:
