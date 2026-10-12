@@ -10,6 +10,7 @@ dependencies = [
     "requests>=2.31",
     "tzdata>=2024.1",
     "garmin-fit-sdk>=21.208",
+    "argon2-cffi>=25.1",
 ]
 
 [project.optional-dependencies]
