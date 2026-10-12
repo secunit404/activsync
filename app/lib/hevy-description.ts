@@ -8,9 +8,9 @@ const SAMPLE_DESCRIPTION_VALUES: Record<string, string> = {
   calories: "🔥 386 kcal",
   avg_hr: "❤️ avg 104 bpm",
   exercises: [
-    "• Chest Fly (Machine): 3 sets · 57.5kg × 9",
-    "• Lat Pulldown (Cable): 3 sets · 50.0kg × 9",
-    "• Bulgarian Split Squat (Barbell): 3 sets · 25.0kg × 8",
+    "• Chest Fly (Machine): 3 sets - 57.5kg × 9",
+    "• Lat Pulldown (Cable): 3 sets - 50.0kg × 9",
+    "• Bulgarian Split Squat (Barbell): 3 sets - 25.0kg × 8",
   ].join("\n"),
   marker: "— synced by activsync",
 };

@@ -3,7 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from activsync import config, db, sync
+from activsync import config, db, hevy_db, sync
+from activsync.strava_client import StravaUploadRejected
 from activsync.garmin_client import ActivityRecord
 
 NOW = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
@@ -933,3 +934,99 @@ def test_check_strava_status_does_not_link_two_activities_to_the_same_strava_ent
     ]
     assert linked.count(9500) == 1
     assert stats.linked_existing == 1
+
+
+def _hevy_applied(conn, garmin_activity_id, exercises, status="replaced"):
+    hevy_db.upsert_workout(
+        conn, "hevy-1", "Pass A", "2026-07-09T09:00:00+00:00",
+        "2026-07-09T10:00:00+00:00", "2026-07-09T10:00:05Z",
+        {"start_time": "2026-07-09T09:00:00+00:00",
+         "end_time": "2026-07-09T10:00:00+00:00", "exercises": exercises},
+    )
+    conn.execute(
+        "UPDATE hevy_workouts SET status = ?, garmin_activity_id = ? WHERE hevy_id = ?",
+        (status, garmin_activity_id, "hevy-1"),
+    )
+    conn.commit()
+
+
+def _strength_row(conn, gid):
+    db.insert_activity(
+        conn, garmin_activity_id=gid, activity_type="strength_training", title="Pass A",
+        description="", start_time="2026-07-09 09:00:00", content_hash="h",
+        publish_status="pending", now=NOW,
+    )
+
+
+def test_publish_sends_a_hevy_linked_activity_as_strava_json(conn, cfg):
+    _strength_row(conn, 30)
+    _hevy_applied(conn, 30, [{"title": "Chest Press (Machine)",
+                              "exercise_template_id": "7EB3F7C3",
+                              "sets": [{"reps": 8, "weight_kg": 60}]}])
+    strava = _fake_strava(strava_activity_id=5005)
+    strava.publish_strength.return_value = 5005
+
+    sync.publish_now(conn, _fake_garmin([], fit_bytes=b""), strava, garmin_activity_id=30, now=NOW)
+
+    strava.publish.assert_not_called()
+    args, kwargs = strava.publish_strength.call_args
+    assert args[0] == 30
+    assert args[1]["sets"] == [
+        {"exercise_type": "MACHINE_CHEST_PRESS", "repetitions": 8, "weight": 60.0}]
+    assert kwargs == {"name": "Pass A", "description": None}
+    assert db.get_activity(conn, 30)["strava_activity_id"] == 5005
+
+
+def test_publish_falls_back_to_the_fit_when_an_exercise_has_no_strava_match(conn, cfg):
+    _strength_row(conn, 31)
+    _hevy_applied(conn, 31, [{"title": "Something Unheard Of",
+                              "exercise_template_id": "CUSTOM99",
+                              "sets": [{"reps": 5}]}])
+    strava = _fake_strava(strava_activity_id=5006)
+
+    sync.publish_now(conn, _fake_garmin([], fit_bytes=b"FIT-31"), strava,
+                     garmin_activity_id=31, now=NOW)
+
+    strava.publish_strength.assert_not_called()
+    strava.publish.assert_called_once_with(31, b"FIT-31", name="Pass A", description=None)
+
+
+def test_publish_uploads_the_fit_for_activities_without_a_hevy_workout(conn, cfg):
+    _strength_row(conn, 32)
+    strava = _fake_strava(strava_activity_id=5007)
+
+    sync.publish_now(conn, _fake_garmin([], fit_bytes=b"FIT-32"), strava,
+                     garmin_activity_id=32, now=NOW)
+
+    strava.publish_strength.assert_not_called()
+    strava.publish.assert_called_once()
+
+
+def test_publish_falls_back_to_the_fit_when_strava_rejects_the_json(conn, cfg):
+    _strength_row(conn, 33)
+    _hevy_applied(conn, 33, [{"title": "Chest Press (Machine)",
+                              "exercise_template_id": "7EB3F7C3",
+                              "sets": [{"reps": 8, "weight_kg": 60}]}])
+    strava = _fake_strava(strava_activity_id=5008)
+    strava.publish_strength.side_effect = StravaUploadRejected("bad set")
+
+    sync.publish_now(conn, _fake_garmin([], fit_bytes=b"FIT-33"), strava,
+                     garmin_activity_id=33, now=NOW)
+
+    strava.publish.assert_called_once_with(33, b"FIT-33", name="Pass A", description=None)
+    assert db.get_activity(conn, 33)["strava_activity_id"] == 5008
+
+
+def test_publish_uploads_the_fit_for_a_described_hevy_workout(conn, cfg):
+    _strength_row(conn, 34)
+    _hevy_applied(conn, 34, [{"title": "Chest Press (Machine)",
+                              "exercise_template_id": "7EB3F7C3",
+                              "sets": [{"reps": 8, "weight_kg": 60}]}],
+                  status="described")
+    strava = _fake_strava(strava_activity_id=5009)
+
+    sync.publish_now(conn, _fake_garmin([], fit_bytes=b"FIT-34"), strava,
+                     garmin_activity_id=34, now=NOW)
+
+    strava.publish_strength.assert_not_called()
+    strava.publish.assert_called_once_with(34, b"FIT-34", name="Pass A", description=None)

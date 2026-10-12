@@ -223,3 +223,8 @@ def test_mappings_view_sorts_actionable_rows_first(conn):
 
     assert rows[0]["template_id"] == "tpl-odd"
     assert rows[0]["unmapped"] is True
+
+
+def test_strava_exercise_label_reads_generic_ids_as_generic():
+    assert view.strava_exercise_label("MACHINE_CHEST_PRESS") == "Machine chest press"
+    assert view.strava_exercise_label("PLANK_GENERIC") == "Plank (generic)"

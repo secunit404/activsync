@@ -56,7 +56,7 @@ const pageSizes = new Set<PageSize>([10, 20, 50, 100]);
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Activities · ActivSync" },
+    { title: "Activities - ActivSync" },
     {
       name: "description",
       content: "Review and publish Garmin activities to Strava.",

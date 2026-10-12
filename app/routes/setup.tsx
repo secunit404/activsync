@@ -183,7 +183,7 @@ function SyncStep({
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 4 · Sync
+          Step 4: Sync
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Ready for the first sync

@@ -552,6 +552,61 @@ def test_hevy_mapping_tools_reset_override_to_standard_table(tmp_path, monkeypat
     assert (after.json()["mappings"][0]["category"], after.json()["mappings"][0]["subcategory"]) == (0, 1)
 
 
+def test_hevy_mapping_tools_choose_and_reset_the_strava_exercise(tmp_path, monkeypatch):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    hevy_db.upsert_template(
+        conn,
+        {
+            "exercise_template_id": "7EB3F7C3",
+            "title": "Chest Press (Machine)",
+            "primary_muscle_group": "chest",
+            "secondary_muscle_groups": [],
+            "equipment_category": "machine",
+            "is_custom": False,
+        },
+    )
+
+    before = client.get("/api/v1/settings/hevy/tools").json()
+    rejected = client.put(
+        "/api/v1/settings/hevy/mappings/7EB3F7C3/strava",
+        json={"exerciseType": "NOT_A_STRAVA_EXERCISE"},
+    )
+    saved = client.put(
+        "/api/v1/settings/hevy/mappings/7EB3F7C3/strava",
+        json={"exerciseType": "MACHINE_ISOLATERAL_CHEST_PRESS"},
+    )
+    chosen = client.get("/api/v1/settings/hevy/tools").json()["mappings"][0]
+    reset = client.delete("/api/v1/settings/hevy/mappings/7EB3F7C3/strava")
+    after = client.get("/api/v1/settings/hevy/tools").json()["mappings"][0]
+
+    row = before["mappings"][0]
+    assert (row["stravaExerciseType"], row["stravaSource"]) == ("MACHINE_CHEST_PRESS", "standard")
+    assert row["stravaExerciseName"] == "Machine chest press"
+    assert row["stravaStandardExerciseType"] == "MACHINE_CHEST_PRESS"
+    bench = next(g for g in before["stravaGroups"] if g["label"] == "Bench Press")
+    assert {"value": "MACHINE_CHEST_PRESS", "label": "Machine chest press"} in bench["exercises"]
+    assert rejected.status_code == 400
+    assert saved.status_code == 200
+    assert (chosen["stravaExerciseType"], chosen["stravaSource"]) == (
+        "MACHINE_ISOLATERAL_CHEST_PRESS", "user")
+    assert reset.status_code == 200
+    assert (after["stravaExerciseType"], after["stravaSource"]) == ("MACHINE_CHEST_PRESS", "standard")
+
+
+def test_strava_exercise_endpoints_404_for_unknown_templates(tmp_path, monkeypatch):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+
+    saved = client.put(
+        "/api/v1/settings/hevy/mappings/NOPE/strava",
+        json={"exerciseType": "MACHINE_CHEST_PRESS"},
+    )
+    removed = client.delete("/api/v1/settings/hevy/mappings/NOPE/strava")
+
+    assert (saved.status_code, removed.status_code) == (404, 404)
+
+
 def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
     tmp_path, monkeypatch
 ):

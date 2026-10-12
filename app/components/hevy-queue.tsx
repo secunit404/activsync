@@ -20,6 +20,7 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 import { cn } from "@/lib/utils";
+import { MetaList } from "@/components/meta-list";
 
 type QueueCommand = HevyQueueAction | HevyMatchStrategy;
 type ConfirmableAction = "skip" | "resync-fresh" | "replace";
@@ -264,10 +265,15 @@ function QueueRow({
             kind === "problem" ? "text-warning/90" : "text-muted-foreground",
           )}
         >
-          {item.startDisplay} ·{" "}
-          {item.awaitingMatch
-            ? `Matched ${item.matchedGarminTitle ?? `Garmin activity ${item.matchedGarminActivityId}`}${item.matchedStravaActivityId ? " · Already on Strava" : ""}`
-            : (item.error ?? queueStatusLabel(item))}
+          <MetaList
+            items={[
+              item.startDisplay,
+              item.awaitingMatch
+                ? `Matched ${item.matchedGarminTitle ?? `Garmin activity ${item.matchedGarminActivityId}`}`
+                : (item.error ?? queueStatusLabel(item)),
+              item.awaitingMatch && item.matchedStravaActivityId && "Already on Strava",
+            ]}
+          />
         </p>
       </div>
       <div

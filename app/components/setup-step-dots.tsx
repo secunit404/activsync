@@ -96,7 +96,7 @@ export function SetupStepDots({ step }: { step: SetupStep | null }) {
           ))}
         </div>
         <span className="font-mono text-[11.5px] text-muted-foreground">
-          Step {activeIndex + 1} of {STEPS.length} · {STEPS[activeIndex].label}
+          Step {activeIndex + 1} of {STEPS.length}: {STEPS[activeIndex].label}
         </span>
       </div>
     </>

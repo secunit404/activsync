@@ -100,6 +100,13 @@ CREATE TABLE IF NOT EXISTS exercise_mappings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS strava_exercise_mappings (
+    exercise_template_id TEXT PRIMARY KEY,
+    exercise_type TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS merge_backups (
     garmin_activity_id INTEGER PRIMARY KEY,
     hevy_id TEXT,
@@ -223,6 +230,8 @@ def has_unresolved_upload(conn: sqlite3.Connection) -> bool:
     ).fetchone() is not None
 
 
+APPLIED_STATUSES = ("merged", "described", "replaced", "uploaded_passive")
+
 _BLOCKING_STATUSES = (
     "needs_mapping",
     "waiting_watch",
@@ -286,6 +295,19 @@ def linked_workout_for_activity(
            ORDER BY created_at
            LIMIT 1""",
         (garmin_activity_id, garmin_activity_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def applied_workout_for_activity(
+    conn: sqlite3.Connection, garmin_activity_id: int
+) -> dict | None:
+    """The Hevy workout whose content now lives on this activity."""
+    placeholders = ", ".join("?" for _ in APPLIED_STATUSES)
+    row = conn.execute(
+        f"""SELECT * FROM hevy_workouts
+            WHERE garmin_activity_id = ? AND status IN ({placeholders})""",
+        (garmin_activity_id, *APPLIED_STATUSES),
     ).fetchone()
     return dict(row) if row else None
 

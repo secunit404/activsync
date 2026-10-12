@@ -40,7 +40,7 @@ export type HevyOutletContext = { onMappingSaved: () => void };
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Hevy · ActivSync" },
+    { title: "Hevy - ActivSync" },
     {
       name: "description",
       content: "Hevy sync queue, exercise mapping, and historical backfill.",
