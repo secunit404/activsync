@@ -100,7 +100,8 @@ def test_setup_code_is_logged_and_checked_case_and_dash_insensitively(conn, capl
         codes.ensure()
 
     code = codes.current
-    assert code and len(code) == 9 and code[4] == "-"
+    groups = code.split("-")
+    assert len(groups) == 4 and all(len(group) == 4 for group in groups)
     assert set(code.replace("-", "")) <= set(auth_core.SETUP_CODE_ALPHABET)
     assert f"ActivSync is unclaimed. Open the app and enter setup code {code}" in caplog.text
     assert codes.check(code.replace("-", "").lower()) is True

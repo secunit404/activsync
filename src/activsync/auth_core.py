@@ -170,8 +170,8 @@ class AttemptLimiter:
 
 
 def _new_setup_code() -> str:
-    raw = "".join(secrets.choice(SETUP_CODE_ALPHABET) for _ in range(8))
-    return f"{raw[:4]}-{raw[4:]}"
+    raw = "".join(secrets.choice(SETUP_CODE_ALPHABET) for _ in range(16))
+    return "-".join(raw[i : i + 4] for i in range(0, 16, 4))
 
 
 def _normalize_code(value: str) -> bytes:
@@ -183,8 +183,8 @@ class SetupCode:
 
     Held in memory only; a restart issues a new one. Wrong guesses never
     rotate it: rotation would let any anonymous client invalidate the code in
-    the owner's log at will. Guessing is bounded by the code's ~40 bits and
-    the per-client attempt limiter instead.
+    the owner's log at will. Sixteen characters (~79 bits) keep guessing out of
+    reach even for a distributed attacker, so no global cap is needed.
     """
 
     def __init__(self, conn: sqlite3.Connection) -> None:
