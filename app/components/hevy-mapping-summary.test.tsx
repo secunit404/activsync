@@ -24,6 +24,10 @@ function mapping(overrides: Partial<Mapping>): Mapping {
     subcategory: null,
     categoryName: null,
     subcategoryName: null,
+    stravaExerciseType: null,
+    stravaExerciseName: null,
+    stravaSource: "",
+    stravaStandardExerciseType: null,
     ...overrides,
   };
 }
@@ -37,7 +41,7 @@ function renderSummary(tools: HevyToolsState) {
 }
 
 test("links each unmapped exercise to its editor", () => {
-  renderSummary({ mappings: [mapping({})], categories: [] });
+  renderSummary({ mappings: [mapping({})], categories: [], stravaGroups: [] });
 
   // No count badge in the header: the rows below it are the count, and the
   // card only lists exercises that need mapping in the first place.
@@ -48,7 +52,7 @@ test("links each unmapped exercise to its editor", () => {
 });
 
 test("flags custom exercises inline", () => {
-  renderSummary({ mappings: [mapping({ isCustom: true })], categories: [] });
+  renderSummary({ mappings: [mapping({ isCustom: true })], categories: [], stravaGroups: [] });
   expect(screen.getByText("CUSTOM")).toBeInTheDocument();
 });
 
@@ -62,6 +66,7 @@ test("renders heuristic choices like every other unmapped row", () => {
       }),
     ],
     categories: [],
+    stravaGroups: [],
   });
 
   expect(screen.getByText("Unmapped")).toBeVisible();
@@ -77,6 +82,7 @@ test("omits rows that are already mapped and not rejected", () => {
   renderSummary({
     mappings: [mapping({ mapped: true, unmapped: false })],
     categories: [],
+    stravaGroups: [],
   });
 
   expect(screen.queryByText("Bulgarian Split Squat")).not.toBeInTheDocument();
@@ -84,7 +90,7 @@ test("omits rows that are already mapped and not rejected", () => {
 });
 
 test("shows a quiet all-mapped message when nothing needs attention", () => {
-  renderSummary({ mappings: [], categories: [] });
+  renderSummary({ mappings: [], categories: [], stravaGroups: [] });
   expect(screen.getByText(/every hevy exercise/i)).toBeInTheDocument();
   expect(screen.queryByText(/need mapping/i)).not.toBeInTheDocument();
 });

@@ -21,6 +21,10 @@ function mapping(overrides: Partial<MappingRowData> = {}): MappingRowData {
     subcategory: 7,
     categoryName: "Strength",
     subcategoryName: "Shoulder Press",
+    stravaExerciseType: null,
+    stravaExerciseName: null,
+    stravaSource: "",
+    stravaStandardExerciseType: null,
     ...overrides,
   };
 }
@@ -112,4 +116,21 @@ test("a built-in exercise carries no custom badge", () => {
 test("a mapped row with no resolved names still reads sensibly", () => {
   renderRow(mapping({ categoryName: null, subcategoryName: null }));
   expect(screen.getByText("Mapped")).toBeVisible();
+});
+
+test("names the Strava exercise and marks a Strava override", () => {
+  renderRow(
+    mapping({
+      stravaExerciseName: "Machine chest press",
+      stravaSource: "user",
+    }),
+  );
+  const strava = screen.getByText("Strava").nextElementSibling;
+  expect(strava).toHaveTextContent("Machine chest press");
+  expect(strava).toHaveTextContent("Your override");
+});
+
+test("says when no Strava exercise is set", () => {
+  renderRow(mapping({ stravaExerciseName: null }));
+  expect(screen.getByText("Strava").nextElementSibling).toHaveTextContent("Not set");
 });

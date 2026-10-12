@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import time
@@ -323,10 +324,29 @@ class StravaClient:
         return match_closest_activity(activities, start_time, tolerance_minutes)
 
     def publish(self, garmin_activity_id: int, fit_bytes: bytes, name: str | None = None, description: str | None = None) -> int:
+        return self._upload(
+            (f"{garmin_activity_id}.fit", fit_bytes), "fit",
+            garmin_activity_id, name, description,
+        )
+
+    def publish_strength(
+        self, garmin_activity_id: int, document: dict,
+        name: str | None = None, description: str | None = None,
+    ) -> int:
+        """Upload a strength activity in Strava's JSON format (see strava_strength)."""
+        return self._upload(
+            (f"{garmin_activity_id}.json", json.dumps(document).encode(), "application/json"),
+            "json", garmin_activity_id, name, description,
+        )
+
+    def _upload(
+        self, file: tuple, data_type: str, garmin_activity_id: int,
+        name: str | None, description: str | None,
+    ) -> int:
         access_token = self._get_access_token()
         headers = {"Authorization": f"Bearer {access_token}"}
-        files = {"file": (f"{garmin_activity_id}.fit", fit_bytes)}
-        data = {"data_type": "fit", "external_id": f"garmin-{garmin_activity_id}"}
+        files = {"file": file}
+        data = {"data_type": data_type, "external_id": f"garmin-{garmin_activity_id}"}
         # Without this, Strava ignores the FIT file's own metadata and
         # auto-generates a name from start date/location — the Garmin title
         # (set in Garmin Connect, not embedded in the FIT file) never lands.

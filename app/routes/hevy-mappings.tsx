@@ -26,7 +26,7 @@ const FILTERS: Array<{ value: MappingFilter; label: string }> = [
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Exercise mapping · ActivSync" },
+    { title: "Exercise mapping - ActivSync" },
     {
       name: "description",
       content: "Every Hevy exercise ActivSync tracks and where it lands in Garmin.",
@@ -130,7 +130,7 @@ export default function HevyMappings() {
     <PageContainer className="grid gap-6 py-8 md:gap-7 md:py-10">
       <PageHeader
         title="Exercise mapping"
-        description="Every Hevy exercise ActivSync tracks, and where its sets and reps land in Garmin."
+        description="Every Hevy exercise ActivSync tracks: where its sets land in Garmin, and which exercise Strava shows."
       />
 
       <HevySectionNav />

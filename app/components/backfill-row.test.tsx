@@ -104,5 +104,5 @@ test("opens the workout preview from a backfill row", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Preview Old ring circuit" }));
 
   expect(screen.getByRole("dialog", { name: "Old ring circuit" })).toBeVisible();
-  expect(screen.getByText("Exercises · 0")).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Exercises (0)" })).toBeVisible();
 });

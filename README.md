@@ -24,6 +24,8 @@ data.
 - Per-activity-type rules and a configurable display timezone.
 - **Hevy → Garmin** strength sync: structured exercise sets, with matched
   workouts held for your decision before anything is changed.
+- Hevy workouts reach Strava with Strava's own exercises, so sets, reps,
+  weights and the muscle map show correctly.
 - Backfill of historical Hevy workouts, previewed before any import.
 - Single self-contained container; state persisted to a mounted volume.
 
@@ -115,6 +117,12 @@ exactly what it would do to each workout, including any exercise it has no
 Garmin mapping for, before writing anything. Exercises that ActivSync cannot
 place are surfaced so you can map them yourself under **Hevy → Exercise
 mappings**.
+
+On Strava, a Hevy-linked activity is uploaded with each set named from
+Strava's exercise library; heart rate, calories and timing still come from
+the watch. **Hevy → Exercise mappings** shows both the Garmin and the Strava
+exercise for every Hevy exercise, and either can be overridden. Strava
+does not show the device name on these uploads.
 
 The **description template** is editable in Settings, with placeholders for the
 workout title, duration, calories, average heart rate, exercise summary, and

@@ -1,6 +1,7 @@
 import { ChevronDownIcon } from "lucide-react";
 
 import type { HevyWorkoutDetail, HevyWorkoutSetDetail } from "@/lib/api";
+import { MetaList } from "@/components/meta-list";
 
 export function HevyWorkoutDetailContent({ detail }: { detail: HevyWorkoutDetail }) {
   return (
@@ -23,7 +24,9 @@ export function HevyWorkoutDetailContent({ detail }: { detail: HevyWorkoutDetail
       ) : null}
 
       <section>
-        <h3 className="mb-3 text-sm font-bold">Exercises · {detail.exercises.length}</h3>
+        <h3 className="mb-3 text-sm font-bold">
+          Exercises <span className="font-normal text-muted-foreground">({detail.exercises.length})</span>
+        </h3>
         {detail.exercises.length === 0 ? (
           <p className="text-sm text-muted-foreground">No exercises were recorded.</p>
         ) : (
@@ -44,12 +47,13 @@ export function HevyWorkoutDetailContent({ detail }: { detail: HevyWorkoutDetail
                   <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
                     <div className="min-w-0 flex-1">
                       <h4 className="font-semibold">{exercise.title}</h4>
-                      <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                        {exercise.sets.length}{" "}
-                        {exercise.sets.length === 1 ? "set" : "sets"}
-                        {summariseSets(exercise.sets) &&
-                          ` · ${summariseSets(exercise.sets)}`}
-                      </p>
+                      <MetaList
+                        className="mt-0.5 font-mono text-xs text-muted-foreground"
+                        items={[
+                          `${exercise.sets.length} ${exercise.sets.length === 1 ? "set" : "sets"}`,
+                          summariseSets(exercise.sets),
+                        ]}
+                      />
                     </div>
                     <ChevronDownIcon
                       aria-hidden="true"
@@ -162,7 +166,7 @@ function formatSetResult(set: HevyWorkoutSetDetail) {
   if (set.distanceMeters != null) parts.push(`${formatNumber(set.distanceMeters)} m`);
   if (set.durationSeconds != null) parts.push(formatSeconds(set.durationSeconds));
   if (set.customMetric != null) parts.push(String(set.customMetric));
-  return parts.join(" · ") || "—";
+  return parts.join(", ") || "—";
 }
 
 /**
@@ -203,5 +207,5 @@ function summariseSets(sets: HevyWorkoutSetDetail[]): string {
     summariseRange(present((set) => set.durationSeconds), formatSeconds),
   ]
     .filter((part): part is string => part !== null)
-    .join(" · ");
+    .join(", ");
 }

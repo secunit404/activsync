@@ -111,7 +111,7 @@ export function GarminStep({
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 1 · Garmin
+          Step 1: Garmin
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Connect your Garmin account
@@ -221,7 +221,7 @@ export function GarminStep({
       >
         <div ref={mfaBodyRef} className="flex flex-col gap-5">
           <p className="font-mono text-[10.5px] tracking-[0.14em] text-[var(--sync)] uppercase">
-            Garmin · Two-factor
+            Garmin two-factor
           </p>
           <MfaCodeInput length={6} onComplete={setCode} disabled={pending} />
         </div>

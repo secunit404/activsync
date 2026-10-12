@@ -1,3 +1,4 @@
+import json
 import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -607,3 +608,30 @@ def test_rate_limit_deadline_honours_the_retry_after_header(mock_get, conn):
         client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
 
     assert excinfo.value.retry_at == now + timedelta(seconds=300)
+
+
+@patch("activsync.strava_client.requests.get")
+@patch("activsync.strava_client.requests.post")
+def test_publish_strength_uploads_the_document_as_json(mock_post, mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=201, json=lambda: {"id": 556})
+    mock_post.return_value.raise_for_status = lambda: None
+    mock_get.return_value = MagicMock(
+        status_code=200, json=lambda: {"activity_id": 9002, "error": None},
+    )
+    mock_get.return_value.raise_for_status = lambda: None
+    document = {"version": "1.0", "sets": [{"exercise_type": "MACHINE_CHEST_PRESS"}]}
+
+    client = StravaClient(conn, "cid", "csecret")
+    strava_id = client.publish_strength(42, document, name="Pass A")
+
+    assert strava_id == 9002
+    kwargs = mock_post.call_args.kwargs
+    assert kwargs["data"] == {
+        "data_type": "json", "external_id": "garmin-42", "name": "Pass A",
+    }
+    filename, body, content_type = kwargs["files"]["file"]
+    assert (filename, content_type) == ("42.json", "application/json")
+    assert json.loads(body) == document

@@ -18,7 +18,7 @@ export function HevyStep({ pending, onConnect, onSkip }: HevyStepProps) {
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 3 · Hevy
+          Step 3: Hevy
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Connect Hevy (optional)
