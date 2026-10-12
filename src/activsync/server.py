@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from activsync import (
     api_routes,
+    auth_api_routes,
     auth_core,
     auth_middleware,
     db,
@@ -162,6 +163,14 @@ def create_app(
         hevy_queue_api_routes.create_router(
             conn,
             apply_hevy_match=apply_hevy_match,
+        )
+    )
+    app.include_router(
+        auth_api_routes.create_router(
+            conn,
+            setup_code=setup_code,
+            limiter=auth_core.AttemptLimiter(),
+            mock_mode=_mock_mode,
         )
     )
 

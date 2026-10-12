@@ -11,9 +11,9 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Literal
 
-from activsync import config, db, events, sync, view
+from activsync import auth_core, config, db, events, sync, view
 
-SetupStep = Literal["garmin", "strava", "hevy", "syncing"]
+SetupStep = Literal["account", "garmin", "strava", "hevy", "syncing"]
 
 logger = logging.getLogger("activsync.onboarding")
 
@@ -22,7 +22,12 @@ def setup_step(
     conn: sqlite3.Connection,
     connections: dict | None = None,
 ) -> SetupStep | None:
-    """Return the active first-run step, or ``None`` after onboarding."""
+    """Return the active first-run step, or ``None`` after onboarding.
+
+    ``account`` comes first even on an onboarded install: an upgrade that
+    introduces auth must be claimed before anything else is reachable."""
+    if not auth_core.auth_disabled() and not auth_core.owner_claimed(conn):
+        return "account"
     if db.get_config_value(conn, "initial_sync_done", default=False):
         return None
     connections = connections or view.connection_status(conn)

@@ -18,7 +18,7 @@ from urllib.parse import quote, urlsplit
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 
 from activsync import auth_core
 
@@ -64,6 +64,47 @@ def is_https(scope: Mapping) -> bool:
 
 def session_cookie_name(scope: Mapping) -> str:
     return SECURE_SESSION_COOKIE if is_https(scope) else SESSION_COOKIE
+
+
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else ""
+
+
+def start_session(
+    conn: sqlite3.Connection, request: Request, response: Response, method: str
+) -> None:
+    """Rotate on every login: drop whatever cookie the browser arrived with,
+    then issue a fresh token."""
+    cookie_name = session_cookie_name(request.scope)
+    previous = request.cookies.get(cookie_name)
+    if previous:
+        auth_core.revoke_session(conn, auth_core.hash_token(previous))
+    token = auth_core.create_session(
+        conn,
+        method=method,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+        now=time.time(),
+    )
+    response.set_cookie(
+        cookie_name,
+        token,
+        max_age=auth_core.SESSION_ABSOLUTE_SECONDS,
+        path="/",
+        secure=is_https(request.scope),
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def clear_session_cookie(request: Request, response: Response) -> None:
+    response.delete_cookie(
+        session_cookie_name(request.scope),
+        path="/",
+        secure=is_https(request.scope),
+        httponly=True,
+        samesite="lax",
+    )
 
 
 def login_redirect_target(request: Request) -> str:
