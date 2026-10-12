@@ -33,7 +33,11 @@ const signedIn: AuthStatus = {
   login: { passwordForm: "shown", oidc: null, strava: false },
 };
 
-const settings: AuthSettings = { passwordForm: "shown" };
+const settings: AuthSettings = {
+  passwordForm: "shown",
+  stravaLogin: false,
+  stravaLoginBlocker: null,
+};
 
 const sessions: AuthSession[] = [
   {
@@ -114,6 +118,27 @@ test("hiding the password form saves immediately", async () => {
 
   await vi.waitFor(() =>
     expect(api.saveAuthSettings).toHaveBeenCalledWith({ passwordForm: "hidden" }, expect.anything()),
+  );
+});
+
+test("the Strava toggle waits for its precondition", async () => {
+  api.getAuthSettings.mockResolvedValue({
+    ...settings,
+    stravaLoginBlocker: "Waiting for the next Strava sync.",
+  });
+  renderAccess();
+
+  expect(await screen.findByText("Waiting for the next Strava sync.")).toBeVisible();
+  expect(screen.getByRole("switch", { name: "Sign in with Strava" })).toBeDisabled();
+});
+
+test("turning on Sign in with Strava saves immediately", async () => {
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("switch", { name: "Sign in with Strava" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveAuthSettings).toHaveBeenCalledWith({ stravaLogin: true }, expect.anything()),
   );
 });
 

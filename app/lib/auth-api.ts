@@ -18,6 +18,8 @@ export type AuthStatus = {
 
 export type AuthSettings = {
   passwordForm: PasswordForm;
+  stravaLogin: boolean;
+  stravaLoginBlocker: string | null;
 };
 
 export type AuthSession = {
@@ -80,7 +82,10 @@ export function getAuthSettings(signal?: AbortSignal): Promise<AuthSettings> {
   return requestJson<AuthSettings>("/api/v1/auth/settings", { signal });
 }
 
-export function saveAuthSettings(payload: { passwordForm?: PasswordForm }) {
+export function saveAuthSettings(payload: {
+  passwordForm?: PasswordForm;
+  stravaLogin?: boolean;
+}) {
   return requestJson<AuthActionResult>("/api/v1/auth/settings", {
     method: "PUT",
     body: JSON.stringify(payload),

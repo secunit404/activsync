@@ -135,6 +135,21 @@ function SignInMethods({ settings }: { settings: AuthSettings }) {
           }
         />
       </label>
+      <label className="flex items-start justify-between gap-4 text-sm">
+        <span className="grid gap-0.5">
+          <span>Sign in with Strava</span>
+          <span className="text-xs text-muted-foreground">
+            {settings.stravaLoginBlocker ??
+              "Only the Strava athlete connected to ActivSync can sign in."}
+          </span>
+        </span>
+        <Switch
+          aria-label="Sign in with Strava"
+          checked={settings.stravaLogin && !settings.stravaLoginBlocker}
+          disabled={save.isPending || Boolean(settings.stravaLoginBlocker)}
+          onCheckedChange={(checked) => save.mutate({ stravaLogin: checked === true })}
+        />
+      </label>
     </div>
   );
 }
