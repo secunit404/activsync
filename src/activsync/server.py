@@ -7,6 +7,7 @@ import logging
 import os
 import secrets
 import sqlite3
+import time
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlencode
@@ -18,6 +19,8 @@ from fastapi.staticfiles import StaticFiles
 
 from activsync import (
     api_routes,
+    auth_core,
+    auth_middleware,
     db,
     dev_mock,
     events,
@@ -39,7 +42,7 @@ logger = logging.getLogger("activsync.server")
 
 STATIC_DIR = Path(__file__).parent / "static"
 WEB_DIR = Path(__file__).parent / "web"
-SPA_RESERVED_PREFIXES = ("api", "assets", "strava")
+SPA_RESERVED_PREFIXES = auth_middleware.SPA_RESERVED_PREFIXES
 
 
 def _garmin_token_dir() -> str:
@@ -101,9 +104,23 @@ def create_app(
     apply_hevy_match: Callable[[str, str], str] | None = None,
     process_hevy_workout: Callable[[str], str] | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="ActivSync", lifespan=lifespan)
+    # No /docs or /openapi.json: deny-by-default would otherwise serve them
+    # through the SPA rule's public GET fallback.
+    app = FastAPI(
+        title="ActivSync",
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     resolved_web_dir = web_dir or WEB_DIR
     react_index = resolved_web_dir / "index.html"
+    public_url = auth_core.public_url()
+    setup_code = auth_core.SetupCode(conn)
+    setup_code.ensure()
+    auth_core.prune_expired_sessions(conn, time.time())
+    app.state.db = conn
+    app.state.setup_code = setup_code
 
     if (resolved_web_dir / "assets").is_dir():
         app.mount(
@@ -205,7 +222,7 @@ def create_app(
                 "Save your Strava client ID and client secret before connecting."
             )
         strava = _build_strava_client(conn)
-        redirect_uri = str(request.url_for("strava_callback"))
+        redirect_uri = auth_middleware.external_url(request, "strava_callback", public_url)
         state = secrets.token_urlsafe(32)
         db.set_config_value(conn, "strava_oauth_state", state)
         return RedirectResponse(strava.authorize_url(redirect_uri, state))
@@ -270,4 +287,14 @@ def create_app(
             headers={"Cache-Control": "no-cache"},
         )
 
+    # Starlette runs the last-added middleware first, so this reads bottom-up
+    # as the request pipeline: security headers, authentication, then CSRF.
+    app.add_middleware(auth_middleware.CsrfMiddleware, public_url=public_url)
+    app.add_middleware(
+        auth_middleware.AuthenticateMiddleware, conn=conn, public_url=public_url
+    )
+    app.add_middleware(
+        auth_middleware.SecurityHeadersMiddleware,
+        content_security_policy=auth_middleware.content_security_policy(react_index),
+    )
     return app

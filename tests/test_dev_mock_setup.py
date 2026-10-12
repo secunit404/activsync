@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from fastapi.testclient import TestClient
+from auth_helpers import owner_client
 
 from activsync import db, dev_mock, view
 from activsync import server as server_module
@@ -24,7 +24,7 @@ def seeded_conn(tmp_path):
 
 
 def _client(conn):
-    return TestClient(create_app(conn), follow_redirects=False)
+    return owner_client(create_app(conn), follow_redirects=False)
 
 
 def _garmin_payload(password: str = "whatever") -> dict:

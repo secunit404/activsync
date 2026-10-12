@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlparse
 
-from fastapi.testclient import TestClient
+from auth_helpers import owner_client
 
 from activsync import db
 from activsync import server as server_module
@@ -32,7 +32,7 @@ def test_strava_connect_issues_and_persists_oauth_state(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(server_module, "_build_strava_client", lambda _conn: fake_strava)
 
-    response = TestClient(create_app(conn)).get(
+    response = owner_client(create_app(conn)).get(
         "/strava/connect",
         follow_redirects=False,
     )
@@ -50,7 +50,7 @@ def test_strava_callback_rejects_mismatched_and_replayed_state(tmp_path, monkeyp
     db.set_config_value(conn, "strava_oauth_state", "expected")
     fake_strava = MagicMock()
     monkeypatch.setattr(server_module, "_build_strava_client", lambda _conn: fake_strava)
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     mismatch = client.get(
         "/strava/callback?code=code&state=wrong",
@@ -84,7 +84,7 @@ def test_strava_callback_connects_and_runs_post_setup_catch_up(
     monkeypatch.setattr(server_module, "_build_garmin_client", lambda _conn: fake_garmin)
     monkeypatch.setattr(server_module.onboarding, "run_catch_up", catch_up)
 
-    response = TestClient(create_app(conn)).get(
+    response = owner_client(create_app(conn)).get(
         "/strava/callback?code=code&state=expected",
         follow_redirects=False,
     )
@@ -108,7 +108,7 @@ def test_strava_callback_returns_to_setup_and_surfaces_declines_there(
     )
     fake_strava = MagicMock()
     monkeypatch.setattr(server_module, "_build_strava_client", lambda _conn: fake_strava)
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     db.set_config_value(conn, "strava_oauth_state", "expected")
     connected = client.get(
@@ -125,3 +125,21 @@ def test_strava_callback_returns_to_setup_and_surfaces_declines_there(
     parsed = urlparse(declined.headers["location"])
     assert parsed.path == "/setup"
     assert "declined" in parse_qs(parsed.query)["stravaError"][0]
+
+
+def test_strava_connect_builds_the_callback_from_the_public_url(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACTIVSYNC_PUBLIC_URL", "https://activsync.example.com/")
+    conn = db.connect(str(tmp_path / "oauth.db"))
+    _complete_setup(conn)
+    fake_strava = MagicMock()
+    fake_strava.authorize_url.side_effect = (
+        lambda redirect_uri, state: f"https://strava.test/oauth?redirect={redirect_uri}"
+    )
+    monkeypatch.setattr(server_module, "_build_strava_client", lambda _conn: fake_strava)
+    client = owner_client(create_app(conn), base_url="https://activsync.example.com")
+
+    response = client.get("/strava/connect", follow_redirects=False)
+
+    assert response.headers["location"] == (
+        "https://strava.test/oauth?redirect=https://activsync.example.com/strava/callback"
+    )

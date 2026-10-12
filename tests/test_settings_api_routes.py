@@ -1,7 +1,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from fastapi.testclient import TestClient
+from auth_helpers import owner_client
 
 from activsync import config, db, dev_mock, hevy_db
 from activsync.server import create_app
@@ -10,7 +10,7 @@ from activsync.server import create_app
 def _client(tmp_path, monkeypatch, *, mock=True):
     monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "1" if mock else "0")
     conn = db.connect(str(tmp_path / "settings-api.db"))
-    return conn, TestClient(create_app(conn), follow_redirects=False)
+    return conn, owner_client(create_app(conn), follow_redirects=False)
 
 
 def _pinned_hevy_workouts(monkeypatch):
@@ -483,7 +483,7 @@ def test_saving_a_mapping_starts_the_woken_workout_immediately(
     monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "1")
     conn = db.connect(str(tmp_path / "settings-api.db"))
     started: list[str] = []
-    client = TestClient(
+    client = owner_client(
         create_app(conn, process_hevy_workout=started.append),
         follow_redirects=False,
     )
@@ -646,7 +646,7 @@ def test_automatic_backfill_starts_a_known_garmin_match_immediately(
     monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "1")
     conn = db.connect(str(tmp_path / "settings-api.db"))
     started: list[str] = []
-    client = TestClient(
+    client = owner_client(
         create_app(conn, process_hevy_workout=started.append),
         follow_redirects=False,
     )
