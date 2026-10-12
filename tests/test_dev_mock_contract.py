@@ -144,3 +144,10 @@ def test_dev_taxonomy_is_large_enough_to_exercise_the_collapsed_picker(conn):
     """The picker only collapses past 18 categories. A dev list under that
     renders a shape production never shows."""
     assert len(dev_mock.garmin_activity_types()) > 18
+
+
+def test_fake_strava_connect_records_the_dev_athlete(conn):
+    dev_mock.FakeStravaClient(conn).exchange_code("dev-mock-code")
+
+    tokens = db.get_config_value(conn, "strava_tokens")
+    assert tokens["athlete_id"] == dev_mock.DEV_STRAVA_ATHLETE_ID

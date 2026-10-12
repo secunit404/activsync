@@ -32,6 +32,15 @@ MAX_ACTIVITY_PAGES = 10
 
 DEFAULT_MATCH_TOLERANCE_MINUTES = 5
 
+# Shared by Connect and Sign in with Strava so a login never narrows the grant
+# the uploader depends on. `read` is listed explicitly because Strava only
+# treats a repeat authorization as already granted (and skips the consent
+# screen) when the request names every scope it grants, and it always grants
+# `read`. activity:read_all, not just activity:read, so duplicate detection
+# also sees activities the athlete has marked private.
+STRAVA_SCOPE = "read,activity:write,activity:read_all"
+REQUIRED_SCOPES = frozenset({"activity:write", "activity:read_all"})
+
 
 class StravaAuthError(Exception):
     """Raised when Strava rejects our credentials or refresh token."""
@@ -106,6 +115,14 @@ def _raise_if_rate_limited(response, now: datetime | None = None) -> None:
     )
 
 
+def scope_is_sufficient(granted: str | None) -> bool:
+    """`None` means the grant was never reported, as for tokens stored before
+    scopes were recorded; only a reported, narrower grant is a problem."""
+    if granted is None:
+        return True
+    return REQUIRED_SCOPES <= set(granted.split(","))
+
+
 def _parse_start_date(raw: str) -> datetime:
     return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
@@ -143,19 +160,16 @@ class StravaClient:
         return bool(tokens and tokens.get("refresh_token"))
 
     def authorize_url(self, redirect_uri: str, state: str) -> str:
-        # activity:read_all (not just activity:read) so duplicate-detection
-        # also sees activities the athlete has marked private — otherwise a
-        # private duplicate wouldn't be found and we'd re-upload it anyway.
         # `state` is echoed back to the callback unchanged; the caller keeps
         # the issued value and rejects any callback that doesn't match.
         return (
             f"{STRAVA_AUTHORIZE_URL}?client_id={self._client_id}"
             f"&redirect_uri={redirect_uri}&response_type=code"
-            f"&approval_prompt=auto&scope=activity:write,activity:read_all"
+            f"&approval_prompt=auto&scope={STRAVA_SCOPE}"
             f"&state={state}"
         )
 
-    def exchange_code(self, code: str) -> None:
+    def fetch_tokens(self, code: str) -> dict:
         response = requests.post(STRAVA_TOKEN_URL, data={
             "client_id": self._client_id,
             "client_secret": self._client_secret,
@@ -163,12 +177,23 @@ class StravaClient:
             "grant_type": "authorization_code",
         }, timeout=30)
         response.raise_for_status()
-        payload = response.json()
-        db.set_config_value(self._conn, "strava_tokens", {
+        return response.json()
+
+    def store_tokens(self, payload: dict, *, granted_scope: str | None = None) -> None:
+        tokens = {
             "access_token": payload["access_token"],
             "refresh_token": payload["refresh_token"],
             "expires_at": payload["expires_at"],
-        })
+        }
+        athlete_id = (payload.get("athlete") or {}).get("id")
+        if athlete_id:
+            tokens["athlete_id"] = int(athlete_id)
+        if granted_scope is not None:
+            tokens["scope"] = granted_scope
+        db.set_config_value(self._conn, "strava_tokens", tokens)
+
+    def exchange_code(self, code: str) -> None:
+        self.store_tokens(self.fetch_tokens(code))
         logger.info("strava connected")
 
     def _get_access_token(self) -> str:
@@ -191,6 +216,7 @@ class StravaClient:
 
         payload = response.json()
         refreshed = {
+            **tokens,
             "access_token": payload["access_token"],
             "refresh_token": payload["refresh_token"],
             "expires_at": payload["expires_at"],
@@ -263,10 +289,32 @@ class StravaClient:
             )
         _raise_if_rate_limited(response, now)
         response.raise_for_status()
+        activities = response.json()
+        self._remember_athlete_id(activities)
         return [
             {"id": int(a["id"]), "start_date": _parse_start_date(a["start_date"])}
-            for a in response.json()
+            for a in activities
         ]
+
+    def _remember_athlete_id(self, activities: list[dict]) -> None:
+        """Installs connected before athlete_id was stored learn it here, from
+        a poll that already runs under the existing grant."""
+        athlete_id = next(
+            (
+                (activity.get("athlete") or {}).get("id")
+                for activity in activities
+                if (activity.get("athlete") or {}).get("id")
+            ),
+            None,
+        )
+        if athlete_id is None:
+            return
+        with db.transaction(self._conn):
+            tokens = db.get_config_value(self._conn, "strava_tokens")
+            if tokens and not tokens.get("athlete_id"):
+                db.set_config_value(
+                    self._conn, "strava_tokens", {**tokens, "athlete_id": int(athlete_id)}
+                )
 
     def list_activities_between(
         self, after: datetime, before: datetime, now: datetime | None = None

@@ -13,6 +13,7 @@ from activsync.strava_client import (
     StravaRateLimitError,
     StravaUploadRejected,
     StravaWindowIncompleteError,
+    scope_is_sufficient,
 )
 
 
@@ -40,7 +41,7 @@ def test_authorize_url_includes_client_id_and_scope(conn):
     url = client.authorize_url("http://localhost:8000/strava/callback", "s3cr3t-state")
 
     assert "client_id=cid123" in url
-    assert "scope=activity:write,activity:read_all" in url
+    assert "scope=read,activity:write,activity:read_all" in url
     assert "redirect_uri=http://localhost:8000/strava/callback" in url
 
 
@@ -648,3 +649,82 @@ def test_publish_strength_uploads_the_document_as_json(mock_post, mock_get, conn
     filename, body, content_type = kwargs["files"]["file"]
     assert (filename, content_type) == ("42.json", "application/json")
     assert json.loads(body) == document
+
+
+@patch("activsync.strava_client.requests.post")
+def test_exchange_code_stores_the_athlete_id(mock_post, conn):
+    mock_post.return_value = MagicMock(
+        status_code=200,
+        json=lambda: {
+            "access_token": "a1", "refresh_token": "r1", "expires_at": 12345,
+            "athlete": {"id": 777, "firstname": "A"},
+        },
+    )
+    mock_post.return_value.raise_for_status = lambda: None
+
+    StravaClient(conn, "cid", "csecret").exchange_code("authcode")
+
+    assert db.get_config_value(conn, "strava_tokens")["athlete_id"] == 777
+
+
+@patch("activsync.strava_client.requests.post")
+def test_refreshing_keeps_the_athlete_id_and_scope(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "old", "refresh_token": "r", "expires_at": time.time() - 10,
+        "athlete_id": 777, "scope": "read,activity:write,activity:read_all",
+    })
+    mock_post.return_value = MagicMock(
+        status_code=200,
+        json=lambda: {"access_token": "fresh", "refresh_token": "r2", "expires_at": time.time() + 3600},
+    )
+    mock_post.return_value.raise_for_status = lambda: None
+
+    StravaClient(conn, "cid", "csecret")._get_access_token()
+
+    tokens = db.get_config_value(conn, "strava_tokens")
+    assert tokens["athlete_id"] == 777
+    assert tokens["scope"] == "read,activity:write,activity:read_all"
+
+
+@patch("activsync.strava_client.requests.get")
+def test_the_activity_poll_backfills_a_missing_athlete_id(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_get.return_value = _page([
+        {"id": 7777, "start_date": "2026-07-09T09:00:30Z", "athlete": {"id": 555, "resource_state": 1}},
+    ])
+
+    StravaClient(conn, "cid", "csecret").list_activities_between(
+        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
+    )
+
+    assert db.get_config_value(conn, "strava_tokens")["athlete_id"] == 555
+
+
+@patch("activsync.strava_client.requests.get")
+def test_the_activity_poll_never_overwrites_a_known_athlete_id(mock_get, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+        "athlete_id": 111,
+    })
+    mock_get.return_value = _page([
+        {"id": 7777, "start_date": "2026-07-09T09:00:30Z", "athlete": {"id": 555}},
+    ])
+
+    StravaClient(conn, "cid", "csecret").list_activities_between(
+        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
+    )
+
+    assert db.get_config_value(conn, "strava_tokens")["athlete_id"] == 111
+
+
+@pytest.mark.parametrize(("granted", "sufficient"), [
+    (None, True),
+    ("read,activity:write,activity:read_all", True),
+    ("activity:write,activity:read_all", True),
+    ("read,activity:read_all", False),
+    ("read", False),
+])
+def test_scope_is_sufficient(granted, sufficient):
+    assert scope_is_sufficient(granted) is sufficient

@@ -81,6 +81,8 @@ HEVY_DEV_BACKFILL_UNMAPPABLE_ID = "hw-dev-backfill-unmappable"
 HEVY_DEV_BACKFILL_IMPORTABLE_ID = "hw-dev-backfill-importable"
 
 # Watch/upload activity ids the seeded scenarios link against.
+DEV_STRAVA_ATHLETE_ID = 4242
+
 HEVY_DEV_MERGED_ACTIVITY_ID = 910001
 HEVY_DEV_SYNCING_ACTIVITY_ID = 910002
 HEVY_DEV_PASSIVE_ACTIVITY_ID = 910050
@@ -700,12 +702,27 @@ class FakeStravaClient:
         separator = "&" if "?" in redirect_uri else "?"
         return f"{redirect_uri}{separator}code=dev-mock-code&state={state}"
 
-    def exchange_code(self, code: str) -> None:
-        db.set_config_value(self._conn, "strava_tokens", {
+    def fetch_tokens(self, code: str) -> dict:
+        return {
             "access_token": "dev-mock-access-token",
             "refresh_token": "dev-mock-refresh-token",
             "expires_at": int(time.time()) + 6 * 3600,
-        })
+            "athlete": {"id": DEV_STRAVA_ATHLETE_ID},
+        }
+
+    def store_tokens(self, payload: dict, *, granted_scope: str | None = None) -> None:
+        tokens = {
+            "access_token": payload["access_token"],
+            "refresh_token": payload["refresh_token"],
+            "expires_at": payload["expires_at"],
+            "athlete_id": payload["athlete"]["id"],
+        }
+        if granted_scope is not None:
+            tokens["scope"] = granted_scope
+        db.set_config_value(self._conn, "strava_tokens", tokens)
+
+    def exchange_code(self, code: str) -> None:
+        self.store_tokens(self.fetch_tokens(code))
 
     def disconnect(self) -> None:
         db.set_config_value(self._conn, "strava_tokens", None)
