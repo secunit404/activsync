@@ -100,12 +100,12 @@ The setup wizard shows the exact value to enter. Two things it can't tell you:
   Only one can be registered, and subdomains of it are fine but an unrelated
   address is not. Always start **Connect Strava** from the address you
   registered — everything else works on either.
-- **Behind an HTTPS proxy?** Set `FORWARDED_ALLOW_IPS` to the proxy's address,
-  or `*` if the container is only reachable through it, so the callback URL is
-  built as `https://`. `*` trusts `X-Forwarded-Proto` from any client, so don't
-  use it on a directly reachable container, and see
-  [Exposing ActivSync publicly](#exposing-activsync-publicly) before using it
-  on a public one.
+- **Behind an HTTPS proxy?** Set `FORWARDED_ALLOW_IPS` to the proxy's address
+  (or its Docker network, e.g. `172.18.0.0/16`) so the callback URL is built as
+  `https://`. Avoid `*`, even when the container is only reachable through the
+  proxy: it makes uvicorn take the client-supplied end of `X-Forwarded-For`, so
+  clients can pick their own sign-in rate-limit address. See
+  [Exposing ActivSync publicly](#exposing-activsync-publicly).
 
 ## Signing in
 
@@ -248,9 +248,11 @@ make test      # run the Python and frontend test suites
 ```
 
 `make dev` runs with auto-reload and **mock data**: it seeds an isolated
-`data/activsync-dev.db`, requires no password, and never contacts Garmin or
-Strava — your real `data/activsync.db` is never touched. To walk the first-run
-wizard from a clean slate, use `make dev-fresh`.
+`data/activsync-dev.db`, signs in with the dev password
+`activsync-dev-password`, and never contacts Garmin or Strava — your real
+`data/activsync.db` is never touched. To walk the first-run wizard from a clean
+slate, including the claim step, use `make dev-fresh`; its setup code is printed
+in the terminal.
 
 In mock mode the wizard is fully faked: any Garmin email/password connects (use
 password `mfa` to trigger the MFA modal; any code except `000000` is accepted);

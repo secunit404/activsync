@@ -13,10 +13,10 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Europe/Stockholm
-      # Behind an HTTPS reverse proxy, trust it to set X-Forwarded-Proto so the
-      # Strava callback URL is built as https:// — see the README. Only enable
-      # this when the container is reachable solely through the proxy.
-      # - FORWARDED_ALLOW_IPS=*
+      # Behind a reverse proxy, name its address (or its Docker network) so
+      # X-Forwarded-Proto/-For are trusted from it alone. Avoid `*`: it lets any
+      # client pick its own rate-limit address. See the README.
+      # - FORWARDED_ALLOW_IPS=172.18.0.0/16
       # Your public address, once it is reachable from the internet — see
       # "Exposing ActivSync publicly" in the README.
       # - ACTIVSYNC_PUBLIC_URL=https://activsync.example.com
