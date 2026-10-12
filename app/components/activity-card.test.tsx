@@ -90,26 +90,32 @@ function renderCard(activity: Activity, props: Partial<{ selected: boolean; onTo
   return router;
 }
 
+function metaItems(text: string) {
+  return Array.from(screen.getByText(text).parentElement?.children ?? []).map(
+    (item) => item.textContent,
+  );
+}
+
 test("renders the title, status pill and metadata line", () => {
   renderCard(run);
   expect(screen.getByText("Morning run")).toBeInTheDocument();
   expect(screen.getByText("PENDING")).toBeInTheDocument();
-  expect(screen.getByText("21 Jul · 06:42 · RUNNING")).toBeInTheDocument();
+  expect(metaItems("21 Jul 06:42")).toEqual(["21 Jul 06:42", "RUNNING"]);
 });
 
 test("renders the stat line joining only the metrics that are present", () => {
   renderCard(run);
-  expect(screen.getByText("52:14 · 10.2 km · 156 bpm")).toBeInTheDocument();
+  expect(metaItems("52:14")).toEqual(["52:14", "10.2 km", "156 bpm"]);
 });
 
 test("omits missing stat segments instead of showing an em dash", () => {
   renderCard(lift);
-  expect(screen.getByText("48:00 · 8,420 kg")).toBeInTheDocument();
+  expect(metaItems("48:00")).toEqual(["48:00", "8,420 kg"]);
 });
 
 test("shows via Hevy in the metadata line instead of the type when hevyBadge is set", () => {
   renderCard(lift);
-  expect(screen.getByText("21 Jul · 06:42 · via Hevy")).toBeInTheDocument();
+  expect(metaItems("21 Jul 06:42")).toEqual(["21 Jul 06:42", "via Hevy"]);
 });
 
 test("checkbox toggles selection without navigating", async () => {
@@ -122,7 +128,7 @@ test("checkbox toggles selection without navigating", async () => {
 
 test("clicking the card body (not the title link or checkbox) navigates to the activity detail", async () => {
   renderCard(run);
-  await userEvent.click(screen.getByText("52:14 · 10.2 km · 156 bpm"));
+  await userEvent.click(screen.getByText("52:14"));
   expect(await screen.findByText("Detail view")).toBeInTheDocument();
 });
 

@@ -24,6 +24,7 @@ import {
   saveStravaCredentials,
   type SettingsState,
 } from "@/lib/api";
+import { MetaList } from "@/components/meta-list";
 
 export function ConnectionsSettings({ state }: { state: SettingsState }) {
   const syncGarmin = useSettingsAction(() => runManualSync("garmin"));
@@ -456,7 +457,7 @@ function HevyDialog({ state }: { state: SettingsState }) {
             }}
           >
             <p className="rounded-lg border border-border/70 bg-background p-3 font-mono text-xs text-muted-foreground">
-              API key saved · {state.hevy.status}
+              <MetaList items={["API key saved", state.hevy.status]} />
             </p>
             <Field>
               <div className="flex items-center gap-0.5">
