@@ -112,6 +112,10 @@ const toolsState: HevyToolsState = {
       subcategory: null,
       categoryName: null,
       subcategoryName: null,
+      stravaExerciseType: null,
+      stravaExerciseName: null,
+      stravaSource: "",
+      stravaStandardExerciseType: null,
     },
     {
       templateId: "tmpl-mapped",
@@ -129,12 +133,17 @@ const toolsState: HevyToolsState = {
       subcategory: 0,
       categoryName: "Bench Press",
       subcategoryName: "Barbell",
+      stravaExerciseType: null,
+      stravaExerciseName: null,
+      stravaSource: "",
+      stravaStandardExerciseType: null,
     },
   ],
   categories: [],
+  stravaGroups: [],
 };
 
-const emptyToolsState: HevyToolsState = { mappings: [], categories: [] };
+const emptyToolsState: HevyToolsState = { mappings: [], categories: [], stravaGroups: [] };
 
 function renderHevy({
   appState = connectedAppState,

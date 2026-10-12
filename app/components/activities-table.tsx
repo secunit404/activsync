@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { activityEffort } from "@/lib/activity-metrics";
 import type { Activity } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MetaList } from "@/components/meta-list";
 
 type ActivitiesTableProps = {
   activities: Activity[];
@@ -120,10 +121,13 @@ function ActivityRow({
           >
             {activity.title}
           </Link>
-          <span className="font-mono text-[11.5px] text-muted-foreground">
-            {activity.startDateDisplay} · {activity.startClockDisplay}
-            {activity.hevyBadge ? " · via Hevy" : ""}
-          </span>
+          <MetaList
+            className="font-mono text-[11.5px] text-muted-foreground"
+            items={[
+              `${activity.startDateDisplay} ${activity.startClockDisplay}`,
+              activity.hevyBadge && "via Hevy",
+            ]}
+          />
         </div>
       </td>
       <td className="px-2 py-3">

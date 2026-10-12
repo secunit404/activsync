@@ -113,7 +113,7 @@ test("an imported Garmin match says queued while automatic processing starts", (
 
   // The status reads once, on the row's detail line — there is no second
   // badge repeating it next to the actions.
-  expect(screen.getByText(/· Queued$/)).toBeVisible();
+  expect(screen.getByText("Queued")).toBeVisible();
   expect(screen.queryByText(/waiting for garmin/i)).not.toBeInTheDocument();
 });
 
@@ -182,7 +182,7 @@ test("loads and shows the actual Hevy workout only after opening details", async
         ],
       },
     ],
-    descriptionPreview: "🏋️ Leg Day\n\n• Back Squat (Barbell): 1 set · 100.0kg × 8",
+    descriptionPreview: "🏋️ Leg Day\n\n• Back Squat (Barbell): 1 set - 100.0kg × 8",
   });
   renderQueue(
     emptyQueue({
@@ -197,7 +197,7 @@ test("loads and shows the actual Hevy workout only after opening details", async
   const dialog = await screen.findByRole("dialog", { name: "Leg Day" });
   expect(getHevyWorkout).toHaveBeenCalledWith("hevy-1", expect.any(AbortSignal));
   expect(within(dialog).getByText("Back Squat (Barbell)")).toBeInTheDocument();
-  expect(within(dialog).getByText("100 kg · 8 reps")).toBeInTheDocument();
+  expect(within(dialog).getByRole("cell", { name: "100 kg, 8 reps" })).toBeInTheDocument();
   expect(within(dialog).getByText("Controlled tempo", { exact: false })).toBeInTheDocument();
   expect(within(dialog).getByText(/Description only always uses/i)).toBeInTheDocument();
 });
@@ -401,7 +401,7 @@ test("in-flight items show their status and inspection but no mutation actions",
     }),
   );
 
-  expect(screen.getByText(/· Waiting for Garmin$/)).toBeInTheDocument();
+  expect(screen.getByText("Waiting for Garmin")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "View workout" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();

@@ -746,6 +746,16 @@ class FakeStravaClient:
         time.sleep(DEV_PUBLISH_DELAY_SECONDS)
         return 9_000_000 + int(garmin_activity_id)
 
+    def publish_strength(
+        self,
+        garmin_activity_id: int,
+        document: dict,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> int:
+        time.sleep(DEV_PUBLISH_DELAY_SECONDS)
+        return 9_000_000 + int(garmin_activity_id)
+
     def update_activity_metadata(
         self, strava_activity_id: int, name: str, description: str
     ) -> None:

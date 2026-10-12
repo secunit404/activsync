@@ -9,9 +9,10 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from activsync import config, db, hevy_db, timeutil
+from activsync import config, db, hevy_db, strava_strength, timeutil
 from activsync.garmin_client import ActivityRecord, GarminClient
-from activsync.strava_client import StravaClient, match_closest_activity
+from activsync.strava_client import StravaClient, StravaUploadRejected, match_closest_activity
+from activsync.strava_exercise_mapper import StravaMappingMiss
 
 logger = logging.getLogger("activsync")
 
@@ -174,12 +175,42 @@ def _publish_row(
         return
 
     fit_bytes = garmin.download_fit(garmin_activity_id)
-    strava_activity_id = strava.publish(
-        garmin_activity_id, fit_bytes,
-        name=row["title"],
-        description=row.get("description") or None,
-    )
+    name, description = row["title"], row.get("description") or None
+    document = _strength_document(conn, garmin_activity_id, fit_bytes)
+    strava_activity_id = None
+    if document is not None:
+        try:
+            strava_activity_id = strava.publish_strength(
+                garmin_activity_id, document, name=name, description=description)
+        except StravaUploadRejected as exc:
+            logger.warning("strava upload %s: Strava rejected Hevy's sets, "
+                           "uploading the FIT instead: %s", garmin_activity_id, exc)
+    if strava_activity_id is None:
+        strava_activity_id = strava.publish(
+            garmin_activity_id, fit_bytes, name=name, description=description)
     db.set_published(conn, garmin_activity_id, strava_activity_id, now)
+
+
+def _strength_document(
+    conn: sqlite3.Connection, garmin_activity_id: int, fit_bytes: bytes
+) -> dict | None:
+    """Strava's JSON strength upload for a Hevy-linked activity, or None to
+    upload the FIT. Strava reads a FIT's sets through its own partial table of
+    Garmin exercise ids; the JSON names Strava's exercises directly."""
+    workout = hevy_db.applied_workout_for_activity(conn, garmin_activity_id)
+    # "described" kept the watch's sets on Garmin; Strava should match them.
+    if workout is None or workout["status"] == "described":
+        return None
+    try:
+        payload = json.loads(workout["payload"] or "{}")
+        return strava_strength.build_strength_upload(
+            conn, payload, fit_bytes,
+            tz_name=config.load_config(conn).get("display_timezone"),
+        )
+    except (StravaMappingMiss, ValueError) as exc:
+        logger.warning("strava upload %s: uploading the FIT instead of Hevy's "
+                       "sets: %s", garmin_activity_id, exc)
+        return None
 
 
 def sync_garmin(

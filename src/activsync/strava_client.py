@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import time
@@ -38,6 +39,11 @@ class StravaAuthError(Exception):
 
 class StravaUploadError(Exception):
     """Raised when a Strava upload fails or Strava rejects the activity."""
+
+
+class StravaUploadRejected(StravaUploadError):
+    """Strava refused the uploaded file itself (a 4xx or a processing error),
+    as opposed to a timeout where the upload may still land."""
 
 
 class StravaWindowIncompleteError(Exception):
@@ -323,10 +329,29 @@ class StravaClient:
         return match_closest_activity(activities, start_time, tolerance_minutes)
 
     def publish(self, garmin_activity_id: int, fit_bytes: bytes, name: str | None = None, description: str | None = None) -> int:
+        return self._upload(
+            (f"{garmin_activity_id}.fit", fit_bytes), "fit",
+            garmin_activity_id, name, description,
+        )
+
+    def publish_strength(
+        self, garmin_activity_id: int, document: dict,
+        name: str | None = None, description: str | None = None,
+    ) -> int:
+        """Upload a strength activity in Strava's JSON format (see strava_strength)."""
+        return self._upload(
+            (f"{garmin_activity_id}.json", json.dumps(document).encode(), "application/json"),
+            "json", garmin_activity_id, name, description,
+        )
+
+    def _upload(
+        self, file: tuple, data_type: str, garmin_activity_id: int,
+        name: str | None, description: str | None,
+    ) -> int:
         access_token = self._get_access_token()
         headers = {"Authorization": f"Bearer {access_token}"}
-        files = {"file": (f"{garmin_activity_id}.fit", fit_bytes)}
-        data = {"data_type": "fit", "external_id": f"garmin-{garmin_activity_id}"}
+        files = {"file": file}
+        data = {"data_type": data_type, "external_id": f"garmin-{garmin_activity_id}"}
         # Without this, Strava ignores the FIT file's own metadata and
         # auto-generates a name from start date/location — the Garmin title
         # (set in Garmin Connect, not embedded in the FIT file) never lands.
@@ -341,6 +366,9 @@ class StravaClient:
         if response.status_code == 401:
             raise StravaAuthError("Strava access token rejected")
         _raise_if_rate_limited(response)
+        if 400 <= response.status_code < 500:
+            raise StravaUploadRejected(
+                f"upload rejected ({response.status_code}): {response.text[:200]}")
         response.raise_for_status()
 
         upload_id = response.json()["id"]
@@ -359,7 +387,7 @@ class StravaClient:
             payload = response.json()
 
             if payload.get("error"):
-                raise StravaUploadError(payload["error"])
+                raise StravaUploadRejected(payload["error"])
             if payload.get("activity_id"):
                 return int(payload["activity_id"])
 

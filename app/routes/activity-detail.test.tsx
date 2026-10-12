@@ -160,8 +160,8 @@ test("preserves the description's saved line breaks", () => {
   const multilineDescription = [
     "🏋️ Afternoon workout 💪",
     "",
-    "Chest Fly (Machine): 3 sets · 57.5kg × 9",
-    "Lat Pulldown (Cable): 3 sets · 50.0kg × 9",
+    "Chest Fly (Machine): 3 sets - 57.5kg × 9",
+    "Lat Pulldown (Cable): 3 sets - 50.0kg × 9",
   ].join("\n");
   renderDetail({ ...fixture, description: multilineDescription });
 

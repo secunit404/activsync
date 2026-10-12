@@ -16,6 +16,7 @@ import { getAppState, type Activity } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 import type { Route } from "./+types/activity-detail";
+import { MetaList } from "@/components/meta-list";
 
 // `:id` (see app/routes.ts) has no built-in way to constrain its shape to
 // "numeric" the way an Express-style `:id(\d+)` would — React Router route
@@ -150,9 +151,15 @@ export default function ActivityDetail() {
   const dirty = title !== activity.title || description !== activity.description;
   const busy = actions.isPending;
 
-  const eyebrow = editing
-    ? `EDITING · ${activity.startDateDisplay} ${activity.startClockDisplay} · ${formatTypeLabel(activity.activityType)}`
-    : `${activity.startDateDisplay} · ${activity.startClockDisplay} · ${formatTypeLabel(activity.activityType)}`;
+  const eyebrow = (
+    <MetaList
+      items={[
+        editing && "EDITING",
+        `${activity.startDateDisplay} ${activity.startClockDisplay}`,
+        formatTypeLabel(activity.activityType),
+      ]}
+    />
+  );
 
   return (
     <ResponsiveOverlay

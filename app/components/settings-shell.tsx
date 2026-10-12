@@ -55,11 +55,10 @@ export function SettingsShell({
         // its own AppVersionFooter whenever it's shown, so an unconditional
         // footer here would duplicate the version at every width the rail
         // is visible — leaving exactly one on screen at any given width.
-        <footer className="flex flex-wrap items-center justify-center gap-2 border-t py-6 text-xs text-muted-foreground md:hidden">
+        <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t py-6 text-xs text-muted-foreground md:hidden">
           <span className="max-w-[60vw] truncate" title={`ActivSync ${version}`}>
             ActivSync {release ? `v${version}` : version}
           </span>
-          <span aria-hidden="true">·</span>
           <a
             className="underline-offset-4 hover:text-foreground hover:underline"
             href={update.repoUrl}
@@ -70,7 +69,6 @@ export function SettingsShell({
           </a>
           {update.available && update.latest ? (
             <>
-              <span aria-hidden="true">·</span>
               <a
                 className="font-medium text-[var(--sync)] underline-offset-4 hover:underline"
                 href={update.releaseUrl}

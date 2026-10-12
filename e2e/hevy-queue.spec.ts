@@ -60,7 +60,7 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
     .getByRole("button", { name: "Skip", exact: true })
     .click();
 
-  await expect(page.getByText(/^Skipped/)).toBeVisible();
+  await expect(page.getByText(/^Skipped .+\.$/)).toBeVisible();
   await expect(page.getByRole("alertdialog")).toBeHidden();
   await expect(row.getByRole("button", { name: "Unskip" })).toBeVisible();
   await expect(row.getByRole("button", { name: "Skip", exact: true })).not.toBeVisible();

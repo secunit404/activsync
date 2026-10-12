@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { activityEffort } from "@/lib/activity-metrics";
 import type { Activity } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MetaList } from "@/components/meta-list";
 
 type ActivityCardProps = {
   activity: Activity;
@@ -32,9 +33,7 @@ export function ActivityCard({ activity, selected, onToggle }: ActivityCardProps
   const navigate = useNavigate();
   const href = `/${activity.garminActivityId}`;
   const source = activity.hevyBadge ? "via Hevy" : formatTypeLabel(activity.activityType);
-  const statLine = [activity.detail.duration, activity.detail.distance, activityEffort(activity)]
-    .filter(Boolean)
-    .join(" · ");
+  const stats = [activity.detail.duration, activity.detail.distance, activityEffort(activity)];
 
   return (
     <div
@@ -61,11 +60,12 @@ export function ActivityCard({ activity, selected, onToggle }: ActivityCardProps
           </Link>
           <StatusPill status={activity.publishStatus} />
         </div>
-        <span className="font-mono text-[11.5px] text-muted-foreground">
-          {activity.startDateDisplay} · {activity.startClockDisplay} · {source}
-        </span>
-        {statLine ? (
-          <span className="font-mono text-xs text-foreground/80">{statLine}</span>
+        <MetaList
+          className="font-mono text-[11.5px] text-muted-foreground"
+          items={[`${activity.startDateDisplay} ${activity.startClockDisplay}`, source]}
+        />
+        {stats.some(Boolean) ? (
+          <MetaList className="font-mono text-xs text-foreground/80" items={stats} />
         ) : null}
       </div>
     </div>

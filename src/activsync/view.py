@@ -35,6 +35,13 @@ def garmin_exercise_label(enum_name: str) -> str:
     return label[:1].upper() + label[1:]
 
 
+def strava_exercise_label(exercise_type: str) -> str:
+    """A UI label for a Strava exercise_type id."""
+    base, generic, _ = exercise_type.partition("_GENERIC")
+    label = garmin_exercise_label(base)
+    return f"{label} (generic)" if generic else label
+
+
 def _parse_garmin_data(row: dict) -> dict:
     """Parse the garmin_data JSON column into a dict, tolerating invalid JSON."""
     try:
@@ -327,6 +334,11 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
         lookup_standard_mapping,
         suggest_mapping,
     )
+    from activsync.strava_exercise_mapper import (
+        StravaMappingMiss,
+        default_strava_exercise,
+        lookup_strava_exercise,
+    )
 
     mappings = {m["exercise_template_id"]: m for m in hevy_db.list_mappings(conn)}
     rows: list[dict] = []
@@ -364,6 +376,14 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
         if suggestion is not None:
             category, subcategory = suggestion
 
+        try:
+            strava_type, strava_source = lookup_strava_exercise(
+                conn, template["title"], template_id
+            )
+        except StravaMappingMiss:
+            strava_type, strava_source = None, ""
+        strava_default = default_strava_exercise(conn, template["title"], template_id)
+
         rows.append({
             "template_id": template_id,
             "title": template["title"],
@@ -396,6 +416,12 @@ def hevy_mappings_view(conn: sqlite3.Connection) -> list[dict]:
                 )
                 else None
             ),
+            "strava_exercise_type": strava_type,
+            "strava_exercise_name": (
+                strava_exercise_label(strava_type) if strava_type else None
+            ),
+            "strava_source": strava_source,
+            "strava_standard_exercise_type": strava_default[0] if strava_default else None,
         })
     # What needs doing first, then custom exercises (the ones a user actually
     # invented), then alphabetical.

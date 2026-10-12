@@ -151,7 +151,7 @@ def _exercise_summary(workout: dict) -> str:
                         values.append(value)
                 if values:
                     details.append(f"{label} {', '.join(str(value) for value in values)}")
-            lines.append(f"• {name}: {' · '.join(details)}")
+            lines.append(f"• {name}: {' - '.join(details)}")
         elif warmup:
             label = "set" if len(warmup) == 1 else "sets"
             lines.append(f"• {name}: {len(warmup)} warmup {label}")

@@ -28,7 +28,7 @@ def test_custom_template_controls_order_and_wording():
     )
 
     assert description == (
-        "• Bench Press (Barbell): 1 set · 80.0kg × 8\n"
+        "• Bench Press (Barbell): 1 set - 80.0kg × 8\n"
         "Duration: ⏱️ 65 min\n"
         "Made with ActivSync"
     )
@@ -40,7 +40,7 @@ def test_empty_optional_metrics_do_not_leave_large_blank_gaps():
         template="{calories}\n{avg_hr}\n\n{exercises}",
     )
 
-    assert description == "• Bench Press (Barbell): 1 set · 80.0kg × 8"
+    assert description == "• Bench Press (Barbell): 1 set - 80.0kg × 8"
 
 
 def test_template_rejects_unknown_fields_and_format_expressions():

@@ -25,7 +25,7 @@ import type { Route } from "./+types/settings";
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Settings · ActivSync" },
+    { title: "Settings - ActivSync" },
     {
       name: "description",
       content: "Manage ActivSync connections, sync rules, and preferences.",

@@ -30,6 +30,12 @@ function detail(sets: HevyWorkoutSetDetail[], title = "Cable Fly"): HevyWorkoutD
   };
 }
 
+function metaItems(text: string) {
+  return Array.from(screen.getByText(text).parentElement?.children ?? []).map(
+    (item) => item.textContent,
+  );
+}
+
 test("an exercise is collapsed by default so the sheet stays scannable", () => {
   render(<HevyWorkoutDetailContent detail={detail([set(1, { reps: 8 })])} />);
   // The set table lives inside the closed <details>, so it is present in the
@@ -46,7 +52,7 @@ test("a collapsed exercise still reports one value when every set matches", () =
       ])}
     />,
   );
-  expect(screen.getByText("2 sets · 70 kg · 8 reps")).toBeInTheDocument();
+  expect(metaItems("2 sets")).toEqual(["2 sets", "70 kg, 8 reps"]);
 });
 
 test("a collapsed exercise reports a range when the sets differ", () => {
@@ -58,7 +64,7 @@ test("a collapsed exercise reports a range when the sets differ", () => {
       ])}
     />,
   );
-  expect(screen.getByText("2 sets · 42–46 kg · 6–8 reps")).toBeInTheDocument();
+  expect(metaItems("2 sets")).toEqual(["2 sets", "42–46 kg, 6–8 reps"]);
 });
 
 // Integers on purpose: `formatNumber` is locale-aware, so a fractional weight
@@ -69,7 +75,7 @@ test("only dimensions the exercise actually recorded appear", () => {
   render(
     <HevyWorkoutDetailContent detail={detail([set(1, { durationSeconds: 90 })], "Plank")} />,
   );
-  expect(screen.getByText("1 set · 1m 30s")).toBeInTheDocument();
+  expect(metaItems("1 set")).toEqual(["1 set", "1m 30s"]);
 });
 
 test("falls back to the set count alone when nothing else was recorded", () => {

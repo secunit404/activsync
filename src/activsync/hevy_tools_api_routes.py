@@ -14,12 +14,14 @@ from activsync import (
     fit_profile,
     hevy_backfill,
     hevy_db,
+    strava_exercise_mapper,
     view,
 )
 from activsync.api_routes import ApiModel
 from activsync.fit_profile import CATEGORY_NAMES, SUBCATEGORY_NAMES
 from activsync.hevy_client import HevyAuthError
 from activsync.hevy_workout_detail import HevyWorkoutDetail, workout_detail
+from activsync.strava_exercises import EXERCISE_GROUPS, EXERCISE_TYPES
 
 logger = logging.getLogger("activsync.hevy_tools_api_routes")
 
@@ -52,11 +54,31 @@ class ExerciseMapping(ApiModel):
     subcategory: int | None
     category_name: str | None
     subcategory_name: str | None
+    strava_exercise_type: str | None
+    strava_exercise_name: str | None
+    # "user" | "standard" | "garmin" | "" — see strava_exercise_mapper.
+    strava_source: str
+    strava_standard_exercise_type: str | None
+
+
+class StravaExerciseOption(ApiModel):
+    value: str
+    label: str
+
+
+class StravaExerciseGroup(ApiModel):
+    label: str
+    exercises: list[StravaExerciseOption]
 
 
 class HevyToolsState(ApiModel):
     mappings: list[ExerciseMapping]
     categories: list[MappingCategory]
+    strava_groups: list[StravaExerciseGroup]
+
+
+class StravaMappingRequest(ApiModel):
+    exercise_type: str
 
 
 class DeviceOption(ApiModel):
@@ -313,6 +335,22 @@ def create_router(
                 ExerciseMapping.model_validate(mapping) for mapping in mappings
             ],
             categories=categories,
+            strava_groups=[
+                StravaExerciseGroup(
+                    label=group,
+                    exercises=sorted(
+                        (
+                            StravaExerciseOption(
+                                value=exercise_type,
+                                label=view.strava_exercise_label(exercise_type),
+                            )
+                            for exercise_type in exercise_types
+                        ),
+                        key=lambda option: option.label,
+                    ),
+                )
+                for group, exercise_types in sorted(EXERCISE_GROUPS.items())
+            ],
         )
 
     @router.put(
@@ -385,6 +423,34 @@ def create_router(
         if woken:
             message += f" {woken} waiting workout{'s' if woken != 1 else ''} resumed."
         return ToolActionResult(message=message)
+
+    @router.put(
+        "/mappings/{template_id}/strava",
+        response_model=ToolActionResult,
+    )
+    def save_strava_mapping(
+        template_id: str, payload: StravaMappingRequest
+    ) -> ToolActionResult:
+        if payload.exercise_type not in EXERCISE_TYPES:
+            raise HTTPException(status_code=400, detail="Unknown Strava exercise.")
+        if hevy_db.get_template(conn, template_id) is None:
+            raise HTTPException(status_code=404, detail="Exercise template not found.")
+        strava_exercise_mapper.save_strava_mapping(
+            conn, template_id, payload.exercise_type
+        )
+        events.bus.publish("refresh")
+        return ToolActionResult(message="Strava exercise saved.")
+
+    @router.delete(
+        "/mappings/{template_id}/strava",
+        response_model=ToolActionResult,
+    )
+    def delete_strava_mapping(template_id: str) -> ToolActionResult:
+        if hevy_db.get_template(conn, template_id) is None:
+            raise HTTPException(status_code=404, detail="Exercise template not found.")
+        strava_exercise_mapper.delete_strava_mapping(conn, template_id)
+        events.bus.publish("refresh")
+        return ToolActionResult(message="Standard Strava exercise restored.")
 
     @router.post("/backfill/preview", response_model=BackfillResult)
     def preview_backfill(payload: BackfillRequest) -> BackfillResult:

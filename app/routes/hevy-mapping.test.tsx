@@ -8,15 +8,30 @@ import type { HevyToolsState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import HevyMapping from "./hevy-mapping";
 
-const { getHevyTools, removeExerciseMapping, saveExerciseMapping } = vi.hoisted(() => ({
+const {
+  getHevyTools,
+  removeExerciseMapping,
+  removeStravaExerciseMapping,
+  saveExerciseMapping,
+  saveStravaExerciseMapping,
+} = vi.hoisted(() => ({
   getHevyTools: vi.fn(),
   removeExerciseMapping: vi.fn(),
+  removeStravaExerciseMapping: vi.fn(),
   saveExerciseMapping: vi.fn(),
+  saveStravaExerciseMapping: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, getHevyTools, removeExerciseMapping, saveExerciseMapping };
+  return {
+    ...actual,
+    getHevyTools,
+    removeExerciseMapping,
+    removeStravaExerciseMapping,
+    saveExerciseMapping,
+    saveStravaExerciseMapping,
+  };
 });
 
 type Mapping = HevyToolsState["mappings"][number];
@@ -38,6 +53,10 @@ function mapping(overrides: Partial<Mapping>): Mapping {
     subcategory: null,
     categoryName: null,
     subcategoryName: null,
+    stravaExerciseType: null,
+    stravaExerciseName: null,
+    stravaSource: "",
+    stravaStandardExerciseType: null,
     ...overrides,
   };
 }
@@ -109,6 +128,42 @@ const toolsState: HevyToolsState = {
       subcategoryName: "Back Squat",
     }),
     mapping({
+      templateId: "tmpl-strava-standard",
+      title: "Hack Squat",
+      mapped: true,
+      unmapped: false,
+      source: "automatic",
+      hasStandardMapping: true,
+      standardCategory: 12,
+      standardSubcategory: 120,
+      category: 12,
+      subcategory: 120,
+      categoryName: "Squat",
+      subcategoryName: "Back Squat",
+      stravaExerciseType: "MACHINE_HACK_SQUAT",
+      stravaExerciseName: "Machine hack squat",
+      stravaSource: "standard",
+      stravaStandardExerciseType: "MACHINE_HACK_SQUAT",
+    }),
+    mapping({
+      templateId: "tmpl-strava-user",
+      title: "Squat (Barbell)",
+      mapped: true,
+      unmapped: false,
+      source: "automatic",
+      hasStandardMapping: true,
+      standardCategory: 12,
+      standardSubcategory: 120,
+      category: 12,
+      subcategory: 120,
+      categoryName: "Squat",
+      subcategoryName: "Back Squat",
+      stravaExerciseType: "MACHINE_HACK_SQUAT",
+      stravaExerciseName: "Machine hack squat",
+      stravaSource: "user",
+      stravaStandardExerciseType: "BARBELL_BACK_SQUAT",
+    }),
+    mapping({
       templateId: "tmpl-user",
       title: "Front Squat",
       mapped: true,
@@ -124,6 +179,15 @@ const toolsState: HevyToolsState = {
     }),
   ],
   categories,
+  stravaGroups: [
+    {
+      label: "Squat",
+      exercises: [
+        { value: "BARBELL_BACK_SQUAT", label: "Barbell back squat" },
+        { value: "MACHINE_HACK_SQUAT", label: "Machine hack squat" },
+      ],
+    },
+  ],
 };
 
 getHevyTools.mockResolvedValue(toolsState);
@@ -160,15 +224,15 @@ function renderMapping(templateId: string, state: HevyToolsState = toolsState) {
 test("changing category resets the subcategory choice", async () => {
   renderMapping("tmpl-unmapped");
   await userEvent.selectOptions(await screen.findByLabelText("Category"), "12");
-  await userEvent.selectOptions(screen.getByLabelText("Subcategory"), "120");
+  await userEvent.selectOptions(screen.getByLabelText("Garmin exercise"), "120");
   await userEvent.selectOptions(screen.getByLabelText("Category"), "18");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("");
 });
 
 test("does not repeat the selected pair in a syncs-as summary", async () => {
   renderMapping("tmpl-unmapped");
   await userEvent.selectOptions(await screen.findByLabelText("Category"), "12");
-  await userEvent.selectOptions(screen.getByLabelText("Subcategory"), "120");
+  await userEvent.selectOptions(screen.getByLabelText("Garmin exercise"), "120");
   expect(screen.queryByText(/Syncs as/i)).toBeNull();
 });
 
@@ -192,13 +256,13 @@ test("right-aligns Cancel and Save mapping in the desktop footer", async () => {
 
 test("subcategory select is disabled until a category is chosen", async () => {
   renderMapping("tmpl-unmapped");
-  expect(await screen.findByLabelText("Subcategory")).toBeDisabled();
+  expect(await screen.findByLabelText("Garmin exercise")).toBeDisabled();
 });
 
 test("a mapped exercise pre-fills both selects and enables Save", async () => {
   renderMapping("tmpl-mapped");
   expect(await screen.findByLabelText("Category")).toHaveValue("4");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("0");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("0");
   expect(screen.getByRole("button", { name: "Save mapping" })).not.toBeDisabled();
 });
 
@@ -226,7 +290,7 @@ test("an unresolved suggestion explains that the preselection is not active", as
   expect(await screen.findByText("Suggested mapping (not active yet)")).toBeVisible();
   expect(screen.getByText(/press Save mapping before structured sets can sync/i)).toBeVisible();
   expect(screen.getByLabelText("Category")).toHaveValue("12");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("120");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("120");
 });
 
 test("a standard-table mapping omits the old state description", async () => {
@@ -260,7 +324,7 @@ test("changing a standard mapping immediately offers a local reset", async () =>
   await userEvent.click(screen.getByRole("button", { name: "Reset to standard" }));
 
   expect(screen.getByLabelText("Category")).toHaveValue("12");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("120");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("120");
   expect(screen.queryByRole("button", { name: "Reset to standard" })).toBeNull();
   expect(removeExerciseMapping).not.toHaveBeenCalled();
 });
@@ -334,7 +398,7 @@ test("saving calls saveExerciseMapping with the chosen ids and returns to the hu
   const { router } = renderMapping("tmpl-unmapped");
 
   await userEvent.selectOptions(await screen.findByLabelText("Category"), "12");
-  await userEvent.selectOptions(screen.getByLabelText("Subcategory"), "120");
+  await userEvent.selectOptions(screen.getByLabelText("Garmin exercise"), "120");
   await userEvent.click(screen.getByRole("button", { name: "Save mapping" }));
 
   await waitFor(() =>
@@ -392,4 +456,65 @@ test("an existing mapping pointing at a since-filtered, subcategory-less categor
   const select = await screen.findByLabelText("Category");
   expect(select).toHaveValue("33");
   expect(within(select).getByRole("option", { name: "Cycling" })).toBeInTheDocument();
+});
+
+test("choosing only a Strava exercise saves it without overriding the standard Garmin pair", async () => {
+  saveStravaExerciseMapping.mockResolvedValue({ message: "Strava exercise saved." });
+  saveExerciseMapping.mockClear();
+  renderMapping("tmpl-strava-standard");
+
+  expect(await screen.findByLabelText("Strava exercise")).toHaveValue("MACHINE_HACK_SQUAT");
+  await userEvent.selectOptions(screen.getByLabelText("Strava exercise"), "BARBELL_BACK_SQUAT");
+  await userEvent.click(screen.getByRole("button", { name: "Save mapping" }));
+
+  await waitFor(() =>
+    expect(saveStravaExerciseMapping).toHaveBeenCalledWith(
+      "tmpl-strava-standard",
+      "BARBELL_BACK_SQUAT",
+    ),
+  );
+  expect(saveExerciseMapping).not.toHaveBeenCalled();
+});
+
+test("reset removes a Strava override and leaves the standard Garmin pair alone", async () => {
+  removeStravaExerciseMapping.mockResolvedValue({ message: "Standard Strava exercise restored." });
+  removeExerciseMapping.mockClear();
+  renderMapping("tmpl-strava-user");
+
+  await userEvent.click(await screen.findByRole("button", { name: "Reset to standard" }));
+
+  await waitFor(() =>
+    expect(removeStravaExerciseMapping).toHaveBeenCalledWith("tmpl-strava-user"),
+  );
+  expect(removeExerciseMapping).not.toHaveBeenCalled();
+});
+
+test("a Strava exercise matched to the Garmin one says so until another is picked", async () => {
+  const state: HevyToolsState = {
+    ...toolsState,
+    mappings: [
+      mapping({
+        templateId: "tmpl-strava-garmin",
+        title: "My Squat",
+        mapped: true,
+        unmapped: false,
+        source: "user",
+        category: 12,
+        subcategory: 120,
+        categoryName: "Squat",
+        subcategoryName: "Back Squat",
+        stravaExerciseType: "BARBELL_BACK_SQUAT",
+        stravaExerciseName: "Barbell back squat",
+        stravaSource: "garmin",
+        stravaStandardExerciseType: "BARBELL_BACK_SQUAT",
+      }),
+    ],
+  };
+  renderMapping("tmpl-strava-garmin", state);
+
+  expect(await screen.findByText("Matched to Garmin")).toBeVisible();
+  expect(screen.getByText(/follows the Garmin exercise above/)).toBeVisible();
+
+  await userEvent.selectOptions(screen.getByLabelText("Strava exercise"), "MACHINE_HACK_SQUAT");
+  expect(screen.queryByText(/follows the Garmin exercise above/)).toBeNull();
 });
