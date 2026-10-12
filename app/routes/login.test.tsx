@@ -174,6 +174,9 @@ test("next never leaves the site", () => {
   expect(safeNext("/\t/evil.test")).toBe("/");
   expect(safeNext("/\n/evil.test")).toBe("/");
   expect(safeNext("/\r/evil.test")).toBe("/");
+  expect(safeNext("/.//evil.test")).toBe("/");
+  expect(safeNext("/a/..//evil.test")).toBe("/");
+  expect(safeNext("/./\\evil.test")).toBe("/");
   expect(safeNext("/hevy?x=1")).toBe("/hevy?x=1");
   expect(safeNext("/hevy#top")).toBe("/hevy#top");
   expect(safeNext(null)).toBe("/");

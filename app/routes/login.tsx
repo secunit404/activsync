@@ -25,13 +25,16 @@ export function meta(): Route.MetaDescriptors {
 }
 
 // Judged on the parsed URL, not the raw string: the URL parser strips tabs
-// and newlines and reads `\` as `/`, so "/\t/evil.test" becomes "//evil.test".
+// and newlines, reads `\` as `/`, and collapses dot segments, so
+// "/\t/evil.test" and "/.//evil.test" both come out as "//evil.test". The
+// normalized path is re-checked because it can itself be protocol-relative.
 export function safeNext(value: string | null): string {
   if (!value || !value.startsWith("/")) return "/";
   const origin = window.location.origin;
   try {
     const url = new URL(value, origin);
-    return url.origin === origin ? `${url.pathname}${url.search}${url.hash}` : "/";
+    if (url.origin !== origin || url.pathname.startsWith("//")) return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return "/";
   }
