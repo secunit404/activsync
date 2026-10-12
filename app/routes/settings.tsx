@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router";
 
+import { AccessSettings } from "@/components/settings-access";
 import { CategorySettings } from "@/components/settings-categories";
 import { ConnectionsSettings } from "@/components/settings-connections";
 import { SettingsFooter } from "@/components/settings-footer";
@@ -127,6 +128,7 @@ export function SettingsView({
       ) : null}
       <div className="grid gap-5">
         <ConnectionsSettings state={state} />
+        <AccessSettings />
         <PreferencesSettings
           state={state}
           draft={drafts.preferencesDraft}

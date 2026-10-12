@@ -14,6 +14,23 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, disconnectHevy };
 });
 
+vi.mock("@/lib/auth-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth-api")>();
+  return {
+    ...actual,
+    getAuthStatus: vi.fn().mockResolvedValue({
+      authenticated: true,
+      method: "password",
+      user: null,
+      ownerClaimed: true,
+      authDisabled: false,
+      login: { passwordForm: "shown", oidc: null, strava: false },
+    }),
+    getAuthSettings: vi.fn().mockResolvedValue({ passwordForm: "shown" }),
+    getSessions: vi.fn().mockResolvedValue([]),
+  };
+});
+
 // 152 uninteresting placeholders (all fall into the "Other" derived
 // category) plus two specifically-named, non-overlapping types so the
 // search test can filter unambiguously. 154 total, matching the real
@@ -166,6 +183,7 @@ test("renders every section, in the order the design specifies", () => {
     .map((heading) => heading.textContent);
   expect(headings).toEqual([
     "Connections",
+    "Access",
     "Preferences",
     "Auto-sync by type",
     "Hevy integration",
