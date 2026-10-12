@@ -11,13 +11,14 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import Field
 
-from activsync import auth_core, auth_devices, db
+from activsync import auth_core, auth_devices, auth_oidc, db
 from activsync.api_routes import ApiModel
 from activsync.auth_middleware import (
     AuthState,
     clear_session_cookie,
     client_ip,
     device_cookie_name,
+    own_origin,
     start_session,
 )
 
@@ -81,6 +82,32 @@ class AuthActionResult(ApiModel):
     message: str
 
 
+class OidcConfigState(ApiModel):
+    configured: bool
+    display_name: str
+    issuer: str
+    client_id: str
+    has_secret: bool
+    scopes: str
+    auto_redirect: bool
+    redirect_uri: str
+    linked_label: str | None
+
+
+class OidcConfigRequest(ApiModel):
+    display_name: str = Field(min_length=1, max_length=64)
+    issuer: str = Field(min_length=1, max_length=512)
+    client_id: str = Field(min_length=1, max_length=256)
+    client_secret: str | None = Field(default=None, max_length=1024)
+    scopes: str = Field(default=auth_oidc.DEFAULT_SCOPES, max_length=512)
+    auto_redirect: bool = False
+    current_password: str = Field(max_length=1024)
+
+
+class CurrentPasswordRequest(ApiModel):
+    current_password: str = Field(max_length=1024)
+
+
 def _iso(epoch: int) -> str:
     return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
 
@@ -94,15 +121,22 @@ def create_router(
     *,
     setup_code: auth_core.SetupCode,
     limiter: auth_core.AttemptLimiter,
+    public_url: str | None,
     mock_mode: Callable[[], bool],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["auth"])
 
     def login_options() -> LoginOptions:
         settings = auth_core.load_settings(conn)
+        oidc_config = auth_oidc.load_config(conn)
         return LoginOptions(
             password_form=settings["password_form"],
-            oidc=None,
+            oidc=OidcLoginOption(
+                label=oidc_config.display_name,
+                auto_redirect=oidc_config.auto_redirect,
+            )
+            if oidc_config and oidc_config.linked
+            else None,
             strava=False,
         )
 
@@ -245,6 +279,53 @@ def create_router(
     def save_auth_settings(payload: AuthSettingsRequest) -> AuthActionResult:
         auth_core.save_settings(conn, **payload.model_dump(exclude_none=True))
         return AuthActionResult(message="Sign-in settings saved.")
+
+    @router.get("/auth/oidc", response_model=OidcConfigState)
+    def oidc_config(request: Request) -> OidcConfigState:
+        config = auth_oidc.load_config(conn)
+        origin = public_url or own_origin(request.scope, request.headers)
+        return OidcConfigState(
+            configured=config is not None,
+            display_name=config.display_name if config else "",
+            issuer=config.issuer if config else "",
+            client_id=config.client_id if config else "",
+            has_secret=bool(config and config.client_secret),
+            scopes=config.scopes if config else auth_oidc.DEFAULT_SCOPES,
+            auto_redirect=bool(config and config.auto_redirect),
+            redirect_uri=f"{origin}/auth/oidc/callback",
+            linked_label=config.linked["label"] if config and config.linked else None,
+        )
+
+    @router.put("/auth/oidc", response_model=AuthActionResult)
+    def save_oidc_config(payload: OidcConfigRequest, request: Request) -> AuthActionResult:
+        require_password(
+            payload.current_password, wrong_status=400, device_id=trusted_device(request)
+        )
+        try:
+            config = auth_oidc.save_config(
+                conn,
+                display_name=payload.display_name.strip(),
+                issuer=payload.issuer,
+                client_id=payload.client_id.strip(),
+                client_secret=payload.client_secret,
+                scopes=payload.scopes,
+                auto_redirect=payload.auto_redirect,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if config.linked:
+            return AuthActionResult(message="Single sign-on settings saved.")
+        return AuthActionResult(
+            message="Single sign-on settings saved. Link your account to finish."
+        )
+
+    @router.delete("/auth/oidc", response_model=AuthActionResult)
+    def delete_oidc_config(payload: CurrentPasswordRequest, request: Request) -> AuthActionResult:
+        require_password(
+            payload.current_password, wrong_status=400, device_id=trusted_device(request)
+        )
+        auth_oidc.delete_config(conn)
+        return AuthActionResult(message="Single sign-on removed.")
 
     @router.post("/dev/unclaim", include_in_schema=False)
     def dev_unclaim() -> dict:

@@ -170,6 +170,7 @@ def create_app(
             conn,
             setup_code=setup_code,
             limiter=auth_core.AttemptLimiter(),
+            public_url=public_url,
             mock_mode=_mock_mode,
         )
     )

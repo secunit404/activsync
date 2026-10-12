@@ -13,7 +13,7 @@ import sqlite3
 import sys
 import time
 
-from activsync import auth_core, auth_devices, db
+from activsync import auth_core, auth_devices, auth_oidc, db
 
 
 def _reset_password(conn: sqlite3.Connection) -> int:
@@ -40,12 +40,26 @@ def _revoke_sessions(conn: sqlite3.Connection) -> int:
     return 0
 
 
+def _disable_oidc(conn: sqlite3.Connection) -> int:
+    auth_oidc.delete_config(conn)
+    print("Single sign-on removed. Sign in with your password.")
+    return 0
+
+
+def _describe_oidc(oidc: auth_oidc.OidcConfig | None) -> str:
+    if oidc is None:
+        return "off"
+    linked = "linked" if oidc.linked else "not linked"
+    return f"{oidc.display_name} ({oidc.issuer}), {linked}"
+
+
 def _status(conn: sqlite3.Connection) -> int:
     settings = auth_core.load_settings(conn)
     lines = [
         f"Owner claimed:        {'yes' if auth_core.owner_claimed(conn) else 'no'}",
         f"Authentication:       {'DISABLED' if auth_core.auth_disabled() else 'on'}",
         f"Password form:        {settings['password_form']}",
+        f"Single sign-on:       {_describe_oidc(auth_oidc.load_config(conn))}",
         f"Active sessions:      {len(auth_core.list_sessions(conn))}",
     ]
     print("\n".join(lines))
@@ -55,6 +69,7 @@ def _status(conn: sqlite3.Connection) -> int:
 COMMANDS = {
     "reset-password": (_reset_password, "Set a new password and sign out every session."),
     "revoke-sessions": (_revoke_sessions, "Sign out every session and forget trusted browsers."),
+    "disable-oidc": (_disable_oidc, "Remove the single sign-on configuration."),
     "status": (_status, "Show which sign-in methods are on. Never prints secrets."),
 }
 
