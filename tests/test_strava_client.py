@@ -11,7 +11,7 @@ from activsync.strava_client import (
     StravaAuthError,
     StravaClient,
     StravaRateLimitError,
-    StravaUploadError,
+    StravaUploadRejected,
     StravaWindowIncompleteError,
 )
 
@@ -198,7 +198,7 @@ def test_publish_raises_upload_error_when_strava_reports_error(mock_post, mock_g
 
     client = StravaClient(conn, "cid", "csecret")
 
-    with pytest.raises(StravaUploadError):
+    with pytest.raises(StravaUploadRejected):
         client.publish(garmin_activity_id=44, fit_bytes=b"FIT-DATA")
 
 
@@ -498,6 +498,19 @@ def test_find_existing_activity_raises_rate_limit_error_on_429(mock_get, conn):
         client.find_existing_activity(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc), now=now)
 
     assert excinfo.value.retry_at == now + timedelta(seconds=42)
+
+
+@patch("activsync.strava_client.requests.post")
+def test_publish_raises_upload_rejected_on_a_4xx(mock_post, conn):
+    db.set_config_value(conn, "strava_tokens", {
+        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
+    })
+    mock_post.return_value = MagicMock(status_code=400, text="bad file", headers={})
+
+    client = StravaClient(conn, "cid", "csecret")
+
+    with pytest.raises(StravaUploadRejected):
+        client.publish_strength(garmin_activity_id=44, document={"sets": []})
 
 
 @patch("activsync.strava_client.requests.post")
