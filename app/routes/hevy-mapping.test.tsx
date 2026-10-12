@@ -224,15 +224,15 @@ function renderMapping(templateId: string, state: HevyToolsState = toolsState) {
 test("changing category resets the subcategory choice", async () => {
   renderMapping("tmpl-unmapped");
   await userEvent.selectOptions(await screen.findByLabelText("Category"), "12");
-  await userEvent.selectOptions(screen.getByLabelText("Subcategory"), "120");
+  await userEvent.selectOptions(screen.getByLabelText("Garmin exercise"), "120");
   await userEvent.selectOptions(screen.getByLabelText("Category"), "18");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("");
 });
 
 test("does not repeat the selected pair in a syncs-as summary", async () => {
   renderMapping("tmpl-unmapped");
   await userEvent.selectOptions(await screen.findByLabelText("Category"), "12");
-  await userEvent.selectOptions(screen.getByLabelText("Subcategory"), "120");
+  await userEvent.selectOptions(screen.getByLabelText("Garmin exercise"), "120");
   expect(screen.queryByText(/Syncs as/i)).toBeNull();
 });
 
@@ -256,13 +256,13 @@ test("right-aligns Cancel and Save mapping in the desktop footer", async () => {
 
 test("subcategory select is disabled until a category is chosen", async () => {
   renderMapping("tmpl-unmapped");
-  expect(await screen.findByLabelText("Subcategory")).toBeDisabled();
+  expect(await screen.findByLabelText("Garmin exercise")).toBeDisabled();
 });
 
 test("a mapped exercise pre-fills both selects and enables Save", async () => {
   renderMapping("tmpl-mapped");
   expect(await screen.findByLabelText("Category")).toHaveValue("4");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("0");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("0");
   expect(screen.getByRole("button", { name: "Save mapping" })).not.toBeDisabled();
 });
 
@@ -290,7 +290,7 @@ test("an unresolved suggestion explains that the preselection is not active", as
   expect(await screen.findByText("Suggested mapping (not active yet)")).toBeVisible();
   expect(screen.getByText(/press Save mapping before structured sets can sync/i)).toBeVisible();
   expect(screen.getByLabelText("Category")).toHaveValue("12");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("120");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("120");
 });
 
 test("a standard-table mapping omits the old state description", async () => {
@@ -324,7 +324,7 @@ test("changing a standard mapping immediately offers a local reset", async () =>
   await userEvent.click(screen.getByRole("button", { name: "Reset to standard" }));
 
   expect(screen.getByLabelText("Category")).toHaveValue("12");
-  expect(screen.getByLabelText("Subcategory")).toHaveValue("120");
+  expect(screen.getByLabelText("Garmin exercise")).toHaveValue("120");
   expect(screen.queryByRole("button", { name: "Reset to standard" })).toBeNull();
   expect(removeExerciseMapping).not.toHaveBeenCalled();
 });
@@ -398,7 +398,7 @@ test("saving calls saveExerciseMapping with the chosen ids and returns to the hu
   const { router } = renderMapping("tmpl-unmapped");
 
   await userEvent.selectOptions(await screen.findByLabelText("Category"), "12");
-  await userEvent.selectOptions(screen.getByLabelText("Subcategory"), "120");
+  await userEvent.selectOptions(screen.getByLabelText("Garmin exercise"), "120");
   await userEvent.click(screen.getByRole("button", { name: "Save mapping" }));
 
   await waitFor(() =>

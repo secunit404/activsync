@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useOutletContext, useParams } from "react-router";
 import { toast } from "sonner";
@@ -366,84 +366,144 @@ function ExerciseMappingForm({
             </p>
           </div>
         ) : null}
-        <Field>
-          <FieldLabel
-            htmlFor="mapping-category"
-            className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase"
-          >
-            Category
-          </FieldLabel>
-          <NativeSelect
-            id="mapping-category"
-            className="w-full"
-            value={category}
-            disabled={busy}
-            onChange={(event) => handleCategoryChange(event.target.value)}
-          >
-            <NativeSelectOption value="">Select a category…</NativeSelectOption>
-            {selectableCategories.map((option) => (
-              <NativeSelectOption key={option.value} value={String(option.value)}>
-                {option.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
+        <DestinationSection
+          title="Garmin"
+          description="Where this exercise's sets land on your Garmin activity."
+          status={
+            mapping.unmapped
+              ? { label: "Not mapped", tone: "warning" }
+              : mapping.source === "user"
+                ? { label: "Your override", tone: "muted" }
+                : { label: "Standard", tone: "muted" }
+          }
+        >
+          <Field>
+            <FieldLabel htmlFor="mapping-category" className={FIELD_LABEL}>
+              Category
+            </FieldLabel>
+            <NativeSelect
+              id="mapping-category"
+              className="w-full"
+              value={category}
+              disabled={busy}
+              onChange={(event) => handleCategoryChange(event.target.value)}
+            >
+              <NativeSelectOption value="">Select a category…</NativeSelectOption>
+              {selectableCategories.map((option) => (
+                <NativeSelectOption key={option.value} value={String(option.value)}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
 
-        <Field>
-          <FieldLabel
-            htmlFor="mapping-subcategory"
-            className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase"
-          >
-            Subcategory
-          </FieldLabel>
-          <NativeSelect
-            id="mapping-subcategory"
-            className="w-full"
-            value={subcategory}
-            disabled={!selectedCategory || busy}
-            onChange={(event) => setSubcategory(event.target.value)}
-          >
-            <NativeSelectOption value="">
-              {selectedCategory ? "Select a subcategory…" : "Choose a category first"}
-            </NativeSelectOption>
-            {(selectedCategory?.subcategories ?? []).map((option) => (
-              <NativeSelectOption key={option.value} value={String(option.value)}>
-                {option.label}
+          <Field>
+            <FieldLabel htmlFor="mapping-subcategory" className={FIELD_LABEL}>
+              Exercise
+            </FieldLabel>
+            <NativeSelect
+              id="mapping-subcategory"
+              aria-label="Garmin exercise"
+              className="w-full"
+              value={subcategory}
+              disabled={!selectedCategory || busy}
+              onChange={(event) => setSubcategory(event.target.value)}
+            >
+              <NativeSelectOption value="">
+                {selectedCategory ? "Select an exercise…" : "Choose a category first"}
               </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
+              {(selectedCategory?.subcategories ?? []).map((option) => (
+                <NativeSelectOption key={option.value} value={String(option.value)}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+        </DestinationSection>
 
-        <Field>
-          <FieldLabel
-            htmlFor="mapping-strava-exercise"
-            className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase"
-          >
-            Strava exercise
-          </FieldLabel>
-          <NativeSelect
-            id="mapping-strava-exercise"
-            className="w-full"
-            value={stravaExercise}
-            disabled={busy}
-            onChange={(event) => setStravaExercise(event.target.value)}
-          >
-            <NativeSelectOption value="">
-              {mapping.stravaExerciseType ? "Select a Strava exercise…" : "Not set — uses the FIT upload"}
-            </NativeSelectOption>
-            {stravaGroups.map((group) => (
-              <NativeSelectOptGroup key={group.label} label={group.label}>
-                {group.exercises.map((option) => (
-                  <NativeSelectOption key={option.value} value={option.value}>
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelectOptGroup>
-            ))}
-          </NativeSelect>
-        </Field>
+        <DestinationSection
+          title="Strava"
+          description="The exercise Strava shows when a Hevy workout is uploaded."
+          status={STRAVA_STATUS[mapping.stravaSource]}
+        >
+          <Field>
+            <FieldLabel htmlFor="mapping-strava-exercise" className={FIELD_LABEL}>
+              Exercise
+            </FieldLabel>
+            <NativeSelect
+              id="mapping-strava-exercise"
+              aria-label="Strava exercise"
+              className="w-full"
+              value={stravaExercise}
+              disabled={busy}
+              onChange={(event) => setStravaExercise(event.target.value)}
+            >
+              <NativeSelectOption value="">
+                {mapping.stravaExerciseType
+                  ? "Select a Strava exercise…"
+                  : "Not set, so the workout uploads as a FIT file"}
+              </NativeSelectOption>
+              {stravaGroups.map((group) => (
+                <NativeSelectOptGroup key={group.label} label={group.label}>
+                  {group.exercises.map((option) => (
+                    <NativeSelectOption key={option.value} value={option.value}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelectOptGroup>
+              ))}
+            </NativeSelect>
+          </Field>
+        </DestinationSection>
       </div>
     </ResponsiveOverlay>
+  );
+}
+
+const FIELD_LABEL = "font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase";
+
+type SectionStatus = { label: string; tone: "muted" | "warning" };
+
+const STRAVA_STATUS: Record<Mapping["stravaSource"], SectionStatus> = {
+  user: { label: "Your override", tone: "muted" },
+  standard: { label: "Standard", tone: "muted" },
+  garmin: { label: "From Garmin mapping", tone: "muted" },
+  "": { label: "Not set", tone: "warning" },
+};
+
+function DestinationSection({
+  title,
+  description,
+  status,
+  children,
+}: {
+  title: string;
+  description: string;
+  status: SectionStatus;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-label={title}
+      className="flex flex-col gap-4 rounded-xl border border-border bg-foreground/[0.02] p-4"
+    >
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>
+        </div>
+        <span
+          className={
+            status.tone === "warning"
+              ? "shrink-0 rounded bg-warning/10 px-1.5 py-0.5 font-mono text-[10px] text-warning"
+              : "shrink-0 rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+          }
+        >
+          {status.label}
+        </span>
+      </header>
+      {children}
+    </section>
   );
 }
 

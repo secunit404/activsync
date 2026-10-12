@@ -125,5 +125,12 @@ test("names the Strava exercise and marks a Strava override", () => {
       stravaSource: "user",
     }),
   );
-  expect(screen.getByText(/Strava › Machine chest press/)).toBeVisible();
+  const strava = screen.getByText("Strava").nextElementSibling;
+  expect(strava).toHaveTextContent("Machine chest press");
+  expect(strava).toHaveTextContent("Your override");
+});
+
+test("says when no Strava exercise is set", () => {
+  renderRow(mapping({ stravaExerciseName: null }));
+  expect(screen.getByText("Strava").nextElementSibling).toHaveTextContent("Not set");
 });
