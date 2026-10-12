@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from activsync import config, db, hevy_db, strava_strength, timeutil
 from activsync.garmin_client import ActivityRecord, GarminClient
-from activsync.strava_client import StravaClient, match_closest_activity
+from activsync.strava_client import StravaClient, StravaUploadRejected, match_closest_activity
 from activsync.strava_exercise_mapper import StravaMappingMiss
 
 logger = logging.getLogger("activsync")
@@ -177,10 +177,15 @@ def _publish_row(
     fit_bytes = garmin.download_fit(garmin_activity_id)
     name, description = row["title"], row.get("description") or None
     document = _strength_document(conn, garmin_activity_id, fit_bytes)
+    strava_activity_id = None
     if document is not None:
-        strava_activity_id = strava.publish_strength(
-            garmin_activity_id, document, name=name, description=description)
-    else:
+        try:
+            strava_activity_id = strava.publish_strength(
+                garmin_activity_id, document, name=name, description=description)
+        except StravaUploadRejected as exc:
+            logger.warning("strava upload %s: Strava rejected Hevy's sets, "
+                           "uploading the FIT instead: %s", garmin_activity_id, exc)
+    if strava_activity_id is None:
         strava_activity_id = strava.publish(
             garmin_activity_id, fit_bytes, name=name, description=description)
     db.set_published(conn, garmin_activity_id, strava_activity_id, now)
@@ -193,7 +198,8 @@ def _strength_document(
     upload the FIT. Strava reads a FIT's sets through its own partial table of
     Garmin exercise ids; the JSON names Strava's exercises directly."""
     workout = hevy_db.applied_workout_for_activity(conn, garmin_activity_id)
-    if workout is None:
+    # "described" kept the watch's sets on Garmin; Strava should match them.
+    if workout is None or workout["status"] == "described":
         return None
     try:
         payload = json.loads(workout["payload"] or "{}")

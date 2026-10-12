@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from activsync import config, db, hevy_db, sync
+from activsync.strava_client import StravaUploadRejected
 from activsync.garmin_client import ActivityRecord
 
 NOW = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
@@ -999,3 +1000,33 @@ def test_publish_uploads_the_fit_for_activities_without_a_hevy_workout(conn, cfg
 
     strava.publish_strength.assert_not_called()
     strava.publish.assert_called_once()
+
+
+def test_publish_falls_back_to_the_fit_when_strava_rejects_the_json(conn, cfg):
+    _strength_row(conn, 33)
+    _hevy_applied(conn, 33, [{"title": "Chest Press (Machine)",
+                              "exercise_template_id": "7EB3F7C3",
+                              "sets": [{"reps": 8, "weight_kg": 60}]}])
+    strava = _fake_strava(strava_activity_id=5008)
+    strava.publish_strength.side_effect = StravaUploadRejected("bad set")
+
+    sync.publish_now(conn, _fake_garmin([], fit_bytes=b"FIT-33"), strava,
+                     garmin_activity_id=33, now=NOW)
+
+    strava.publish.assert_called_once_with(33, b"FIT-33", name="Pass A", description=None)
+    assert db.get_activity(conn, 33)["strava_activity_id"] == 5008
+
+
+def test_publish_uploads_the_fit_for_a_described_hevy_workout(conn, cfg):
+    _strength_row(conn, 34)
+    _hevy_applied(conn, 34, [{"title": "Chest Press (Machine)",
+                              "exercise_template_id": "7EB3F7C3",
+                              "sets": [{"reps": 8, "weight_kg": 60}]}],
+                  status="described")
+    strava = _fake_strava(strava_activity_id=5009)
+
+    sync.publish_now(conn, _fake_garmin([], fit_bytes=b"FIT-34"), strava,
+                     garmin_activity_id=34, now=NOW)
+
+    strava.publish_strength.assert_not_called()
+    strava.publish.assert_called_once_with(34, b"FIT-34", name="Pass A", description=None)

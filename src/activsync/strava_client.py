@@ -41,6 +41,11 @@ class StravaUploadError(Exception):
     """Raised when a Strava upload fails or Strava rejects the activity."""
 
 
+class StravaUploadRejected(StravaUploadError):
+    """Strava refused the uploaded file itself (a 4xx or a processing error),
+    as opposed to a timeout where the upload may still land."""
+
+
 class StravaWindowIncompleteError(Exception):
     """Raised when a window fetch could not be read to the end.
 
@@ -361,6 +366,9 @@ class StravaClient:
         if response.status_code == 401:
             raise StravaAuthError("Strava access token rejected")
         _raise_if_rate_limited(response)
+        if 400 <= response.status_code < 500:
+            raise StravaUploadRejected(
+                f"upload rejected ({response.status_code}): {response.text[:200]}")
         response.raise_for_status()
 
         upload_id = response.json()["id"]
@@ -379,7 +387,7 @@ class StravaClient:
             payload = response.json()
 
             if payload.get("error"):
-                raise StravaUploadError(payload["error"])
+                raise StravaUploadRejected(payload["error"])
             if payload.get("activity_id"):
                 return int(payload["activity_id"])
 
