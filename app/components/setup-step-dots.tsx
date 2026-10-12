@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { SetupStep } from "@/lib/api";
 
 const STEPS: Array<{ key: SetupStep; label: string; sublabel: string }> = [
+  { key: "account", label: "Claim ActivSync", sublabel: "Setup code, password" },
   { key: "garmin", label: "Connect Garmin", sublabel: "Sign in, MFA if needed" },
   { key: "strava", label: "Authorize Strava", sublabel: "OAuth callback" },
   { key: "hevy", label: "Hevy (optional)", sublabel: "API key" },
@@ -13,7 +14,7 @@ const STEPS: Array<{ key: SetupStep; label: string; sublabel: string }> = [
 
 /**
  * Setup wizard progress, frame `2d`. Desktop renders the numbered step rail
- * (left pane of the wizard card); mobile renders the compact four-segment
+ * (left pane of the wizard card); mobile renders the compact five-segment
  * bar + caption from the mobile frame. Both variants stay in the DOM at
  * every width, switched by CSS breakpoint only — the project-wide
  * convention (see `ActivitiesTable`/`ActivityCard`) — so this renders no

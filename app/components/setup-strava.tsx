@@ -16,7 +16,7 @@ export type StravaStepProps = {
   }) => Promise<void>;
 };
 
-/** Step 2: Strava app credentials, then the OAuth handoff. */
+/** Step 3: Strava app credentials, then the OAuth handoff. */
 export function StravaStep({ state, pending, onSave }: StravaStepProps) {
   const [clientId, setClientId] = useState(state.credentials.stravaClientId);
   const [clientSecret, setClientSecret] = useState("");
@@ -24,7 +24,7 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 2: Strava
+          Step 3: Strava
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Authorize Strava
