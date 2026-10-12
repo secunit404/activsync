@@ -30,6 +30,28 @@ export type AuthSession = {
   current: boolean;
 };
 
+export type OidcConfig = {
+  configured: boolean;
+  displayName: string;
+  issuer: string;
+  clientId: string;
+  hasSecret: boolean;
+  scopes: string;
+  autoRedirect: boolean;
+  redirectUri: string;
+  linkedLabel: string | null;
+};
+
+export type OidcConfigInput = {
+  displayName: string;
+  issuer: string;
+  clientId: string;
+  clientSecret: string | null;
+  scopes: string;
+  autoRedirect: boolean;
+  currentPassword: string;
+};
+
 export type AuthActionResult = { message: string };
 
 export function getAuthStatus(signal?: AbortSignal): Promise<AuthStatus> {
@@ -86,6 +108,24 @@ export function revokeSession(publicId: string) {
 export function revokeOtherSessions() {
   return requestJson<AuthActionResult>("/api/v1/auth/sessions", {
     method: "DELETE",
+  });
+}
+
+export function getOidcConfig(signal?: AbortSignal): Promise<OidcConfig> {
+  return requestJson<OidcConfig>("/api/v1/auth/oidc", { signal });
+}
+
+export function saveOidcConfig(payload: OidcConfigInput) {
+  return requestJson<AuthActionResult>("/api/v1/auth/oidc", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function removeOidcConfig(currentPassword: string) {
+  return requestJson<AuthActionResult>("/api/v1/auth/oidc", {
+    method: "DELETE",
+    body: JSON.stringify({ currentPassword }),
   });
 }
 

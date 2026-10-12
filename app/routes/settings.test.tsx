@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { expect, test, vi } from "vitest";
 
 import type { SettingsState } from "@/lib/api";
+import { LOGIN_ERRORS } from "@/lib/auth-errors";
 import { SettingsView } from "./settings";
 
 const { disconnectHevy } = vi.hoisted(() => ({ disconnectHevy: vi.fn() }));
@@ -28,6 +29,17 @@ vi.mock("@/lib/auth-api", async (importOriginal) => {
     }),
     getAuthSettings: vi.fn().mockResolvedValue({ passwordForm: "shown" }),
     getSessions: vi.fn().mockResolvedValue([]),
+    getOidcConfig: vi.fn().mockResolvedValue({
+      configured: false,
+      displayName: "",
+      issuer: "",
+      clientId: "",
+      hasSecret: false,
+      scopes: "openid profile email",
+      autoRedirect: false,
+      redirectUri: "http://localhost/auth/oidc/callback",
+      linkedLabel: null,
+    }),
   };
 });
 
@@ -200,6 +212,15 @@ test("renders Strava OAuth failures inside the React settings surface", () => {
 
   expect(screen.getByText("Strava connection failed")).toBeInTheDocument();
   expect(screen.getByText("Strava authorization was declined.")).toBeInTheDocument();
+});
+
+test("an OIDC link failure shows fixed copy for its code", () => {
+  renderWithProviders(
+    <SettingsView state={connectedState} oidcError="oidc_mismatch" />,
+  );
+
+  expect(screen.getByText("Linking single sign-on failed")).toBeInTheDocument();
+  expect(screen.getByText(LOGIN_ERRORS.oidc_mismatch)).toBeInTheDocument();
 });
 
 test("disables prerequisite actions when services are disconnected", () => {

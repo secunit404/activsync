@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
+import { OidcSettings } from "@/components/settings-access-oidc";
 import { SessionList } from "@/components/settings-access-sessions";
 import { SettingsSection } from "@/components/settings-shell";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -42,6 +43,7 @@ export function AccessSettings() {
         <>
           <PasswordChangeForm />
           <SignInMethods settings={settings.data} />
+          <OidcSettings />
           <SessionList />
           <div>
             <SignOutButton method={status.data.method} variant="text" />

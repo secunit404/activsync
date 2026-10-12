@@ -3,17 +3,20 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import type { AuthSession, AuthSettings, AuthStatus } from "@/lib/auth-api";
+import type { AuthSession, AuthSettings, AuthStatus, OidcConfig } from "@/lib/auth-api";
 import { AccessSettings } from "./settings-access";
 
 const api = vi.hoisted(() => ({
   getAuthStatus: vi.fn(),
   getAuthSettings: vi.fn(),
   getSessions: vi.fn(),
+  getOidcConfig: vi.fn(),
   saveAuthSettings: vi.fn(),
   changePassword: vi.fn(),
   revokeSession: vi.fn(),
   revokeOtherSessions: vi.fn(),
+  saveOidcConfig: vi.fn(),
+  removeOidcConfig: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-api", async (importOriginal) => {
@@ -53,6 +56,18 @@ const sessions: AuthSession[] = [
   },
 ];
 
+const oidc: OidcConfig = {
+  configured: false,
+  displayName: "",
+  issuer: "",
+  clientId: "",
+  hasSecret: false,
+  scopes: "openid profile email",
+  autoRedirect: false,
+  redirectUri: "https://activsync.example.com/auth/oidc/callback",
+  linkedLabel: null,
+};
+
 function renderAccess() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -69,10 +84,12 @@ beforeEach(() => {
   api.getAuthStatus.mockResolvedValue(signedIn);
   api.getAuthSettings.mockResolvedValue(settings);
   api.getSessions.mockResolvedValue(sessions);
+  api.getOidcConfig.mockResolvedValue(oidc);
   api.saveAuthSettings.mockResolvedValue({ message: "Sign-in settings saved." });
   api.changePassword.mockResolvedValue({ message: "Password changed." });
   api.revokeSession.mockResolvedValue(undefined);
   api.revokeOtherSessions.mockResolvedValue({ message: "Signed out 1 other session(s)." });
+  api.saveOidcConfig.mockResolvedValue({ message: "Saved." });
 });
 
 test("changes the password with the current one", async () => {
@@ -122,4 +139,49 @@ test("offers a sign-out button for password sessions", async () => {
   renderAccess();
 
   expect(await screen.findByRole("button", { name: "Sign out" })).toBeVisible();
+});
+
+test("configuring single sign-on sends the current password and shows the redirect URI", async () => {
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Set up single sign-on" }));
+  expect(screen.getByText("https://activsync.example.com/auth/oidc/callback")).toBeVisible();
+  await userEvent.type(screen.getByLabelText("Button label"), "Pocket ID");
+  await userEvent.type(screen.getByLabelText("Issuer URL"), "https://id.example.com");
+  await userEvent.type(screen.getByLabelText("Client ID"), "activsync");
+  await userEvent.type(screen.getByLabelText("Your ActivSync password"), "my long passphrase");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveOidcConfig).toHaveBeenCalledWith(
+      {
+        displayName: "Pocket ID",
+        issuer: "https://id.example.com",
+        clientId: "activsync",
+        clientSecret: "",
+        scopes: "openid profile email",
+        autoRedirect: false,
+        currentPassword: "my long passphrase",
+      },
+      expect.anything(),
+    ),
+  );
+});
+
+test("a configured provider offers to link the account", async () => {
+  api.getOidcConfig.mockResolvedValue({
+    ...oidc,
+    configured: true,
+    displayName: "Pocket ID",
+    issuer: "https://id.example.com",
+    clientId: "activsync",
+    hasSecret: true,
+  });
+  renderAccess();
+
+  expect(await screen.findByRole("link", { name: "Link account" })).toHaveAttribute(
+    "href",
+    "/auth/oidc/login?intent=link&next=%2Fsettings",
+  );
+  expect(screen.getByText(/not linked yet/)).toBeVisible();
 });
