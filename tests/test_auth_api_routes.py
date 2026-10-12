@@ -42,7 +42,7 @@ def test_status_before_claim(app):
         "user": None,
         "ownerClaimed": False,
         "authDisabled": False,
-        "login": {"passwordForm": "shown", "oidc": None, "strava": False},
+        "login": {"oidc": None, "strava": False},
     }
 
 
@@ -224,15 +224,6 @@ def test_password_change_verifies_current_and_revokes_other_sessions(app, conn):
     assert client.get("/api/v1/app").status_code == 200
     assert other.get("/api/v1/app").status_code == 401
     assert auth_core.verify_password(conn, new_password) is True
-
-
-def test_hidden_password_form_is_reported_in_status(app):
-    client = owner_client(app)
-
-    assert client.put("/api/v1/auth/settings", json={"passwordForm": "hidden"}).status_code == 200
-
-    assert _anonymous(app).get("/api/v1/auth/status").json()["login"]["passwordForm"] == "hidden"
-    assert client.get("/api/v1/auth/settings").json()["passwordForm"] == "hidden"
 
 
 def test_upgraded_install_is_gated_to_the_account_step(app, conn):

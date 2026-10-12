@@ -118,8 +118,8 @@ the same limits Grafana uses by default.
   passphrase. After five wrong guesses each further attempt waits longer, up
   to 15 minutes. A browser that has signed in before keeps its own count of
   wrong guesses, so someone guessing from elsewhere cannot lock you out of it.
-  Settings can hide the form from the sign-in page once another method works;
-  `/login?local=1` always shows it.
+  When single sign-on is set to redirect to the provider automatically,
+  `/login?local=1` still shows the password form.
 - **Single sign-on (OIDC).** Any standards-compliant provider: Authentik,
   Authelia, Keycloak, Pocket ID, Kanidm, Zitadel, Google. Create a client with
   the redirect URI Settings shows (`<your origin>/auth/oidc/callback`), enter

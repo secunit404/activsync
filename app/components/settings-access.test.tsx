@@ -30,11 +30,10 @@ const signedIn: AuthStatus = {
   user: null,
   ownerClaimed: true,
   authDisabled: false,
-  login: { passwordForm: "shown", oidc: null, strava: false },
+  login: { oidc: null, strava: false },
 };
 
 const settings: AuthSettings = {
-  passwordForm: "shown",
   stravaLogin: false,
   stravaLoginBlocker: null,
   proxy: null,
@@ -109,16 +108,6 @@ test("changes the password with the current one", async () => {
       { current: "old long passphrase", new: "a new long passphrase" },
       expect.anything(),
     ),
-  );
-});
-
-test("hiding the password form saves immediately", async () => {
-  renderAccess();
-
-  await userEvent.click(await screen.findByRole("switch", { name: "Show the password form" }));
-
-  await vi.waitFor(() =>
-    expect(api.saveAuthSettings).toHaveBeenCalledWith({ passwordForm: "hidden" }, expect.anything()),
   );
 });
 

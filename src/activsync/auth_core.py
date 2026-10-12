@@ -44,7 +44,7 @@ IP_ATTEMPT_WINDOW_SECONDS = 60
 
 SETUP_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
-DEFAULT_SETTINGS = {"password_form": "shown", "strava_login": False}
+DEFAULT_SETTINGS = {"strava_login": False}
 
 
 def _env_enabled(name: str) -> bool:
@@ -354,7 +354,8 @@ def prune_expired_sessions(conn: sqlite3.Connection, now: float) -> int:
 
 
 def load_settings(conn: sqlite3.Connection) -> dict:
-    return {**DEFAULT_SETTINGS, **(db.get_config_value(conn, SETTINGS_KEY) or {})}
+    stored = db.get_config_value(conn, SETTINGS_KEY) or {}
+    return {key: stored.get(key, default) for key, default in DEFAULT_SETTINGS.items()}
 
 
 def save_settings(conn: sqlite3.Connection, **changes) -> dict:

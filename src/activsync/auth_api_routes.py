@@ -24,7 +24,6 @@ from activsync.auth_middleware import (
 )
 
 AuthMethod = Literal["password", "oidc", "strava", "proxy", "disabled"]
-PasswordForm = Literal["shown", "hidden"]
 
 
 class OidcLoginOption(ApiModel):
@@ -33,7 +32,6 @@ class OidcLoginOption(ApiModel):
 
 
 class LoginOptions(ApiModel):
-    password_form: PasswordForm
     oidc: OidcLoginOption | None
     strava: bool
 
@@ -62,7 +60,6 @@ class PasswordChangeRequest(ApiModel):
 
 
 class AuthSettingsRequest(ApiModel):
-    password_form: PasswordForm | None = None
     strava_login: bool | None = None
 
 
@@ -73,7 +70,6 @@ class ProxyState(ApiModel):
 
 
 class AuthSettingsState(ApiModel):
-    password_form: PasswordForm
     strava_login: bool
     strava_login_blocker: str | None
     proxy: ProxyState | None
@@ -139,10 +135,8 @@ def create_router(
     router = APIRouter(prefix="/api/v1", tags=["auth"])
 
     def login_options() -> LoginOptions:
-        settings = auth_core.load_settings(conn)
         oidc_config = auth_oidc.load_config(conn)
         return LoginOptions(
-            password_form=settings["password_form"],
             oidc=OidcLoginOption(
                 label=oidc_config.display_name,
                 auto_redirect=oidc_config.auto_redirect,
@@ -286,7 +280,6 @@ def create_router(
     def auth_settings() -> AuthSettingsState:
         settings = auth_core.load_settings(conn)
         return AuthSettingsState(
-            password_form=settings["password_form"],
             strava_login=settings["strava_login"],
             strava_login_blocker=auth_strava_login.blocker(conn),
             proxy=ProxyState.model_validate(proxy.describe()) if proxy else None,

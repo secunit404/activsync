@@ -95,7 +95,6 @@ export function LoginView({
 }) {
   const oidc = status.login.oidc;
   const autoRedirect = Boolean(oidc?.autoRedirect && !local && !error);
-  const showPassword = local || status.login.passwordForm === "shown";
 
   useEffect(() => {
     if (autoRedirect) window.location.assign(oidcLoginUrl(next));
@@ -142,7 +141,7 @@ export function LoginView({
           ) : null}
         </div>
       ) : null}
-      {showPassword ? <PasswordForm next={next} /> : null}
+      <PasswordForm next={next} />
     </LoginCard>
   );
 }

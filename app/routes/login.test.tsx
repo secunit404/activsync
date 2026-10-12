@@ -26,7 +26,7 @@ function status(overrides: Partial<AuthStatus> = {}): AuthStatus {
     user: null,
     ownerClaimed: true,
     authDisabled: false,
-    login: { passwordForm: "shown", oidc: null, strava: false },
+    login: { oidc: null, strava: false },
     ...overrides,
   };
 }
@@ -95,7 +95,6 @@ test("offers each enabled provider with next passed through", async () => {
   getAuthStatus.mockResolvedValue(
     status({
       login: {
-        passwordForm: "shown",
         oidc: { label: "Authentik", autoRedirect: false },
         strava: true,
       },
@@ -113,23 +112,12 @@ test("offers each enabled provider with next passed through", async () => {
   );
 });
 
-test("a hidden password form is left out of the page", async () => {
-  getAuthStatus.mockResolvedValue(
-    status({
-      login: { passwordForm: "hidden", oidc: { label: "Authentik", autoRedirect: false }, strava: false },
-    }),
-  );
-  renderAt("/login");
-  expect(await screen.findByRole("link", { name: "Sign in with Authentik" })).toBeVisible();
-  expect(screen.queryByLabelText("Password")).toBeNull();
-});
-
-test("?local=1 shows the hidden password form and skips auto-redirect", async () => {
+test("?local=1 shows the password form and skips auto-redirect", async () => {
   const assign = vi.fn();
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { passwordForm: "hidden", oidc: { label: "Authentik", autoRedirect: true }, strava: false },
+      login: { oidc: { label: "Authentik", autoRedirect: true }, strava: false },
     }),
   );
   renderAt("/login?local=1");
@@ -143,7 +131,7 @@ test("auto-redirect sends the browser straight to the provider", async () => {
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { passwordForm: "shown", oidc: { label: "Authentik", autoRedirect: true }, strava: false },
+      login: { oidc: { label: "Authentik", autoRedirect: true }, strava: false },
     }),
   );
   renderAt("/login?next=%2Fhevy");

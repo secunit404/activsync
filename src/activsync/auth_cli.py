@@ -71,7 +71,6 @@ def _status(conn: sqlite3.Connection) -> int:
     lines = [
         f"Owner claimed:        {'yes' if auth_core.owner_claimed(conn) else 'no'}",
         f"Authentication:       {'DISABLED' if auth_core.auth_disabled() else 'on'}",
-        f"Password form:        {settings['password_form']}",
         f"Single sign-on:       {_describe_oidc(auth_oidc.load_config(conn))}",
         f"Sign in with Strava:  {'on' if settings['strava_login'] else 'off'}",
         "Proxy header:         "

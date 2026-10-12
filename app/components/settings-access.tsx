@@ -126,22 +126,6 @@ function SignInMethods({ settings }: { settings: AuthSettings }) {
       <h3 className="text-sm font-semibold">Sign-in methods</h3>
       <label className="flex items-start justify-between gap-4 text-sm">
         <span className="grid gap-0.5">
-          <span>Show the password form on the sign-in page</span>
-          <span className="text-xs text-muted-foreground">
-            When hidden, /login?local=1 still shows it.
-          </span>
-        </span>
-        <Switch
-          aria-label="Show the password form"
-          checked={settings.passwordForm === "shown"}
-          disabled={save.isPending}
-          onCheckedChange={(checked) =>
-            save.mutate({ passwordForm: checked === true ? "shown" : "hidden" })
-          }
-        />
-      </label>
-      <label className="flex items-start justify-between gap-4 text-sm">
-        <span className="grid gap-0.5">
           <span>Sign in with Strava</span>
           <span className="text-xs text-muted-foreground">
             {settings.stravaLoginBlocker ??

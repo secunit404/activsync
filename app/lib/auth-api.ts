@@ -1,7 +1,6 @@
 import { requestJson } from "@/lib/api";
 
 export type AuthMethod = "password" | "oidc" | "strava" | "proxy" | "disabled";
-export type PasswordForm = "shown" | "hidden";
 
 export type AuthStatus = {
   authenticated: boolean;
@@ -10,14 +9,12 @@ export type AuthStatus = {
   ownerClaimed: boolean;
   authDisabled: boolean;
   login: {
-    passwordForm: PasswordForm;
     oidc: { label: string; autoRedirect: boolean } | null;
     strava: boolean;
   };
 };
 
 export type AuthSettings = {
-  passwordForm: PasswordForm;
   stravaLogin: boolean;
   stravaLoginBlocker: string | null;
   proxy: { header: string; trusted: string[]; user: string } | null;
@@ -83,10 +80,7 @@ export function getAuthSettings(signal?: AbortSignal): Promise<AuthSettings> {
   return requestJson<AuthSettings>("/api/v1/auth/settings", { signal });
 }
 
-export function saveAuthSettings(payload: {
-  passwordForm?: PasswordForm;
-  stravaLogin?: boolean;
-}) {
+export function saveAuthSettings(payload: { stravaLogin?: boolean }) {
   return requestJson<AuthActionResult>("/api/v1/auth/settings", {
     method: "PUT",
     body: JSON.stringify(payload),

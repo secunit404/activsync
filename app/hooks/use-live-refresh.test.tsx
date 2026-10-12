@@ -50,7 +50,7 @@ function status(authenticated: boolean): AuthStatus {
     user: null,
     ownerClaimed: true,
     authDisabled: false,
-    login: { passwordForm: "shown", oidc: null, strava: false },
+    login: { oidc: null, strava: false },
   };
 }
 
