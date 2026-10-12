@@ -24,11 +24,17 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Sign in - ActivSync" }];
 }
 
+// Judged on the parsed URL, not the raw string: the URL parser strips tabs
+// and newlines and reads `\` as `/`, so "/\t/evil.test" becomes "//evil.test".
 export function safeNext(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+  if (!value || !value.startsWith("/")) return "/";
+  const origin = window.location.origin;
+  try {
+    const url = new URL(value, origin);
+    return url.origin === origin ? `${url.pathname}${url.search}${url.hash}` : "/";
+  } catch {
     return "/";
   }
-  return value;
 }
 
 export default function Login() {
