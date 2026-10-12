@@ -42,7 +42,6 @@ IP_ATTEMPT_LIMIT = 10
 IP_ATTEMPT_WINDOW_SECONDS = 60
 
 SETUP_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-SETUP_CODE_MAX_FAILURES = 5
 
 DEFAULT_SETTINGS = {"password_form": "shown", "strava_login": False}
 
@@ -182,14 +181,15 @@ def _normalize_code(value: str) -> bytes:
 class SetupCode:
     """The one-time code that proves the claimant can read the server log.
 
-    Held in memory only: a restart issues a new one, and so do five wrong
-    guesses, so the code is never worth more than five attempts.
+    Held in memory only; a restart issues a new one. Wrong guesses never
+    rotate it: rotation would let any anonymous client invalidate the code in
+    the owner's log at will. Guessing is bounded by the code's ~40 bits and
+    the per-client attempt limiter instead.
     """
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
         self._code: str | None = None
-        self._failures = 0
         self._lock = threading.Lock()
 
     @property
@@ -212,12 +212,9 @@ class SetupCode:
         with self._lock:
             if self._code is None:
                 return False
-            if secrets.compare_digest(_normalize_code(submitted), _normalize_code(self._code)):
-                return True
-            self._failures += 1
-            if self._failures >= SETUP_CODE_MAX_FAILURES:
-                self._issue()
-            return False
+            return secrets.compare_digest(
+                _normalize_code(submitted), _normalize_code(self._code)
+            )
 
     def discard(self) -> None:
         with self._lock:
@@ -225,7 +222,6 @@ class SetupCode:
 
     def _issue(self) -> None:
         self._code = _new_setup_code()
-        self._failures = 0
         logger.warning(
             "ActivSync is unclaimed. Open the app and enter setup code %s", self._code
         )

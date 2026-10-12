@@ -106,20 +106,16 @@ def test_setup_code_is_logged_and_checked_case_and_dash_insensitively(conn, capl
     assert codes.check(code.replace("-", "").lower()) is True
 
 
-def test_five_wrong_setup_codes_issue_a_new_one(conn, caplog):
+def test_wrong_setup_codes_never_rotate_the_logged_code(conn):
     codes = auth_core.SetupCode(conn)
     codes.ensure()
     first = codes.current
 
-    for _ in range(4):
-        assert codes.check("WRONG-CODE") is False
-    assert codes.current == first
-    with caplog.at_level(logging.WARNING, logger="activsync.auth"):
+    for _ in range(50):
         assert codes.check("WRONG-CODE") is False
 
-    assert codes.current != first
-    assert codes.check(first) is False
-    assert codes.current in caplog.text
+    assert codes.current == first
+    assert codes.check(first) is True
 
 
 def test_claimed_install_issues_no_setup_code(conn, caplog):
