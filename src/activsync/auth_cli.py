@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import sqlite3
 import sys
 import time
 
-from activsync import auth_core, auth_devices, auth_oidc, db
+from activsync import auth_core, auth_devices, auth_middleware, auth_oidc, db
 
 
 def _reset_password(conn: sqlite3.Connection) -> int:
@@ -59,6 +60,12 @@ def _describe_oidc(oidc: auth_oidc.OidcConfig | None) -> str:
     return f"{oidc.display_name} ({oidc.issuer}), {linked}"
 
 
+def _describe_proxy(proxy: auth_middleware.ProxyAuthConfig | None) -> str:
+    if proxy is None:
+        return "off"
+    return f"{proxy.header} from {', '.join(proxy.describe()['trusted'])}"
+
+
 def _status(conn: sqlite3.Connection) -> int:
     settings = auth_core.load_settings(conn)
     lines = [
@@ -67,6 +74,8 @@ def _status(conn: sqlite3.Connection) -> int:
         f"Password form:        {settings['password_form']}",
         f"Single sign-on:       {_describe_oidc(auth_oidc.load_config(conn))}",
         f"Sign in with Strava:  {'on' if settings['strava_login'] else 'off'}",
+        "Proxy header:         "
+        f"{_describe_proxy(auth_middleware.ProxyAuthConfig.from_env(os.environ))}",
         f"Active sessions:      {len(auth_core.list_sessions(conn))}",
     ]
     print("\n".join(lines))

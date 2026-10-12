@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from activsync import (
     api_routes,
@@ -122,6 +123,7 @@ def create_app(
     resolved_web_dir = web_dir or WEB_DIR
     react_index = resolved_web_dir / "index.html"
     public_url = auth_core.public_url()
+    proxy = auth_middleware.ProxyAuthConfig.from_env(os.environ)
     setup_code = auth_core.SetupCode(conn)
     setup_code.ensure()
     auth_core.prune_expired_sessions(conn, time.time())
@@ -176,6 +178,7 @@ def create_app(
             setup_code=setup_code,
             limiter=auth_core.AttemptLimiter(),
             public_url=public_url,
+            proxy=proxy,
             mock_mode=_mock_mode,
         )
     )
@@ -311,8 +314,9 @@ def create_app(
         )
 
     # Starlette runs the last-added middleware first, so this reads bottom-up
-    # as the request pipeline: security headers, authentication, CSRF, then
-    # the short-lived OAuth-state cookie Authlib keeps state, nonce and PKCE in.
+    # as the request pipeline: peer capture, proxy headers, security headers,
+    # authentication, CSRF, then the short-lived OAuth-state cookie Authlib
+    # keeps state, nonce and PKCE in.
     app.add_middleware(
         SessionMiddleware,
         secret_key=auth_core.state_secret(conn),
@@ -327,9 +331,19 @@ def create_app(
         conn=conn,
         public_url=public_url,
         allowed_hosts=auth_core.allowed_hosts(),
+        proxy=proxy,
     )
     app.add_middleware(
         auth_middleware.SecurityHeadersMiddleware,
         content_security_policy=auth_middleware.content_security_policy(react_index),
     )
+    # The app owns proxy-header handling (uvicorn runs with --no-proxy-headers)
+    # so PeerCapture can record the real socket peer first: uvicorn's '*'
+    # takes the leftmost, client-controlled X-Forwarded-For entry, and that
+    # rewritten address must never decide who may assert the proxy header.
+    app.add_middleware(
+        ProxyHeadersMiddleware,
+        trusted_hosts=os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1"),
+    )
+    app.add_middleware(auth_middleware.PeerCaptureMiddleware)
     return app

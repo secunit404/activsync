@@ -101,3 +101,13 @@ def test_disable_strava_login(conn, capsys):
     assert auth_core.load_settings(conn)["strava_login"] is False
     auth_cli.main(["status"])
     assert "Sign in with Strava:  off" in capsys.readouterr().out
+
+
+def test_status_describes_the_proxy_from_the_environment(conn, monkeypatch, capsys):
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User")
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_TRUSTED", "172.18.0.0/16")
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_USER", "andreas")
+
+    assert auth_cli.main(["status"]) == 0
+
+    assert "Proxy header:         Remote-User from 172.18.0.0/16" in capsys.readouterr().out

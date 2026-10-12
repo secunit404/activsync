@@ -1,6 +1,6 @@
-"""Request pipeline guards: security headers, authentication, and CSRF.
-Pure ASGI so they run before routing and cover every route, including ones
-added later."""
+"""Request pipeline guards: peer capture, security headers, authentication,
+and CSRF. Pure ASGI so they run before routing and cover every route,
+including ones added later."""
 
 from __future__ import annotations
 
@@ -277,6 +277,82 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+@dataclass(frozen=True)
+class ProxyAuthConfig:
+    header: str
+    trusted: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
+    user: str
+
+    @classmethod
+    def from_env(cls, environ: Mapping[str, str]) -> ProxyAuthConfig | None:
+        header = environ.get("ACTIVSYNC_AUTH_PROXY_HEADER", "").strip()
+        if not header:
+            return None
+        trusted_raw = environ.get("ACTIVSYNC_AUTH_PROXY_TRUSTED", "").strip()
+        user = environ.get("ACTIVSYNC_AUTH_PROXY_USER", "").strip()
+        if not trusted_raw:
+            raise ValueError(
+                "ACTIVSYNC_AUTH_PROXY_HEADER is set, so ACTIVSYNC_AUTH_PROXY_TRUSTED "
+                "must list the proxy's address range (for example 172.18.0.0/16)."
+            )
+        if not user:
+            raise ValueError(
+                "ACTIVSYNC_AUTH_PROXY_HEADER is set, so ACTIVSYNC_AUTH_PROXY_USER "
+                "must name the user the proxy signs in as."
+            )
+        networks = []
+        for item in (part.strip() for part in trusted_raw.split(",")):
+            if not item:
+                continue
+            try:
+                network = ipaddress.ip_network(item, strict=False)
+            except ValueError as exc:
+                raise ValueError(
+                    f"ACTIVSYNC_AUTH_PROXY_TRUSTED has an invalid address range: {item}"
+                ) from exc
+            if network.prefixlen == 0:
+                raise ValueError(
+                    f"ACTIVSYNC_AUTH_PROXY_TRUSTED must not trust every address ({item})."
+                )
+            networks.append(network)
+        return cls(header=header, trusted=tuple(networks), user=user)
+
+    def trusts(self, peer: str | None) -> bool:
+        try:
+            address = ipaddress.ip_address(peer or "")
+        except ValueError:
+            return False
+        return any(address in network for network in self.trusted)
+
+    def describe(self) -> dict:
+        return {
+            "header": self.header,
+            "trusted": [str(network) for network in self.trusted],
+            "user": self.user,
+        }
+
+
+class PeerCaptureMiddleware:
+    """Records the socket peer before ProxyHeadersMiddleware rewrites
+    scope["client"] from X-Forwarded-For, which the client controls."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            client = scope.get("client")
+            scope.setdefault("state", {})["peer"] = client[0] if client else None
+        await self.app(scope, receive, send)
+
+
+class _Rejected:
+    pass
+
+
+REJECTED = _Rejected()
+
+
 class AuthenticateMiddleware:
     def __init__(
         self,
@@ -285,13 +361,16 @@ class AuthenticateMiddleware:
         conn: sqlite3.Connection,
         public_url: str | None,
         allowed_hosts: tuple[str, ...],
+        proxy: ProxyAuthConfig | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.app = app
         self.conn = conn
         self.public_host = urlsplit(public_url).netloc if public_url else None
         self.allowed_hosts = allowed_hosts
+        self.proxy = proxy
         self.clock = clock
+        self._last_untrusted_warning = 0.0
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
@@ -313,6 +392,11 @@ class AuthenticateMiddleware:
         # A sync DB read; off the event loop so a long transaction elsewhere
         # cannot stall every open request and the SSE stream with it.
         auth = await run_in_threadpool(self._authenticate, request)
+        if auth is REJECTED:
+            await JSONResponse({"detail": "Not signed in"}, status_code=401)(
+                scope, receive, send
+            )
+            return
         scope.setdefault("state", {})["auth"] = auth
 
         if auth is None and not is_public(scope["method"], path):
@@ -324,9 +408,12 @@ class AuthenticateMiddleware:
             return
         await self.app(scope, receive, send)
 
-    def _authenticate(self, request: Request) -> AuthState | None:
+    def _authenticate(self, request: Request) -> AuthState | _Rejected | None:
         if auth_core.auth_disabled():
             return AuthState(method="disabled")
+        from_proxy = self._from_proxy(request)
+        if from_proxy is not None:
+            return from_proxy
         token = request.cookies.get(session_cookie_name(request.scope))
         if not token:
             return None
@@ -338,6 +425,33 @@ class AuthenticateMiddleware:
             token_hash=session.token_hash,
             public_id=session.public_id,
         )
+
+    def _from_proxy(self, request: Request) -> AuthState | _Rejected | None:
+        if self.proxy is None:
+            return None
+        value = request.headers.get(self.proxy.header)
+        if value is None:
+            return None
+        peer = request.scope.get("state", {}).get("peer")
+        if not self.proxy.trusts(peer):
+            now = self.clock()
+            if now - self._last_untrusted_warning >= 60:
+                self._last_untrusted_warning = now
+                logger.warning(
+                    "ignored %s from untrusted peer %s; is something bypassing the proxy?",
+                    self.proxy.header,
+                    peer,
+                )
+            return None
+        if value == self.proxy.user:
+            return AuthState(method="proxy", user=value)
+        logger.warning(
+            "proxy at %s asserted %s=%r, which is not the configured owner",
+            peer,
+            self.proxy.header,
+            value,
+        )
+        return REJECTED
 
 
 def own_origin(scope: Mapping, headers: Mapping[str, str]) -> str:

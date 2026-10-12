@@ -1,6 +1,7 @@
 import importlib
 import logging
 
+import pytest
 from fastapi.testclient import TestClient
 
 from activsync import timeutil
@@ -87,3 +88,12 @@ def test_bind_host_reads_the_uvicorn_flag(tmp_path, monkeypatch):
     assert main._bind_host(["uvicorn", "activsync.main:app", "--host", "0.0.0.0"]) == "0.0.0.0"
     assert main._bind_host(["uvicorn", "--host=::"]) == "::"
     assert main._bind_host(["uvicorn", "activsync.main:app"]) == "127.0.0.1"
+
+
+def test_startup_refuses_an_incomplete_proxy_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACTIVSYNC_DB_PATH", str(tmp_path / "proxy.db"))
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User")
+    import activsync.main as main
+
+    with pytest.raises(SystemExit, match="ACTIVSYNC_AUTH_PROXY_TRUSTED"):
+        importlib.reload(main)

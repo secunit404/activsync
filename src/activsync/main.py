@@ -6,7 +6,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
-from activsync import auth_core, config, db, logging_setup, timeutil
+from activsync import auth_core, auth_middleware, config, db, logging_setup, timeutil
 from activsync.dev_seed import seed as seed_dev_data
 from activsync.garmin_client import GarminClient, get_client as get_garmin_raw_client
 from activsync.hevy_client import HevyClient
@@ -33,6 +33,11 @@ E2E_SEED_ONBOARDED = (_env_value("ACTIVSYNC_DEV_E2E_ONBOARDED") or "").lower() i
 # Set by `make dev` and the E2E server, not by `make dev-fresh`, whose wiped
 # DB must start at the claim step.
 DEV_SEED_OWNER = _env_enabled("ACTIVSYNC_DEV_SEED_OWNER")
+
+try:
+    auth_middleware.ProxyAuthConfig.from_env(os.environ)
+except ValueError as exc:
+    raise SystemExit(f"ActivSync cannot start: {exc}") from exc
 
 
 DB_PATH = db.resolve_path(mock_mode=MOCK_MODE)

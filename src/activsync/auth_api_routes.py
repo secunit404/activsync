@@ -15,6 +15,7 @@ from activsync import auth_core, auth_devices, auth_oidc, auth_strava_login, db
 from activsync.api_routes import ApiModel
 from activsync.auth_middleware import (
     AuthState,
+    ProxyAuthConfig,
     clear_session_cookie,
     client_ip,
     device_cookie_name,
@@ -65,10 +66,17 @@ class AuthSettingsRequest(ApiModel):
     strava_login: bool | None = None
 
 
+class ProxyState(ApiModel):
+    header: str
+    trusted: list[str]
+    user: str
+
+
 class AuthSettingsState(ApiModel):
     password_form: PasswordForm
     strava_login: bool
     strava_login_blocker: str | None
+    proxy: ProxyState | None
 
 
 class SessionInfo(ApiModel):
@@ -125,6 +133,7 @@ def create_router(
     setup_code: auth_core.SetupCode,
     limiter: auth_core.AttemptLimiter,
     public_url: str | None,
+    proxy: ProxyAuthConfig | None,
     mock_mode: Callable[[], bool],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["auth"])
@@ -280,6 +289,7 @@ def create_router(
             password_form=settings["password_form"],
             strava_login=settings["strava_login"],
             strava_login_blocker=auth_strava_login.blocker(conn),
+            proxy=ProxyState.model_validate(proxy.describe()) if proxy else None,
         )
 
     @router.put("/auth/settings", response_model=AuthActionResult)
