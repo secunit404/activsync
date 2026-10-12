@@ -20,6 +20,7 @@ export default defineConfig({
       "/favicon.ico": { target: backend, changeOrigin: false },
       "/health": { target: backend, changeOrigin: false },
       "/strava": { target: backend, changeOrigin: false },
+      "/auth": { target: backend, changeOrigin: false },
     },
   },
 });
