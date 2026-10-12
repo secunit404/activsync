@@ -35,6 +35,7 @@ def _reset_password(conn: sqlite3.Connection) -> int:
 
 def _revoke_sessions(conn: sqlite3.Connection) -> int:
     revoked = auth_core.revoke_all(conn)
+    auth_devices.clear_trusted_devices(conn)
     print(f"Signed out {revoked} session(s).")
     return 0
 
@@ -53,7 +54,7 @@ def _status(conn: sqlite3.Connection) -> int:
 
 COMMANDS = {
     "reset-password": (_reset_password, "Set a new password and sign out every session."),
-    "revoke-sessions": (_revoke_sessions, "Sign out every session."),
+    "revoke-sessions": (_revoke_sessions, "Sign out every session and forget trusted browsers."),
     "status": (_status, "Show which sign-in methods are on. Never prints secrets."),
 }
 

@@ -66,6 +66,14 @@ def test_revoke_sessions(conn, capsys):
     assert "Signed out 2 session(s)." in capsys.readouterr().out
 
 
+def test_revoke_sessions_forgets_trusted_devices_like_sign_out_everywhere(conn):
+    device_id = auth_devices.trust_device(conn, time.time())
+
+    assert auth_cli.main(["revoke-sessions"]) == 0
+
+    assert auth_devices.is_trusted(conn, device_id) is False
+
+
 def test_status_never_prints_the_hash(conn, capsys):
     auth_core.set_password(conn, PASSWORD, time.time())
 
