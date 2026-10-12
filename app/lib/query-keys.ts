@@ -2,6 +2,10 @@ import type { ActivityQuery } from "@/lib/api";
 
 export const queryKeys = {
   appState: ["app-state"] as const,
+  authStatus: ["auth-status"] as const,
+  authSettings: ["auth-settings"] as const,
+  authSessions: ["auth-sessions"] as const,
+  oidcConfig: ["oidc-config"] as const,
   settings: ["settings"] as const,
   hevyTools: ["hevy-tools"] as const,
   hevyDeviceOptions: ["hevy-device-options"] as const,
