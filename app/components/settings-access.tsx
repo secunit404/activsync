@@ -39,6 +39,11 @@ export function AccessSettings() {
       description="How you sign in to ActivSync, and where you are signed in."
       contentClassName="grid gap-7"
     >
+      {status.data?.method === "proxy" ? (
+        <p className="text-sm">
+          Signed in through your proxy as <strong>{status.data.user}</strong>.
+        </p>
+      ) : null}
       {settings.data && status.data ? (
         <>
           <PasswordChangeForm />
@@ -150,6 +155,12 @@ function SignInMethods({ settings }: { settings: AuthSettings }) {
           onCheckedChange={(checked) => save.mutate({ stravaLogin: checked === true })}
         />
       </label>
+      {settings.proxy ? (
+        <p className="text-xs text-muted-foreground">
+          Proxy sign-in — configured via environment: {settings.proxy.header} from{" "}
+          {settings.proxy.trusted.join(", ")}
+        </p>
+      ) : null}
     </div>
   );
 }

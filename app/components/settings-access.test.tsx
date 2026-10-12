@@ -37,6 +37,7 @@ const settings: AuthSettings = {
   passwordForm: "shown",
   stravaLogin: false,
   stravaLoginBlocker: null,
+  proxy: null,
 };
 
 const sessions: AuthSession[] = [
@@ -140,6 +141,26 @@ test("turning on Sign in with Strava saves immediately", async () => {
   await vi.waitFor(() =>
     expect(api.saveAuthSettings).toHaveBeenCalledWith({ stravaLogin: true }, expect.anything()),
   );
+});
+
+test("shows the environment-configured proxy read-only", async () => {
+  api.getAuthSettings.mockResolvedValue({
+    ...settings,
+    proxy: { header: "Remote-User", trusted: ["172.18.0.0/16"], user: "andreas" },
+  });
+  renderAccess();
+
+  expect(
+    await screen.findByText(/configured via environment: Remote-User from 172\.18\.0\.0\/16/),
+  ).toBeVisible();
+});
+
+test("a proxy sign-in says so and offers no sign-out", async () => {
+  api.getAuthStatus.mockResolvedValue({ ...signedIn, method: "proxy", user: "andreas" });
+  renderAccess();
+
+  expect(await screen.findByText(/Signed in through your proxy as/)).toHaveTextContent("andreas");
+  expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
 });
 
 test("lists sessions and revokes another one", async () => {

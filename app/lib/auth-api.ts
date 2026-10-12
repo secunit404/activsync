@@ -20,6 +20,7 @@ export type AuthSettings = {
   passwordForm: PasswordForm;
   stravaLogin: boolean;
   stravaLoginBlocker: string | null;
+  proxy: { header: string; trusted: string[]; user: string } | null;
 };
 
 export type AuthSession = {

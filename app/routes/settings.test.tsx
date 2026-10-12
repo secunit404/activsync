@@ -31,6 +31,7 @@ vi.mock("@/lib/auth-api", async (importOriginal) => {
       passwordForm: "shown",
       stravaLogin: false,
       stravaLoginBlocker: null,
+      proxy: null,
     }),
     getSessions: vi.fn().mockResolvedValue([]),
     getOidcConfig: vi.fn().mockResolvedValue({
