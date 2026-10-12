@@ -9,7 +9,7 @@ export const CSRF_HEADERS = { "X-ActivSync-Request": "1", Origin: BASE_URL };
 
 export async function signIn(page: Page, next = "/") {
   await page.goto(next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`);
-  await page.getByLabel("Password").fill(DEV_PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(DEV_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).not.toHaveURL(/\/login/);
 }

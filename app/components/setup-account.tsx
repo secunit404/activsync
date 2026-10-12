@@ -9,8 +9,10 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Spinner } from "@/components/ui/spinner";
 import { claimOwner } from "@/lib/auth-api";
+import { passwordsMismatch } from "@/lib/password";
 import { queryKeys } from "@/lib/query-keys";
 
 const MIN_PASSWORD = 15;
@@ -31,7 +33,7 @@ export function AccountStep() {
       await queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     },
   });
-  const mismatch = repeat.length > 0 && repeat !== password;
+  const mismatch = passwordsMismatch(password, repeat);
   const tooShort = password.length > 0 && password.length < MIN_PASSWORD;
 
   return (
@@ -71,10 +73,9 @@ export function AccountStep() {
           </Field>
           <Field data-invalid={tooShort || undefined}>
             <FieldLabel htmlFor="setup-password">Password</FieldLabel>
-            <Input
+            <PasswordInput
               id="setup-password"
               className="h-12"
-              type="password"
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -87,10 +88,9 @@ export function AccountStep() {
           </Field>
           <Field data-invalid={mismatch || undefined}>
             <FieldLabel htmlFor="setup-password-repeat">Repeat password</FieldLabel>
-            <Input
+            <PasswordInput
               id="setup-password-repeat"
               className="h-12"
-              type="password"
               autoComplete="new-password"
               value={repeat}
               onChange={(event) => setRepeat(event.target.value)}

@@ -8,7 +8,7 @@ import { StravaConnectButton } from "@/components/strava-connect-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuthStatus } from "@/hooks/use-auth-status";
 import { useStravaLoginUrl } from "@/hooks/use-strava-authorize-url";
@@ -173,10 +173,9 @@ function PasswordForm({ next }: { next: string }) {
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="login-password">Password</FieldLabel>
-          <Input
+          <PasswordInput
             id="login-password"
             className="h-11"
-            type="password"
             autoComplete="current-password"
             autoFocus
             value={password}

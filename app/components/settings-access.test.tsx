@@ -101,6 +101,7 @@ test("changes the password with the current one", async () => {
 
   await userEvent.type(await screen.findByLabelText("Current password"), "old long passphrase");
   await userEvent.type(screen.getByLabelText("New password"), "a new long passphrase");
+  await userEvent.type(screen.getByLabelText("Repeat new password"), "a new long passphrase");
   await userEvent.click(screen.getByRole("button", { name: "Change password" }));
 
   await vi.waitFor(() =>
@@ -108,6 +109,44 @@ test("changes the password with the current one", async () => {
       { current: "old long passphrase", new: "a new long passphrase" },
       expect.anything(),
     ),
+  );
+});
+
+test("a mismatched repeat blocks the password change", async () => {
+  renderAccess();
+
+  await userEvent.type(await screen.findByLabelText("Current password"), "old long passphrase");
+  await userEvent.type(screen.getByLabelText("New password"), "a new long passphrase");
+  await userEvent.type(screen.getByLabelText("Repeat new password"), "a new long passphrasx");
+
+  expect(screen.getByText("The new passwords don’t match.")).toBeVisible();
+  const submit = screen.getByRole("button", { name: "Change password" });
+  expect(submit).toBeDisabled();
+  await userEvent.click(submit);
+  expect(api.changePassword).not.toHaveBeenCalled();
+});
+
+test("each password field has its own show/hide toggle", async () => {
+  renderAccess();
+
+  const current = await screen.findByLabelText("Current password");
+  const next = screen.getByLabelText("New password");
+  const repeat = screen.getByLabelText("Repeat new password");
+  expect(current).toHaveAttribute("autocomplete", "current-password");
+  expect(next).toHaveAttribute("autocomplete", "new-password");
+  expect(repeat).toHaveAttribute("autocomplete", "new-password");
+
+  const form = current.closest("form")!;
+  const toggles = within(form).getAllByRole("button", { name: "Show password" });
+  expect(toggles).toHaveLength(3);
+  await userEvent.click(toggles[1]);
+
+  expect(current).toHaveAttribute("type", "password");
+  expect(next).toHaveAttribute("type", "text");
+  expect(repeat).toHaveAttribute("type", "password");
+  expect(within(form).getByRole("button", { name: "Hide password" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
   );
 });
 

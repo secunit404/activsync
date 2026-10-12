@@ -88,6 +88,26 @@ test("shows the server's message for a wrong password", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password.");
 });
 
+test("the password field can be shown and hidden", async () => {
+  getAuthStatus.mockResolvedValue(status());
+  renderAt("/login");
+
+  const input = await screen.findByLabelText("Password");
+  expect(input).toHaveAttribute("type", "password");
+  expect(input).toHaveAttribute("autocomplete", "current-password");
+
+  await userEvent.type(input, "correct horse");
+  await userEvent.click(screen.getByRole("button", { name: "Show password" }));
+
+  expect(input).toHaveAttribute("type", "text");
+  expect(input).toHaveValue("correct horse");
+  expect(screen.getByRole("button", { name: "Hide password" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(login).not.toHaveBeenCalled();
+});
+
 test("maps error codes to fixed copy, never provider text", async () => {
   getAuthStatus.mockResolvedValue(status());
   renderAt("/login?error=oidc_mismatch&error_description=%3Cscript%3E");

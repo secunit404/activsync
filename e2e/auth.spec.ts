@@ -19,7 +19,7 @@ test("a signed-out visit goes to login and comes back after signing in", async (
   await page.goto("/hevy");
   await expect(page).toHaveURL(/\/login\?next=%2Fhevy$/);
 
-  await page.getByLabel("Password").fill(DEV_PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(DEV_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL(/\/hevy$/);
@@ -27,7 +27,7 @@ test("a signed-out visit goes to login and comes back after signing in", async (
 
 test("a wrong password is refused with one generic message", async ({ page }) => {
   await page.goto("/login");
-  await page.getByLabel("Password").fill("not the dev password at all");
+  await page.getByLabel("Password", { exact: true }).fill("not the dev password at all");
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page.getByRole("alert")).toHaveText("Wrong password.");

@@ -6,8 +6,8 @@ import { SessionList } from "@/components/settings-access-sessions";
 import { SettingsSection } from "@/components/settings-shell";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useAuthAction } from "@/hooks/use-auth-action";
@@ -18,6 +18,7 @@ import {
   saveAuthSettings,
   type AuthSettings,
 } from "@/lib/auth-api";
+import { passwordsMismatch } from "@/lib/password";
 import { queryKeys } from "@/lib/query-keys";
 
 /**
@@ -66,7 +67,9 @@ export function AccessSettings() {
 function PasswordChangeForm() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
+  const [repeat, setRepeat] = useState("");
   const change = useAuthAction(changePassword);
+  const mismatch = passwordsMismatch(next, repeat);
 
   return (
     <form
@@ -79,6 +82,7 @@ function PasswordChangeForm() {
             onSuccess: () => {
               setCurrent("");
               setNext("");
+              setRepeat("");
             },
           },
         );
@@ -88,9 +92,8 @@ function PasswordChangeForm() {
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="access-current-password">Current password</FieldLabel>
-          <Input
+          <PasswordInput
             id="access-current-password"
-            type="password"
             autoComplete="current-password"
             value={current}
             onChange={(event) => setCurrent(event.target.value)}
@@ -99,9 +102,8 @@ function PasswordChangeForm() {
         </Field>
         <Field>
           <FieldLabel htmlFor="access-new-password">New password</FieldLabel>
-          <Input
+          <PasswordInput
             id="access-new-password"
-            type="password"
             autoComplete="new-password"
             minLength={15}
             value={next}
@@ -109,8 +111,26 @@ function PasswordChangeForm() {
             required
           />
         </Field>
+        <Field data-invalid={mismatch || undefined}>
+          <FieldLabel htmlFor="access-new-password-repeat">Repeat new password</FieldLabel>
+          <PasswordInput
+            id="access-new-password-repeat"
+            autoComplete="new-password"
+            value={repeat}
+            onChange={(event) => setRepeat(event.target.value)}
+            required
+          />
+          {mismatch ? (
+            <FieldDescription>The new passwords don’t match.</FieldDescription>
+          ) : null}
+        </Field>
       </FieldGroup>
-      <Button type="submit" variant="outline" className="sm:w-fit" disabled={change.isPending}>
+      <Button
+        type="submit"
+        variant="outline"
+        className="sm:w-fit"
+        disabled={change.isPending || mismatch}
+      >
         {change.isPending ? <Spinner /> : null}
         Change password
       </Button>

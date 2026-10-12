@@ -87,3 +87,23 @@ test("shows a wrong setup code", async () => {
 
   expect(await screen.findByRole("alert")).toHaveTextContent("That setup code is not right.");
 });
+
+test("both password fields toggle visibility on their own", async () => {
+  renderStep();
+
+  const password = screen.getByLabelText("Password");
+  const repeat = screen.getByLabelText("Repeat password");
+  expect(password).toHaveAttribute("autocomplete", "new-password");
+  expect(repeat).toHaveAttribute("autocomplete", "new-password");
+
+  const toggles = screen.getAllByRole("button", { name: "Show password" });
+  expect(toggles).toHaveLength(2);
+  await userEvent.click(toggles[1]);
+
+  expect(password).toHaveAttribute("type", "password");
+  expect(repeat).toHaveAttribute("type", "text");
+  expect(screen.getByRole("button", { name: "Hide password" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
