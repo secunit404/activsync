@@ -226,3 +226,13 @@ def test_the_legacy_purge_leaves_auth_sessions_alone(tmp_path):
     reopened = db.connect(path)
 
     assert auth_core.resolve_session(reopened, token, NOW) is not None
+
+
+def test_disabled_auth_on_a_network_bind_logs_an_error(monkeypatch, caplog):
+    monkeypatch.setenv("ACTIVSYNC_AUTH_DISABLED", "1")
+    with caplog.at_level(logging.ERROR, logger="activsync.auth"):
+        auth_core.warn_if_disabled_on_network("127.0.0.1")
+        assert caplog.text == ""
+        auth_core.warn_if_disabled_on_network("0.0.0.0")
+
+    assert "Authentication is disabled" in caplog.text

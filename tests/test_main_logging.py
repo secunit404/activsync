@@ -77,3 +77,13 @@ def test_real_mode_starts_background_services_by_default(tmp_path, monkeypatch):
         "poller-stop",
         "updates-stop",
     ]
+
+
+def test_bind_host_reads_the_uvicorn_flag(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACTIVSYNC_DB_PATH", str(tmp_path / "bind.db"))
+    import activsync.main as main
+    importlib.reload(main)
+
+    assert main._bind_host(["uvicorn", "activsync.main:app", "--host", "0.0.0.0"]) == "0.0.0.0"
+    assert main._bind_host(["uvicorn", "--host=::"]) == "::"
+    assert main._bind_host(["uvicorn", "activsync.main:app"]) == "127.0.0.1"

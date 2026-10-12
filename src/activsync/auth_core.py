@@ -361,3 +361,15 @@ def save_settings(conn: sqlite3.Connection, **changes) -> dict:
         updated = {**load_settings(conn), **changes}
         db.set_config_value(conn, SETTINGS_KEY, updated)
     return updated
+
+
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def warn_if_disabled_on_network(bind_host: str) -> None:
+    if auth_disabled() and bind_host not in LOOPBACK_HOSTS:
+        logger.error(
+            "Authentication is disabled (ACTIVSYNC_AUTH_DISABLED) and ActivSync "
+            "listens on %s. Anyone who can reach it has full access.",
+            bind_host,
+        )

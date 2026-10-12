@@ -4,17 +4,25 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from datetime import datetime, timezone
 
-from activsync import config, db, dev_mock, hevy_db
+from activsync import auth_core, config, db, dev_mock, hevy_db
 
 SEED_VERSION = 11
+
+DEV_PASSWORD = "activsync-dev-password"
 
 _HEVY_TABLES = ("hevy_workouts", "hevy_operations", "exercise_templates",
                 "exercise_mappings", "merge_backups", "hevy_events_seen")
 
 
-def seed(conn: sqlite3.Connection, *, mark_onboarded: bool = False) -> None:
+def seed(
+    conn: sqlite3.Connection,
+    *,
+    mark_onboarded: bool = False,
+    seed_owner: bool = False,
+) -> None:
     """Insert repeatable, multi-month activity data into the dev database.
 
     ``mark_onboarded`` is applied on every call that clears the non-dev-database
@@ -23,6 +31,9 @@ def seed(conn: sqlite3.Connection, *, mark_onboarded: bool = False) -> None:
     ``SEED_VERSION``) before the caller started asking for onboarding to be
     marked complete, the early return must not skip that. Applying it there is
     safe — it is idempotent.
+
+    ``seed_owner`` follows the same rule, so an already-seeded dev DB gains
+    the dev password too.
     """
     existing = db.list_activities(conn)
     if existing and not all(
@@ -34,6 +45,8 @@ def seed(conn: sqlite3.Connection, *, mark_onboarded: bool = False) -> None:
         return
     if mark_onboarded:
         _mark_onboarding_complete(conn)
+    if seed_owner and not auth_core.owner_claimed(conn):
+        auth_core.set_password(conn, DEV_PASSWORD, time.time())
     if db.get_config_value(conn, "dev_seed_version") == SEED_VERSION:
         return
     if existing:

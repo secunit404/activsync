@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from activsync import config, db, logging_setup
+from activsync import auth_core, config, db, logging_setup
 from activsync.garmin_client import GarminSessionExpired
 from activsync.poller import Poller
 from activsync.strava_client import StravaRateLimitError
@@ -404,3 +404,24 @@ def test_poller_logs_the_backoff_deadline_in_local_time(conn, monkeypatch, caplo
     message = caplog.records[0].getMessage()
     assert "22:15:00 CEST" in message
     assert "+00:00" not in message, "raw UTC offset leaked into a local-time log"
+
+
+def test_loop_prunes_expired_sessions_hourly_even_before_setup(conn):
+    start = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+    auth_core.create_session(
+        conn, method="password", ip="", user_agent="",
+        now=start.timestamp() - auth_core.SESSION_IDLE_SECONDS,
+    )
+    poller = Poller(conn, garmin_factory=MagicMock(), strava_factory=MagicMock())
+
+    poller._loop_once(start)
+    assert auth_core.list_sessions(conn) == []
+
+    auth_core.create_session(
+        conn, method="password", ip="", user_agent="",
+        now=start.timestamp() - auth_core.SESSION_IDLE_SECONDS,
+    )
+    poller._loop_once(start + timedelta(minutes=59))
+    assert len(auth_core.list_sessions(conn)) == 1
+    poller._loop_once(start + timedelta(minutes=60))
+    assert auth_core.list_sessions(conn) == []

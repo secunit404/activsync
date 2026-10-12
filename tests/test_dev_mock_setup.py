@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from auth_helpers import owner_client
 
-from activsync import db, dev_mock, view
+from activsync import auth_core, db, dev_mock, dev_seed, view
 from activsync import server as server_module
 from activsync.dev_seed import seed as seed_dev_data
 from activsync.server import create_app
@@ -174,3 +174,23 @@ def test_mock_off_uses_real_login_path(monkeypatch, seeded_conn):
 
     assert response.status_code == 502
     assert view.connection_status(seeded_conn)["garmin"]["connected"] is False
+
+
+def test_seed_creates_the_dev_owner_only_when_asked(seeded_conn):
+    assert auth_core.owner_claimed(seeded_conn) is False
+
+    seed_dev_data(seeded_conn, seed_owner=True)
+
+    assert auth_core.verify_password(seeded_conn, dev_seed.DEV_PASSWORD) is True
+
+
+def test_seed_never_creates_an_owner_on_a_real_database(tmp_path):
+    conn = db.connect(str(tmp_path / "real.db"))
+    db.insert_activity(
+        conn, 1, "running", "Run", "", "2026-07-09 09:00:00", "real-hash", "pending",
+        datetime(2026, 7, 9, tzinfo=timezone.utc),
+    )
+
+    seed_dev_data(conn, seed_owner=True)
+
+    assert auth_core.owner_claimed(conn) is False
