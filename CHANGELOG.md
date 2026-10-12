@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.0](https://github.com/secunit404/activsync/compare/v2.0.1...v2.1.0) (2026-10-12)
+
+
+### Features
+
+* upload Hevy strength workouts to Strava with Strava's own exercises ([#72](https://github.com/secunit404/activsync/issues/72)) ([bde7423](https://github.com/secunit404/activsync/commit/bde7423f5dd3309e809f9f045fa434679c5086a0))
+
+
+### Bug Fixes
+
+* fall back to the FIT when Strava rejects a strength upload ([#74](https://github.com/secunit404/activsync/issues/74)) ([bb17ecd](https://github.com/secunit404/activsync/commit/bb17ecdb27e876fc618117b70978e6fd5beb7645))
+
 ## [2.0.1](https://github.com/secunit404/activsync/compare/v2.0.0...v2.0.1) (2026-09-29)
 
 
