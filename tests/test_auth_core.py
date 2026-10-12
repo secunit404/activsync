@@ -140,3 +140,92 @@ def test_disabled_auth_issues_no_setup_code(conn, monkeypatch):
     codes.ensure()
 
     assert codes.current is None
+
+
+def _session(conn, now=NOW, method="password"):
+    return auth_core.create_session(
+        conn, method=method, ip="203.0.113.7", user_agent="ua", now=now
+    )
+
+
+def test_sessions_store_only_the_token_hash(conn):
+    token = _session(conn)
+
+    rows = conn.execute("SELECT * FROM auth_sessions").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["token_hash"] == auth_core.hash_token(token)
+    assert token not in [str(value) for value in dict(rows[0]).values()]
+    assert rows[0]["public_id"] != rows[0]["token_hash"]
+
+
+def test_session_idle_timeout(conn):
+    token = _session(conn)
+    idle = auth_core.SESSION_IDLE_SECONDS
+
+    assert auth_core.resolve_session(conn, token, NOW + idle - 1) is not None
+    token = _session(conn)
+    assert auth_core.resolve_session(conn, token, NOW + idle) is None
+    assert auth_core.resolve_session(conn, token, NOW) is None
+
+
+def test_session_absolute_timeout_despite_activity(conn):
+    token = _session(conn)
+    day = 24 * 3600
+    for elapsed in range(day, auth_core.SESSION_ABSOLUTE_SECONDS, day):
+        assert auth_core.resolve_session(conn, token, NOW + elapsed) is not None
+
+    assert (
+        auth_core.resolve_session(conn, token, NOW + auth_core.SESSION_ABSOLUTE_SECONDS)
+        is None
+    )
+
+
+def test_last_seen_is_written_at_most_every_five_minutes(conn):
+    token = _session(conn)
+
+    soon = auth_core.resolve_session(conn, token, NOW + 299)
+    later = auth_core.resolve_session(conn, token, NOW + 300)
+
+    assert soon.last_seen_at == int(NOW)
+    assert later.last_seen_at == int(NOW + 300)
+    stored = conn.execute("SELECT last_seen_at FROM auth_sessions").fetchone()[0]
+    assert stored == int(NOW + 300)
+
+
+def test_revoke_one_and_revoke_all_except_current(conn):
+    first, second, third = _session(conn), _session(conn), _session(conn)
+    second_public = auth_core.resolve_session(conn, second, NOW).public_id
+
+    assert auth_core.revoke_public_id(conn, second_public) is True
+    assert auth_core.revoke_public_id(conn, second_public) is False
+    assert auth_core.revoke_all(conn, keep_token_hash=auth_core.hash_token(first)) == 1
+    assert auth_core.resolve_session(conn, first, NOW) is not None
+    assert auth_core.resolve_session(conn, third, NOW) is None
+    assert auth_core.revoke_all(conn) == 1
+
+
+def test_prune_drops_idle_and_expired_sessions(conn):
+    _session(conn, now=NOW - auth_core.SESSION_IDLE_SECONDS)
+    keep = _session(conn)
+
+    assert auth_core.prune_expired_sessions(conn, NOW) == 1
+    assert auth_core.resolve_session(conn, keep, NOW) is not None
+
+
+def test_settings_default_and_merge(conn):
+    assert auth_core.load_settings(conn) == {"password_form": "shown", "strava_login": False}
+
+    saved = auth_core.save_settings(conn, password_form="hidden")
+
+    assert saved == {"password_form": "hidden", "strava_login": False}
+    assert auth_core.load_settings(conn) == saved
+
+
+def test_the_legacy_purge_leaves_auth_sessions_alone(tmp_path):
+    path = str(tmp_path / "reopen.db")
+    conn = db.connect(path)
+    token = _session(conn)
+
+    reopened = db.connect(path)
+
+    assert auth_core.resolve_session(reopened, token, NOW) is not None

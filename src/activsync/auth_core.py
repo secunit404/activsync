@@ -6,6 +6,8 @@ holds only its SHA-256, so a copied database cannot be replayed as a cookie.
 
 from __future__ import annotations
 
+import dataclasses
+import hashlib
 import logging
 import math
 import os
@@ -13,6 +15,7 @@ import secrets
 import sqlite3
 import threading
 from collections import deque
+from dataclasses import dataclass
 
 from argon2 import PasswordHasher, profiles
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -23,9 +26,14 @@ logger = logging.getLogger("activsync.auth")
 
 OWNER_KEY = "auth_owner"
 THROTTLE_KEY = "auth_login_throttle"
+SETTINGS_KEY = "auth_settings"
 
 PASSWORD_MIN_LENGTH = 15
 PASSWORD_MAX_LENGTH = 256
+
+SESSION_IDLE_SECONDS = 7 * 24 * 3600
+SESSION_ABSOLUTE_SECONDS = 30 * 24 * 3600
+LAST_SEEN_WRITE_SECONDS = 5 * 60
 
 FREE_FAILURES = 5
 MAX_DELAY_SECONDS = 900
@@ -35,6 +43,8 @@ IP_ATTEMPT_WINDOW_SECONDS = 60
 
 SETUP_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 SETUP_CODE_MAX_FAILURES = 5
+
+DEFAULT_SETTINGS = {"password_form": "shown", "strava_login": False}
 
 
 def _env_enabled(name: str) -> bool:
@@ -219,3 +229,119 @@ class SetupCode:
         logger.warning(
             "ActivSync is unclaimed. Open the app and enter setup code %s", self._code
         )
+
+
+@dataclass(frozen=True)
+class Session:
+    token_hash: str
+    public_id: str
+    method: str
+    created_at: int
+    last_seen_at: int
+    expires_at: int
+    ip: str
+    user_agent: str
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_session(
+    conn: sqlite3.Connection,
+    *,
+    method: str,
+    ip: str,
+    user_agent: str,
+    now: float,
+) -> str:
+    token = secrets.token_urlsafe(32)
+    issued = int(now)
+    with db.transaction(conn):
+        conn.execute(
+            """INSERT INTO auth_sessions
+               (token_hash, public_id, method, created_at, last_seen_at,
+                expires_at, ip, user_agent)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                hash_token(token),
+                secrets.token_urlsafe(12),
+                method,
+                issued,
+                issued,
+                issued + SESSION_ABSOLUTE_SECONDS,
+                ip[:64],
+                user_agent[:256],
+            ),
+        )
+    return token
+
+
+def resolve_session(
+    conn: sqlite3.Connection, token: str, now: float
+) -> Session | None:
+    row = conn.execute(
+        "SELECT * FROM auth_sessions WHERE token_hash = ?", (hash_token(token),)
+    ).fetchone()
+    if row is None:
+        return None
+    session = Session(**dict(row))
+    if now >= session.expires_at or now - session.last_seen_at >= SESSION_IDLE_SECONDS:
+        revoke_session(conn, session.token_hash)
+        return None
+    if now - session.last_seen_at >= LAST_SEEN_WRITE_SECONDS:
+        with db.transaction(conn):
+            conn.execute(
+                "UPDATE auth_sessions SET last_seen_at = ? WHERE token_hash = ?",
+                (int(now), session.token_hash),
+            )
+        return dataclasses.replace(session, last_seen_at=int(now))
+    return session
+
+
+def revoke_session(conn: sqlite3.Connection, token_hash: str) -> None:
+    with db.transaction(conn):
+        conn.execute("DELETE FROM auth_sessions WHERE token_hash = ?", (token_hash,))
+
+
+def revoke_public_id(conn: sqlite3.Connection, public_id: str) -> bool:
+    with db.transaction(conn):
+        cursor = conn.execute(
+            "DELETE FROM auth_sessions WHERE public_id = ?", (public_id,)
+        )
+    return cursor.rowcount > 0
+
+
+def revoke_all(conn: sqlite3.Connection, *, keep_token_hash: str | None = None) -> int:
+    with db.transaction(conn):
+        cursor = conn.execute(
+            "DELETE FROM auth_sessions WHERE token_hash != ?", (keep_token_hash or "",)
+        )
+    return cursor.rowcount
+
+
+def list_sessions(conn: sqlite3.Connection) -> list[Session]:
+    rows = conn.execute(
+        "SELECT * FROM auth_sessions ORDER BY last_seen_at DESC"
+    ).fetchall()
+    return [Session(**dict(row)) for row in rows]
+
+
+def prune_expired_sessions(conn: sqlite3.Connection, now: float) -> int:
+    with db.transaction(conn):
+        cursor = conn.execute(
+            "DELETE FROM auth_sessions WHERE expires_at <= ? OR last_seen_at <= ?",
+            (int(now), int(now) - SESSION_IDLE_SECONDS),
+        )
+    return cursor.rowcount
+
+
+def load_settings(conn: sqlite3.Connection) -> dict:
+    return {**DEFAULT_SETTINGS, **(db.get_config_value(conn, SETTINGS_KEY) or {})}
+
+
+def save_settings(conn: sqlite3.Connection, **changes) -> dict:
+    with db.transaction(conn):
+        updated = {**load_settings(conn), **changes}
+        db.set_config_value(conn, SETTINGS_KEY, updated)
+    return updated
