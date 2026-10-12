@@ -252,7 +252,7 @@ export type HevyToolsState = {
     stravaExerciseName: string | null;
     /**
      * Who chose the Strava exercise: `"user"`, the built-in `"standard"`
-     * table, derived from the `"garmin"` mapping, or `""` when none applies.
+     * table, matched to the `"garmin"` exercise, or `""` when none applies.
      */
     stravaSource: "user" | "standard" | "garmin" | "";
     stravaStandardExerciseType: string | null;

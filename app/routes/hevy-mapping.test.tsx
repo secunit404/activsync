@@ -488,3 +488,33 @@ test("reset removes a Strava override and leaves the standard Garmin pair alone"
   );
   expect(removeExerciseMapping).not.toHaveBeenCalled();
 });
+
+test("a Strava exercise matched to the Garmin one says so until another is picked", async () => {
+  const state: HevyToolsState = {
+    ...toolsState,
+    mappings: [
+      mapping({
+        templateId: "tmpl-strava-garmin",
+        title: "My Squat",
+        mapped: true,
+        unmapped: false,
+        source: "user",
+        category: 12,
+        subcategory: 120,
+        categoryName: "Squat",
+        subcategoryName: "Back Squat",
+        stravaExerciseType: "BARBELL_BACK_SQUAT",
+        stravaExerciseName: "Barbell back squat",
+        stravaSource: "garmin",
+        stravaStandardExerciseType: "BARBELL_BACK_SQUAT",
+      }),
+    ],
+  };
+  renderMapping("tmpl-strava-garmin", state);
+
+  expect(await screen.findByText("Matched to Garmin")).toBeVisible();
+  expect(screen.getByText(/follows the Garmin exercise above/)).toBeVisible();
+
+  await userEvent.selectOptions(screen.getByLabelText("Strava exercise"), "MACHINE_HACK_SQUAT");
+  expect(screen.queryByText(/follows the Garmin exercise above/)).toBeNull();
+});

@@ -4,7 +4,7 @@ import { useNavigate, useOutletContext, useParams } from "react-router";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import {
   NativeSelect,
   NativeSelectOptGroup,
@@ -453,6 +453,12 @@ function ExerciseMappingForm({
                 </NativeSelectOptGroup>
               ))}
             </NativeSelect>
+            {mapping.stravaSource === "garmin" && stravaExercise === mapping.stravaExerciseType ? (
+              <FieldDescription>
+                No standard Strava exercise, so this follows the Garmin exercise above. Pick one
+                to override.
+              </FieldDescription>
+            ) : null}
           </Field>
         </DestinationSection>
       </div>
@@ -467,7 +473,7 @@ type SectionStatus = { label: string; tone: "muted" | "warning" };
 const STRAVA_STATUS: Record<Mapping["stravaSource"], SectionStatus> = {
   user: { label: "Your override", tone: "muted" },
   standard: { label: "Standard", tone: "muted" },
-  garmin: { label: "From Garmin mapping", tone: "muted" },
+  garmin: { label: "Matched to Garmin", tone: "muted" },
   "": { label: "Not set", tone: "warning" },
 };
 
