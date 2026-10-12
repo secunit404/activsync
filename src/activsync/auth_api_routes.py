@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import Field
 
-from activsync import auth_core, auth_devices, auth_oidc, db
+from activsync import auth_core, auth_devices, auth_oidc, auth_strava_login, db
 from activsync.api_routes import ApiModel
 from activsync.auth_middleware import (
     AuthState,
@@ -62,10 +62,13 @@ class PasswordChangeRequest(ApiModel):
 
 class AuthSettingsRequest(ApiModel):
     password_form: PasswordForm | None = None
+    strava_login: bool | None = None
 
 
 class AuthSettingsState(ApiModel):
     password_form: PasswordForm
+    strava_login: bool
+    strava_login_blocker: str | None
 
 
 class SessionInfo(ApiModel):
@@ -137,7 +140,7 @@ def create_router(
             )
             if oidc_config and oidc_config.linked
             else None,
-            strava=False,
+            strava=auth_strava_login.enabled(conn),
         )
 
     def status_for(auth: AuthState | None) -> AuthStatus:
@@ -273,11 +276,20 @@ def create_router(
     @router.get("/auth/settings", response_model=AuthSettingsState)
     def auth_settings() -> AuthSettingsState:
         settings = auth_core.load_settings(conn)
-        return AuthSettingsState(password_form=settings["password_form"])
+        return AuthSettingsState(
+            password_form=settings["password_form"],
+            strava_login=settings["strava_login"],
+            strava_login_blocker=auth_strava_login.blocker(conn),
+        )
 
     @router.put("/auth/settings", response_model=AuthActionResult)
     def save_auth_settings(payload: AuthSettingsRequest) -> AuthActionResult:
-        auth_core.save_settings(conn, **payload.model_dump(exclude_none=True))
+        changes = payload.model_dump(exclude_none=True)
+        if changes.get("strava_login"):
+            blocker = auth_strava_login.blocker(conn)
+            if blocker:
+                raise HTTPException(status_code=409, detail=blocker)
+        auth_core.save_settings(conn, **changes)
         return AuthActionResult(message="Sign-in settings saved.")
 
     @router.get("/auth/oidc", response_model=OidcConfigState)

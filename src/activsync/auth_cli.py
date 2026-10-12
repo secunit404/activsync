@@ -46,6 +46,12 @@ def _disable_oidc(conn: sqlite3.Connection) -> int:
     return 0
 
 
+def _disable_strava_login(conn: sqlite3.Connection) -> int:
+    auth_core.save_settings(conn, strava_login=False)
+    print("Sign in with Strava turned off.")
+    return 0
+
+
 def _describe_oidc(oidc: auth_oidc.OidcConfig | None) -> str:
     if oidc is None:
         return "off"
@@ -60,6 +66,7 @@ def _status(conn: sqlite3.Connection) -> int:
         f"Authentication:       {'DISABLED' if auth_core.auth_disabled() else 'on'}",
         f"Password form:        {settings['password_form']}",
         f"Single sign-on:       {_describe_oidc(auth_oidc.load_config(conn))}",
+        f"Sign in with Strava:  {'on' if settings['strava_login'] else 'off'}",
         f"Active sessions:      {len(auth_core.list_sessions(conn))}",
     ]
     print("\n".join(lines))
@@ -70,6 +77,7 @@ COMMANDS = {
     "reset-password": (_reset_password, "Set a new password and sign out every session."),
     "revoke-sessions": (_revoke_sessions, "Sign out every session and forget trusted browsers."),
     "disable-oidc": (_disable_oidc, "Remove the single sign-on configuration."),
+    "disable-strava-login": (_disable_strava_login, "Turn off Sign in with Strava."),
     "status": (_status, "Show which sign-in methods are on. Never prints secrets."),
 }
 

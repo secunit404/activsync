@@ -184,6 +184,7 @@ def create_app(
             conn,
             oidc=auth_oidc.OidcProvider(conn, transport=oidc_transport),
             public_url=public_url,
+            build_strava_client=_build_strava_client,
         )
     )
 
