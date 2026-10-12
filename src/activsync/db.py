@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -134,6 +135,17 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     user_agent TEXT NOT NULL DEFAULT ''
 );
 """
+
+
+def resolve_path(*, mock_mode: bool) -> str:
+    configured = os.environ.get("ACTIVSYNC_DB_PATH") or os.environ.get("G2S_DB_PATH")
+    if configured:
+        return configured
+    preferred = "/config/activsync-dev.db" if mock_mode else "/config/activsync.db"
+    legacy = "/config/dev-mock.db" if mock_mode else "/config/garmin2strava.db"
+    if os.path.exists(legacy) and not os.path.exists(preferred):
+        return legacy
+    return preferred
 
 
 def connect(path: str) -> sqlite3.Connection:

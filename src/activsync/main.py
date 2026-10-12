@@ -31,15 +31,7 @@ MANUAL_ONLY = _env_enabled("ACTIVSYNC_MANUAL_ONLY")
 E2E_SEED_ONBOARDED = (_env_value("ACTIVSYNC_DEV_E2E_ONBOARDED") or "").lower() in ("1", "true", "yes")
 
 
-def _default_db_path() -> str:
-    preferred = "/config/activsync-dev.db" if MOCK_MODE else "/config/activsync.db"
-    legacy = "/config/dev-mock.db" if MOCK_MODE else "/config/garmin2strava.db"
-    if os.path.exists(legacy) and not os.path.exists(preferred):
-        return legacy
-    return preferred
-
-
-DB_PATH = _env_value("ACTIVSYNC_DB_PATH", "G2S_DB_PATH") or _default_db_path()
+DB_PATH = db.resolve_path(mock_mode=MOCK_MODE)
 GARMIN_TOKEN_DIR = _env_value("ACTIVSYNC_GARMIN_TOKEN_DIR", "G2S_GARMIN_TOKEN_DIR") or "/config/.garminconnect"
 
 _conn = db.connect(DB_PATH)
