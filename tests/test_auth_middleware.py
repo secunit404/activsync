@@ -213,3 +213,99 @@ def test_disabled_auth_opens_every_route(monkeypatch, conn, tmp_path):
 
     assert client.get("/api/v1/app").status_code == 200
     assert client.delete("/api/v1/catch-up-report").status_code == 204
+
+
+UNKNOWN_HOST_MESSAGE = (
+    "Unknown host — set ACTIVSYNC_PUBLIC_URL or add it to ACTIVSYNC_ALLOWED_HOSTS"
+)
+
+
+def test_unknown_host_is_rejected_without_a_public_url(app):
+    response = TestClient(app, base_url="http://attacker.example:8381").get("/")
+
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == UNKNOWN_HOST_MESSAGE
+
+
+def test_unknown_host_is_rejected_with_auth_disabled(monkeypatch, conn, tmp_path):
+    monkeypatch.setenv("ACTIVSYNC_AUTH_DISABLED", "1")
+    client = TestClient(
+        create_app(conn, web_dir=_web_build(tmp_path)),
+        base_url="http://attacker.example:8381",
+    )
+    client.headers.update(CSRF_HEADERS)
+
+    assert client.get("/api/v1/app").status_code == 400
+    assert client.delete("/api/v1/catch-up-report").status_code == 400
+
+
+def test_unknown_host_still_passes_the_healthcheck(app):
+    client = TestClient(app, base_url="http://attacker.example:8381")
+
+    assert client.get("/health").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["192.168.1.20:8381", "[::1]:8381", "localhost:8381", "app.localhost", "LOCALHOST:8381"],
+)
+def test_local_hosts_are_accepted_without_a_public_url(app, host):
+    assert TestClient(app).get("/", headers={"Host": host}).status_code == 200
+
+
+def test_allowed_hosts_match_exactly_and_by_leading_dot(monkeypatch, conn, tmp_path):
+    monkeypatch.setenv("ACTIVSYNC_ALLOWED_HOSTS", "activsync.home, .Example.LAN")
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+
+    def status(base_url):
+        return TestClient(app, base_url=base_url).get("/").status_code
+
+    assert status("http://ActivSync.home:8381") == 200
+    assert status("http://example.lan") == 200
+    assert status("http://activsync.example.lan:8381") == 200
+    assert status("http://other.home") == 400
+    assert status("http://notexample.lan") == 400
+    assert status("http://testserver") == 400
+
+
+def test_public_url_mode_ignores_the_allowed_hosts(monkeypatch, conn, tmp_path):
+    monkeypatch.setenv("ACTIVSYNC_PUBLIC_URL", "https://activsync.example.com")
+    monkeypatch.setenv("ACTIVSYNC_ALLOWED_HOSTS", "attacker.example")
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+
+    allowed_host = TestClient(app, base_url="http://attacker.example")
+    public = TestClient(app, base_url="https://activsync.example.com")
+
+    assert allowed_host.get("/").status_code == 400
+    assert allowed_host.get("/").text == "Unknown host"
+    assert public.get("/").status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("host", "allowed"),
+    [
+        (None, False),
+        ("", False),
+        ("10.0.0.1", True),
+        ("10.0.0.1:80", True),
+        ("[::1]", True),
+        ("[fe80::1]:8381", True),
+        ("::1", False),
+        ("[not-an-ip]", False),
+        ("[::1]x", False),
+        ("999.0.0.1", False),
+        ("localhost", True),
+        ("a.b.localhost:5173", True),
+        ("evil-localhost", False),
+        ("attacker.example", False),
+        ("testserver", True),
+        ("app.example.lan", True),
+        ("example.lan", True),
+        ("badexample.lan", False),
+    ],
+)
+def test_host_is_allowed(host, allowed):
+    allowed_hosts = ("testserver", ".example.lan")
+
+    assert auth_middleware.host_is_allowed(host, allowed_hosts) is allowed

@@ -8,3 +8,4 @@ one setting still verifies under the other.
 import os
 
 os.environ.setdefault("ACTIVSYNC_ARGON2_TEST_PARAMS", "1")
+os.environ.setdefault("ACTIVSYNC_ALLOWED_HOSTS", "testserver")

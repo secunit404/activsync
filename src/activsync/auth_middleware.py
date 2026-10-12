@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import logging
 import re
 import sqlite3
@@ -35,6 +36,10 @@ PUBLIC_ROUTES = frozenset({
 PUBLIC_PREFIXES = (("GET", "/assets/"),)
 SPA_RESERVED_PREFIXES = ("api", "assets", "strava", "auth")
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+UNKNOWN_HOST_MESSAGE = (
+    "Unknown host — set ACTIVSYNC_PUBLIC_URL or add it to ACTIVSYNC_ALLOWED_HOSTS"
+)
 
 SESSION_COOKIE = "activsync_session"
 SECURE_SESSION_COOKIE = "__Host-activsync_session"
@@ -120,6 +125,37 @@ def external_url(request: Request, route_name: str, public_url: str | None) -> s
     return str(request.url_for(route_name))
 
 
+def _is_ip(value: str, kind: type[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> bool:
+    try:
+        kind(value)
+    except ValueError:
+        return False
+    return True
+
+
+def host_is_allowed(host: str | None, allowed_hosts: tuple[str, ...]) -> bool:
+    """Without a public URL, a DNS-rebinding attacker's domain makes Origin
+    equal Host, so the CSRF check alone would pass; only known names get in."""
+    if not host:
+        return False
+    host = host.lower()
+    if host.startswith("["):
+        literal, _, rest = host[1:].partition("]")
+        return (rest == "" or rest.startswith(":")) and _is_ip(literal, ipaddress.IPv6Address)
+    name = host.partition(":")[0]
+    if _is_ip(name, ipaddress.IPv4Address):
+        return True
+    if name == "localhost" or name.endswith(".localhost"):
+        return True
+    for entry in (entry.lower() for entry in allowed_hosts):
+        if entry.startswith("."):
+            if name == entry[1:] or name.endswith(entry):
+                return True
+        elif name == entry:
+            return True
+    return False
+
+
 _INLINE_SCRIPT = re.compile(r"<script\b([^>]*)>(.*?)</script>", re.DOTALL | re.IGNORECASE)
 
 
@@ -183,11 +219,13 @@ class AuthenticateMiddleware:
         *,
         conn: sqlite3.Connection,
         public_url: str | None,
+        allowed_hosts: tuple[str, ...],
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.app = app
         self.conn = conn
         self.public_host = urlsplit(public_url).netloc if public_url else None
+        self.allowed_hosts = allowed_hosts
         self.clock = clock
 
     async def __call__(self, scope, receive, send) -> None:
@@ -196,13 +234,16 @@ class AuthenticateMiddleware:
             return
         request = Request(scope)
         path = scope["path"]
-        if (
-            self.public_host
-            and path != "/health"
-            and request.headers.get("host") != self.public_host
-        ):
-            await PlainTextResponse("Unknown host", status_code=400)(scope, receive, send)
-            return
+        if path != "/health":
+            host = request.headers.get("host")
+            if self.public_host and host != self.public_host:
+                await PlainTextResponse("Unknown host", status_code=400)(scope, receive, send)
+                return
+            if not self.public_host and not host_is_allowed(host, self.allowed_hosts):
+                await PlainTextResponse(UNKNOWN_HOST_MESSAGE, status_code=400)(
+                    scope, receive, send
+                )
+                return
 
         # A sync DB read; off the event loop so a long transaction elsewhere
         # cannot stall every open request and the SSE stream with it.

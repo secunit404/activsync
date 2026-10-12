@@ -300,7 +300,10 @@ def create_app(
     # as the request pipeline: security headers, authentication, then CSRF.
     app.add_middleware(auth_middleware.CsrfMiddleware, public_url=public_url)
     app.add_middleware(
-        auth_middleware.AuthenticateMiddleware, conn=conn, public_url=public_url
+        auth_middleware.AuthenticateMiddleware,
+        conn=conn,
+        public_url=public_url,
+        allowed_hosts=auth_core.allowed_hosts(),
     )
     app.add_middleware(
         auth_middleware.SecurityHeadersMiddleware,

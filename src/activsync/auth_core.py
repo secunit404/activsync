@@ -59,6 +59,11 @@ def public_url() -> str | None:
     return value or None
 
 
+def allowed_hosts() -> tuple[str, ...]:
+    value = os.environ.get("ACTIVSYNC_ALLOWED_HOSTS", "")
+    return tuple(entry.strip() for entry in value.split(",") if entry.strip())
+
+
 def _hasher() -> PasswordHasher:
     if _env_enabled("ACTIVSYNC_ARGON2_TEST_PARAMS"):
         return PasswordHasher.from_parameters(profiles.CHEAPEST)
