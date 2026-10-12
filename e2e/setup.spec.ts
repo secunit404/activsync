@@ -1,4 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "@playwright/test";
+
+import { CSRF_HEADERS } from "./auth";
 
 // This spec starts at /setup, not /, so it doesn't use the seeded
 // `fixtures.ts` (which navigates to / and waits on /api/v1/activities) —
@@ -20,21 +22,26 @@ import { test, expect } from "@playwright/test";
 // "mfa" simulates Garmin demanding a verification code — so this spec uses
 // that existing hook rather than inventing a new one.
 
-async function resetOnboarding(request: import("@playwright/test").APIRequestContext) {
+// `page.request` shares the page's signed-in cookies (the project's
+// storageState); the standalone `request` fixture would be signed out.
+async function resetOnboarding(request: APIRequestContext) {
   const response = await request.post("/api/v1/dev/onboarding-state", {
+    headers: CSRF_HEADERS,
     data: { complete: false },
   });
   expect(response.ok()).toBeTruthy();
 }
 
-async function restoreOnboarding(request: import("@playwright/test").APIRequestContext) {
+async function restoreOnboarding(request: APIRequestContext) {
   const response = await request.post("/api/v1/dev/onboarding-state", {
+    headers: CSRF_HEADERS,
     data: { complete: true },
   });
   expect(response.ok()).toBeTruthy();
 }
 
-test("wizard reaches the MFA step and presents correctly", async ({ page, request }) => {
+test("wizard reaches the MFA step and presents correctly", async ({ page }) => {
+  const request = page.request;
   await resetOnboarding(request);
   try {
     await page.goto("/setup");
