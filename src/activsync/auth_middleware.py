@@ -32,6 +32,8 @@ PUBLIC_ROUTES = frozenset({
     ("GET", "/api/v1/auth/status"),
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/claim"),
+    ("GET", "/auth/oidc/login"),
+    ("GET", "/auth/oidc/callback"),
 })
 PUBLIC_PREFIXES = (("GET", "/assets/"),)
 SPA_RESERVED_PREFIXES = ("api", "assets", "strava", "auth")
@@ -75,6 +77,44 @@ def session_cookie_name(scope: Mapping) -> str:
 
 def device_cookie_name(scope: Mapping) -> str:
     return SECURE_DEVICE_COOKIE if is_https(scope) else DEVICE_COOKIE
+
+
+_SINGLE_DOT_SEGMENTS = frozenset({".", "%2e"})
+_DOUBLE_DOT_SEGMENTS = frozenset({"..", ".%2e", "%2e.", "%2e%2e"})
+
+
+def _resolved_path(path: str) -> str:
+    """Dot segments removed the way browsers do, including percent-encoded
+    dots and a `..` at the root, which urllib and posixpath treat differently."""
+    resolved: list[str] = []
+    segments = path.split("/")[1:]
+    for index, segment in enumerate(segments):
+        last = index == len(segments) - 1
+        lowered = segment.lower()
+        if lowered in _DOUBLE_DOT_SEGMENTS:
+            if resolved:
+                resolved.pop()
+            if last:
+                resolved.append("")
+        elif lowered in _SINGLE_DOT_SEGMENTS:
+            if last:
+                resolved.append("")
+        else:
+            resolved.append(segment)
+    return "/" + "/".join(resolved)
+
+
+def safe_next(value: str | None) -> str:
+    if (
+        not value
+        or not value.startswith("/")
+        or value.startswith("//")
+        or "\\" in value
+        or any(ord(ch) < 0x20 for ch in value)
+        or _resolved_path(re.split(r"[?#]", value, maxsplit=1)[0]).startswith("//")
+    ):
+        return "/"
+    return value
 
 
 def client_ip(request: Request) -> str:

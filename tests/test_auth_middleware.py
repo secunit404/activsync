@@ -15,6 +15,8 @@ EXPECTED_PUBLIC_ROUTES = {
     ("GET", "/api/v1/auth/status"),
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/claim"),
+    ("GET", "/auth/oidc/login"),
+    ("GET", "/auth/oidc/callback"),
 }
 SPA_ROUTE = "/{path:path}"
 BOOT_SCRIPT = "window.boot = 1;"
@@ -309,3 +311,31 @@ def test_host_is_allowed(host, allowed):
     allowed_hosts = ("testserver", ".example.lan")
 
     assert auth_middleware.host_is_allowed(host, allowed_hosts) is allowed
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        "",
+        "hevy",
+        "//evil.test",
+        "https://evil.test",
+        "/\\evil.test",
+        "/\t/evil.test",
+        "/\r/evil.test",
+        "/\n/evil.test",
+        "/.//evil.test",
+        "/a/..//evil.test",
+        "/..//evil.test",
+        "/%2e//evil.test",
+        "/a/%2E%2e//evil.test",
+    ],
+)
+def test_safe_next_refuses_anything_that_could_leave_the_site(value):
+    assert auth_middleware.safe_next(value) == "/"
+
+
+@pytest.mark.parametrize("value", ["/", "/hevy", "/settings?tab=access", "/a/../b", "/./hevy"])
+def test_safe_next_keeps_same_site_paths(value):
+    assert auth_middleware.safe_next(value) == value

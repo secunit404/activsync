@@ -236,3 +236,10 @@ def test_disabled_auth_on_a_network_bind_logs_an_error(monkeypatch, caplog):
         auth_core.warn_if_disabled_on_network("0.0.0.0")
 
     assert "Authentication is disabled" in caplog.text
+
+
+def test_state_secret_is_generated_once(conn):
+    first = auth_core.state_secret(conn)
+
+    assert len(first) == 64
+    assert auth_core.state_secret(conn) == first

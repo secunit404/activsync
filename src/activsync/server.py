@@ -12,16 +12,20 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlencode
 
+import httpx2
 import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from activsync import (
     api_routes,
     auth_api_routes,
     auth_core,
     auth_middleware,
+    auth_oauth_routes,
+    auth_oidc,
     db,
     dev_mock,
     events,
@@ -104,6 +108,7 @@ def create_app(
     web_dir: Path | None = None,
     apply_hevy_match: Callable[[str, str], str] | None = None,
     process_hevy_workout: Callable[[str], str] | None = None,
+    oidc_transport: httpx2.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     # No /docs or /openapi.json: deny-by-default would otherwise serve them
     # through the SPA rule's public GET fallback.
@@ -172,6 +177,13 @@ def create_app(
             limiter=auth_core.AttemptLimiter(),
             public_url=public_url,
             mock_mode=_mock_mode,
+        )
+    )
+    app.include_router(
+        auth_oauth_routes.create_router(
+            conn,
+            oidc=auth_oidc.OidcProvider(conn, transport=oidc_transport),
+            public_url=public_url,
         )
     )
 
@@ -298,7 +310,16 @@ def create_app(
         )
 
     # Starlette runs the last-added middleware first, so this reads bottom-up
-    # as the request pipeline: security headers, authentication, then CSRF.
+    # as the request pipeline: security headers, authentication, CSRF, then
+    # the short-lived OAuth-state cookie Authlib keeps state, nonce and PKCE in.
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=auth_core.state_secret(conn),
+        session_cookie="activsync_oauth",
+        max_age=600,
+        same_site="lax",
+        https_only=bool(public_url and public_url.startswith("https://")),
+    )
     app.add_middleware(auth_middleware.CsrfMiddleware, public_url=public_url)
     app.add_middleware(
         auth_middleware.AuthenticateMiddleware,

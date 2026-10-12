@@ -27,6 +27,7 @@ logger = logging.getLogger("activsync.auth")
 OWNER_KEY = "auth_owner"
 THROTTLE_KEY = "auth_login_throttle"
 SETTINGS_KEY = "auth_settings"
+STATE_SECRET_KEY = "auth_state_secret"
 
 PASSWORD_MIN_LENGTH = 15
 PASSWORD_MAX_LENGTH = 256
@@ -361,6 +362,15 @@ def save_settings(conn: sqlite3.Connection, **changes) -> dict:
         updated = {**load_settings(conn), **changes}
         db.set_config_value(conn, SETTINGS_KEY, updated)
     return updated
+
+
+def state_secret(conn: sqlite3.Connection) -> str:
+    with db.transaction(conn):
+        secret = db.get_config_value(conn, STATE_SECRET_KEY)
+        if not secret:
+            secret = secrets.token_hex(32)
+            db.set_config_value(conn, STATE_SECRET_KEY, secret)
+    return secret
 
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
