@@ -220,7 +220,8 @@ test("configuring single sign-on sends the current password and shows the redire
 
   await userEvent.click(await screen.findByRole("button", { name: "Set up single sign-on" }));
   expect(screen.getByText("https://activsync.example.com/auth/oidc/callback")).toBeVisible();
-  await userEvent.type(screen.getByLabelText("Button label"), "Pocket ID");
+  await userEvent.type(screen.getByLabelText("Provider name"), "Pocket ID");
+  expect(screen.getByText("Shown as “Sign in with Pocket ID”.")).toBeVisible();
   await userEvent.type(screen.getByLabelText("Issuer URL"), "https://id.example.com");
   await userEvent.type(screen.getByLabelText("Client ID"), "activsync");
   await userEvent.type(screen.getByLabelText("Your ActivSync password"), "my long passphrase");

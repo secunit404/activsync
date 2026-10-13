@@ -139,6 +139,59 @@ test("offers each enabled provider with next passed through", async () => {
   expect(startStravaLogin).toHaveBeenCalledWith("/hevy", expect.anything());
 });
 
+test("the or divider shows only when a provider is offered", async () => {
+  getAuthStatus.mockResolvedValue(status());
+  renderAt("/login");
+
+  expect(await screen.findByLabelText("Password")).toBeVisible();
+  expect(screen.queryByText("or", { exact: true })).toBeNull();
+});
+
+test("the or divider separates the password form from the providers", async () => {
+  getAuthStatus.mockResolvedValue(
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false }, strava: false } }),
+  );
+  renderAt("/login");
+
+  expect(await screen.findByText("or", { exact: true })).toBeVisible();
+});
+
+test("the OIDC button matches the official Strava button's 237x48 size", async () => {
+  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  getAuthStatus.mockResolvedValue(
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false }, strava: true } }),
+  );
+  renderAt("/login");
+
+  const oidc = await screen.findByRole("link", { name: "Sign in with Authentik" });
+  expect(oidc).toHaveClass("h-12", "w-[237px]", "rounded-[6px]");
+  expect(oidc.querySelector("svg")).toHaveClass("size-5");
+  const strava = await screen.findByRole("img", { name: "Connect with Strava" });
+  expect(strava).toHaveAttribute("width", "237");
+  expect(strava).toHaveAttribute("height", "48");
+});
+
+test("Strava sign-in explains which account it uses", async () => {
+  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
+  renderAt("/login");
+
+  expect(await screen.findByText("Signs in as your connected Strava athlete")).toBeVisible();
+});
+
+test("the sign-in page shows the brand, subtitle and a GitHub footer", async () => {
+  getAuthStatus.mockResolvedValue(status());
+  renderAt("/login");
+
+  expect(await screen.findByLabelText("Password")).toBeVisible();
+  expect(screen.getByLabelText("ActivSync")).toBeVisible();
+  expect(screen.getByText("Sign in to manage your activities")).toBeVisible();
+  expect(screen.getByRole("link", { name: "GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/secunit404/activsync",
+  );
+});
+
 test("Strava sign-in is the official 48px button, fetched once per visit", async () => {
   startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
   getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));

@@ -96,7 +96,7 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
     >
       <FieldGroup>
         <Field>
-          <FieldLabel htmlFor="oidc-name">Button label</FieldLabel>
+          <FieldLabel htmlFor="oidc-name">Provider name</FieldLabel>
           <Input id="oidc-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           <FieldDescription>Shown as “Sign in with {displayName || "…"}”.</FieldDescription>
         </Field>

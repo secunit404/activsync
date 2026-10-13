@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleAlertIcon } from "lucide-react";
+import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 
@@ -108,13 +108,7 @@ export function LoginView({
   }
 
   return (
-    <LoginCard>
-      <div className="grid gap-1.5">
-        <h1 className="text-2xl font-extrabold tracking-[-0.02em]">Sign in</h1>
-        <p className="text-sm text-muted-foreground">
-          Sign in to manage your activities.
-        </p>
-      </div>
+    <LoginCard subtitle="Sign in to manage your activities">
       {error ? (
         <Alert variant="destructive">
           <CircleAlertIcon />
@@ -124,29 +118,71 @@ export function LoginView({
           </AlertDescription>
         </Alert>
       ) : null}
-      {oidc || status.login.strava ? (
-        <div className="grid gap-2.5">
-          {oidc ? (
-            <Button asChild size="lg" className="h-11">
-              <a href={oidcLoginUrl(next)}>Sign in with {oidc.label}</a>
-            </Button>
-          ) : null}
-          {status.login.strava ? <StravaLogin next={next} /> : null}
-        </div>
-      ) : null}
       <PasswordForm next={next} />
+      {oidc || status.login.strava ? (
+        <>
+          <OrDivider />
+          <div className="grid justify-items-center gap-3">
+            {oidc ? (
+              <ProviderButton
+                href={oidcLoginUrl(next)}
+                icon={<KeyRoundIcon className="size-5" aria-hidden="true" />}
+              >
+                Sign in with {oidc.label}
+              </ProviderButton>
+            ) : null}
+            {status.login.strava ? <StravaLogin next={next} /> : null}
+          </div>
+        </>
+      ) : null}
     </LoginCard>
+  );
+}
+
+function OrDivider() {
+  return (
+    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <span className="h-px flex-1 bg-border" />
+      or
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+// Sized to match Strava's official button, which can't be stretched, so the
+// two providers stack as a matched pair.
+function ProviderButton({
+  href,
+  icon,
+  children,
+}: {
+  href: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className="inline-flex h-12 w-[237px] items-center justify-center gap-2.5 rounded-[6px] border border-input bg-muted px-4 text-[14px] font-medium text-foreground transition-colors outline-none hover:bg-input focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      {icon}
+      {children}
+    </a>
   );
 }
 
 function StravaLogin({ next }: { next: string }) {
   const authorize = useStravaLoginUrl(next);
   return (
-    <StravaConnectButton
-      className="justify-self-center"
-      href={authorize.data?.url ?? null}
-      error={authorize.error?.message}
-    />
+    <div className="grid justify-items-center gap-2">
+      <StravaConnectButton
+        href={authorize.data?.url ?? null}
+        error={authorize.error?.message}
+      />
+      <p className="text-center text-[11px] text-muted-foreground">
+        Signs in as your connected Strava athlete
+      </p>
+    </div>
   );
 }
 
@@ -197,13 +233,32 @@ function PasswordForm({ next }: { next: string }) {
   );
 }
 
-function LoginCard({ children }: { children: ReactNode }) {
+// The version lives in the signed-in app state, which this page can't read,
+// so the footer carries only the repository link.
+const REPO_URL = "https://github.com/secunit404/activsync";
+
+function LoginCard({ subtitle, children }: { subtitle?: string; children: ReactNode }) {
   return (
-    <div className="grid min-h-screen place-items-center bg-background px-4 py-10">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 py-10">
       <main className="flex w-full max-w-[400px] flex-col gap-6 rounded-2xl border border-border bg-card p-7 text-card-foreground shadow-[var(--shadow-frame)]">
-        <AppBrand />
+        <div className="grid gap-1.5 text-center">
+          <h1>
+            <AppBrand className="text-[26px]" />
+          </h1>
+          {subtitle ? <p className="text-sm text-muted-foreground">{subtitle}</p> : null}
+        </div>
         {children}
       </main>
+      <footer className="text-xs text-muted-foreground">
+        <a
+          className="font-normal text-muted-foreground hover:text-foreground"
+          href={REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+        >
+          GitHub
+        </a>
+      </footer>
     </div>
   );
 }
