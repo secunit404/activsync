@@ -125,7 +125,8 @@ the same limits Grafana uses by default.
   the redirect URI Settings shows (`<your origin>/auth/oidc/callback`), enter
   its issuer URL, client ID and secret, then press **Link account**. Only the
   account you link can sign in, so another account at the same provider is
-  refused.
+  refused. The **Provider** picker puts that provider's logo on the sign-in
+  button (a key icon for Pocket ID, Kanidm, Zitadel and Other).
 - **Sign in with Strava.** Uses the Strava app you already connected, so
   nothing changes on Strava's side. The sign-in page shows it as the
   **Connect with Strava** button. Only the athlete ActivSync is connected to

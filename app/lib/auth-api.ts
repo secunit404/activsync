@@ -1,4 +1,5 @@
 import { requestJson, type AuthorizeUrl } from "@/lib/api";
+import type { OidcProvider } from "@/lib/oidc-providers";
 
 export type AuthMethod = "password" | "oidc" | "strava" | "proxy" | "disabled";
 
@@ -9,7 +10,7 @@ export type AuthStatus = {
   ownerClaimed: boolean;
   authDisabled: boolean;
   login: {
-    oidc: { label: string; autoRedirect: boolean } | null;
+    oidc: { label: string; autoRedirect: boolean; provider: OidcProvider } | null;
     strava: boolean;
   };
 };
@@ -38,6 +39,7 @@ export type OidcConfig = {
   hasSecret: boolean;
   scopes: string;
   autoRedirect: boolean;
+  provider: OidcProvider;
   redirectUri: string;
   linkedLabel: string | null;
 };
@@ -49,6 +51,7 @@ export type OidcConfigInput = {
   clientSecret: string | null;
   scopes: string;
   autoRedirect: boolean;
+  provider: OidcProvider;
   currentPassword: string;
 };
 

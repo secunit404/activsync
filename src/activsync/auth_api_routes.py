@@ -31,6 +31,7 @@ AuthMethod = Literal["password", "oidc", "strava", "proxy", "disabled"]
 class OidcLoginOption(ApiModel):
     label: str
     auto_redirect: bool
+    provider: auth_oidc.OidcProviderKind
 
 
 class LoginOptions(ApiModel):
@@ -107,6 +108,7 @@ class OidcConfigState(ApiModel):
     has_secret: bool
     scopes: str
     auto_redirect: bool
+    provider: auth_oidc.OidcProviderKind
     redirect_uri: str
     linked_label: str | None
 
@@ -118,6 +120,7 @@ class OidcConfigRequest(ApiModel):
     client_secret: str | None = Field(default=None, max_length=1024)
     scopes: str = Field(default=auth_oidc.DEFAULT_SCOPES, max_length=512)
     auto_redirect: bool = False
+    provider: auth_oidc.OidcProviderKind = "other"
     current_password: str = Field(max_length=1024)
 
 
@@ -151,6 +154,7 @@ def create_router(
             oidc=OidcLoginOption(
                 label=oidc_config.display_name,
                 auto_redirect=oidc_config.auto_redirect,
+                provider=oidc_config.provider,
             )
             if oidc_config and oidc_config.linked
             else None,
@@ -336,6 +340,7 @@ def create_router(
             has_secret=bool(config and config.client_secret),
             scopes=config.scopes if config else auth_oidc.DEFAULT_SCOPES,
             auto_redirect=bool(config and config.auto_redirect),
+            provider=config.provider if config else "other",
             redirect_uri=f"{origin}/auth/oidc/callback",
             linked_label=config.linked["label"] if config and config.linked else None,
         )
@@ -354,6 +359,7 @@ def create_router(
                 client_secret=payload.client_secret,
                 scopes=payload.scopes,
                 auto_redirect=payload.auto_redirect,
+                provider=payload.provider,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

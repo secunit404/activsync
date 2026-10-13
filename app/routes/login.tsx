@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
+import { CircleAlertIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 
 import { AppBrand } from "@/components/app-shell";
+import { OidcProviderIcon } from "@/components/oidc-provider-icon";
 import { StravaConnectButton } from "@/components/strava-connect-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -126,7 +127,7 @@ export function LoginView({
             {oidc ? (
               <ProviderButton
                 href={oidcLoginUrl(next)}
-                icon={<KeyRoundIcon className="size-5" aria-hidden="true" />}
+                icon={<OidcProviderIcon provider={oidc.provider} className="size-5" />}
               >
                 Sign in with {oidc.label}
               </ProviderButton>

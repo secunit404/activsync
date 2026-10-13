@@ -53,6 +53,7 @@ def test_config_round_trip_hides_the_secret(owner):
         "hasSecret": True,
         "scopes": "openid profile email",
         "autoRedirect": False,
+        "provider": "other",
         "redirectUri": "http://testserver/auth/oidc/callback",
         "linkedLabel": None,
     }
@@ -83,6 +84,61 @@ def test_a_new_issuer_or_client_drops_the_link(owner, conn):
     assert auth_oidc.load_config(conn).linked is None
 
 
+@pytest.mark.parametrize(
+    "provider",
+    ["authentik", "authelia", "keycloak", "pocket_id", "kanidm", "zitadel", "google", "other"],
+)
+def test_every_known_provider_is_accepted(owner, conn, provider):
+    response = owner.put("/api/v1/auth/oidc", json={**CONFIG, "provider": provider})
+
+    assert response.status_code == 200
+    assert auth_oidc.load_config(conn).provider == provider
+    assert owner.get("/api/v1/auth/oidc").json()["provider"] == provider
+
+
+@pytest.mark.parametrize("provider", ["okta", "Authentik", "pocketid", ""])
+def test_an_unknown_provider_is_rejected(owner, conn, provider):
+    response = owner.put("/api/v1/auth/oidc", json={**CONFIG, "provider": provider})
+
+    assert response.status_code == 422
+    assert auth_oidc.load_config(conn) is None
+
+
+def test_a_config_saved_before_providers_reads_as_other(owner, conn):
+    db.set_config_value(conn, auth_oidc.OIDC_KEY, {
+        "display_name": "Pocket ID",
+        "issuer": ISSUER,
+        "client_id": "activsync",
+        "client_secret": "very-secret-value",
+        "scopes": "openid profile email",
+        "auto_redirect": False,
+        "linked": None,
+    })
+
+    assert auth_oidc.load_config(conn).provider == "other"
+    assert owner.get("/api/v1/auth/oidc").json()["provider"] == "other"
+
+
+def test_changing_the_provider_keeps_the_link(owner, conn):
+    owner.put("/api/v1/auth/oidc", json={**CONFIG, "provider": "pocket_id"})
+    _link(conn)
+
+    owner.put("/api/v1/auth/oidc", json={**CONFIG, "provider": "authentik"})
+
+    config = auth_oidc.load_config(conn)
+    assert config.provider == "authentik"
+    assert config.linked == {"iss": ISSUER, "sub": "owner-sub", "label": "andreas"}
+
+
+def test_login_status_names_the_provider(owner, conn):
+    owner.put("/api/v1/auth/oidc", json={**CONFIG, "provider": "authentik"})
+    _link(conn)
+
+    oidc = TestClient(owner.app).get("/api/v1/auth/status").json()["login"]["oidc"]
+
+    assert oidc["provider"] == "authentik"
+
+
 def test_saving_without_a_secret_keeps_the_stored_one(owner, conn):
     owner.put("/api/v1/auth/oidc", json=CONFIG)
 
@@ -111,6 +167,7 @@ def test_login_status_offers_oidc_only_once_linked(owner, conn):
     assert anonymous.get("/api/v1/auth/status").json()["login"]["oidc"] == {
         "label": "Pocket ID",
         "autoRedirect": True,
+        "provider": "other",
     }
     assert owner.get("/api/v1/auth/oidc").json()["linkedLabel"] == "andreas"
 

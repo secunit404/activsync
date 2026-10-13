@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { siAuthentik } from "simple-icons";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import type { AuthSession, AuthSettings, AuthStatus, OidcConfig } from "@/lib/auth-api";
@@ -68,6 +69,7 @@ const oidc: OidcConfig = {
   hasSecret: false,
   scopes: "openid profile email",
   autoRedirect: false,
+  provider: "other",
   redirectUri: "https://activsync.example.com/auth/oidc/callback",
   linkedLabel: null,
 };
@@ -236,6 +238,7 @@ test("configuring single sign-on sends the current password and shows the redire
         clientSecret: "",
         scopes: "openid profile email",
         autoRedirect: false,
+        provider: "other",
         currentPassword: "my long passphrase",
       },
       expect.anything(),
@@ -259,4 +262,93 @@ test("a configured provider offers to link the account", async () => {
     "/auth/oidc/login?intent=link&next=%2Fsettings",
   );
   expect(screen.getByText(/not linked yet/)).toBeVisible();
+});
+
+async function pickProvider(name: string) {
+  await userEvent.click(screen.getByRole("combobox", { name: "Provider" }));
+  await userEvent.click(await screen.findByRole("option", { name }));
+}
+
+test("picking a provider fills in its name but never a name you typed", async () => {
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Set up single sign-on" }));
+  const name = screen.getByLabelText("Provider name");
+  await pickProvider("Authentik");
+  expect(name).toHaveValue("Authentik");
+  await pickProvider("Pocket ID");
+  expect(name).toHaveValue("Pocket ID");
+
+  await userEvent.clear(name);
+  await userEvent.type(name, "Work SSO");
+  await pickProvider("Google");
+  expect(name).toHaveValue("Work SSO");
+
+  await userEvent.type(screen.getByLabelText("Issuer URL"), "https://id.example.com");
+  await userEvent.type(screen.getByLabelText("Client ID"), "activsync");
+  await userEvent.type(screen.getByLabelText("Your ActivSync password"), "my long passphrase");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveOidcConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "Work SSO", provider: "google" }),
+      expect.anything(),
+    ),
+  );
+});
+
+test("a saved custom name survives switching providers", async () => {
+  api.getOidcConfig.mockResolvedValue({
+    ...oidc,
+    configured: true,
+    displayName: "Home login",
+    issuer: "https://id.example.com",
+    clientId: "activsync",
+    provider: "authentik",
+  });
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  expect(screen.getByRole("combobox", { name: "Provider" })).toHaveTextContent("Authentik");
+  await pickProvider("Keycloak");
+
+  expect(screen.getByLabelText("Provider name")).toHaveValue("Home login");
+});
+
+test("each provider option shows its logo", async () => {
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Set up single sign-on" }));
+  await userEvent.click(screen.getByRole("combobox", { name: "Provider" }));
+
+  const options = await screen.findAllByRole("option");
+  expect(options.map((option) => option.textContent)).toEqual([
+    "Authentik",
+    "Authelia",
+    "Keycloak",
+    "Pocket ID",
+    "Kanidm",
+    "Zitadel",
+    "Google",
+    "Other",
+  ]);
+  const authentik = screen.getByRole("option", { name: "Authentik" });
+  expect(authentik.querySelector("svg path")).toHaveAttribute("d", siAuthentik.path);
+  const other = screen.getByRole("option", { name: "Other" });
+  expect(other.querySelector("svg.lucide-key-round")).toBeInTheDocument();
+});
+
+test("the configured summary shows the provider's logo", async () => {
+  api.getOidcConfig.mockResolvedValue({
+    ...oidc,
+    configured: true,
+    displayName: "Authentik",
+    issuer: "https://id.example.com",
+    clientId: "activsync",
+    provider: "authentik",
+  });
+  renderAccess();
+
+  const summary = (await screen.findByText(/not linked yet/)).closest("p")!;
+  expect(summary.querySelector("svg path")).toHaveAttribute("d", siAuthentik.path);
 });

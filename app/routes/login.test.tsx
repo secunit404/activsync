@@ -1,12 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { siAuthelia, siAuthentik, siGoogle, siKeycloak } from "simple-icons";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { ApiError } from "@/lib/api";
 import type { AuthStatus } from "@/lib/auth-api";
 import { LOGIN_ERRORS } from "@/lib/auth-errors";
+import type { OidcProvider } from "@/lib/oidc-providers";
 import Login, { safeNext } from "./login";
 
 const { getAuthStatus, login, startStravaLogin } = vi.hoisted(() => ({
@@ -121,7 +123,7 @@ test("offers each enabled provider with next passed through", async () => {
   getAuthStatus.mockResolvedValue(
     status({
       login: {
-        oidc: { label: "Authentik", autoRedirect: false },
+        oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" },
         strava: true,
       },
     }),
@@ -139,6 +141,47 @@ test("offers each enabled provider with next passed through", async () => {
   expect(startStravaLogin).toHaveBeenCalledWith("/hevy", expect.anything());
 });
 
+test.each([
+  ["authentik", siAuthentik],
+  ["authelia", siAuthelia],
+  ["keycloak", siKeycloak],
+  ["google", siGoogle],
+] as const)("the %s sign-in button shows its logo", async (provider, icon) => {
+  getAuthStatus.mockResolvedValue(
+    status({ login: { oidc: { label: "My SSO", autoRedirect: false, provider }, strava: false } }),
+  );
+  renderAt("/login");
+
+  const link = await screen.findByRole("link", { name: "Sign in with My SSO" });
+  const svg = link.querySelector("svg")!;
+  expect(svg).toHaveAttribute("viewBox", "0 0 24 24");
+  expect(svg).toHaveAttribute("fill", "currentColor");
+  expect(svg).toHaveClass("size-5");
+  expect(svg.querySelector("path")).toHaveAttribute("d", icon.path);
+});
+
+test.each(["pocket_id", "kanidm", "zitadel", "other", "unknown"])(
+  "the %s sign-in button falls back to the key icon",
+  async (provider) => {
+    getAuthStatus.mockResolvedValue(
+      status({
+        login: {
+          oidc: {
+            label: "My SSO",
+            autoRedirect: false,
+            provider: provider as OidcProvider,
+          },
+          strava: false,
+        },
+      }),
+    );
+    renderAt("/login");
+
+    const link = await screen.findByRole("link", { name: "Sign in with My SSO" });
+    expect(link.querySelector("svg")).toHaveClass("lucide-key-round", "size-5");
+  },
+);
+
 test("the or divider shows only when a provider is offered", async () => {
   getAuthStatus.mockResolvedValue(status());
   renderAt("/login");
@@ -149,7 +192,7 @@ test("the or divider shows only when a provider is offered", async () => {
 
 test("the or divider separates the password form from the providers", async () => {
   getAuthStatus.mockResolvedValue(
-    status({ login: { oidc: { label: "Authentik", autoRedirect: false }, strava: false } }),
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" }, strava: false } }),
   );
   renderAt("/login");
 
@@ -159,7 +202,7 @@ test("the or divider separates the password form from the providers", async () =
 test("the OIDC button matches the official Strava button's 237x48 size", async () => {
   startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
   getAuthStatus.mockResolvedValue(
-    status({ login: { oidc: { label: "Authentik", autoRedirect: false }, strava: true } }),
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" }, strava: true } }),
   );
   renderAt("/login");
 
@@ -241,7 +284,7 @@ test("?local=1 shows the password form and skips auto-redirect", async () => {
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { oidc: { label: "Authentik", autoRedirect: true }, strava: false },
+      login: { oidc: { label: "Authentik", autoRedirect: true, provider: "authentik" }, strava: false },
     }),
   );
   renderAt("/login?local=1");
@@ -255,7 +298,7 @@ test("auto-redirect sends the browser straight to the provider", async () => {
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { oidc: { label: "Authentik", autoRedirect: true }, strava: false },
+      login: { oidc: { label: "Authentik", autoRedirect: true, provider: "authentik" }, strava: false },
     }),
   );
   renderAt("/login?next=%2Fhevy");
