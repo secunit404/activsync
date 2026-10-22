@@ -39,6 +39,7 @@ vi.mock("@/lib/auth-api", async (importOriginal) => {
       autoRedirect: false,
       redirectUri: "http://localhost/auth/oidc/callback",
       linkedLabel: null,
+      logoUrl: null,
     }),
   };
 });

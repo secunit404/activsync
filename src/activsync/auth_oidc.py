@@ -16,7 +16,7 @@ from joserfc.errors import JoseError
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
-from activsync import db
+from activsync import auth_oidc_logo, db
 
 logger = logging.getLogger("activsync.auth.oidc")
 
@@ -118,6 +118,7 @@ def set_linked(conn: sqlite3.Connection, *, iss: str, sub: str, label: str) -> N
 
 
 def delete_config(conn: sqlite3.Connection) -> None:
+    auth_oidc_logo.delete(conn)
     db.set_config_value(conn, OIDC_KEY, None)
 
 

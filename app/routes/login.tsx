@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
+import { CircleAlertIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 
 import { AppBrand } from "@/components/app-shell";
+import { OidcLogo } from "@/components/oidc-logo";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -122,7 +123,7 @@ export function LoginView({
           <OrDivider />
           <ProviderButton
             href={oidcLoginUrl(next)}
-            icon={<KeyRoundIcon className="size-5" aria-hidden="true" />}
+            icon={<OidcLogo url={oidc.logoUrl} />}
           >
             Sign in with {oidc.label}
           </ProviderButton>

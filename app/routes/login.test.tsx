@@ -113,7 +113,7 @@ test("maps error codes to fixed copy, never provider text", async () => {
 
 test("offers single sign-on with next passed through", async () => {
   getAuthStatus.mockResolvedValue(
-    status({ login: { oidc: { label: "Authentik", autoRedirect: false } } }),
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false, logoUrl: null } } }),
   );
   renderAt("/login?next=%2Fhevy");
 
@@ -121,6 +121,32 @@ test("offers single sign-on with next passed through", async () => {
     "href",
     "/auth/oidc/login?intent=login&next=%2Fhevy",
   );
+});
+
+test("the single sign-on button shows the key icon without a logo", async () => {
+  getAuthStatus.mockResolvedValue(
+    status({ login: { oidc: { label: "Pocket ID", autoRedirect: false, logoUrl: null } } }),
+  );
+  renderAt("/login");
+
+  const link = await screen.findByRole("link", { name: "Sign in with Pocket ID" });
+  expect(link.querySelector("svg")).toHaveClass("lucide-key-round", "size-5");
+  expect(link.querySelector("img")).toBeNull();
+});
+
+test("the single sign-on button shows the uploaded logo", async () => {
+  const logoUrl = "/api/v1/auth/oidc/logo?v=0123456789ab";
+  getAuthStatus.mockResolvedValue(
+    status({ login: { oidc: { label: "Pocket ID", autoRedirect: false, logoUrl } } }),
+  );
+  renderAt("/login");
+
+  const link = await screen.findByRole("link", { name: "Sign in with Pocket ID" });
+  const logo = link.querySelector("img")!;
+  expect(logo).toHaveAttribute("src", logoUrl);
+  expect(logo).toHaveAttribute("alt", "");
+  expect(logo).toHaveClass("h-5");
+  expect(link.querySelector("svg")).toBeNull();
 });
 
 test("the or divider shows only when a provider is offered", async () => {
@@ -133,7 +159,7 @@ test("the or divider shows only when a provider is offered", async () => {
 
 test("the or divider separates the password form from single sign-on", async () => {
   getAuthStatus.mockResolvedValue(
-    status({ login: { oidc: { label: "Authentik", autoRedirect: false } } }),
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false, logoUrl: null } } }),
   );
   renderAt("/login");
 
@@ -159,7 +185,7 @@ test("?local=1 shows the password form and skips auto-redirect", async () => {
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { oidc: { label: "Authentik", autoRedirect: true } },
+      login: { oidc: { label: "Authentik", autoRedirect: true, logoUrl: null } },
     }),
   );
   renderAt("/login?local=1");
@@ -173,7 +199,7 @@ test("auto-redirect sends the browser straight to the provider", async () => {
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { oidc: { label: "Authentik", autoRedirect: true } },
+      login: { oidc: { label: "Authentik", autoRedirect: true, logoUrl: null } },
     }),
   );
   renderAt("/login?next=%2Fhevy");

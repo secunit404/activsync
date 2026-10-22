@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
+import { OidcLogoSettings } from "@/components/settings-access-oidc-logo";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -58,6 +59,7 @@ export function OidcSettings() {
           </Button>
         ) : null}
       </div>
+      {data.configured ? <OidcLogoSettings logoUrl={data.logoUrl} /> : null}
       {editing ? <OidcForm config={data} onDone={() => setEditing(false)} /> : null}
     </div>
   );

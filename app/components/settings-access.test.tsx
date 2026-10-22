@@ -16,6 +16,8 @@ const api = vi.hoisted(() => ({
   revokeOtherSessions: vi.fn(),
   saveOidcConfig: vi.fn(),
   removeOidcConfig: vi.fn(),
+  uploadOidcLogo: vi.fn(),
+  removeOidcLogo: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-api", async (importOriginal) => {
@@ -65,6 +67,7 @@ const oidc: OidcConfig = {
   autoRedirect: false,
   redirectUri: "https://activsync.example.com/auth/oidc/callback",
   linkedLabel: null,
+  logoUrl: null,
 };
 
 function renderAccess() {
@@ -231,4 +234,50 @@ test("a configured provider offers to link the account", async () => {
     "/auth/oidc/login?intent=link&next=%2Fsettings",
   );
   expect(screen.getByText(/not linked yet/)).toBeVisible();
+});
+
+const configured: OidcConfig = {
+  ...oidc,
+  configured: true,
+  displayName: "Pocket ID",
+  issuer: "https://id.example.com",
+  clientId: "activsync",
+  hasSecret: true,
+};
+
+test("single sign-on offers a logo upload once it is set up", async () => {
+  api.getOidcConfig.mockResolvedValue(oidc);
+  renderAccess();
+
+  expect(await screen.findByRole("button", { name: "Set up single sign-on" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Upload logo" })).toBeNull();
+});
+
+test("choosing a logo uploads it straight away", async () => {
+  api.getOidcConfig.mockResolvedValue(configured);
+  api.uploadOidcLogo.mockResolvedValue({ message: "Logo saved." });
+  renderAccess();
+  const file = new File([new Uint8Array([137, 80, 78, 71])], "logo.png", { type: "image/png" });
+
+  expect(await screen.findByRole("button", { name: "Upload logo" })).toBeVisible();
+  const picker = screen.getByLabelText("Logo image");
+  expect(picker).toHaveAttribute("accept", "image/png,image/jpeg,image/webp");
+  await userEvent.upload(picker, file);
+
+  await vi.waitFor(() =>
+    expect(api.uploadOidcLogo).toHaveBeenCalledWith(file, expect.anything()),
+  );
+});
+
+test("an uploaded logo is previewed and can be removed", async () => {
+  const logoUrl = "/api/v1/auth/oidc/logo?v=0123456789ab";
+  api.getOidcConfig.mockResolvedValue({ ...configured, logoUrl });
+  api.removeOidcLogo.mockResolvedValue({ message: "Logo removed." });
+  renderAccess();
+
+  expect(await screen.findByRole("button", { name: "Replace logo" })).toBeVisible();
+  expect(document.querySelector(`img[src="${logoUrl}"]`)).not.toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Remove logo" }));
+
+  await vi.waitFor(() => expect(api.removeOidcLogo).toHaveBeenCalled());
 });

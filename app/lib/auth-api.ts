@@ -1,4 +1,4 @@
-import { requestJson } from "@/lib/api";
+import { ApiError, requestJson } from "@/lib/api";
 
 export type AuthMethod = "password" | "oidc" | "proxy" | "disabled";
 
@@ -9,7 +9,7 @@ export type AuthStatus = {
   ownerClaimed: boolean;
   authDisabled: boolean;
   login: {
-    oidc: { label: string; autoRedirect: boolean } | null;
+    oidc: { label: string; autoRedirect: boolean; logoUrl: string | null } | null;
   };
 };
 
@@ -37,6 +37,7 @@ export type OidcConfig = {
   autoRedirect: boolean;
   redirectUri: string;
   linkedLabel: string | null;
+  logoUrl: string | null;
 };
 
 export type OidcConfigInput = {
@@ -117,6 +118,24 @@ export function removeOidcConfig(currentPassword: string) {
     method: "DELETE",
     body: JSON.stringify({ currentPassword }),
   });
+}
+
+export const OIDC_LOGO_MAX_BYTES = 1024 * 1024;
+export const OIDC_LOGO_TYPES = "image/png,image/jpeg,image/webp";
+
+export function uploadOidcLogo(file: File) {
+  if (file.size > OIDC_LOGO_MAX_BYTES) {
+    return Promise.reject(new ApiError("That image is too large. Use one under 1 MB.", 413));
+  }
+  return requestJson<AuthActionResult>("/api/v1/auth/oidc/logo", {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+  });
+}
+
+export function removeOidcLogo() {
+  return requestJson<AuthActionResult>("/api/v1/auth/oidc/logo", { method: "DELETE" });
 }
 
 export function oidcLoginUrl(next: string, intent: "login" | "link" = "login") {

@@ -10,8 +10,9 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import Field
+from starlette.concurrency import run_in_threadpool
 
-from activsync import auth_core, auth_devices, auth_oidc, db
+from activsync import auth_core, auth_devices, auth_oidc, auth_oidc_logo, db
 from activsync.api_routes import ApiModel
 from activsync.auth_middleware import (
     AuthState,
@@ -29,6 +30,7 @@ AuthMethod = Literal["password", "oidc", "proxy", "disabled"]
 class OidcLoginOption(ApiModel):
     label: str
     auto_redirect: bool
+    logo_url: str | None
 
 
 class LoginOptions(ApiModel):
@@ -96,6 +98,7 @@ class OidcConfigState(ApiModel):
     auto_redirect: bool
     redirect_uri: str
     linked_label: str | None
+    logo_url: str | None
 
 
 class OidcConfigRequest(ApiModel):
@@ -120,6 +123,21 @@ def _current_auth(request: Request) -> AuthState | None:
     return getattr(request.state, "auth", None)
 
 
+async def _read_capped_body(request: Request, limit: int) -> bytes:
+    """413 as soon as the body passes `limit`, without buffering the rest."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail=auth_oidc_logo.TOO_LARGE)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise HTTPException(status_code=413, detail=auth_oidc_logo.TOO_LARGE)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def create_router(
     conn: sqlite3.Connection,
     *,
@@ -137,6 +155,7 @@ def create_router(
             oidc=OidcLoginOption(
                 label=oidc_config.display_name,
                 auto_redirect=oidc_config.auto_redirect,
+                logo_url=auth_oidc_logo.current_url(conn),
             )
             if oidc_config and oidc_config.linked
             else None,
@@ -292,6 +311,7 @@ def create_router(
             auto_redirect=bool(config and config.auto_redirect),
             redirect_uri=f"{origin}/auth/oidc/callback",
             linked_label=config.linked["label"] if config and config.linked else None,
+            logo_url=auth_oidc_logo.current_url(conn),
         )
 
     @router.put("/auth/oidc", response_model=AuthActionResult)
@@ -324,6 +344,38 @@ def create_router(
         )
         auth_oidc.delete_config(conn)
         return AuthActionResult(message="Single sign-on removed.")
+
+    @router.get("/auth/oidc/logo", include_in_schema=False)
+    def oidc_logo() -> Response:
+        logo = auth_oidc_logo.load(conn)
+        if logo is None:
+            raise HTTPException(status_code=404, detail="No logo uploaded")
+        return Response(
+            content=logo.png,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @router.put("/auth/oidc/logo", response_model=AuthActionResult)
+    async def upload_oidc_logo(request: Request) -> AuthActionResult:
+        if await run_in_threadpool(auth_oidc.load_config, conn) is None:
+            raise HTTPException(status_code=409, detail="Set up single sign-on first.")
+        data = await _read_capped_body(request, auth_oidc_logo.MAX_UPLOAD_BYTES)
+        try:
+            png = await run_in_threadpool(auth_oidc_logo.normalize, data)
+        except auth_oidc_logo.LogoError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await run_in_threadpool(auth_oidc_logo.save, conn, png, time.time())
+        return AuthActionResult(message="Logo saved.")
+
+    @router.delete("/auth/oidc/logo", response_model=AuthActionResult)
+    def delete_oidc_logo() -> AuthActionResult:
+        auth_oidc_logo.delete(conn)
+        return AuthActionResult(message="Logo removed. The sign-in button shows a key again.")
 
     @router.post("/dev/unclaim", include_in_schema=False)
     def dev_unclaim() -> dict:

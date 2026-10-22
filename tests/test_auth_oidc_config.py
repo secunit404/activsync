@@ -55,6 +55,7 @@ def test_config_round_trip_hides_the_secret(owner):
         "autoRedirect": False,
         "redirectUri": "http://testserver/auth/oidc/callback",
         "linkedLabel": None,
+        "logoUrl": None,
     }
 
 
@@ -111,6 +112,7 @@ def test_login_status_offers_oidc_only_once_linked(owner, conn):
     assert anonymous.get("/api/v1/auth/status").json()["login"]["oidc"] == {
         "label": "Pocket ID",
         "autoRedirect": True,
+        "logoUrl": None,
     }
     assert owner.get("/api/v1/auth/oidc").json()["linkedLabel"] == "andreas"
 

@@ -134,6 +134,13 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     ip TEXT NOT NULL DEFAULT '',
     user_agent TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS auth_oidc_logo (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    png BLOB NOT NULL,
+    sha256 TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 """
 
 

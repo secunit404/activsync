@@ -34,6 +34,7 @@ PUBLIC_ROUTES = frozenset({
     ("POST", "/api/v1/auth/claim"),
     ("GET", "/auth/oidc/login"),
     ("GET", "/auth/oidc/callback"),
+    ("GET", "/api/v1/auth/oidc/logo"),
 })
 PUBLIC_PREFIXES = (("GET", "/assets/"),)
 SPA_RESERVED_PREFIXES = ("api", "assets", "strava", "auth")

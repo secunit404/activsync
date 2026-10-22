@@ -17,6 +17,7 @@ EXPECTED_PUBLIC_ROUTES = {
     ("POST", "/api/v1/auth/claim"),
     ("GET", "/auth/oidc/login"),
     ("GET", "/auth/oidc/callback"),
+    ("GET", "/api/v1/auth/oidc/logo"),
 }
 SPA_ROUTE = "/{path:path}"
 BOOT_SCRIPT = "window.boot = 1;"
