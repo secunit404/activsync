@@ -8,7 +8,6 @@ import logging
 import sqlite3
 import threading
 from dataclasses import dataclass
-from typing import Literal, get_args
 
 import httpx2
 from authlib.integrations.starlette_client import OAuth, OAuthError
@@ -25,11 +24,6 @@ OIDC_KEY = "auth_oidc"
 DEFAULT_SCOPES = "openid profile email"
 FLOW_KEY = "oidc_flow"
 
-OidcProviderKind = Literal[
-    "authentik", "authelia", "keycloak", "pocket_id", "kanidm", "zitadel", "google", "other"
-]
-PROVIDER_KINDS: tuple[str, ...] = get_args(OidcProviderKind)
-
 
 @dataclass(frozen=True)
 class OidcConfig:
@@ -40,14 +34,12 @@ class OidcConfig:
     scopes: str
     auto_redirect: bool
     linked: dict | None
-    provider: OidcProviderKind = "other"
 
 
 def load_config(conn: sqlite3.Connection) -> OidcConfig | None:
     stored = db.get_config_value(conn, OIDC_KEY)
     if not stored:
         return None
-    provider = stored.get("provider")
     return OidcConfig(
         display_name=stored["display_name"],
         issuer=stored["issuer"],
@@ -56,7 +48,6 @@ def load_config(conn: sqlite3.Connection) -> OidcConfig | None:
         scopes=stored.get("scopes", DEFAULT_SCOPES),
         auto_redirect=bool(stored.get("auto_redirect")),
         linked=stored.get("linked"),
-        provider=provider if provider in PROVIDER_KINDS else "other",
     )
 
 
@@ -76,7 +67,6 @@ def _store(conn: sqlite3.Connection, config: OidcConfig) -> None:
         "scopes": config.scopes,
         "auto_redirect": config.auto_redirect,
         "linked": config.linked,
-        "provider": config.provider,
     })
 
 
@@ -89,11 +79,9 @@ def save_config(
     client_secret: str | None,
     scopes: str,
     auto_redirect: bool,
-    provider: OidcProviderKind = "other",
 ) -> OidcConfig:
     """`client_secret=None` keeps the stored secret. A new issuer or client ID
-    is a different identity provider, so the link is dropped; `provider` only
-    picks the sign-in button's logo, so changing it keeps the link."""
+    is a different identity provider, so the link is dropped."""
     normalized = _normalize_issuer(issuer)
     with db.transaction(conn):
         existing = load_config(conn)
@@ -114,7 +102,6 @@ def save_config(
             scopes=" ".join(scopes.split()) or DEFAULT_SCOPES,
             auto_redirect=auto_redirect,
             linked=existing.linked if same_provider else None,
-            provider=provider,
         )
         _store(conn, config)
     return config

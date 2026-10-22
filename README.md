@@ -125,8 +125,7 @@ the same limits Grafana uses by default.
   the redirect URI Settings shows (`<your origin>/auth/oidc/callback`), enter
   its issuer URL, client ID and secret, then press **Link account**. Only the
   account you link can sign in, so another account at the same provider is
-  refused. The **Provider** picker puts that provider's logo on the sign-in
-  button (a key icon for Pocket ID, Kanidm, Zitadel and Other).
+  refused.
 - **Trusted proxy header.** For an authenticating reverse proxy. Set the three
   `ACTIVSYNC_AUTH_PROXY_*` variables; ActivSync refuses to start if one is
   missing or the trusted range is everything. The proxy's own sign-out signs

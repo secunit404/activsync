@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
-import { OidcProviderIcon } from "@/components/oidc-provider-icon";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -10,13 +9,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useAuthAction } from "@/hooks/use-auth-action";
@@ -27,12 +19,6 @@ import {
   saveOidcConfig,
   type OidcConfig,
 } from "@/lib/auth-api";
-import {
-  defaultOidcName,
-  OIDC_PROVIDER_IDS,
-  OIDC_PROVIDERS,
-  type OidcProvider,
-} from "@/lib/oidc-providers";
 import { queryKeys } from "@/lib/query-keys";
 
 export function OidcSettings() {
@@ -50,10 +36,6 @@ export function OidcSettings() {
       <h3 className="text-sm font-semibold">Single sign-on (OIDC)</h3>
       {data.configured ? (
         <p className="text-sm text-muted-foreground">
-          <OidcProviderIcon
-            provider={data.provider}
-            className="mr-1.5 inline size-4 align-text-bottom"
-          />
           {data.displayName} at <span className="font-mono">{data.issuer}</span>
           {" — "}
           {data.linkedLabel ? `linked to ${data.linkedLabel}` : "not linked yet"}
@@ -82,7 +64,6 @@ export function OidcSettings() {
 }
 
 function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }) {
-  const [provider, setProvider] = useState<OidcProvider>(config.provider);
   const [displayName, setDisplayName] = useState(config.displayName);
   const [issuer, setIssuer] = useState(config.issuer);
   const [clientId, setClientId] = useState(config.clientId);
@@ -93,13 +74,6 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
   const save = useAuthAction(saveOidcConfig);
   const remove = useAuthAction(removeOidcConfig);
   const pending = save.isPending || remove.isPending;
-
-  function pickProvider(next: OidcProvider) {
-    if (displayName.trim() === "" || displayName === defaultOidcName(provider)) {
-      setDisplayName(defaultOidcName(next));
-    }
-    setProvider(next);
-  }
 
   return (
     <form
@@ -114,7 +88,6 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
             clientSecret: clientSecret === "" && config.hasSecret ? null : clientSecret,
             scopes,
             autoRedirect,
-            provider,
             currentPassword,
           },
           { onSuccess: onDone },
@@ -122,22 +95,6 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
       }}
     >
       <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="oidc-provider">Provider</FieldLabel>
-          <Select value={provider} onValueChange={(value) => pickProvider(value as OidcProvider)}>
-            <SelectTrigger id="oidc-provider" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              {OIDC_PROVIDER_IDS.map((id) => (
-                <SelectItem key={id} value={id}>
-                  <OidcProviderIcon provider={id} />
-                  {OIDC_PROVIDERS[id].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
         <Field>
           <FieldLabel htmlFor="oidc-name">Provider name</FieldLabel>
           <Input id="oidc-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
