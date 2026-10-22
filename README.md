@@ -127,10 +127,6 @@ the same limits Grafana uses by default.
   account you link can sign in, so another account at the same provider is
   refused. The **Provider** picker puts that provider's logo on the sign-in
   button (a key icon for Pocket ID, Kanidm, Zitadel and Other).
-- **Sign in with Strava.** Uses the Strava app you already connected, so
-  nothing changes on Strava's side. The sign-in page shows it as the
-  **Connect with Strava** button. Only the athlete ActivSync is connected to
-  can sign in. Signing out never disconnects Strava.
 - **Trusted proxy header.** For an authenticating reverse proxy. Set the three
   `ACTIVSYNC_AUTH_PROXY_*` variables; ActivSync refuses to start if one is
   missing or the trusted range is everything. The proxy's own sign-out signs
@@ -158,7 +154,6 @@ Run the recovery commands inside the container:
 docker compose exec activsync activsync-auth reset-password       # new password, signs everyone out
 docker compose exec activsync activsync-auth revoke-sessions      # sign everyone out
 docker compose exec activsync activsync-auth disable-oidc         # remove a broken SSO setup
-docker compose exec activsync activsync-auth disable-strava-login
 docker compose exec activsync activsync-auth status               # which methods are on; no secrets
 ```
 

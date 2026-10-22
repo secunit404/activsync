@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from auth_helpers import CSRF_HEADERS, owner_client
 
-from activsync import db
+from activsync import db, dev_mock, view
 from activsync import server as server_module
 from activsync.server import create_app
 
@@ -143,8 +143,26 @@ def test_strava_callback_connects_and_runs_post_setup_catch_up(
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings"
-    fake_strava.exchange_code.assert_called_once_with("code")
+    fake_strava.exchange_code.assert_called_once_with("code", granted_scope=None)
     catch_up.assert_called_once_with(conn, fake_garmin, fake_strava)
+
+
+def test_strava_callback_flags_a_narrowed_grant_for_reconnect(tmp_path, monkeypatch):
+    conn = db.connect(str(tmp_path / "oauth.db"))
+    _complete_setup(conn)
+    db.set_config_value(conn, "strava_oauth_state", "expected")
+    monkeypatch.setattr(server_module, "_build_strava_client", dev_mock.FakeStravaClient)
+    monkeypatch.setattr(server_module, "_build_garmin_client", lambda _conn: MagicMock())
+    monkeypatch.setattr(server_module.onboarding, "run_catch_up", MagicMock())
+
+    owner_client(create_app(conn)).get(
+        "/strava/callback?code=code&state=expected&scope=read",
+        follow_redirects=False,
+    )
+
+    connections = view.connection_status(conn)
+    assert connections["strava"]["status"].startswith("Reconnect needed")
+    assert "strava" in connections["broken"]
 
 
 def test_strava_callback_returns_to_setup_and_surfaces_declines_there(

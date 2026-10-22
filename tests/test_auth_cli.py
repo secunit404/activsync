@@ -93,16 +93,6 @@ def test_db_path_follows_the_server(monkeypatch, tmp_path):
     assert db.resolve_path(mock_mode=False) == str(tmp_path / "legacy.db")
 
 
-def test_disable_strava_login(conn, capsys):
-    auth_core.save_settings(conn, strava_login=True)
-
-    assert auth_cli.main(["disable-strava-login"]) == 0
-
-    assert auth_core.load_settings(conn)["strava_login"] is False
-    auth_cli.main(["status"])
-    assert "Sign in with Strava:  off" in capsys.readouterr().out
-
-
 def test_status_describes_the_proxy_from_the_environment(conn, monkeypatch, capsys):
     monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User")
     monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_TRUSTED", "172.18.0.0/16")

@@ -1,7 +1,7 @@
-import { requestJson, type AuthorizeUrl } from "@/lib/api";
+import { requestJson } from "@/lib/api";
 import type { OidcProvider } from "@/lib/oidc-providers";
 
-export type AuthMethod = "password" | "oidc" | "strava" | "proxy" | "disabled";
+export type AuthMethod = "password" | "oidc" | "proxy" | "disabled";
 
 export type AuthStatus = {
   authenticated: boolean;
@@ -11,13 +11,10 @@ export type AuthStatus = {
   authDisabled: boolean;
   login: {
     oidc: { label: string; autoRedirect: boolean; provider: OidcProvider } | null;
-    strava: boolean;
   };
 };
 
 export type AuthSettings = {
-  stravaLogin: boolean;
-  stravaLoginBlocker: string | null;
   proxy: { header: string; trusted: string[]; user: string } | null;
 };
 
@@ -83,13 +80,6 @@ export function getAuthSettings(signal?: AbortSignal): Promise<AuthSettings> {
   return requestJson<AuthSettings>("/api/v1/auth/settings", { signal });
 }
 
-export function saveAuthSettings(payload: { stravaLogin?: boolean }) {
-  return requestJson<AuthActionResult>("/api/v1/auth/settings", {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
 export function changePassword(payload: { current: string; new: string }) {
   return requestJson<AuthActionResult>("/api/v1/auth/password", {
     method: "PUT",
@@ -135,12 +125,4 @@ export function removeOidcConfig(currentPassword: string) {
 export function oidcLoginUrl(next: string, intent: "login" | "link" = "login") {
   const params = new URLSearchParams({ intent, next });
   return `/auth/oidc/login?${params.toString()}`;
-}
-
-export function startStravaLogin(next: string, signal?: AbortSignal): Promise<AuthorizeUrl> {
-  return requestJson<AuthorizeUrl>("/api/v1/auth/strava/authorize", {
-    method: "POST",
-    body: JSON.stringify({ next }),
-    signal,
-  });
 }

@@ -1,10 +1,9 @@
-"""Browser-redirect sign-in flows under /auth: OIDC and Sign in with Strava."""
+"""Browser-redirect OIDC sign-in flow under /auth."""
 
 from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Callable
 from typing import Literal
 from urllib.parse import urlencode
 
@@ -12,7 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
-from activsync import auth_oidc, auth_strava_login
+from activsync import auth_oidc
 from activsync.auth_middleware import external_url, safe_next, start_session
 
 logger = logging.getLogger("activsync.auth")
@@ -31,7 +30,6 @@ def create_router(
     *,
     oidc: auth_oidc.OidcProvider,
     public_url: str | None,
-    build_strava_client: Callable[[sqlite3.Connection], object],
 ) -> APIRouter:
     router = APIRouter(prefix="/auth", include_in_schema=False)
 
@@ -79,30 +77,6 @@ def create_router(
             return _login_error("oidc_mismatch")
         response = RedirectResponse(result.next_path, status_code=303)
         await run_in_threadpool(start_session, conn, request, response, "oidc")
-        return response
-
-    @router.get("/strava/callback", name="strava_login_callback")
-    def strava_login_callback(
-        request: Request,
-        code: str | None = None,
-        state: str | None = None,
-        error: str | None = None,
-        scope: str | None = None,
-    ):
-        try:
-            target = auth_strava_login.finish(
-                conn,
-                request,
-                build_strava_client(conn),
-                code=code,
-                state=state,
-                error=error,
-                scope=scope,
-            )
-        except auth_strava_login.StravaLoginError as exc:
-            return _login_error(exc.code)
-        response = RedirectResponse(target, status_code=303)
-        start_session(conn, request, response, "strava")
         return response
 
     return router

@@ -652,26 +652,23 @@ def test_publish_strength_uploads_the_document_as_json(mock_post, mock_get, conn
 
 
 @patch("activsync.strava_client.requests.post")
-def test_exchange_code_stores_the_athlete_id(mock_post, conn):
+def test_exchange_code_records_the_granted_scope(mock_post, conn):
     mock_post.return_value = MagicMock(
         status_code=200,
-        json=lambda: {
-            "access_token": "a1", "refresh_token": "r1", "expires_at": 12345,
-            "athlete": {"id": 777, "firstname": "A"},
-        },
+        json=lambda: {"access_token": "a1", "refresh_token": "r1", "expires_at": 12345},
     )
     mock_post.return_value.raise_for_status = lambda: None
 
-    StravaClient(conn, "cid", "csecret").exchange_code("authcode")
+    StravaClient(conn, "cid", "csecret").exchange_code("authcode", granted_scope="read")
 
-    assert db.get_config_value(conn, "strava_tokens")["athlete_id"] == 777
+    assert db.get_config_value(conn, "strava_tokens")["scope"] == "read"
 
 
 @patch("activsync.strava_client.requests.post")
-def test_refreshing_keeps_the_athlete_id_and_scope(mock_post, conn):
+def test_refreshing_keeps_the_granted_scope(mock_post, conn):
     db.set_config_value(conn, "strava_tokens", {
         "access_token": "old", "refresh_token": "r", "expires_at": time.time() - 10,
-        "athlete_id": 777, "scope": "read,activity:write,activity:read_all",
+        "scope": "read,activity:write,activity:read_all",
     })
     mock_post.return_value = MagicMock(
         status_code=200,
@@ -682,41 +679,8 @@ def test_refreshing_keeps_the_athlete_id_and_scope(mock_post, conn):
     StravaClient(conn, "cid", "csecret")._get_access_token()
 
     tokens = db.get_config_value(conn, "strava_tokens")
-    assert tokens["athlete_id"] == 777
+    assert tokens["access_token"] == "fresh"
     assert tokens["scope"] == "read,activity:write,activity:read_all"
-
-
-@patch("activsync.strava_client.requests.get")
-def test_the_activity_poll_backfills_a_missing_athlete_id(mock_get, conn):
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
-    })
-    mock_get.return_value = _page([
-        {"id": 7777, "start_date": "2026-07-09T09:00:30Z", "athlete": {"id": 555, "resource_state": 1}},
-    ])
-
-    StravaClient(conn, "cid", "csecret").list_activities_between(
-        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
-    )
-
-    assert db.get_config_value(conn, "strava_tokens")["athlete_id"] == 555
-
-
-@patch("activsync.strava_client.requests.get")
-def test_the_activity_poll_never_overwrites_a_known_athlete_id(mock_get, conn):
-    db.set_config_value(conn, "strava_tokens", {
-        "access_token": "tok", "refresh_token": "r", "expires_at": time.time() + 3600,
-        "athlete_id": 111,
-    })
-    mock_get.return_value = _page([
-        {"id": 7777, "start_date": "2026-07-09T09:00:30Z", "athlete": {"id": 555}},
-    ])
-
-    StravaClient(conn, "cid", "csecret").list_activities_between(
-        datetime(2026, 7, 2, tzinfo=timezone.utc), datetime(2026, 7, 9, 12, tzinfo=timezone.utc),
-    )
-
-    assert db.get_config_value(conn, "strava_tokens")["athlete_id"] == 111
 
 
 @pytest.mark.parametrize(("granted", "sufficient"), [

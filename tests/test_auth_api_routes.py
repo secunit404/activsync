@@ -42,7 +42,7 @@ def test_status_before_claim(app):
         "user": None,
         "ownerClaimed": False,
         "authDisabled": False,
-        "login": {"oidc": None, "strava": False},
+        "login": {"oidc": None},
     }
 
 

@@ -5,14 +5,12 @@ import { Navigate, useNavigate, useSearchParams } from "react-router";
 
 import { AppBrand } from "@/components/app-shell";
 import { OidcProviderIcon } from "@/components/oidc-provider-icon";
-import { StravaConnectButton } from "@/components/strava-connect-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuthStatus } from "@/hooks/use-auth-status";
-import { useStravaLoginUrl } from "@/hooks/use-strava-authorize-url";
 import { LOGIN_ERRORS } from "@/lib/auth-errors";
 import { login, oidcLoginUrl, type AuthStatus } from "@/lib/auth-api";
 import { queryKeys } from "@/lib/query-keys";
@@ -120,20 +118,15 @@ export function LoginView({
         </Alert>
       ) : null}
       <PasswordForm next={next} />
-      {oidc || status.login.strava ? (
+      {oidc ? (
         <>
           <OrDivider />
-          <div className="grid justify-items-center gap-3">
-            {oidc ? (
-              <ProviderButton
-                href={oidcLoginUrl(next)}
-                icon={<OidcProviderIcon provider={oidc.provider} className="size-5" />}
-              >
-                Sign in with {oidc.label}
-              </ProviderButton>
-            ) : null}
-            {status.login.strava ? <StravaLogin next={next} /> : null}
-          </div>
+          <ProviderButton
+            href={oidcLoginUrl(next)}
+            icon={<OidcProviderIcon provider={oidc.provider} className="size-5" />}
+          >
+            Sign in with {oidc.label}
+          </ProviderButton>
         </>
       ) : null}
     </LoginCard>
@@ -150,8 +143,6 @@ function OrDivider() {
   );
 }
 
-// Sized to match Strava's official button, which can't be stretched, so the
-// two providers stack as a matched pair.
 function ProviderButton({
   href,
   icon,
@@ -164,26 +155,11 @@ function ProviderButton({
   return (
     <a
       href={href}
-      className="inline-flex h-12 w-[237px] items-center justify-center gap-2.5 rounded-[6px] border border-input bg-muted px-4 text-[14px] font-medium text-foreground transition-colors outline-none hover:bg-input focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-input bg-muted px-4 text-sm font-medium text-foreground transition-colors outline-none hover:bg-input focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       {icon}
       {children}
     </a>
-  );
-}
-
-function StravaLogin({ next }: { next: string }) {
-  const authorize = useStravaLoginUrl(next);
-  return (
-    <div className="grid justify-items-center gap-2">
-      <StravaConnectButton
-        href={authorize.data?.url ?? null}
-        error={authorize.error?.message}
-      />
-      <p className="text-center text-[11px] text-muted-foreground">
-        Signs in as your connected Strava athlete
-      </p>
-    </div>
   );
 }
 

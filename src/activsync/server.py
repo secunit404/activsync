@@ -181,7 +181,6 @@ def create_app(
             public_url=public_url,
             proxy=proxy,
             mock_mode=_mock_mode,
-            build_strava_client=_build_strava_client,
         )
     )
     app.include_router(
@@ -189,7 +188,6 @@ def create_app(
             conn,
             oidc=auth_oidc.OidcProvider(conn, transport=oidc_transport),
             public_url=public_url,
-            build_strava_client=_build_strava_client,
         )
     )
 
@@ -261,6 +259,7 @@ def create_app(
         code: str | None = None,
         state: str | None = None,
         error: str | None = None,
+        scope: str | None = None,
     ):
         expected_state = db.get_config_value(conn, "strava_oauth_state")
         db.set_config_value(conn, "strava_oauth_state", None)
@@ -288,7 +287,7 @@ def create_app(
 
         strava = _build_strava_client(conn)
         try:
-            strava.exchange_code(code)
+            strava.exchange_code(code, granted_scope=scope)
         except (requests.RequestException, StravaAuthError) as exc:
             logger.warning("strava code exchange failed: %s", exc)
             return strava_error(

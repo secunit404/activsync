@@ -9,15 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { useAuthAction } from "@/hooks/use-auth-action";
 import { useAuthStatus } from "@/hooks/use-auth-status";
-import {
-  changePassword,
-  getAuthSettings,
-  saveAuthSettings,
-  type AuthSettings,
-} from "@/lib/auth-api";
+import { changePassword, getAuthSettings, type AuthSettings } from "@/lib/auth-api";
 import { passwordsMismatch } from "@/lib/password";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -48,7 +42,7 @@ export function AccessSettings() {
       {settings.data && status.data ? (
         <>
           <PasswordChangeForm />
-          <SignInMethods settings={settings.data} />
+          {settings.data.proxy ? <ProxySignIn proxy={settings.data.proxy} /> : null}
           <OidcSettings />
           <SessionList />
           <div>
@@ -138,33 +132,13 @@ function PasswordChangeForm() {
   );
 }
 
-function SignInMethods({ settings }: { settings: AuthSettings }) {
-  const save = useAuthAction(saveAuthSettings);
-
+function ProxySignIn({ proxy }: { proxy: NonNullable<AuthSettings["proxy"]> }) {
   return (
-    <div className="grid gap-4">
-      <h3 className="text-sm font-semibold">Sign-in methods</h3>
-      <label className="flex items-start justify-between gap-4 text-sm">
-        <span className="grid gap-0.5">
-          <span>Sign in with Strava</span>
-          <span className="text-xs text-muted-foreground">
-            {settings.stravaLoginBlocker ??
-              "Only the Strava athlete connected to ActivSync can sign in."}
-          </span>
-        </span>
-        <Switch
-          aria-label="Sign in with Strava"
-          checked={settings.stravaLogin && !settings.stravaLoginBlocker}
-          disabled={save.isPending || Boolean(settings.stravaLoginBlocker)}
-          onCheckedChange={(checked) => save.mutate({ stravaLogin: checked === true })}
-        />
-      </label>
-      {settings.proxy ? (
-        <p className="text-xs text-muted-foreground">
-          Proxy sign-in — configured via environment: {settings.proxy.header} from{" "}
-          {settings.proxy.trusted.join(", ")}
-        </p>
-      ) : null}
+    <div className="grid gap-1">
+      <h3 className="text-sm font-semibold">Proxy sign-in</h3>
+      <p className="text-xs text-muted-foreground">
+        Configured via environment: {proxy.header} from {proxy.trusted.join(", ")}
+      </p>
     </div>
   );
 }

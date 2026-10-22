@@ -42,7 +42,7 @@ test("claims with the code and password and stores the signed-in status", async 
     user: null,
     ownerClaimed: true,
     authDisabled: false,
-    login: { oidc: null, strava: false },
+    login: { oidc: null },
   };
   claimOwner.mockResolvedValue(signedIn);
   const client = renderStep();

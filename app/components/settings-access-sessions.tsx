@@ -13,7 +13,6 @@ import { queryKeys } from "@/lib/query-keys";
 const METHOD_LABELS: Record<string, string> = {
   password: "Password",
   oidc: "Single sign-on",
-  strava: "Strava",
 };
 
 function formatWhen(iso: string) {

@@ -12,7 +12,6 @@ const api = vi.hoisted(() => ({
   getAuthSettings: vi.fn(),
   getSessions: vi.fn(),
   getOidcConfig: vi.fn(),
-  saveAuthSettings: vi.fn(),
   changePassword: vi.fn(),
   revokeSession: vi.fn(),
   revokeOtherSessions: vi.fn(),
@@ -31,14 +30,10 @@ const signedIn: AuthStatus = {
   user: null,
   ownerClaimed: true,
   authDisabled: false,
-  login: { oidc: null, strava: false },
+  login: { oidc: null },
 };
 
-const settings: AuthSettings = {
-  stravaLogin: false,
-  stravaLoginBlocker: null,
-  proxy: null,
-};
+const settings: AuthSettings = { proxy: null };
 
 const sessions: AuthSession[] = [
   {
@@ -91,7 +86,6 @@ beforeEach(() => {
   api.getAuthSettings.mockResolvedValue(settings);
   api.getSessions.mockResolvedValue(sessions);
   api.getOidcConfig.mockResolvedValue(oidc);
-  api.saveAuthSettings.mockResolvedValue({ message: "Sign-in settings saved." });
   api.changePassword.mockResolvedValue({ message: "Password changed." });
   api.revokeSession.mockResolvedValue(undefined);
   api.revokeOtherSessions.mockResolvedValue({ message: "Signed out 1 other session(s)." });
@@ -152,36 +146,14 @@ test("each password field has its own show/hide toggle", async () => {
   );
 });
 
-test("the Strava toggle waits for its precondition", async () => {
-  api.getAuthSettings.mockResolvedValue({
-    ...settings,
-    stravaLoginBlocker: "Waiting for the next Strava sync.",
-  });
-  renderAccess();
-
-  expect(await screen.findByText("Waiting for the next Strava sync.")).toBeVisible();
-  expect(screen.getByRole("switch", { name: "Sign in with Strava" })).toBeDisabled();
-});
-
-test("turning on Sign in with Strava saves immediately", async () => {
-  renderAccess();
-
-  await userEvent.click(await screen.findByRole("switch", { name: "Sign in with Strava" }));
-
-  await vi.waitFor(() =>
-    expect(api.saveAuthSettings).toHaveBeenCalledWith({ stravaLogin: true }, expect.anything()),
-  );
-});
-
 test("shows the environment-configured proxy read-only", async () => {
   api.getAuthSettings.mockResolvedValue({
-    ...settings,
     proxy: { header: "Remote-User", trusted: ["172.18.0.0/16"], user: "andreas" },
   });
   renderAccess();
 
   expect(
-    await screen.findByText(/configured via environment: Remote-User from 172\.18\.0\.0\/16/),
+    await screen.findByText(/Configured via environment: Remote-User from 172\.18\.0\.0\/16/),
   ).toBeVisible();
 });
 

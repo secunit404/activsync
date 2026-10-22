@@ -47,12 +47,6 @@ def _disable_oidc(conn: sqlite3.Connection) -> int:
     return 0
 
 
-def _disable_strava_login(conn: sqlite3.Connection) -> int:
-    auth_core.save_settings(conn, strava_login=False)
-    print("Sign in with Strava turned off.")
-    return 0
-
-
 def _describe_oidc(oidc: auth_oidc.OidcConfig | None) -> str:
     if oidc is None:
         return "off"
@@ -67,12 +61,10 @@ def _describe_proxy(proxy: auth_middleware.ProxyAuthConfig | None) -> str:
 
 
 def _status(conn: sqlite3.Connection) -> int:
-    settings = auth_core.load_settings(conn)
     lines = [
         f"Owner claimed:        {'yes' if auth_core.owner_claimed(conn) else 'no'}",
         f"Authentication:       {'DISABLED' if auth_core.auth_disabled() else 'on'}",
         f"Single sign-on:       {_describe_oidc(auth_oidc.load_config(conn))}",
-        f"Sign in with Strava:  {'on' if settings['strava_login'] else 'off'}",
         "Proxy header:         "
         f"{_describe_proxy(auth_middleware.ProxyAuthConfig.from_env(os.environ))}",
         f"Active sessions:      {len(auth_core.list_sessions(conn))}",
@@ -85,7 +77,6 @@ COMMANDS = {
     "reset-password": (_reset_password, "Set a new password and sign out every session."),
     "revoke-sessions": (_revoke_sessions, "Sign out every session and forget trusted browsers."),
     "disable-oidc": (_disable_oidc, "Remove the single sign-on configuration."),
-    "disable-strava-login": (_disable_strava_login, "Turn off Sign in with Strava."),
     "status": (_status, "Show which sign-in methods are on. Never prints secrets."),
 }
 

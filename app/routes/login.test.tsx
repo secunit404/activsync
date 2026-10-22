@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { siAuthelia, siAuthentik, siGoogle, siKeycloak } from "simple-icons";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -11,19 +11,15 @@ import { LOGIN_ERRORS } from "@/lib/auth-errors";
 import type { OidcProvider } from "@/lib/oidc-providers";
 import Login, { safeNext } from "./login";
 
-const { getAuthStatus, login, startStravaLogin } = vi.hoisted(() => ({
+const { getAuthStatus, login } = vi.hoisted(() => ({
   getAuthStatus: vi.fn(),
   login: vi.fn(),
-  startStravaLogin: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth-api")>();
-  return { ...actual, getAuthStatus, login, startStravaLogin };
+  return { ...actual, getAuthStatus, login };
 });
-
-const STRAVA_AUTHORIZE =
-  "https://www.strava.com/oauth/authorize?client_id=1234&state=issued";
 
 function status(overrides: Partial<AuthStatus> = {}): AuthStatus {
   return {
@@ -32,7 +28,7 @@ function status(overrides: Partial<AuthStatus> = {}): AuthStatus {
     user: null,
     ownerClaimed: true,
     authDisabled: false,
-    login: { oidc: null, strava: false },
+    login: { oidc: null },
     ...overrides,
   };
 }
@@ -59,7 +55,6 @@ function renderAt(path: string) {
 beforeEach(() => {
   getAuthStatus.mockReset();
   login.mockReset();
-  startStravaLogin.mockReset();
 });
 
 afterEach(() => {
@@ -118,15 +113,9 @@ test("maps error codes to fixed copy, never provider text", async () => {
   expect(screen.queryByText("<script>")).toBeNull();
 });
 
-test("offers each enabled provider with next passed through", async () => {
-  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+test("offers single sign-on with next passed through", async () => {
   getAuthStatus.mockResolvedValue(
-    status({
-      login: {
-        oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" },
-        strava: true,
-      },
-    }),
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" } } }),
   );
   renderAt("/login?next=%2Fhevy");
 
@@ -134,11 +123,6 @@ test("offers each enabled provider with next passed through", async () => {
     "href",
     "/auth/oidc/login?intent=login&next=%2Fhevy",
   );
-  expect(await screen.findByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
-    "href",
-    STRAVA_AUTHORIZE,
-  );
-  expect(startStravaLogin).toHaveBeenCalledWith("/hevy", expect.anything());
 });
 
 test.each([
@@ -148,7 +132,7 @@ test.each([
   ["google", siGoogle],
 ] as const)("the %s sign-in button shows its logo", async (provider, icon) => {
   getAuthStatus.mockResolvedValue(
-    status({ login: { oidc: { label: "My SSO", autoRedirect: false, provider }, strava: false } }),
+    status({ login: { oidc: { label: "My SSO", autoRedirect: false, provider } } }),
   );
   renderAt("/login");
 
@@ -171,7 +155,6 @@ test.each(["pocket_id", "kanidm", "zitadel", "other", "unknown"])(
             autoRedirect: false,
             provider: provider as OidcProvider,
           },
-          strava: false,
         },
       }),
     );
@@ -190,36 +173,14 @@ test("the or divider shows only when a provider is offered", async () => {
   expect(screen.queryByText("or", { exact: true })).toBeNull();
 });
 
-test("the or divider separates the password form from the providers", async () => {
+test("the or divider separates the password form from single sign-on", async () => {
   getAuthStatus.mockResolvedValue(
-    status({ login: { oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" }, strava: false } }),
+    status({ login: { oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" } } }),
   );
   renderAt("/login");
 
   expect(await screen.findByText("or", { exact: true })).toBeVisible();
-});
-
-test("the OIDC button matches the official Strava button's 237x48 size", async () => {
-  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
-  getAuthStatus.mockResolvedValue(
-    status({ login: { oidc: { label: "Authentik", autoRedirect: false, provider: "authentik" }, strava: true } }),
-  );
-  renderAt("/login");
-
-  const oidc = await screen.findByRole("link", { name: "Sign in with Authentik" });
-  expect(oidc).toHaveClass("h-12", "w-[237px]", "rounded-[6px]");
-  expect(oidc.querySelector("svg")).toHaveClass("size-5");
-  const strava = await screen.findByRole("img", { name: "Connect with Strava" });
-  expect(strava).toHaveAttribute("width", "237");
-  expect(strava).toHaveAttribute("height", "48");
-});
-
-test("Strava sign-in explains which account it uses", async () => {
-  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
-  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
-  renderAt("/login");
-
-  expect(await screen.findByText("Signs in as your connected Strava athlete")).toBeVisible();
+  expect(screen.getByRole("link", { name: "Sign in with Authentik" })).toHaveClass("h-11", "w-full");
 });
 
 test("the sign-in page shows the brand, subtitle and a GitHub footer", async () => {
@@ -235,56 +196,12 @@ test("the sign-in page shows the brand, subtitle and a GitHub footer", async () 
   );
 });
 
-test("Strava sign-in is the official 48px button, fetched once per visit", async () => {
-  startStravaLogin.mockResolvedValue({ url: STRAVA_AUTHORIZE });
-  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
-  renderAt("/login");
-
-  const link = await screen.findByRole("link", { name: "Connect with Strava" });
-  const image = within(link).getByRole("img", { name: "Connect with Strava" });
-  expect(image).toHaveAttribute("height", "48");
-  expect(image.getAttribute("src")).toMatch(/btn_strava_connect_with_orange.*\.svg$/);
-  await userEvent.type(screen.getByLabelText("Password"), "typing re-renders");
-  expect(startStravaLogin).toHaveBeenCalledTimes(1);
-});
-
-test("the Strava button is disabled while its link loads", async () => {
-  startStravaLogin.mockReturnValue(new Promise(() => {}));
-  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
-  renderAt("/login");
-
-  expect(await screen.findByRole("img", { name: "Connect with Strava" })).toBeVisible();
-  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
-});
-
-test("a refused Strava sign-in stays disabled and says why", async () => {
-  startStravaLogin.mockRejectedValue(
-    new ApiError("Sign in with Strava is not available right now.", 409),
-  );
-  getAuthStatus.mockResolvedValue(status({ login: { oidc: null, strava: true } }));
-  renderAt("/login");
-
-  expect(
-    await screen.findByText("Sign in with Strava is not available right now."),
-  ).toBeVisible();
-  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
-});
-
-test("no Strava link is requested when Strava sign-in is off", async () => {
-  getAuthStatus.mockResolvedValue(status());
-  renderAt("/login");
-
-  expect(await screen.findByLabelText("Password")).toBeVisible();
-  expect(screen.queryByRole("img", { name: "Connect with Strava" })).toBeNull();
-  expect(startStravaLogin).not.toHaveBeenCalled();
-});
-
 test("?local=1 shows the password form and skips auto-redirect", async () => {
   const assign = vi.fn();
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { oidc: { label: "Authentik", autoRedirect: true, provider: "authentik" }, strava: false },
+      login: { oidc: { label: "Authentik", autoRedirect: true, provider: "authentik" } },
     }),
   );
   renderAt("/login?local=1");
@@ -298,7 +215,7 @@ test("auto-redirect sends the browser straight to the provider", async () => {
   vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(
     status({
-      login: { oidc: { label: "Authentik", autoRedirect: true, provider: "authentik" }, strava: false },
+      login: { oidc: { label: "Authentik", autoRedirect: true, provider: "authentik" } },
     }),
   );
   renderAt("/login?next=%2Fhevy");

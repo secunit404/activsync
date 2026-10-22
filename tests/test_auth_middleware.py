@@ -17,8 +17,6 @@ EXPECTED_PUBLIC_ROUTES = {
     ("POST", "/api/v1/auth/claim"),
     ("GET", "/auth/oidc/login"),
     ("GET", "/auth/oidc/callback"),
-    ("POST", "/api/v1/auth/strava/authorize"),
-    ("GET", "/auth/strava/callback"),
 }
 SPA_ROUTE = "/{path:path}"
 BOOT_SCRIPT = "window.boot = 1;"

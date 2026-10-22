@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import Field
 
-from activsync import auth_core, auth_devices, auth_oidc, auth_strava_login, db
+from activsync import auth_core, auth_devices, auth_oidc, db
 from activsync.api_routes import ApiModel
 from activsync.auth_middleware import (
     AuthState,
@@ -19,13 +19,11 @@ from activsync.auth_middleware import (
     clear_session_cookie,
     client_ip,
     device_cookie_name,
-    external_url,
     own_origin,
-    safe_next,
     start_session,
 )
 
-AuthMethod = Literal["password", "oidc", "strava", "proxy", "disabled"]
+AuthMethod = Literal["password", "oidc", "proxy", "disabled"]
 
 
 class OidcLoginOption(ApiModel):
@@ -36,7 +34,6 @@ class OidcLoginOption(ApiModel):
 
 class LoginOptions(ApiModel):
     oidc: OidcLoginOption | None
-    strava: bool
 
 
 class AuthStatus(ApiModel):
@@ -57,10 +54,6 @@ class LoginRequest(ApiModel):
     password: str = Field(max_length=1024)
 
 
-class StravaLoginRequest(ApiModel):
-    next: str = Field(default="/", max_length=2048)
-
-
 class AuthorizeUrl(ApiModel):
     url: str
 
@@ -70,10 +63,6 @@ class PasswordChangeRequest(ApiModel):
     new: str = Field(max_length=1024)
 
 
-class AuthSettingsRequest(ApiModel):
-    strava_login: bool | None = None
-
-
 class ProxyState(ApiModel):
     header: str
     trusted: list[str]
@@ -81,8 +70,6 @@ class ProxyState(ApiModel):
 
 
 class AuthSettingsState(ApiModel):
-    strava_login: bool
-    strava_login_blocker: str | None
     proxy: ProxyState | None
 
 
@@ -144,7 +131,6 @@ def create_router(
     public_url: str | None,
     proxy: ProxyAuthConfig | None,
     mock_mode: Callable[[], bool],
-    build_strava_client: Callable[[sqlite3.Connection], object],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["auth"])
 
@@ -158,7 +144,6 @@ def create_router(
             )
             if oidc_config and oidc_config.linked
             else None,
-            strava=auth_strava_login.enabled(conn),
         )
 
     def status_for(auth: AuthState | None) -> AuthStatus:
@@ -238,24 +223,6 @@ def create_router(
         start_session(conn, request, response, "password")
         return status_for(AuthState(method="password"))
 
-    @router.post("/auth/strava/authorize", response_model=AuthorizeUrl)
-    def start_strava_login(payload: StravaLoginRequest, request: Request) -> AuthorizeUrl:
-        if not auth_strava_login.enabled(conn):
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Sign in with Strava is not available right now. "
-                    "Use your password instead."
-                ),
-            )
-        url = auth_strava_login.begin(
-            request,
-            build_strava_client(conn),
-            redirect_uri=external_url(request, "strava_login_callback", public_url),
-            next_path=safe_next(payload.next),
-        )
-        return AuthorizeUrl(url=url)
-
     @router.post("/auth/logout", status_code=204)
     def logout(request: Request, response: Response) -> None:
         auth = require_session(request)
@@ -311,22 +278,9 @@ def create_router(
 
     @router.get("/auth/settings", response_model=AuthSettingsState)
     def auth_settings() -> AuthSettingsState:
-        settings = auth_core.load_settings(conn)
         return AuthSettingsState(
-            strava_login=settings["strava_login"],
-            strava_login_blocker=auth_strava_login.blocker(conn),
             proxy=ProxyState.model_validate(proxy.describe()) if proxy else None,
         )
-
-    @router.put("/auth/settings", response_model=AuthActionResult)
-    def save_auth_settings(payload: AuthSettingsRequest) -> AuthActionResult:
-        changes = payload.model_dump(exclude_none=True)
-        if changes.get("strava_login"):
-            blocker = auth_strava_login.blocker(conn)
-            if blocker:
-                raise HTTPException(status_code=409, detail=blocker)
-        auth_core.save_settings(conn, **changes)
-        return AuthActionResult(message="Sign-in settings saved.")
 
     @router.get("/auth/oidc", response_model=OidcConfigState)
     def oidc_config(request: Request) -> OidcConfigState:

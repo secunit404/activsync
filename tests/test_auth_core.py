@@ -209,25 +209,6 @@ def test_prune_drops_idle_and_expired_sessions(conn):
     assert auth_core.resolve_session(conn, keep, NOW) is not None
 
 
-def test_settings_default_and_merge(conn):
-    assert auth_core.load_settings(conn) == {"strava_login": False}
-
-    saved = auth_core.save_settings(conn, strava_login=True)
-
-    assert saved == {"strava_login": True}
-    assert auth_core.load_settings(conn) == saved
-
-
-def test_settings_ignore_the_removed_password_form_key(conn):
-    db.set_config_value(
-        conn, auth_core.SETTINGS_KEY, {"password_form": "hidden", "strava_login": True}
-    )
-
-    assert auth_core.load_settings(conn) == {"strava_login": True}
-    assert auth_core.save_settings(conn, strava_login=False) == {"strava_login": False}
-    assert db.get_config_value(conn, auth_core.SETTINGS_KEY) == {"strava_login": False}
-
-
 def test_the_legacy_purge_leaves_auth_sessions_alone(tmp_path):
     path = str(tmp_path / "reopen.db")
     conn = db.connect(path)

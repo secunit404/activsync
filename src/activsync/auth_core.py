@@ -26,7 +26,6 @@ logger = logging.getLogger("activsync.auth")
 
 OWNER_KEY = "auth_owner"
 THROTTLE_KEY = "auth_login_throttle"
-SETTINGS_KEY = "auth_settings"
 STATE_SECRET_KEY = "auth_state_secret"
 
 PASSWORD_MIN_LENGTH = 15
@@ -43,9 +42,6 @@ IP_ATTEMPT_LIMIT = 10
 IP_ATTEMPT_WINDOW_SECONDS = 60
 
 SETUP_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-
-DEFAULT_SETTINGS = {"strava_login": False}
-
 
 def _env_enabled(name: str) -> bool:
     return os.environ.get(name, "").lower() in ("1", "true", "yes")
@@ -351,18 +347,6 @@ def prune_expired_sessions(conn: sqlite3.Connection, now: float) -> int:
             (int(now), int(now) - SESSION_IDLE_SECONDS),
         )
     return cursor.rowcount
-
-
-def load_settings(conn: sqlite3.Connection) -> dict:
-    stored = db.get_config_value(conn, SETTINGS_KEY) or {}
-    return {key: stored.get(key, default) for key, default in DEFAULT_SETTINGS.items()}
-
-
-def save_settings(conn: sqlite3.Connection, **changes) -> dict:
-    with db.transaction(conn):
-        updated = {**load_settings(conn), **changes}
-        db.set_config_value(conn, SETTINGS_KEY, updated)
-    return updated
 
 
 def state_secret(conn: sqlite3.Connection) -> str:

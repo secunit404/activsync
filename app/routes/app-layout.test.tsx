@@ -30,7 +30,7 @@ function status(overrides: Partial<AuthStatus> = {}): AuthStatus {
     user: null,
     ownerClaimed: true,
     authDisabled: false,
-    login: { oidc: null, strava: false },
+    login: { oidc: null },
     ...overrides,
   };
 }
