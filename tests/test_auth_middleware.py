@@ -93,12 +93,12 @@ def test_unauthenticated_api_gets_401_and_pages_redirect_to_login(app):
     client = _anonymous(app)
 
     api = client.get("/api/v1/app")
-    page = client.get("/strava/connect?from=settings")
+    page = client.get("/strava/callback?code=abc&state=xyz")
 
     assert api.status_code == 401
     assert api.json() == {"detail": "Not signed in"}
     assert page.status_code == 303
-    assert page.headers["location"] == "/login?next=%2Fstrava%2Fconnect%3Ffrom%3Dsettings"
+    assert page.headers["location"] == "/login?next=%2Fstrava%2Fcallback%3Fcode%3Dabc%26state%3Dxyz"
 
 
 def test_spa_shell_and_static_files_stay_public(app):
@@ -414,7 +414,7 @@ def test_a_root_path_does_not_open_the_api_without_a_session(app):
 
 
 def test_a_root_path_still_redirects_protected_pages_to_the_login(app):
-    status, headers, _ = _call(app, "GET", ROOT + "/strava/connect", root_path=ROOT)
+    status, headers, _ = _call(app, "GET", ROOT + "/strava/callback", root_path=ROOT)
 
     assert status == 303
     assert dict(headers)[b"location"].startswith(b"/login?next=")

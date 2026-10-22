@@ -71,6 +71,45 @@ def test_claim_needs_the_setup_code_then_signs_in(app):
     assert again.status_code == 409
 
 
+def test_concurrent_claims_have_one_winner(app, conn, monkeypatch):
+    code = app.state.setup_code.current
+    passwords = ["first long passphrase", "second long passphrase"]
+    barrier = threading.Barrier(2, timeout=10)
+    real_hash = auth_core.hash_password
+
+    def hash_after_both_passed_the_checks(password):
+        barrier.wait()
+        return real_hash(password)
+
+    monkeypatch.setattr(auth_core, "hash_password", hash_after_both_passed_the_checks)
+    results = {}
+
+    def claim(password):
+        client = _anonymous(app)
+        response = client.post(
+            "/api/v1/auth/claim", json={"setupCode": code, "password": password}
+        )
+        results[password] = (response, client)
+
+    threads = [threading.Thread(target=claim, args=(password,)) for password in passwords]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    by_status = {response.status_code: password for password, (response, _) in results.items()}
+    assert sorted(by_status) == [200, 409]
+    winner, loser = by_status[200], by_status[409]
+    assert results[loser][0].json() == {"detail": "ActivSync is already claimed."}
+    assert "activsync_session" not in results[loser][0].cookies
+    assert "activsync_session" in results[winner][0].cookies
+    assert len(auth_core.list_sessions(conn)) == 1
+    assert len(_devices(conn)) == 1
+    assert auth_core.verify_password(conn, winner) is True
+    assert auth_core.verify_password(conn, loser) is False
+    assert app.state.setup_code.current is None
+
+
 def test_session_cookie_flags_over_http(app, conn):
     _claim(conn)
 
@@ -378,7 +417,7 @@ def test_ten_device_failures_drop_trust(app, conn):
     assert _login(client).status_code == 429
 
 
-def test_password_change_clears_trusted_devices(app, conn):
+def test_password_change_keeps_only_the_requesting_device_trusted(app, conn):
     _claim(conn)
     client = _anonymous(app)
     _login(client)
@@ -392,17 +431,63 @@ def test_password_change_clears_trusted_devices(app, conn):
     )
 
     assert changed.status_code == 200
-    assert _devices(conn) == []
+    assert [entry["hash"] for entry in _devices(conn)] == [
+        auth_core.hash_token(client.cookies["activsync_device"])
+    ]
 
 
-def test_signing_out_everywhere_clears_trusted_devices(app, conn):
+def test_signing_out_everywhere_keeps_only_the_requesting_device_trusted(app, conn):
     _claim(conn)
     client = _anonymous(app)
     _login(client)
+    other = _anonymous(app)
+    _login(other)
 
     assert client.delete("/api/v1/auth/sessions").status_code == 200
 
-    assert _devices(conn) == []
+    assert [entry["hash"] for entry in _devices(conn)] == [
+        auth_core.hash_token(client.cookies["activsync_device"])
+    ]
+
+
+def _exhaust_shared_bucket(conn):
+    for _ in range(20):
+        auth_core.record_failure(conn, time.time())
+
+
+def test_the_browser_that_signs_out_everywhere_stays_out_of_the_shared_throttle(app, conn):
+    _claim(conn)
+    client = _anonymous(app)
+    _login(client)
+    other = _anonymous(app)
+    _login(other)
+
+    assert client.delete("/api/v1/auth/sessions").status_code == 200
+    _exhaust_shared_bucket(conn)
+
+    assert _login(client, "nope").status_code == 401
+    assert _login(client).status_code == 200
+    assert _login(other).status_code == 429
+
+
+def test_the_browser_that_changes_the_password_stays_out_of_the_shared_throttle(app, conn):
+    _claim(conn)
+    new_password = "a different long passphrase"
+    client = _anonymous(app)
+    _login(client)
+    other = _anonymous(app)
+    _login(other)
+
+    changed = client.put(
+        "/api/v1/auth/password",
+        json={"current": OWNER_PASSWORD, "new": new_password},
+    )
+    _exhaust_shared_bucket(conn)
+
+    assert changed.status_code == 200
+    assert _login(client, "nope").status_code == 401
+    assert _login(client, new_password).status_code == 200
+    assert _login(other, new_password).status_code == 429
 
 
 def test_concurrent_wrong_logins_are_all_counted(app, conn, monkeypatch):

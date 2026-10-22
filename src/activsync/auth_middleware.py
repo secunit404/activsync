@@ -21,7 +21,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 
-from activsync import auth_core, auth_devices, net_gateways
+from activsync import auth_body_cap, auth_core, auth_devices, net_gateways
 
 logger = logging.getLogger("activsync.auth")
 
@@ -501,6 +501,16 @@ class AuthenticateMiddleware:
                 response = RedirectResponse(login_redirect_target(request), status_code=303)
             await response(scope, receive, send)
             return
+        if auth is None and scope["method"] in UNSAFE_METHODS:
+            capped = await auth_body_cap.capped_receive(
+                scope, receive, auth_body_cap.PUBLIC_BODY_LIMIT
+            )
+            if capped is None:
+                await JSONResponse(
+                    {"detail": auth_body_cap.TOO_LARGE}, status_code=413
+                )(scope, receive, send)
+                return
+            receive = capped
         await self.app(scope, receive, send)
 
     def _host_accepted(self, host: str | None) -> bool:

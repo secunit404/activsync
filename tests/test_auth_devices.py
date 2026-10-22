@@ -66,6 +66,35 @@ def test_clearing_forgets_every_device(conn):
     assert _devices(conn) == []
 
 
+def test_clearing_can_keep_the_device_that_asked(conn):
+    asking = auth_devices.trust_device(conn, NOW)
+    others = [auth_devices.trust_device(conn, NOW) for _ in range(2)]
+
+    auth_devices.clear_trusted_devices(conn, keep_device_id=asking)
+
+    assert auth_devices.is_trusted(conn, asking) is True
+    assert not any(auth_devices.is_trusted(conn, device_id) for device_id in others)
+    assert len(_devices(conn)) == 1
+
+
+def test_keeping_an_untrusted_device_clears_everything(conn):
+    ids = [auth_devices.trust_device(conn, NOW) for _ in range(2)]
+
+    auth_devices.clear_trusted_devices(conn, keep_device_id="forged")
+
+    assert not any(auth_devices.is_trusted(conn, device_id) for device_id in ids)
+    assert _devices(conn) == []
+
+
+def test_a_kept_device_keeps_its_own_counters(conn):
+    asking = auth_devices.trust_device(conn, NOW)
+    auth_devices.reserve_device_attempt(conn, asking, NOW)
+
+    auth_devices.clear_trusted_devices(conn, keep_device_id=asking)
+
+    assert _devices(conn)[0]["failures"] == 1
+
+
 def test_shared_attempts_are_counted_before_verifying(conn):
     waits = [auth_core.reserve_attempt(conn, NOW) for _ in range(7)]
 

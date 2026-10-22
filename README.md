@@ -161,7 +161,8 @@ keep port `8381` reachable from that host alone; ActivSync logs a warning at
 startup while this is on.
 
 **Sign out everywhere** in Settings and changing your password also make every
-browser sign in from scratch, as if it had never signed in before.
+other browser sign in from scratch, as if it had never signed in before. The
+browser you do it from keeps its own wrong-guess count.
 
 ### Locked out?
 

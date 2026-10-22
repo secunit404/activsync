@@ -37,6 +37,33 @@ def test_set_password_refuses_a_short_password(conn):
     assert auth_core.owner_claimed(conn) is False
 
 
+def test_claim_owner_stores_the_hash_the_way_set_password_does(conn):
+    password_hash = auth_core.hash_password(PASSWORD)
+
+    assert auth_core.claim_owner(conn, password_hash, NOW) is True
+
+    assert db.get_config_value(conn, "auth_owner") == {
+        "password_hash": password_hash,
+        "password_changed_at": int(NOW),
+    }
+    assert auth_core.verify_password(conn, PASSWORD) is True
+
+
+def test_claim_owner_never_replaces_an_existing_owner(conn):
+    auth_core.set_password(conn, PASSWORD, NOW)
+    stored = db.get_config_value(conn, "auth_owner")
+
+    claimed = auth_core.claim_owner(conn, auth_core.hash_password(PASSWORD + "!"), NOW + 1)
+
+    assert claimed is False
+    assert db.get_config_value(conn, "auth_owner") == stored
+
+
+def test_hash_password_refuses_a_short_password():
+    with pytest.raises(ValueError):
+        auth_core.hash_password("too short")
+
+
 def test_verify_password_accepts_only_the_right_password(conn):
     auth_core.set_password(conn, PASSWORD, NOW)
 

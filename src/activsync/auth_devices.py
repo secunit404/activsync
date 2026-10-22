@@ -56,8 +56,19 @@ def is_trusted(conn: sqlite3.Connection, device_id: str | None) -> bool:
     return any(device["hash"] == digest for device in _devices(conn))
 
 
-def clear_trusted_devices(conn: sqlite3.Connection) -> None:
-    db.set_config_value(conn, TRUSTED_DEVICES_KEY, [])
+def clear_trusted_devices(
+    conn: sqlite3.Connection, *, keep_device_id: str | None = None
+) -> None:
+    """Forget every trusted browser except `keep_device_id`, the one asking.
+    Un-trusting it would drop it into the shared throttle bucket, which anyone
+    can keep exhausted."""
+    kept = auth_core.hash_token(keep_device_id) if keep_device_id else None
+    with db.transaction(conn):
+        db.set_config_value(
+            conn,
+            TRUSTED_DEVICES_KEY,
+            [device for device in _devices(conn) if device["hash"] == kept],
+        )
 
 
 def reserve_device_attempt(

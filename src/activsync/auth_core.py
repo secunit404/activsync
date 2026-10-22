@@ -83,15 +83,30 @@ def owner_claimed(conn: sqlite3.Connection) -> bool:
     return bool(owner.get("password_hash"))
 
 
-def set_password(conn: sqlite3.Connection, password: str, now: float) -> None:
+def hash_password(password: str) -> str:
     problem = password_problem(password)
     if problem:
         raise ValueError(problem)
-    db.set_config_value(
-        conn,
-        OWNER_KEY,
-        {"password_hash": _hasher().hash(password), "password_changed_at": int(now)},
-    )
+    return _hasher().hash(password)
+
+
+def _owner_record(password_hash: str, now: float) -> dict:
+    return {"password_hash": password_hash, "password_changed_at": int(now)}
+
+
+def set_password(conn: sqlite3.Connection, password: str, now: float) -> None:
+    db.set_config_value(conn, OWNER_KEY, _owner_record(hash_password(password), now))
+
+
+def claim_owner(conn: sqlite3.Connection, password_hash: str, now: float) -> bool:
+    """Store the first owner's password, or return False if someone claimed
+    first. Hash outside this call: argon2 is slow and the check and the write
+    must share one transaction."""
+    with db.transaction(conn):
+        if owner_claimed(conn):
+            return False
+        db.set_config_value(conn, OWNER_KEY, _owner_record(password_hash, now))
+    return True
 
 
 def verify_password(conn: sqlite3.Connection, password: str) -> bool:

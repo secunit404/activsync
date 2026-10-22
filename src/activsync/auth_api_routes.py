@@ -222,7 +222,9 @@ def create_router(
                 status_code=403,
                 detail="That setup code is not right. Check the server log for the current one.",
             )
-        auth_core.set_password(conn, payload.password, time.time())
+        password_hash = auth_core.hash_password(payload.password)
+        if not auth_core.claim_owner(conn, password_hash, time.time()):
+            raise HTTPException(status_code=409, detail="ActivSync is already claimed.")
         setup_code.discard()
         start_session(conn, request, response, "password")
         return status_for(AuthState(method="password"))
@@ -274,21 +276,20 @@ def create_router(
     def revoke_others(request: Request) -> AuthActionResult:
         auth = require_session(request)
         revoked = auth_core.revoke_all(conn, keep_token_hash=auth.token_hash)
-        auth_devices.clear_trusted_devices(conn)
+        auth_devices.clear_trusted_devices(conn, keep_device_id=trusted_device(request))
         return AuthActionResult(message=f"Signed out {revoked} other session(s).")
 
     @router.put("/auth/password", response_model=AuthActionResult)
     def change_password(payload: PasswordChangeRequest, request: Request) -> AuthActionResult:
         auth = require_session(request)
-        require_password(
-            payload.current, wrong_status=400, device_id=trusted_device(request)
-        )
+        device_id = trusted_device(request)
+        require_password(payload.current, wrong_status=400, device_id=device_id)
         problem = auth_core.password_problem(payload.new)
         if problem:
             raise HTTPException(status_code=400, detail=problem)
         auth_core.set_password(conn, payload.new, time.time())
         auth_core.revoke_all(conn, keep_token_hash=auth.token_hash)
-        auth_devices.clear_trusted_devices(conn)
+        auth_devices.clear_trusted_devices(conn, keep_device_id=device_id)
         return AuthActionResult(message="Password changed. Other sessions were signed out.")
 
     @router.get("/auth/settings", response_model=AuthSettingsState)
