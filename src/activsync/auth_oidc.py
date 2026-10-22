@@ -15,6 +15,7 @@ import httpx2
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from authlib.integrations.base_client import MismatchingStateError
 from joserfc.errors import JoseError
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
@@ -93,8 +94,9 @@ def save_config(
     scopes: str,
     auto_redirect: bool,
 ) -> OidcConfig:
-    """`client_secret=None` keeps the stored secret. A new issuer or client ID
-    is a different identity provider, so the link is dropped."""
+    """A new issuer or client ID is a different identity provider, so the link
+    is dropped and `client_secret=None` means no secret; for the same provider
+    it keeps the stored one."""
     normalized = _normalize_issuer(issuer)
     with db.transaction(conn):
         existing = load_config(conn)
@@ -110,7 +112,7 @@ def save_config(
             client_secret=(
                 client_secret
                 if client_secret is not None
-                else (existing.client_secret if existing else "")
+                else (existing.client_secret if same_provider else "")
             ),
             scopes=" ".join(scopes.split()) or DEFAULT_SCOPES,
             auto_redirect=auto_redirect,
@@ -234,7 +236,7 @@ class OidcProvider:
     async def begin(
         self, request: Request, *, redirect_uri: str, intent: str, next_path: str
     ) -> RedirectResponse:
-        config, client = self.client()
+        config, client = await run_in_threadpool(self.client)
         if client is None:
             raise OidcError("oidc_unavailable", intent)
         request.session[FLOW_KEY] = {"intent": intent, "next": next_path}
@@ -247,7 +249,7 @@ class OidcProvider:
     async def finish(self, request: Request) -> OidcResult:
         flow = request.session.pop(FLOW_KEY, None)
         intent = flow["intent"] if flow else "login"
-        config, client = self.client()
+        config, client = await run_in_threadpool(self.client)
         if client is None:
             raise OidcError("oidc_unavailable", intent)
         if flow is None:

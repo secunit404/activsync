@@ -1,8 +1,11 @@
+import asyncio
+import threading
 import time
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from activsync import auth_core, auth_oidc, db
 from activsync.server import create_app
@@ -58,6 +61,64 @@ def _oidc_visitor(app, idp):
     assert response.status_code == 303
     assert visitor.get("/api/v1/auth/status").json()["method"] == "oidc"
     return visitor
+
+
+def _request(session):
+    return Request({
+        "type": "http",
+        "method": "GET",
+        "scheme": "https",
+        "path": "/auth/oidc/login",
+        "query_string": b"",
+        "headers": [],
+        "server": ("activsync.example.com", 443),
+        "session": session,
+    })
+
+
+def _record_config_reads(monkeypatch):
+    threads = []
+    real_load = auth_oidc.load_config
+
+    def recording(conn):
+        threads.append(threading.get_ident())
+        return real_load(conn)
+
+    monkeypatch.setattr(auth_oidc, "load_config", recording)
+    return threads
+
+
+def test_begin_reads_the_config_off_the_event_loop(tmp_path, monkeypatch):
+    conn, app, idp, owner = _setup(tmp_path)
+    provider = auth_oidc.OidcProvider(conn, transport=idp.transport)
+    threads = _record_config_reads(monkeypatch)
+
+    response = asyncio.run(
+        provider.begin(
+            _request({}),
+            redirect_uri="https://activsync.example.com/auth/oidc/callback",
+            intent="login",
+            next_path="/",
+        )
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"].startswith(f"{ISSUER}/authorize?")
+    assert threads
+    assert threading.get_ident() not in threads
+
+
+def test_finish_reads_the_config_off_the_event_loop(tmp_path, monkeypatch):
+    conn, app, idp, owner = _setup(tmp_path)
+    provider = auth_oidc.OidcProvider(conn, transport=idp.transport)
+    threads = _record_config_reads(monkeypatch)
+
+    with pytest.raises(auth_oidc.OidcError) as raised:
+        asyncio.run(provider.finish(_request({})))
+
+    assert raised.value.code == "oidc_state"
+    assert threads
+    assert threading.get_ident() not in threads
 
 
 def _signed_in(client):

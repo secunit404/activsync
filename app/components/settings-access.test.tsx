@@ -233,6 +233,122 @@ const configured: OidcConfig = {
   hasSecret: true,
 };
 
+async function openOidcEditor() {
+  api.getOidcConfig.mockResolvedValue(configured);
+  renderAccess();
+  await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  await userEvent.type(screen.getByLabelText("Your ActivSync password"), "my long passphrase");
+}
+
+test("editing other fields keeps the saved client secret, and the hint says so", async () => {
+  await openOidcEditor();
+
+  const secret = screen.getByLabelText("Client secret");
+  expect(secret).toHaveAttribute("placeholder", "Saved — leave blank to keep it");
+  await userEvent.clear(screen.getByLabelText("Provider name"));
+  await userEvent.type(screen.getByLabelText("Provider name"), "Renamed");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveOidcConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "Renamed", clientSecret: null }),
+      expect.anything(),
+    ),
+  );
+});
+
+test("a new client ID drops the saved-secret hint and sends no secret", async () => {
+  await openOidcEditor();
+
+  await userEvent.type(screen.getByLabelText("Client ID"), "-2");
+
+  expect(screen.getByLabelText("Client secret")).toHaveAttribute(
+    "placeholder",
+    "Optional for public clients",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveOidcConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: "activsync-2", clientSecret: "" }),
+      expect.anything(),
+    ),
+  );
+});
+
+test("a new issuer drops the saved-secret hint and sends no secret", async () => {
+  await openOidcEditor();
+
+  const issuer = screen.getByLabelText("Issuer URL");
+  await userEvent.clear(issuer);
+  await userEvent.type(issuer, "https://sso.example.com");
+
+  expect(screen.getByLabelText("Client secret")).toHaveAttribute(
+    "placeholder",
+    "Optional for public clients",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveOidcConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ issuer: "https://sso.example.com", clientSecret: "" }),
+      expect.anything(),
+    ),
+  );
+});
+
+test("restoring the saved issuer and client ID brings the saved-secret hint back", async () => {
+  await openOidcEditor();
+  const clientId = screen.getByLabelText("Client ID");
+
+  await userEvent.type(clientId, "x");
+  expect(screen.getByLabelText("Client secret")).toHaveAttribute(
+    "placeholder",
+    "Optional for public clients",
+  );
+  await userEvent.type(clientId, "{Backspace}");
+
+  expect(screen.getByLabelText("Client secret")).toHaveAttribute(
+    "placeholder",
+    "Saved — leave blank to keep it",
+  );
+});
+
+test("whitespace and a trailing slash are not counted as a changed issuer or client ID", async () => {
+  await openOidcEditor();
+
+  await userEvent.type(screen.getByLabelText("Issuer URL"), "/");
+  await userEvent.type(screen.getByLabelText("Client ID"), " ");
+
+  expect(screen.getByLabelText("Client secret")).toHaveAttribute(
+    "placeholder",
+    "Saved — leave blank to keep it",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveOidcConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ clientSecret: null }),
+      expect.anything(),
+    ),
+  );
+});
+
+test("a typed secret is always sent, even when the client ID changed", async () => {
+  await openOidcEditor();
+
+  await userEvent.type(screen.getByLabelText("Client ID"), "-2");
+  await userEvent.type(screen.getByLabelText("Client secret"), "s3cret");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  await vi.waitFor(() =>
+    expect(api.saveOidcConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: "activsync-2", clientSecret: "s3cret" }),
+      expect.anything(),
+    ),
+  );
+});
+
 test("linking is a button that asks for the password, not a plain link", async () => {
   api.getOidcConfig.mockResolvedValue(configured);
   renderAccess();

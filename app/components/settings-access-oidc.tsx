@@ -78,6 +78,10 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
   const save = useAuthAction(saveOidcConfig);
   const remove = useAuthAction(removeOidcConfig);
   const pending = save.isPending || remove.isPending;
+  const secretKept =
+    config.hasSecret &&
+    issuer.trim().replace(/\/+$/, "") === config.issuer &&
+    clientId.trim() === config.clientId;
 
   return (
     <form
@@ -89,7 +93,7 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
             displayName,
             issuer,
             clientId,
-            clientSecret: clientSecret === "" && config.hasSecret ? null : clientSecret,
+            clientSecret: clientSecret === "" && secretKept ? null : clientSecret,
             scopes,
             autoRedirect,
             currentPassword,
@@ -119,7 +123,7 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
             type="password"
             autoComplete="off"
             value={clientSecret}
-            placeholder={config.hasSecret ? "Saved — leave blank to keep it" : "Optional for public clients"}
+            placeholder={secretKept ? "Saved — leave blank to keep it" : "Optional for public clients"}
             onChange={(e) => setClientSecret(e.target.value)}
           />
         </Field>

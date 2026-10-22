@@ -198,6 +198,52 @@ def test_saving_without_a_secret_keeps_the_stored_one(owner, conn):
     assert auth_oidc.load_config(conn).client_secret == "very-secret-value"
 
 
+def test_a_new_issuer_without_a_secret_drops_the_stored_one(owner, conn):
+    owner.put("/api/v1/auth/oidc", json=CONFIG)
+
+    response = owner.put(
+        "/api/v1/auth/oidc",
+        json={**CONFIG, "issuer": "https://other.example.com", "clientSecret": None},
+    )
+
+    assert response.status_code == 200
+    assert auth_oidc.load_config(conn).client_secret == ""
+    assert owner.get("/api/v1/auth/oidc").json()["hasSecret"] is False
+
+
+def test_a_new_client_id_without_a_secret_drops_the_stored_one(owner, conn):
+    owner.put("/api/v1/auth/oidc", json=CONFIG)
+
+    owner.put("/api/v1/auth/oidc", json={**CONFIG, "clientId": "public", "clientSecret": None})
+
+    assert auth_oidc.load_config(conn).client_secret == ""
+
+
+def test_a_new_client_id_with_a_secret_stores_that_secret(owner, conn):
+    owner.put("/api/v1/auth/oidc", json=CONFIG)
+
+    owner.put("/api/v1/auth/oidc", json={**CONFIG, "clientId": "other", "clientSecret": "new-one"})
+
+    assert auth_oidc.load_config(conn).client_secret == "new-one"
+
+
+def test_the_same_provider_spelled_differently_keeps_the_secret(owner, conn):
+    owner.put("/api/v1/auth/oidc", json=CONFIG)
+
+    owner.put(
+        "/api/v1/auth/oidc",
+        json={**CONFIG, "issuer": ISSUER + "//", "displayName": "Renamed", "clientSecret": None},
+    )
+
+    assert auth_oidc.load_config(conn).client_secret == "very-secret-value"
+
+
+def test_the_first_save_without_a_secret_stores_none(owner, conn):
+    owner.put("/api/v1/auth/oidc", json={**CONFIG, "clientSecret": None})
+
+    assert auth_oidc.load_config(conn).client_secret == ""
+
+
 def test_removing_needs_the_current_password(owner, conn):
     owner.put("/api/v1/auth/oidc", json=CONFIG)
 
