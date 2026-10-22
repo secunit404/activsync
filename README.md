@@ -85,7 +85,8 @@ State (database and Garmin tokens) is persisted under `./data` (mounted at
 | `ACTIVSYNC_PUBLIC_URL` | _(unset)_ | Public origin, e.g. `https://activsync.example.com`. Builds OAuth redirect URIs, is the expected `Origin`, and rejects other `Host` headers |
 | `ACTIVSYNC_ALLOWED_HOSTS` | _(unset)_ | Without a public URL, extra host names to accept besides IP addresses and `localhost`, comma-separated, e.g. `activsync.lan`. A leading dot (`.example.com`) also accepts subdomains |
 | `ACTIVSYNC_AUTH_PROXY_HEADER` | _(unset)_ | Header an authenticating proxy signs in with, e.g. `Remote-User` (see [Signing in](#signing-in)) |
-| `ACTIVSYNC_AUTH_PROXY_TRUSTED` | _(unset)_ | CIDRs of the proxy allowed to send that header, e.g. `172.18.0.0/16`. Required with the header |
+| `ACTIVSYNC_AUTH_PROXY_TRUSTED` | _(unset)_ | Address of the proxy allowed to send that header, e.g. `172.18.0.10/32`. Required with the header; must not include Docker's gateway (see [Signing in](#signing-in)) |
+| `ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY` | _(unset)_ | `1` allows a trusted range that includes Docker's gateway, for a proxy running on the Docker host itself (see [Signing in](#signing-in)) |
 | `ACTIVSYNC_AUTH_PROXY_USER` | _(unset)_ | The exact header value that is you. Required with the header |
 | `ACTIVSYNC_AUTH_DISABLED` | _(unset)_ | `1` turns sign-in off entirely. LAN-only installs that accept the risk |
 
@@ -100,11 +101,11 @@ The setup wizard shows the exact value to enter. Two things it can't tell you:
   Only one can be registered, and subdomains of it are fine but an unrelated
   address is not. Always press **Connect with Strava** from the address you
   registered — everything else works on either.
-- **Behind an HTTPS proxy?** Set `FORWARDED_ALLOW_IPS` to the proxy's address
-  (or its Docker network, e.g. `172.18.0.0/16`) so the callback URL is built as
-  `https://`. Avoid `*`, even when the container is only reachable through the
-  proxy: it makes uvicorn take the client-supplied end of `X-Forwarded-For`, so
-  clients can pick their own sign-in rate-limit address. See
+- **Behind an HTTPS proxy?** Set `FORWARDED_ALLOW_IPS` to the proxy's own
+  address (e.g. `172.18.0.10`) so the callback URL is built as `https://`.
+  Avoid `*`, even when the container is only reachable through the proxy: it
+  makes uvicorn take the client-supplied end of `X-Forwarded-For`, so clients
+  can pick their own sign-in rate-limit address. See
   [Exposing ActivSync publicly](#exposing-activsync-publicly).
 
 ## Signing in
@@ -147,6 +148,18 @@ The proxy must also remove any copy of that header a client sends. Authelia,
 authentik and Tailscale do. oauth2-proxy trusts every address by default; set
 `--trusted-proxy-ip` to your proxy's range.
 
+Give the proxy a fixed address on the Docker network (`ipv4_address:
+172.18.0.10` under its network) and trust only that:
+`ACTIVSYNC_AUTH_PROXY_TRUSTED=172.18.0.10/32`. Do not publish `8381` beyond the
+proxy: remove `ports:` or bind `127.0.0.1:8381:8381`. Docker relays connections
+from the host and from IPv6 clients through the network's gateway (for example
+`172.18.0.1`), so a range that covers it would let anyone who reaches the port
+send the header and be signed in as you. ActivSync therefore refuses to start
+when a trusted range contains its default gateway. If the proxy runs on the
+Docker host itself, set `ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY=1` to allow it, and
+keep port `8381` reachable from that host alone; ActivSync logs a warning at
+startup while this is on.
+
 **Sign out everywhere** in Settings and changing your password also make every
 browser sign in from scratch, as if it had never signed in before.
 
@@ -188,7 +201,11 @@ signed in before.
 
 Upgrading from a version without sign-in: the first start stops at the claim
 step, even though setup was finished before. Read the code from the log as
-above. ActivSync now also asks Strava for the `read` scope, so the first
+above. If you open ActivSync by a host name (through a reverse proxy, a `.local`
+name or a Tailscale name), set `ACTIVSYNC_PUBLIC_URL` or
+`ACTIVSYNC_ALLOWED_HOSTS` first, or every page returns `400 Unknown host`; the
+log names the rejected host. IP addresses and `localhost` keep working.
+ActivSync now also asks Strava for the `read` scope, so the first
 **Connect with Strava** in **Settings → Connections** after upgrading shows
 Strava's consent screen once.
 

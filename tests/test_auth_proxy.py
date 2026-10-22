@@ -1,21 +1,36 @@
+import ipaddress
 import logging
 
 import pytest
 from fastapi.testclient import TestClient
 
-from activsync import auth_core, db
+from activsync import auth_core, db, net_gateways
 from activsync.auth_middleware import ProxyAuthConfig
 from activsync.server import create_app
 
 OWNER_PASSWORD = "correct horse battery staple"
 PROXY = "172.18.0.2"
+GATEWAY = "172.18.0.1"
 OUTSIDER = "203.0.113.7"
+PROXY_ENV = {
+    "ACTIVSYNC_AUTH_PROXY_HEADER": "Remote-User",
+    "ACTIVSYNC_AUTH_PROXY_USER": "andreas",
+}
+
+
+def _gateways(*addresses):
+    return lambda: tuple(ipaddress.ip_address(address) for address in addresses)
+
+
+@pytest.fixture(autouse=True)
+def docker_gateway(monkeypatch):
+    monkeypatch.setattr(net_gateways, "read_default_gateways", _gateways(GATEWAY))
 
 
 @pytest.fixture
 def proxy_env(monkeypatch):
     monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User")
-    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_TRUSTED", "172.18.0.0/16")
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_TRUSTED", f"{PROXY}/32")
     monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_USER", "andreas")
 
 
@@ -107,7 +122,7 @@ def test_settings_describe_the_proxy_without_secrets(app):
 
     assert client.get("/api/v1/auth/settings").json()["proxy"] == {
         "header": "Remote-User",
-        "trusted": ["172.18.0.0/16"],
+        "trusted": [f"{PROXY}/32"],
         "user": "andreas",
     }
 
@@ -145,3 +160,92 @@ def test_create_app_refuses_an_unsafe_proxy_config(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError):
         create_app(db.connect(str(tmp_path / "bad.db")))
+
+
+def _trusting(ranges, **extra):
+    return {**PROXY_ENV, "ACTIVSYNC_AUTH_PROXY_TRUSTED": ranges, **extra}
+
+
+def test_a_range_containing_the_gateway_is_refused():
+    with pytest.raises(ValueError, match="default gateway") as raised:
+        ProxyAuthConfig.from_env(_trusting("172.18.0.0/16"), gateways=_gateways(GATEWAY))
+
+    assert GATEWAY in str(raised.value)
+    assert "/32" in str(raised.value)
+    assert "ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY" in str(raised.value)
+
+
+def test_the_gateway_check_covers_every_listed_range():
+    with pytest.raises(ValueError, match="default gateway"):
+        ProxyAuthConfig.from_env(
+            _trusting(f"{PROXY}/32, 172.18.0.0/24"), gateways=_gateways(GATEWAY)
+        )
+
+
+def test_an_ipv6_gateway_inside_a_range_is_refused():
+    with pytest.raises(ValueError, match="2001:db8::1"):
+        ProxyAuthConfig.from_env(
+            _trusting("2001:db8::/32"), gateways=_gateways("172.18.0.1", "2001:db8::1")
+        )
+
+
+def test_the_proxys_own_address_is_accepted():
+    config = ProxyAuthConfig.from_env(_trusting(f"{PROXY}/32"), gateways=_gateways(GATEWAY))
+
+    assert config is not None
+    assert config.trusts(PROXY)
+    assert not config.trusts(GATEWAY)
+    assert config.trusted_gateways == ()
+
+
+def test_ranges_elsewhere_are_accepted_when_there_is_no_gateway():
+    assert ProxyAuthConfig.from_env(_trusting("172.18.0.0/16"), gateways=_gateways()) is not None
+
+
+def test_the_opt_out_accepts_a_range_with_the_gateway_and_warns(caplog):
+    config = ProxyAuthConfig.from_env(
+        _trusting("172.18.0.0/16", ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY="1"),
+        gateways=_gateways(GATEWAY),
+    )
+
+    assert config is not None
+    assert config.trusts(GATEWAY)
+    with caplog.at_level(logging.WARNING, logger="activsync.auth"):
+        config.warn_if_trusting_gateway()
+    assert "ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY" in caplog.text
+    assert GATEWAY in caplog.text
+    assert "8381" in caplog.text
+
+
+def test_no_gateway_warning_without_the_opt_out(caplog):
+    config = ProxyAuthConfig.from_env(_trusting(f"{PROXY}/32"), gateways=_gateways(GATEWAY))
+
+    with caplog.at_level(logging.WARNING, logger="activsync.auth"):
+        config.warn_if_trusting_gateway()
+
+    assert caplog.text == ""
+
+
+def test_the_default_gateway_source_is_the_kernel_routing_table(monkeypatch):
+    monkeypatch.setattr(net_gateways, "read_default_gateways", _gateways(GATEWAY))
+
+    with pytest.raises(ValueError, match="default gateway"):
+        ProxyAuthConfig.from_env(_trusting("172.18.0.0/16"))
+
+
+def test_create_app_refuses_a_range_with_the_gateway(tmp_path, monkeypatch):
+    for name, value in _trusting("172.18.0.0/16").items():
+        monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError, match="default gateway"):
+        create_app(db.connect(str(tmp_path / "gateway.db")))
+
+
+def test_create_app_warns_once_when_the_opt_out_is_used(tmp_path, monkeypatch, caplog):
+    for name, value in _trusting("172.18.0.0/16", ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY="1").items():
+        monkeypatch.setenv(name, value)
+
+    with caplog.at_level(logging.WARNING, logger="activsync.auth"):
+        create_app(db.connect(str(tmp_path / "optout.db")))
+
+    assert caplog.text.count("ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY") == 1

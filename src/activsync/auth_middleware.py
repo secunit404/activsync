@@ -11,7 +11,7 @@ import logging
 import re
 import sqlite3
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlsplit
@@ -21,7 +21,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 
-from activsync import auth_core, auth_devices
+from activsync import auth_core, auth_devices, net_gateways
 
 logger = logging.getLogger("activsync.auth")
 
@@ -40,14 +40,32 @@ PUBLIC_PREFIXES = (("GET", "/assets/"),)
 SPA_RESERVED_PREFIXES = ("api", "assets", "strava", "auth")
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
+TRUST_GATEWAY_VARIABLE = "ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY"
+
 UNKNOWN_HOST_MESSAGE = (
     "Unknown host — set ACTIVSYNC_PUBLIC_URL or add it to ACTIVSYNC_ALLOWED_HOSTS"
 )
+PUBLIC_HOST_MESSAGE = "Unknown host — ActivSync answers only on the host in ACTIVSYNC_PUBLIC_URL"
 
 SESSION_COOKIE = "activsync_session"
 SECURE_SESSION_COOKIE = "__Host-activsync_session"
 DEVICE_COOKIE = "activsync_device"
 SECURE_DEVICE_COOKIE = "__Host-activsync_device"
+
+
+def route_path(scope: Mapping) -> str:
+    """The path Starlette routes on. uvicorn prepends root_path to
+    scope["path"], and a guard matching the prefixed form sees an unreserved
+    first segment and waves /api/... through as a public SPA page."""
+    path = scope["path"]
+    root_path = scope.get("root_path", "")
+    if not root_path or not path.startswith(root_path):
+        return path
+    if path == root_path:
+        return ""
+    if path[len(root_path)] == "/":
+        return path[len(root_path):]
+    return path
 
 
 def is_public(method: str, path: str) -> bool:
@@ -197,12 +215,31 @@ def _is_ip(value: str, kind: type[ipaddress.IPv4Address | ipaddress.IPv6Address]
     return True
 
 
+_DEFAULT_PORTS = {"http": "80", "https": "443"}
+_HOST_PATTERN = re.compile(r"(?P<name>\[[^\]]*\]|[^:\[\]]*)(?::(?P<port>[^:\[\]]*))?")
+
+
+def normalize_host(host: str, scheme: str | None = None) -> str:
+    """Lowercase, no trailing dot on the name, and no port that is the default
+    for `scheme` (either default when the scheme is unknown)."""
+    host = host.strip().lower()
+    match = _HOST_PATTERN.fullmatch(host)
+    if match is None:
+        return host
+    name = match["name"].removesuffix(".")
+    port = match["port"] or ""
+    defaults = {_DEFAULT_PORTS[scheme]} if scheme in _DEFAULT_PORTS else _DEFAULT_PORTS.values()
+    if port in defaults:
+        port = ""
+    return f"{name}:{port}" if port else name
+
+
 def host_is_allowed(host: str | None, allowed_hosts: tuple[str, ...]) -> bool:
     """Without a public URL, a DNS-rebinding attacker's domain makes Origin
     equal Host, so the CSRF check alone would pass; only known names get in."""
     if not host:
         return False
-    host = host.lower()
+    host = normalize_host(host)
     if host.startswith("["):
         literal, _, rest = host[1:].partition("]")
         return (rest == "" or rest.startswith(":")) and _is_ip(literal, ipaddress.IPv6Address)
@@ -211,7 +248,7 @@ def host_is_allowed(host: str | None, allowed_hosts: tuple[str, ...]) -> bool:
         return True
     if name == "localhost" or name.endswith(".localhost"):
         return True
-    for entry in (entry.lower() for entry in allowed_hosts):
+    for entry in filter(None, (normalize_host(entry) for entry in allowed_hosts)):
         if entry.startswith("."):
             if name == entry[1:] or name.endswith(entry):
                 return True
@@ -252,6 +289,21 @@ def content_security_policy(index_html: Path) -> str:
     ])
 
 
+class PublicSchemeMiddleware:
+    """An HTTPS public URL means every request the Host guard lets through
+    reached the user over HTTPS, whether or not a trusted proxy said so, so the
+    Secure and __Host- cookies and HSTS must not depend on X-Forwarded-Proto."""
+
+    def __init__(self, app, *, public_url: str | None) -> None:
+        self.app = app
+        self.force_https = bool(public_url and urlsplit(public_url).scheme == "https")
+
+    async def __call__(self, scope, receive, send) -> None:
+        if self.force_https and scope["type"] == "http":
+            scope = {**scope, "scheme": "https"}
+        await self.app(scope, receive, send)
+
+
 class SecurityHeadersMiddleware:
     def __init__(self, app, *, content_security_policy: str) -> None:
         self.app = app
@@ -281,9 +333,15 @@ class ProxyAuthConfig:
     header: str
     trusted: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
     user: str
+    trusted_gateways: tuple[net_gateways.IPAddress, ...] = ()
 
     @classmethod
-    def from_env(cls, environ: Mapping[str, str]) -> ProxyAuthConfig | None:
+    def from_env(
+        cls,
+        environ: Mapping[str, str],
+        *,
+        gateways: Callable[[], Iterable[net_gateways.IPAddress]] | None = None,
+    ) -> ProxyAuthConfig | None:
         header = environ.get("ACTIVSYNC_AUTH_PROXY_HEADER", "").strip()
         if not header:
             return None
@@ -314,7 +372,43 @@ class ProxyAuthConfig:
                     f"ACTIVSYNC_AUTH_PROXY_TRUSTED must not trust every address ({item})."
                 )
             networks.append(network)
-        return cls(header=header, trusted=tuple(networks), user=user)
+        in_range = tuple(
+            gateway
+            for gateway in (gateways or net_gateways.read_default_gateways)()
+            if any(gateway in network for network in networks)
+        )
+        trust_gateway = environ.get(TRUST_GATEWAY_VARIABLE, "").strip().lower() in (
+            "1", "true", "yes",
+        )
+        if in_range and not trust_gateway:
+            raise ValueError(
+                "ACTIVSYNC_AUTH_PROXY_TRUSTED must not include this container's "
+                f"default gateway ({', '.join(map(str, in_range))}). Docker's gateway "
+                "relays connections that come from outside the Docker network, so "
+                "anyone who can reach the published port could send the proxy "
+                "header and be signed in as you. Trust only the reverse proxy's own "
+                "address: give it a fixed IP and trust its /32. If the proxy runs on "
+                f"the Docker host itself, set {TRUST_GATEWAY_VARIABLE}=1 and keep "
+                "the port reachable from that host alone."
+            )
+        return cls(
+            header=header,
+            trusted=tuple(networks),
+            user=user,
+            trusted_gateways=in_range if trust_gateway else (),
+        )
+
+    def warn_if_trusting_gateway(self) -> None:
+        if self.trusted_gateways:
+            logger.warning(
+                "%s is set, so %s is trusted from the default gateway (%s). "
+                "Docker relays every connection to the published port from that "
+                "address; port 8381 must not be reachable except from the Docker "
+                "host itself (publish it as 127.0.0.1:8381:8381).",
+                TRUST_GATEWAY_VARIABLE,
+                self.header,
+                ", ".join(map(str, self.trusted_gateways)),
+            )
 
     def trusts(self, peer: str | None) -> bool:
         try:
@@ -365,25 +459,27 @@ class AuthenticateMiddleware:
     ) -> None:
         self.app = app
         self.conn = conn
-        self.public_host = urlsplit(public_url).netloc if public_url else None
+        public = urlsplit(public_url) if public_url else None
+        self.public_scheme = public.scheme if public else None
+        self.public_host = normalize_host(public.netloc, public.scheme) if public else None
         self.allowed_hosts = allowed_hosts
         self.proxy = proxy
         self.clock = clock
         self._last_untrusted_warning = 0.0
+        self._last_unknown_host_warning = 0.0
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
         request = Request(scope)
-        path = scope["path"]
+        path = route_path(scope)
         if path != "/health":
             host = request.headers.get("host")
-            if self.public_host and host != self.public_host:
-                await PlainTextResponse("Unknown host", status_code=400)(scope, receive, send)
-                return
-            if not self.public_host and not host_is_allowed(host, self.allowed_hosts):
-                await PlainTextResponse(UNKNOWN_HOST_MESSAGE, status_code=400)(
+            if not self._host_accepted(host):
+                self._warn_unknown_host(host)
+                message = PUBLIC_HOST_MESSAGE if self.public_host else UNKNOWN_HOST_MESSAGE
+                await PlainTextResponse(message, status_code=400)(
                     scope, receive, send
                 )
                 return
@@ -406,6 +502,29 @@ class AuthenticateMiddleware:
             await response(scope, receive, send)
             return
         await self.app(scope, receive, send)
+
+    def _host_accepted(self, host: str | None) -> bool:
+        if self.public_host:
+            return normalize_host(host or "", self.public_scheme) == self.public_host
+        return host_is_allowed(host, self.allowed_hosts)
+
+    def _warn_unknown_host(self, host: str | None) -> None:
+        now = self.clock()
+        if now - self._last_unknown_host_warning < 60:
+            return
+        self._last_unknown_host_warning = now
+        if self.public_host:
+            logger.warning(
+                "rejected a request for Host %r; ACTIVSYNC_PUBLIC_URL allows only %r",
+                (host or "")[:255],
+                self.public_host,
+            )
+            return
+        logger.warning(
+            "rejected a request for Host %r; set ACTIVSYNC_PUBLIC_URL or add "
+            "the name to ACTIVSYNC_ALLOWED_HOSTS",
+            (host or "")[:255],
+        )
 
     def _authenticate(self, request: Request) -> AuthState | _Rejected | None:
         if auth_core.auth_disabled():
@@ -458,11 +577,15 @@ def own_origin(scope: Mapping, headers: Mapping[str, str]) -> str:
 
 
 def _origin_of(url: str) -> str:
-    parts = urlsplit(url)
-    return f"{parts.scheme}://{parts.netloc}"
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    return f"{parts.scheme}://{normalize_host(parts.netloc, parts.scheme)}"
 
 
 def csrf_problem(headers: Mapping[str, str], expected_origin: str) -> str | None:
+    expected_origin = _origin_of(expected_origin)
     if headers.get("x-activsync-request") != "1":
         return "missing X-ActivSync-Request header"
     origin = headers.get("origin")
@@ -472,7 +595,9 @@ def csrf_problem(headers: Mapping[str, str], expected_origin: str) -> str | None
     if site is not None:
         return None if site == "same-origin" else f"Sec-Fetch-Site is {site}"
     if origin:
-        return None if origin == expected_origin else f"Origin {origin} does not match"
+        if _origin_of(origin) == expected_origin:
+            return None
+        return f"Origin {origin} does not match"
     referer = headers.get("referer")
     if referer:
         return None if _origin_of(referer) == expected_origin else "Referer does not match"
@@ -491,7 +616,7 @@ class CsrfMiddleware:
             problem = csrf_problem(request.headers, expected)
             if problem:
                 logger.warning(
-                    "blocked %s %s: %s", scope["method"], scope["path"], problem
+                    "blocked %s %s: %s", scope["method"], route_path(scope), problem
                 )
                 await JSONResponse(
                     {"detail": "This request was blocked as cross-site."},

@@ -125,6 +125,8 @@ def create_app(
     react_index = resolved_web_dir / "index.html"
     public_url = auth_core.public_url()
     proxy = auth_middleware.ProxyAuthConfig.from_env(os.environ)
+    if proxy:
+        proxy.warn_if_trusting_gateway()
     setup_code = auth_core.SetupCode(conn)
     setup_code.ensure()
     auth_core.prune_expired_sessions(conn, time.time())
@@ -316,9 +318,9 @@ def create_app(
         )
 
     # Starlette runs the last-added middleware first, so this reads bottom-up
-    # as the request pipeline: peer capture, proxy headers, security headers,
-    # authentication, CSRF, then the short-lived OAuth-state cookie Authlib
-    # keeps state, nonce and PKCE in.
+    # as the request pipeline: peer capture, proxy headers, public scheme,
+    # security headers, authentication, CSRF, then the short-lived OAuth-state
+    # cookie Authlib keeps state, nonce and PKCE in.
     app.add_middleware(
         SessionMiddleware,
         secret_key=auth_core.state_secret(conn),
@@ -339,6 +341,7 @@ def create_app(
         auth_middleware.SecurityHeadersMiddleware,
         content_security_policy=auth_middleware.content_security_policy(react_index),
     )
+    app.add_middleware(auth_middleware.PublicSchemeMiddleware, public_url=public_url)
     # The app owns proxy-header handling (uvicorn runs with --no-proxy-headers)
     # so PeerCapture can record the real socket peer first: uvicorn's '*'
     # takes the leftmost, client-controlled X-Forwarded-For entry, and that

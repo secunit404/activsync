@@ -13,10 +13,13 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Europe/Stockholm
-      # Behind a reverse proxy, name its address (or its Docker network) so
-      # X-Forwarded-Proto/-For are trusted from it alone. Avoid `*`: it lets any
-      # client pick its own rate-limit address. See the README.
-      # - FORWARDED_ALLOW_IPS=172.18.0.0/16
+      # Behind a reverse proxy, name its own address (give it a fixed IP on
+      # the Docker network) so X-Forwarded-Proto/-For are trusted from it
+      # alone. Avoid `*` and whole networks: the network's gateway relays
+      # outside connections, so trusting it lets any client pick its own
+      # rate-limit address. With a proxy, drop `ports:` above or bind
+      # 127.0.0.1:8381:8381. See the README.
+      # - FORWARDED_ALLOW_IPS=172.18.0.10
       # Your public address, once it is reachable from the internet — see
       # "Exposing ActivSync publicly" in the README.
       # - ACTIVSYNC_PUBLIC_URL=https://activsync.example.com

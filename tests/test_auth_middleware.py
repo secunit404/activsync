@@ -1,12 +1,17 @@
+import asyncio
+import json
+import logging
 import re
+import time
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.routing import Mount
 
-from activsync import auth_middleware, db
+from activsync import auth_core, auth_middleware, db
 from activsync.server import create_app
-from auth_helpers import CSRF_HEADERS, owner_client
+from auth_helpers import CSRF_HEADERS, OWNER_PASSWORD, owner_client
 
 EXPECTED_PUBLIC_ROUTES = {
     ("GET", "/health"),
@@ -221,6 +226,7 @@ def test_disabled_auth_opens_every_route(monkeypatch, conn, tmp_path):
 UNKNOWN_HOST_MESSAGE = (
     "Unknown host — set ACTIVSYNC_PUBLIC_URL or add it to ACTIVSYNC_ALLOWED_HOSTS"
 )
+PUBLIC_HOST_MESSAGE = "Unknown host — ActivSync answers only on the host in ACTIVSYNC_PUBLIC_URL"
 
 
 def test_unknown_host_is_rejected_without_a_public_url(app):
@@ -281,7 +287,7 @@ def test_public_url_mode_ignores_the_allowed_hosts(monkeypatch, conn, tmp_path):
     public = TestClient(app, base_url="https://activsync.example.com")
 
     assert allowed_host.get("/").status_code == 400
-    assert allowed_host.get("/").text == "Unknown host"
+    assert allowed_host.get("/").text == PUBLIC_HOST_MESSAGE
     assert public.get("/").status_code == 200
 
 
@@ -306,10 +312,20 @@ def test_public_url_mode_ignores_the_allowed_hosts(monkeypatch, conn, tmp_path):
         ("app.example.lan", True),
         ("example.lan", True),
         ("badexample.lan", False),
+        ("TESTSERVER", True),
+        ("testserver.", True),
+        ("TestServer.:8381", True),
+        ("app.example.lan.", True),
+        ("localhost.:8381", True),
+        ("nas.local", True),
+        ("NAS.LOCAL.:80", True),
+        ("nas.local.attacker.example", False),
+        (".", False),
+        (":8381", False),
     ],
 )
 def test_host_is_allowed(host, allowed):
-    allowed_hosts = ("testserver", ".example.lan")
+    allowed_hosts = ("testserver", ".example.lan", "Nas.Local.")
 
     assert auth_middleware.host_is_allowed(host, allowed_hosts) is allowed
 
@@ -340,3 +356,336 @@ def test_safe_next_refuses_anything_that_could_leave_the_site(value):
 @pytest.mark.parametrize("value", ["/", "/hevy", "/settings?tab=access", "/a/../b", "/./hevy"])
 def test_safe_next_keeps_same_site_paths(value):
     assert auth_middleware.safe_next(value) == value
+
+
+@pytest.mark.parametrize(
+    ("root_path", "path", "expected"),
+    [
+        ("", "/api/v1/app", "/api/v1/app"),
+        ("/activsync", "/activsync/api/v1/app", "/api/v1/app"),
+        ("/activsync", "/activsync", ""),
+        ("/activsync", "/activsyncx/api/v1/app", "/activsyncx/api/v1/app"),
+        ("/activsync", "/api/v1/app", "/api/v1/app"),
+    ],
+)
+def test_route_path_strips_the_root_path_the_way_starlette_does(root_path, path, expected):
+    scope = {"path": path, "root_path": root_path}
+
+    assert auth_middleware.route_path(scope) == expected
+
+
+def _call(app, method, path, *, root_path="", headers=None, body=b""):
+    request_headers = {"host": "localhost:8381", **(headers or {})}
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "root_path": root_path,
+        "query_string": b"",
+        "headers": [(k.encode(), v.encode()) for k, v in request_headers.items()],
+        "client": ("127.0.0.1", 50000),
+        "server": ("localhost", 8381),
+    }
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(app(scope, receive, send))
+    start = next(m for m in sent if m["type"] == "http.response.start")
+    payload = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
+    return start["status"], start["headers"], payload
+
+
+ROOT = "/activsync"
+
+
+def test_a_root_path_does_not_open_the_api_without_a_session(app):
+    for path in ("/api/v1/app", "/api/v1/settings"):
+        status, _, _ = _call(app, "GET", ROOT + path, root_path=ROOT)
+        assert status == 401, path
+
+
+def test_a_root_path_still_redirects_protected_pages_to_the_login(app):
+    status, headers, _ = _call(app, "GET", ROOT + "/strava/connect", root_path=ROOT)
+
+    assert status == 303
+    assert dict(headers)[b"location"].startswith(b"/login?next=")
+
+
+def test_a_root_path_keeps_the_public_surface_public(app):
+    for path in ("/health", "/api/v1/auth/status", "/", "/login", "/assets/app.js"):
+        status, _, _ = _call(app, "GET", ROOT + path, root_path=ROOT)
+        assert status == 200, path
+
+
+def test_a_root_path_still_exempts_the_healthcheck_from_the_host_guard(app):
+    status, _, _ = _call(
+        app, "GET", ROOT + "/health", root_path=ROOT, headers={"host": "attacker.example"}
+    )
+    blocked, _, _ = _call(
+        app, "GET", ROOT + "/api/v1/app", root_path=ROOT, headers={"host": "attacker.example"}
+    )
+
+    assert status == 200
+    assert blocked == 400
+
+
+def test_login_and_the_session_work_under_a_root_path(app, conn):
+    auth_core.set_password(conn, OWNER_PASSWORD, time.time())
+    csrf = {"x-activsync-request": "1", "origin": "http://localhost:8381"}
+
+    status, headers, _ = _call(
+        app,
+        "POST",
+        ROOT + "/api/v1/auth/login",
+        root_path=ROOT,
+        headers={**csrf, "content-type": "application/json"},
+        body=json.dumps({"password": OWNER_PASSWORD}).encode(),
+    )
+    cookie = next(
+        value.decode().split(";", 1)[0]
+        for name, value in headers
+        if name == b"set-cookie" and value.startswith(b"activsync_session=")
+    )
+    signed_in, _, _ = _call(
+        app, "GET", ROOT + "/api/v1/app", root_path=ROOT, headers={"cookie": cookie}
+    )
+
+    assert status == 200
+    assert signed_in == 200
+
+
+PUBLIC_HTTPS = "https://activsync.example.com"
+
+
+def _login(client, origin):
+    return client.post(
+        "/api/v1/auth/login",
+        json={"password": OWNER_PASSWORD},
+        headers={"X-ActivSync-Request": "1", "Origin": origin},
+    )
+
+
+def _set_cookie(response, name):
+    return next(
+        value
+        for value in response.headers.get_list("set-cookie")
+        if value.startswith(f"{name}=")
+    )
+
+
+def test_an_https_public_url_makes_cookies_secure_without_forwarded_headers(
+    monkeypatch, conn, tmp_path
+):
+    monkeypatch.setenv("ACTIVSYNC_PUBLIC_URL", PUBLIC_HTTPS)
+    auth_core.set_password(conn, OWNER_PASSWORD, time.time())
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+    plain_http = "http://activsync.example.com"
+
+    response = _login(TestClient(app, base_url=plain_http), PUBLIC_HTTPS)
+
+    assert response.status_code == 200
+    session = _set_cookie(response, "__Host-activsync_session")
+    assert "Secure" in session
+    assert "Secure" in _set_cookie(response, "__Host-activsync_device")
+    assert not any(
+        value.startswith(("activsync_session=", "activsync_device="))
+        for value in response.headers.get_list("set-cookie")
+    )
+    assert response.headers["strict-transport-security"] == "max-age=31536000"
+
+    token = session.split("=", 1)[1].split(";", 1)[0]
+    reader = TestClient(app, base_url=plain_http)
+    assert reader.get(
+        "/api/v1/app", headers={"Cookie": f"__Host-activsync_session={token}"}
+    ).status_code == 200
+    assert reader.get(
+        "/api/v1/app", headers={"Cookie": f"activsync_session={token}"}
+    ).status_code == 401
+
+
+def test_an_https_public_url_puts_hsts_on_every_response(monkeypatch, conn, tmp_path):
+    monkeypatch.setenv("ACTIVSYNC_PUBLIC_URL", PUBLIC_HTTPS)
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+
+    for path in ("/", "/health", "/api/v1/app"):
+        response = TestClient(app, base_url="http://activsync.example.com").get(path)
+        assert response.headers["strict-transport-security"] == "max-age=31536000", path
+
+
+def test_an_http_public_url_keeps_plain_cookies_and_no_hsts(monkeypatch, conn, tmp_path):
+    monkeypatch.setenv("ACTIVSYNC_PUBLIC_URL", "http://activsync.example.com")
+    auth_core.set_password(conn, OWNER_PASSWORD, time.time())
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+
+    response = _login(
+        TestClient(app, base_url="http://activsync.example.com"), "http://activsync.example.com"
+    )
+
+    assert response.status_code == 200
+    assert "Secure" not in _set_cookie(response, "activsync_session")
+    assert "strict-transport-security" not in response.headers
+
+
+def test_without_a_public_url_the_cookie_follows_the_request_scheme(conn, tmp_path):
+    auth_core.set_password(conn, OWNER_PASSWORD, time.time())
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+
+    over_http = _login(TestClient(app), "http://testserver")
+    over_https = _login(TestClient(app, base_url="https://testserver"), "https://testserver")
+
+    assert "Secure" not in _set_cookie(over_http, "activsync_session")
+    assert "strict-transport-security" not in over_http.headers
+    assert "Secure" in _set_cookie(over_https, "__Host-activsync_session")
+    assert "strict-transport-security" in over_https.headers
+
+
+@pytest.mark.parametrize(
+    ("value", "scheme", "expected"),
+    [
+        ("Activsync.Example.com", "https", "activsync.example.com"),
+        ("activsync.example.com.", "https", "activsync.example.com"),
+        ("activsync.example.com:443", "https", "activsync.example.com"),
+        ("activsync.example.com:80", "http", "activsync.example.com"),
+        ("activsync.example.com:80", "https", "activsync.example.com:80"),
+        ("activsync.example.com:443", "http", "activsync.example.com:443"),
+        ("activsync.example.com.:8443", "https", "activsync.example.com:8443"),
+        ("activsync.example.com:", "https", "activsync.example.com"),
+        ("activsync.example.com:80", None, "activsync.example.com"),
+        ("activsync.example.com:443", None, "activsync.example.com"),
+        ("activsync.example.com:8381", None, "activsync.example.com:8381"),
+        ("[::1]:443", "https", "[::1]"),
+        ("[::1]:8381", "https", "[::1]:8381"),
+        ("[::1]x", None, "[::1]x"),
+        ("::1", None, "::1"),
+    ],
+)
+def test_normalize_host(value, scheme, expected):
+    assert auth_middleware.normalize_host(value, scheme) == expected
+
+
+@pytest.mark.parametrize(
+    ("public_url", "host", "status"),
+    [
+        ("https://activsync.example.com", "activsync.example.com", 200),
+        ("https://ActivSync.example.com", "activsync.example.com", 200),
+        ("https://activsync.example.com:443", "activsync.example.com", 200),
+        ("https://activsync.example.com.", "activsync.example.com", 200),
+        ("https://activsync.example.com", "activsync.example.com:443", 200),
+        ("https://activsync.example.com", "ACTIVSYNC.Example.com.", 200),
+        ("http://activsync.example.com:80", "activsync.example.com", 200),
+        ("http://activsync.example.com", "activsync.example.com:80", 200),
+        ("https://activsync.example.com:8443", "activsync.example.com:8443", 200),
+        ("https://activsync.example.com", "activsync.example.com:80", 400),
+        ("http://activsync.example.com", "activsync.example.com:443", 400),
+        ("https://activsync.example.com:8443", "activsync.example.com", 400),
+        ("https://activsync.example.com", "activsync.example.com:8381", 400),
+        ("https://activsync.example.com", "other.example.com", 400),
+        ("https://activsync.example.com", "activsync.example.com.attacker.example", 400),
+    ],
+)
+def test_public_url_host_matching_is_normalized(
+    monkeypatch, conn, tmp_path, public_url, host, status
+):
+    monkeypatch.setenv("ACTIVSYNC_PUBLIC_URL", public_url)
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+
+    response = TestClient(app).get("/", headers={"Host": host})
+
+    assert response.status_code == status
+    if status == 400:
+        assert response.text == PUBLIC_HOST_MESSAGE
+
+
+def test_a_normalized_public_url_is_also_the_csrf_origin(monkeypatch, conn, tmp_path):
+    monkeypatch.setenv("ACTIVSYNC_PUBLIC_URL", "https://ActivSync.example.com:443")
+    client = owner_client(
+        create_app(conn, web_dir=_web_build(tmp_path)), base_url=PUBLIC_HTTPS
+    )
+    del client.headers["Origin"]
+
+    accepted = client.delete("/api/v1/catch-up-report", headers={"Origin": PUBLIC_HTTPS})
+    spelled_out = client.delete(
+        "/api/v1/catch-up-report", headers={"Origin": PUBLIC_HTTPS + ":443"}
+    )
+    refused = client.delete(
+        "/api/v1/catch-up-report", headers={"Origin": "http://activsync.example.com"}
+    )
+
+    assert accepted.status_code == 204
+    assert spelled_out.status_code == 204
+    assert refused.status_code == 403
+
+
+def test_a_malformed_origin_or_referer_is_blocked_not_a_server_error(app):
+    client = owner_client(app)
+
+    origin = client.delete("/api/v1/catch-up-report", headers={"Origin": "http://[bad"})
+    del client.headers["Origin"]
+    referer = client.delete("/api/v1/catch-up-report", headers={"Referer": "http://[bad"})
+
+    assert origin.status_code == 403
+    assert referer.status_code == 403
+
+
+def test_allowed_hosts_entries_are_normalized(monkeypatch, conn, tmp_path):
+    monkeypatch.setenv("ACTIVSYNC_ALLOWED_HOSTS", "NAS.Local., tailnet.example.ts.net:80")
+    app = create_app(conn, web_dir=_web_build(tmp_path))
+
+    def status(host):
+        return TestClient(app).get("/", headers={"Host": host}).status_code
+
+    assert status("nas.local:8381") == 200
+    assert status("nas.local.") == 200
+    assert status("tailnet.example.ts.net") == 200
+    assert status("other.local") == 400
+
+
+def _guarded(conn, clock, public_url=None):
+    return TestClient(
+        auth_middleware.AuthenticateMiddleware(
+            FastAPI(), conn=conn, public_url=public_url, allowed_hosts=(), clock=clock
+        ),
+        base_url="http://nas.local:8381",
+    )
+
+
+def test_a_rejected_host_is_logged_once_a_minute_with_both_settings(conn, caplog):
+    now = [1_000_000.0]
+    client = _guarded(conn, lambda: now[0])
+
+    with caplog.at_level(logging.WARNING, logger="activsync.auth"):
+        first = client.get("/")
+        now[0] += 30
+        client.get("/")
+        client.get("/health")
+        now[0] += 31
+        client.get("/")
+
+    assert first.status_code == 400
+    assert first.text == UNKNOWN_HOST_MESSAGE
+    assert caplog.text.count("rejected a request for Host") == 2
+    assert "'nas.local:8381'" in caplog.text
+    assert "ACTIVSYNC_PUBLIC_URL" in caplog.text
+    assert "ACTIVSYNC_ALLOWED_HOSTS" in caplog.text
+
+
+def test_a_host_rejected_under_a_public_url_is_logged_and_carries_the_hint(conn, caplog):
+    client = _guarded(conn, lambda: 1_000_000.0, public_url=PUBLIC_HTTPS)
+
+    with caplog.at_level(logging.WARNING, logger="activsync.auth"):
+        response = client.get("/")
+
+    assert response.status_code == 400
+    assert response.text == PUBLIC_HOST_MESSAGE
+    assert "nas.local:8381" in caplog.text
+    assert "ACTIVSYNC_PUBLIC_URL allows only" in caplog.text
+    assert "ACTIVSYNC_ALLOWED_HOSTS" not in caplog.text
