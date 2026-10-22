@@ -241,7 +241,10 @@ class Poller:
 
     def _prune_sessions(self, now: datetime) -> None:
         if self._due(self._last_session_prune, now, _SESSION_PRUNE_SECONDS):
-            auth_core.prune_expired_sessions(self._conn, now.timestamp())
+            try:
+                auth_core.prune_expired_sessions(self._conn, now.timestamp())
+            except Exception:
+                logger.exception("session prune failed")
             self._last_session_prune = now
 
     def _loop_once(self, now: datetime) -> None:
@@ -326,7 +329,10 @@ class Poller:
 
     def _loop(self) -> None:
         while not self._stop_event.is_set():
-            self._loop_once(datetime.now(timezone.utc))
+            try:
+                self._loop_once(datetime.now(timezone.utc))
+            except Exception:
+                logger.exception("poll tick failed")
             self._stop_event.wait(self._tick_seconds)
 
     def start(self) -> None:

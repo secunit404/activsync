@@ -1,9 +1,12 @@
 import sqlite3
+import time
 from datetime import datetime, timezone
 
 import pytest
+from fastapi.testclient import TestClient
 
-from activsync import db
+from activsync import auth_core, db
+from activsync.server import create_app
 
 
 @pytest.fixture
@@ -197,3 +200,25 @@ def test_connect_purge_is_idempotent_on_a_fresh_database(conn):
     tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert "sessions" not in tables
     assert "activities" in tables
+
+
+def test_connect_purges_sessions_from_the_removed_strava_sign_in(tmp_path):
+    path = str(tmp_path / "legacy.db")
+    legacy = db.connect(path)
+    stale = auth_core.create_session(
+        legacy, method="strava", ip="", user_agent="", now=time.time()
+    )
+    kept = auth_core.create_session(
+        legacy, method="password", ip="", user_agent="", now=time.time()
+    )
+    legacy.close()
+
+    reopened = db.connect(path)
+
+    assert [s.method for s in auth_core.list_sessions(reopened)] == ["password"]
+    client = TestClient(create_app(reopened))
+    stale_status = client.get("/api/v1/auth/status", headers={"Cookie": f"activsync_session={stale}"})
+    kept_status = client.get("/api/v1/auth/status", headers={"Cookie": f"activsync_session={kept}"})
+    assert stale_status.status_code == 200
+    assert stale_status.json()["authenticated"] is False
+    assert kept_status.json()["authenticated"] is True

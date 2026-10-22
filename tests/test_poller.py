@@ -1,4 +1,5 @@
 import logging
+import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -425,3 +426,88 @@ def test_loop_prunes_expired_sessions_hourly_even_before_setup(conn):
     assert len(auth_core.list_sessions(conn)) == 1
     poller._loop_once(start + timedelta(minutes=60))
     assert auth_core.list_sessions(conn) == []
+
+
+def _locked_once():
+    calls = {"n": 0}
+
+    def prune(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return 0
+
+    return prune, calls
+
+
+def test_a_failed_session_prune_is_logged_and_the_tick_carries_on(conn, monkeypatch, caplog):
+    db.set_config_value(conn, "initial_sync_done", True)
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    garmin = MagicMock()
+    garmin.fetch_recent_activities.return_value = []
+    prune, calls = _locked_once()
+    monkeypatch.setattr("activsync.poller.auth_core.prune_expired_sessions", prune)
+    poller = Poller(conn, lambda: garmin, lambda: MagicMock())
+
+    with caplog.at_level(logging.ERROR, logger="activsync.poller"):
+        poller._loop_once(RATE_LIMIT_START)
+
+    assert calls["n"] == 1
+    assert garmin.fetch_recent_activities.call_count == 1
+    assert "session prune failed" in caplog.text
+    assert any(record.exc_info for record in caplog.records)
+
+
+def test_the_poller_thread_survives_a_failed_session_prune(conn, monkeypatch):
+    db.set_config_value(conn, "initial_sync_done", True)
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    ran_twice = threading.Event()
+    runs = {"n": 0}
+
+    def fake_sync_garmin(c, garmin, cfg, now):
+        runs["n"] += 1
+        if runs["n"] >= 2:
+            ran_twice.set()
+        return object()
+
+    prune, _ = _locked_once()
+    monkeypatch.setattr("activsync.poller.auth_core.prune_expired_sessions", prune)
+    monkeypatch.setattr("activsync.poller.sync.sync_garmin", fake_sync_garmin)
+    poller = Poller(
+        conn, lambda: MagicMock(), lambda: MagicMock(),
+        tick_seconds=0.02, garmin_interval_seconds_override=0.0,
+        strava_polling_enabled=False,
+    )
+
+    poller.start()
+    try:
+        assert ran_twice.wait(timeout=2), "the next tick never ran"
+        assert poller._thread.is_alive()
+    finally:
+        poller.stop()
+
+
+def test_an_exception_from_a_tick_does_not_end_the_loop(conn, caplog):
+    ticked_three_times = threading.Event()
+    ticks = []
+
+    def flaky_tick(now):
+        ticks.append(now)
+        if len(ticks) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        if len(ticks) >= 3:
+            ticked_three_times.set()
+
+    poller = Poller(conn, lambda: MagicMock(), lambda: MagicMock(), tick_seconds=0.01)
+    poller._loop_once = flaky_tick
+
+    with caplog.at_level(logging.ERROR, logger="activsync.poller"):
+        poller.start()
+        try:
+            assert ticked_three_times.wait(timeout=2), "the loop stopped after an error"
+            assert poller._thread.is_alive()
+        finally:
+            poller.stop()
+
+    assert "poll tick failed" in caplog.text
+    assert any(record.exc_info for record in caplog.records)
