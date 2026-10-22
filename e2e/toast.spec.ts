@@ -1,5 +1,10 @@
 import { test, expect } from "./fixtures";
 
+// Both tests exclude a row in the shared e2e DB; on parallel workers they
+// pick the same PENDING row. `default` (not `serial`) keeps them in order on
+// one worker without skipping the second when the first fails.
+test.describe.configure({ mode: "default" });
+
 // The brief's spec drives this via the bulk Publish button, but the e2e
 // dev-mock seed (`dev_seed.py`) never sets `strava_tokens` — Strava is
 // always "disconnected" in this environment (see `view.connection_status`),
