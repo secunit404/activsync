@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
+import { OidcLinkForm } from "@/components/settings-access-oidc-link";
 import { OidcLogoSettings } from "@/components/settings-access-oidc-logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +16,6 @@ import { Switch } from "@/components/ui/switch";
 import { useAuthAction } from "@/hooks/use-auth-action";
 import {
   getOidcConfig,
-  oidcLoginUrl,
   removeOidcConfig,
   saveOidcConfig,
   type OidcConfig,
@@ -28,6 +28,7 @@ export function OidcSettings() {
     queryFn: ({ signal }) => getOidcConfig(signal),
   });
   const [editing, setEditing] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   if (!config.data) return null;
   const data = config.data;
@@ -52,13 +53,14 @@ export function OidcSettings() {
           {data.configured ? "Edit" : "Set up single sign-on"}
         </Button>
         {data.configured ? (
-          <Button asChild variant="outline">
-            <a href={oidcLoginUrl("/settings", "link")}>
-              {data.linkedLabel ? "Re-link account" : "Link account"}
-            </a>
+          <Button type="button" variant="outline" onClick={() => setLinking((open) => !open)}>
+            {data.linkedLabel ? "Re-link account" : "Link account"}
           </Button>
         ) : null}
       </div>
+      {data.configured && linking ? (
+        <OidcLinkForm displayName={data.displayName} onCancel={() => setLinking(false)} />
+      ) : null}
       {data.configured ? <OidcLogoSettings logoUrl={data.logoUrl} /> : null}
       {editing ? <OidcForm config={data} onDone={() => setEditing(false)} /> : null}
     </div>

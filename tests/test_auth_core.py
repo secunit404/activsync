@@ -201,6 +201,24 @@ def test_revoke_one_and_revoke_all_except_current(conn):
     assert auth_core.revoke_all(conn) == 1
 
 
+def test_revoke_method_ends_only_that_methods_sessions(conn):
+    password = _session(conn)
+    first_oidc = _session(conn, method="oidc")
+    second_oidc = _session(conn, method="oidc")
+
+    revoked = auth_core.revoke_method(
+        conn, "oidc", keep_token_hash=auth_core.hash_token(first_oidc)
+    )
+
+    assert revoked == 1
+    assert auth_core.resolve_session(conn, second_oidc, NOW) is None
+    assert auth_core.resolve_session(conn, first_oidc, NOW) is not None
+    assert auth_core.resolve_session(conn, password, NOW) is not None
+    assert auth_core.revoke_method(conn, "oidc") == 1
+    assert auth_core.revoke_method(conn, "oidc") == 0
+    assert auth_core.resolve_session(conn, password, NOW) is not None
+
+
 def test_prune_drops_idle_and_expired_sessions(conn):
     _session(conn, now=NOW - auth_core.SESSION_IDLE_SECONDS)
     keep = _session(conn)

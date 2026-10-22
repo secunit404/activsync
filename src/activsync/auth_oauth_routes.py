@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from typing import Literal
 from urllib.parse import urlencode
 
@@ -41,6 +42,8 @@ def create_router(
     ):
         if intent == "link" and getattr(request.state, "auth", None) is None:
             return RedirectResponse("/login?next=%2Fsettings", status_code=303)
+        if intent == "link" and not auth_oidc.consume_link_grant(request.session, time.time()):
+            return _link_error("link_password")
         try:
             return await oidc.begin(
                 request,
@@ -62,7 +65,12 @@ def create_router(
             if getattr(request.state, "auth", None) is None:
                 return _login_error("oidc_state")
             await run_in_threadpool(
-                auth_oidc.set_linked, conn, iss=result.iss, sub=result.sub, label=result.label
+                auth_oidc.set_linked,
+                conn,
+                iss=result.iss,
+                sub=result.sub,
+                label=result.label,
+                keep_token_hash=request.state.auth.token_hash,
             )
             return RedirectResponse("/settings?oidc=linked", status_code=303)
 

@@ -333,6 +333,17 @@ def revoke_all(conn: sqlite3.Connection, *, keep_token_hash: str | None = None) 
     return cursor.rowcount
 
 
+def revoke_method(
+    conn: sqlite3.Connection, method: str, *, keep_token_hash: str | None = None
+) -> int:
+    with db.transaction(conn):
+        cursor = conn.execute(
+            "DELETE FROM auth_sessions WHERE method = ? AND token_hash != ?",
+            (method, keep_token_hash or ""),
+        )
+    return cursor.rowcount
+
+
 def list_sessions(conn: sqlite3.Connection) -> list[Session]:
     rows = conn.execute(
         "SELECT * FROM auth_sessions ORDER BY last_seen_at DESC"

@@ -123,9 +123,12 @@ the same limits Grafana uses by default.
 - **Single sign-on (OIDC).** Any standards-compliant provider: Authentik,
   Authelia, Keycloak, Pocket ID, Kanidm, Zitadel, Google. Create a client with
   the redirect URI Settings shows (`<your origin>/auth/oidc/callback`), enter
-  its issuer URL, client ID and secret, then press **Link account**. Only the
-  account you link can sign in, so another account at the same provider is
-  refused. **Upload logo** puts your provider's logo on the sign-in button
+  its issuer URL (`https://`; `http://` only for `localhost`), client ID and
+  secret, then press **Link account** and enter your ActivSync password. Only
+  the account you link can sign in, so another account at the same provider is
+  refused. Removing single sign-on, changing its issuer or client ID, or
+  linking a different account signs out every single sign-on session.
+  **Upload logo** puts your provider's logo on the sign-in button
   (PNG, JPEG or WebP up to 1 MB; SVG is not accepted). Without one the button
   shows a key.
 - **Trusted proxy header.** For an authenticating reverse proxy. Set the three

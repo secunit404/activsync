@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
+import { ApiError } from "@/lib/api";
 import type { AuthSession, AuthSettings, AuthStatus, OidcConfig } from "@/lib/auth-api";
 import { AccessSettings } from "./settings-access";
 
@@ -16,6 +17,7 @@ const api = vi.hoisted(() => ({
   revokeOtherSessions: vi.fn(),
   saveOidcConfig: vi.fn(),
   removeOidcConfig: vi.fn(),
+  startOidcLink: vi.fn(),
   uploadOidcLogo: vi.fn(),
   removeOidcLogo: vi.fn(),
 }));
@@ -91,6 +93,10 @@ beforeEach(() => {
   api.revokeSession.mockResolvedValue(undefined);
   api.revokeOtherSessions.mockResolvedValue({ message: "Signed out 1 other session(s)." });
   api.saveOidcConfig.mockResolvedValue({ message: "Saved." });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 test("changes the password with the current one", async () => {
@@ -218,24 +224,6 @@ test("configuring single sign-on sends the current password and shows the redire
   );
 });
 
-test("a configured provider offers to link the account", async () => {
-  api.getOidcConfig.mockResolvedValue({
-    ...oidc,
-    configured: true,
-    displayName: "Pocket ID",
-    issuer: "https://id.example.com",
-    clientId: "activsync",
-    hasSecret: true,
-  });
-  renderAccess();
-
-  expect(await screen.findByRole("link", { name: "Link account" })).toHaveAttribute(
-    "href",
-    "/auth/oidc/login?intent=link&next=%2Fsettings",
-  );
-  expect(screen.getByText(/not linked yet/)).toBeVisible();
-});
-
 const configured: OidcConfig = {
   ...oidc,
   configured: true,
@@ -244,6 +232,81 @@ const configured: OidcConfig = {
   clientId: "activsync",
   hasSecret: true,
 };
+
+test("linking is a button that asks for the password, not a plain link", async () => {
+  api.getOidcConfig.mockResolvedValue(configured);
+  renderAccess();
+
+  const trigger = await screen.findByRole("button", { name: "Link account" });
+  expect(screen.queryByRole("link", { name: "Link account" })).toBeNull();
+  expect(screen.getByText(/not linked yet/)).toBeVisible();
+  expect(screen.queryByLabelText("Your ActivSync password")).toBeNull();
+
+  await userEvent.click(trigger);
+
+  const password = screen.getByLabelText("Your ActivSync password");
+  expect(password).toHaveAttribute("type", "password");
+  expect(password).toHaveAttribute("autocomplete", "current-password");
+  expect(screen.getByRole("button", { name: "Continue to Pocket ID" })).toBeVisible();
+  expect(api.startOidcLink).not.toHaveBeenCalled();
+});
+
+test("a linked provider offers to re-link", async () => {
+  api.getOidcConfig.mockResolvedValue({ ...configured, linkedLabel: "andreas" });
+  renderAccess();
+
+  expect(await screen.findByRole("button", { name: "Re-link account" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Link account" })).toBeNull();
+});
+
+test("the password goes to the server and the browser follows the returned link", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
+  api.getOidcConfig.mockResolvedValue(configured);
+  api.startOidcLink.mockResolvedValue({ url: "/auth/oidc/login?intent=link&next=%2Fsettings" });
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Link account" }));
+  await userEvent.type(screen.getByLabelText("Your ActivSync password"), "my long passphrase");
+  await userEvent.click(screen.getByRole("button", { name: "Continue to Pocket ID" }));
+
+  await vi.waitFor(() =>
+    expect(api.startOidcLink).toHaveBeenCalledWith("my long passphrase", expect.anything()),
+  );
+  await vi.waitFor(() =>
+    expect(assign).toHaveBeenCalledWith("/auth/oidc/login?intent=link&next=%2Fsettings"),
+  );
+});
+
+test("a wrong password stays on the page instead of leaving for the provider", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
+  api.getOidcConfig.mockResolvedValue(configured);
+  api.startOidcLink.mockRejectedValue(new ApiError("Wrong password.", 400));
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Link account" }));
+  await userEvent.type(screen.getByLabelText("Your ActivSync password"), "not it at all");
+  await userEvent.click(screen.getByRole("button", { name: "Continue to Pocket ID" }));
+
+  await vi.waitFor(() => expect(api.startOidcLink).toHaveBeenCalled());
+  await vi.waitFor(() =>
+    expect(screen.getByRole("button", { name: "Continue to Pocket ID" })).toBeEnabled(),
+  );
+  expect(assign).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Your ActivSync password")).toBeVisible();
+});
+
+test("cancelling the link step hides the password field", async () => {
+  api.getOidcConfig.mockResolvedValue(configured);
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Link account" }));
+  const linkForm = screen.getByLabelText("Your ActivSync password").closest("form")!;
+  await userEvent.click(within(linkForm).getByRole("button", { name: "Cancel" }));
+
+  expect(screen.queryByLabelText("Your ActivSync password")).toBeNull();
+});
 
 test("single sign-on offers a logo upload once it is set up", async () => {
   api.getOidcConfig.mockResolvedValue(oidc);

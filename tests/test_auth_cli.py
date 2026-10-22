@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from activsync import auth_cli, auth_core, auth_devices, db
+from activsync import auth_cli, auth_core, auth_devices, auth_oidc, db
 
 PASSWORD = "correct horse battery staple"
 
@@ -74,6 +74,30 @@ def test_revoke_sessions_forgets_trusted_devices_like_sign_out_everywhere(conn):
     assert auth_devices.is_trusted(conn, device_id) is False
 
 
+def test_disable_oidc_signs_out_single_sign_on_sessions_only(conn, capsys):
+    auth_oidc.save_config(
+        conn,
+        display_name="Pocket ID",
+        issuer="https://id.example.com",
+        client_id="activsync",
+        client_secret="very-secret-value",
+        scopes="openid",
+        auto_redirect=False,
+    )
+    auth_oidc.set_linked(conn, iss="https://id.example.com", sub="owner-sub", label="andreas")
+    sso = auth_core.create_session(conn, method="oidc", ip="", user_agent="", now=time.time())
+    password = auth_core.create_session(
+        conn, method="password", ip="", user_agent="", now=time.time()
+    )
+
+    assert auth_cli.main(["disable-oidc"]) == 0
+
+    assert auth_oidc.load_config(conn) is None
+    assert auth_core.resolve_session(conn, sso, time.time()) is None
+    assert auth_core.resolve_session(conn, password, time.time()) is not None
+    assert "Single sign-on removed" in capsys.readouterr().out
+
+
 def test_status_never_prints_the_hash(conn, capsys):
     auth_core.set_password(conn, PASSWORD, time.time())
 
@@ -95,9 +119,9 @@ def test_db_path_follows_the_server(monkeypatch, tmp_path):
 
 def test_status_describes_the_proxy_from_the_environment(conn, monkeypatch, capsys):
     monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User")
-    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_TRUSTED", "172.18.0.0/16")
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_TRUSTED", "172.18.0.10/32")
     monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_USER", "andreas")
 
     assert auth_cli.main(["status"]) == 0
 
-    assert "Proxy header:         Remote-User from 172.18.0.0/16" in capsys.readouterr().out
+    assert "Proxy header:         Remote-User from 172.18.0.10/32" in capsys.readouterr().out

@@ -345,6 +345,17 @@ def create_router(
         auth_oidc.delete_config(conn)
         return AuthActionResult(message="Single sign-on removed.")
 
+    @router.post("/auth/oidc/link", response_model=AuthorizeUrl)
+    def start_oidc_link(payload: CurrentPasswordRequest, request: Request) -> AuthorizeUrl:
+        require_session(request)
+        if auth_oidc.load_config(conn) is None:
+            raise HTTPException(status_code=409, detail="Set up single sign-on first.")
+        require_password(
+            payload.current_password, wrong_status=400, device_id=trusted_device(request)
+        )
+        auth_oidc.grant_link(request.session, time.time())
+        return AuthorizeUrl(url=auth_oidc.link_start_url())
+
     @router.get("/auth/oidc/logo", include_in_schema=False)
     def oidc_logo() -> Response:
         logo = auth_oidc_logo.load(conn)

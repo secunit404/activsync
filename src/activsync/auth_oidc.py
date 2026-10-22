@@ -7,7 +7,9 @@ import dataclasses
 import logging
 import sqlite3
 import threading
+from collections.abc import MutableMapping
 from dataclasses import dataclass
+from urllib.parse import urlencode, urlsplit
 
 import httpx2
 from authlib.integrations.starlette_client import OAuth, OAuthError
@@ -16,13 +18,16 @@ from joserfc.errors import JoseError
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
-from activsync import auth_oidc_logo, db
+from activsync import auth_core, auth_oidc_logo, db
 
 logger = logging.getLogger("activsync.auth.oidc")
 
 OIDC_KEY = "auth_oidc"
 DEFAULT_SCOPES = "openid profile email"
 FLOW_KEY = "oidc_flow"
+LINK_GRANT_KEY = "oidc_link_grant"
+LINK_GRANT_SECONDS = 300
+OIDC_METHOD = "oidc"
 
 
 @dataclass(frozen=True)
@@ -53,8 +58,16 @@ def load_config(conn: sqlite3.Connection) -> OidcConfig | None:
 
 def _normalize_issuer(issuer: str) -> str:
     value = issuer.strip().rstrip("/")
-    if not value.startswith(("https://", "http://")):
-        raise ValueError("The issuer URL must start with https://")
+    try:
+        host = urlsplit(value).hostname
+    except ValueError:
+        host = None
+    secure = value.startswith("https://") and host is not None
+    local = value.startswith("http://") and host in auth_core.LOOPBACK_HOSTS
+    if not (secure or local):
+        raise ValueError(
+            "The issuer URL must start with https:// (http:// is accepted only for localhost)"
+        )
     return value
 
 
@@ -104,22 +117,53 @@ def save_config(
             linked=existing.linked if same_provider else None,
         )
         _store(conn, config)
+    if existing is not None and existing.linked and config.linked is None:
+        auth_core.revoke_method(conn, OIDC_METHOD)
     return config
 
 
-def set_linked(conn: sqlite3.Connection, *, iss: str, sub: str, label: str) -> None:
+def set_linked(
+    conn: sqlite3.Connection,
+    *,
+    iss: str,
+    sub: str,
+    label: str,
+    keep_token_hash: str | None = None,
+) -> None:
+    """Linking a different identity signs out every sign-in made through the
+    old one, except `keep_token_hash`, the session doing the linking."""
     with db.transaction(conn):
         config = load_config(conn)
         if config is None:
             return
+        replaced = config.linked is not None and (
+            config.linked["iss"],
+            config.linked["sub"],
+        ) != (iss, sub)
         _store(conn, dataclasses.replace(
             config, linked={"iss": iss, "sub": sub, "label": label}
         ))
+    if replaced:
+        auth_core.revoke_method(conn, OIDC_METHOD, keep_token_hash=keep_token_hash)
 
 
 def delete_config(conn: sqlite3.Connection) -> None:
     auth_oidc_logo.delete(conn)
     db.set_config_value(conn, OIDC_KEY, None)
+    auth_core.revoke_method(conn, OIDC_METHOD)
+
+
+def link_start_url() -> str:
+    return "/auth/oidc/login?" + urlencode({"intent": "link", "next": "/settings"})
+
+
+def grant_link(session: MutableMapping, now: float) -> None:
+    session[LINK_GRANT_KEY] = int(now) + LINK_GRANT_SECONDS
+
+
+def consume_link_grant(session: MutableMapping, now: float) -> bool:
+    expires = session.pop(LINK_GRANT_KEY, None)
+    return isinstance(expires, int) and now < expires
 
 
 def discovery_url(issuer: str) -> str:

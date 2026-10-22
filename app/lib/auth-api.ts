@@ -120,6 +120,13 @@ export function removeOidcConfig(currentPassword: string) {
   });
 }
 
+export function startOidcLink(currentPassword: string) {
+  return requestJson<{ url: string }>("/api/v1/auth/oidc/link", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword }),
+  });
+}
+
 export const OIDC_LOGO_MAX_BYTES = 1024 * 1024;
 export const OIDC_LOGO_TYPES = "image/png,image/jpeg,image/webp";
 
@@ -138,7 +145,7 @@ export function removeOidcLogo() {
   return requestJson<AuthActionResult>("/api/v1/auth/oidc/logo", { method: "DELETE" });
 }
 
-export function oidcLoginUrl(next: string, intent: "login" | "link" = "login") {
-  const params = new URLSearchParams({ intent, next });
+export function oidcLoginUrl(next: string) {
+  const params = new URLSearchParams({ intent: "login", next });
   return `/auth/oidc/login?${params.toString()}`;
 }
