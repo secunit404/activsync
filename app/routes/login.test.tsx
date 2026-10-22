@@ -60,6 +60,8 @@ afterEach(() => {
 });
 
 test("signs in with the password and returns to next", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
   getAuthStatus.mockResolvedValue(status());
   login.mockResolvedValue(status({ authenticated: true, method: "password" }));
   const router = renderAt("/login?next=%2Fhevy");
@@ -70,6 +72,38 @@ test("signs in with the password and returns to next", async () => {
   expect(await screen.findByText("hevy page")).toBeVisible();
   expect(login).toHaveBeenCalledWith("correct horse battery staple", expect.anything());
   expect(router.state.location.pathname).toBe("/hevy");
+  expect(assign).not.toHaveBeenCalled();
+});
+
+test.each(["api/v1/app", "assets/app.js", "strava/callback?code=abc&state=xyz", "auth/oidc/login"])(
+  "signing in with next=/%s reloads the page instead of routing in the SPA",
+  async (path) => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    getAuthStatus.mockResolvedValue(status());
+    login.mockResolvedValue(status({ authenticated: true, method: "password" }));
+    const router = renderAt(`/login?next=${encodeURIComponent(`/${path}`)}`);
+
+    await userEvent.type(await screen.findByLabelText("Password"), "correct horse battery staple");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(`/${path}`));
+    expect(router.state.location.pathname).toBe("/login");
+  },
+);
+
+test("a path that only starts like a server prefix still routes in the SPA", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
+  getAuthStatus.mockResolvedValue(status());
+  login.mockResolvedValue(status({ authenticated: true, method: "password" }));
+  const router = renderAt("/login?next=%2Fstrava-tips");
+
+  await userEvent.type(await screen.findByLabelText("Password"), "correct horse battery staple");
+  await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/strava-tips"));
+  expect(assign).not.toHaveBeenCalled();
 });
 
 test("shows the server's message for a wrong password", async () => {
@@ -221,6 +255,18 @@ test("an already signed-in browser skips the form", async () => {
   renderAt("/login?next=%2Fhevy");
 
   expect(await screen.findByText("hevy page")).toBeVisible();
+});
+
+test("an already signed-in browser reaches a server-only next with a page load", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
+  getAuthStatus.mockResolvedValue(status({ authenticated: true, method: "password" }));
+  renderAt("/login?next=%2Fstrava%2Fcallback%3Fcode%3Dc%26state%3Ds");
+
+  await vi.waitFor(() =>
+    expect(assign).toHaveBeenCalledWith("/strava/callback?code=c&state=s"),
+  );
+  expect(screen.queryByText("home page")).toBeNull();
 });
 
 test("next never leaves the site", () => {

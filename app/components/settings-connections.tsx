@@ -272,11 +272,14 @@ function StravaDialog({ state }: { state: SettingsState }) {
   const disconnect = useSettingsAction(disconnectStrava);
   const saved =
     Boolean(state.credentials.stravaClientId) && state.credentials.stravaClientSecretSaved;
-  const dirty = clientId !== state.credentials.stravaClientId || Boolean(clientSecret);
+  const trimmedClientId = clientId.trim();
+  const trimmedSecret = clientSecret.trim();
+  const dirty =
+    trimmedClientId !== state.credentials.stravaClientId || Boolean(trimmedSecret);
   const canSave =
     dirty &&
-    Boolean(clientId.trim()) &&
-    (Boolean(clientSecret) || state.credentials.stravaClientSecretSaved);
+    Boolean(trimmedClientId) &&
+    (Boolean(trimmedSecret) || state.credentials.stravaClientSecretSaved);
   const authorize = useStravaConnectUrl(state.credentials.stravaClientId, saved && open);
   return (
     <>
@@ -328,7 +331,10 @@ function StravaDialog({ state }: { state: SettingsState }) {
           className="grid gap-4"
           onSubmit={async (event) => {
             event.preventDefault();
-            await save.mutateAsync({ clientId, clientSecret });
+            await save.mutateAsync({
+              clientId: trimmedClientId,
+              clientSecret: trimmedSecret,
+            });
             setClientSecret("");
           }}
         >

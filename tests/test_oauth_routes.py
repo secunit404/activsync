@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from auth_helpers import CSRF_HEADERS, owner_client
 
-from activsync import db, dev_mock, view
+from activsync import db, dev_mock, onboarding, view
 from activsync import server as server_module
 from activsync.server import create_app
 
@@ -151,11 +151,12 @@ def test_strava_callback_flags_a_narrowed_grant_for_reconnect(tmp_path, monkeypa
     conn = db.connect(str(tmp_path / "oauth.db"))
     _complete_setup(conn)
     db.set_config_value(conn, "strava_oauth_state", "expected")
+    catch_up = MagicMock()
     monkeypatch.setattr(server_module, "_build_strava_client", dev_mock.FakeStravaClient)
     monkeypatch.setattr(server_module, "_build_garmin_client", lambda _conn: MagicMock())
-    monkeypatch.setattr(server_module.onboarding, "run_catch_up", MagicMock())
+    monkeypatch.setattr(server_module.onboarding, "run_catch_up", catch_up)
 
-    owner_client(create_app(conn)).get(
+    response = owner_client(create_app(conn)).get(
         "/strava/callback?code=code&state=expected&scope=read",
         follow_redirects=False,
     )
@@ -163,6 +164,60 @@ def test_strava_callback_flags_a_narrowed_grant_for_reconnect(tmp_path, monkeypa
     connections = view.connection_status(conn)
     assert connections["strava"]["status"].startswith("Reconnect needed")
     assert "strava" in connections["broken"]
+    assert response.status_code == 303
+    parsed = urlparse(response.headers["location"])
+    assert parsed.path == "/settings"
+    assert "didn't grant upload access" in parse_qs(parsed.query)["stravaError"][0]
+    catch_up.assert_not_called()
+
+
+def test_strava_callback_keeps_setup_on_the_strava_step_for_a_narrowed_grant(
+    tmp_path,
+    monkeypatch,
+):
+    conn = db.connect(str(tmp_path / "oauth.db"))
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    db.set_config_value(
+        conn,
+        "strava_credentials",
+        {"client_id": "client-id", "client_secret": "client-secret"},
+    )
+    db.set_config_value(conn, "strava_oauth_state", "expected")
+    monkeypatch.setattr(server_module, "_build_strava_client", dev_mock.FakeStravaClient)
+
+    response = owner_client(create_app(conn)).get(
+        "/strava/callback?code=code&state=expected&scope=read",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    parsed = urlparse(response.headers["location"])
+    assert parsed.path == "/setup"
+    assert "didn't grant upload access" in parse_qs(parsed.query)["stravaError"][0]
+    assert onboarding.setup_step(conn) == "strava"
+    assert db.get_config_value(conn, "strava_tokens")["scope"] == "read"
+
+
+def test_strava_callback_moves_setup_on_for_the_full_grant(tmp_path, monkeypatch):
+    conn = db.connect(str(tmp_path / "oauth.db"))
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    db.set_config_value(
+        conn,
+        "strava_credentials",
+        {"client_id": "client-id", "client_secret": "client-secret"},
+    )
+    db.set_config_value(conn, "strava_oauth_state", "expected")
+    monkeypatch.setattr(server_module, "_build_strava_client", dev_mock.FakeStravaClient)
+
+    response = owner_client(create_app(conn)).get(
+        "/strava/callback?code=code&state=expected"
+        "&scope=read,activity:write,activity:read_all",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/setup"
+    assert onboarding.setup_step(conn) == "hevy"
 
 
 def test_strava_callback_returns_to_setup_and_surfaces_declines_there(

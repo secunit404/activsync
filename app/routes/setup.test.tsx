@@ -261,6 +261,42 @@ test("the Strava step links Connect with Strava straight to Strava once saved", 
   expect(startStravaConnect).toHaveBeenCalledTimes(1);
 });
 
+test("a trailing space left in the saved client ID keeps Connect with Strava linked", async () => {
+  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  renderSetup({
+    ...baseState,
+    setup: { ...baseState.setup, step: "strava" },
+    credentials: {
+      ...baseState.credentials,
+      stravaClientId: "1234",
+      stravaClientSecretSaved: true,
+    },
+  });
+  await screen.findByRole("link", { name: "Connect with Strava" });
+
+  await userEvent.type(screen.getByLabelText("Strava client ID"), " ");
+
+  expect(screen.getByLabelText("Strava client ID")).toHaveValue("1234 ");
+  expect(screen.getByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
+    "href",
+    STRAVA_AUTHORIZE,
+  );
+});
+
+test("the Strava step saves the client ID and secret trimmed", async () => {
+  saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
+  renderSetup({ ...baseState, setup: { ...baseState.setup, step: "strava" } });
+
+  await userEvent.type(screen.getByLabelText("Strava client ID"), "  1234 ");
+  await userEvent.type(screen.getByLabelText("Strava client secret"), " secret ");
+  await userEvent.click(screen.getByRole("button", { name: "Save credentials" }));
+
+  expect(saveStravaCredentials).toHaveBeenCalledWith(
+    { clientId: "1234", clientSecret: "secret" },
+    expect.anything(),
+  );
+});
+
 test("renders the Hevy step with a skip option", async () => {
   skipHevy.mockResolvedValue(actionResult);
   renderSetup({ ...baseState, setup: { ...baseState.setup, step: "hevy" } });

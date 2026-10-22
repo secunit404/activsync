@@ -157,6 +157,39 @@ test("editing the Strava credentials disables Connect until they are saved", asy
   expect(screen.getByRole("dialog")).toBeVisible();
 });
 
+test("a trailing space left in the saved Strava client ID keeps Connect linked and Save disabled", async () => {
+  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  renderConnections();
+  const dialog = await openDialog("strava");
+  await within(dialog).findByRole("link", { name: "Connect with Strava" });
+
+  await userEvent.type(within(dialog).getByLabelText("Strava client ID"), " ");
+
+  expect(within(dialog).getByLabelText("Strava client ID")).toHaveValue("1234 ");
+  expect(within(dialog).getByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
+    "href",
+    STRAVA_AUTHORIZE,
+  );
+  expect(within(dialog).getByRole("button", { name: "Save credentials" })).toBeDisabled();
+});
+
+test("Strava credentials are saved trimmed, matching what the server stores", async () => {
+  saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
+  renderConnections();
+  const dialog = await openDialog("strava");
+
+  const clientId = within(dialog).getByLabelText("Strava client ID");
+  await userEvent.clear(clientId);
+  await userEvent.type(clientId, "  5678 ");
+  await userEvent.type(within(dialog).getByLabelText("Strava client secret"), " new-secret ");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Save credentials" }));
+
+  expect(saveStravaCredentials).toHaveBeenCalledWith(
+    { clientId: "5678", clientSecret: "new-secret" },
+    expect.anything(),
+  );
+});
+
 test("a disconnected Strava without saved credentials offers Cancel and a disabled Connect", async () => {
   renderConnections({
     ...baseState,

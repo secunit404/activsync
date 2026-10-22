@@ -39,7 +39,7 @@ test("signing out returns to login and ends the session", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).last().click();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login\?local=1$/);
 
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/login\?next=%2Fsettings$/);

@@ -43,7 +43,7 @@ from activsync.garmin_client import (
     get_client as get_garmin_raw_client,
 )
 from activsync.hevy_client import HevyClient
-from activsync.strava_client import StravaAuthError, StravaClient
+from activsync.strava_client import StravaAuthError, StravaClient, scope_is_sufficient
 
 logger = logging.getLogger("activsync.server")
 
@@ -295,6 +295,12 @@ def create_app(
             return strava_error(
                 "Could not complete the Strava connection. Check your client ID "
                 "and client secret, then try again."
+            )
+
+        if not scope_is_sufficient(scope):
+            return strava_error(
+                "Strava didn't grant upload access. Press Connect with Strava "
+                "again and leave both permissions ticked."
             )
 
         if onboarding.setup_step(conn) is not None:

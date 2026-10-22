@@ -33,7 +33,7 @@ def setup_step(
     connections = connections or view.connection_status(conn)
     if not connections["garmin"]["connected"]:
         return "garmin"
-    if not connections["strava"]["connected"]:
+    if "strava" in connections["broken"]:
         return "strava"
     if not db.get_config_value(conn, "setup_hevy_done", default=False):
         return "hevy"

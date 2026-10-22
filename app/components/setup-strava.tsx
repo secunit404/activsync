@@ -24,7 +24,10 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
   const [clientSecret, setClientSecret] = useState("");
   const saved =
     Boolean(state.credentials.stravaClientId) && state.credentials.stravaClientSecretSaved;
-  const dirty = clientId !== state.credentials.stravaClientId || Boolean(clientSecret);
+  const trimmedClientId = clientId.trim();
+  const trimmedSecret = clientSecret.trim();
+  const dirty =
+    trimmedClientId !== state.credentials.stravaClientId || Boolean(trimmedSecret);
   const authorize = useStravaConnectUrl(state.credentials.stravaClientId, saved);
   return (
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
@@ -44,7 +47,9 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
         className="grid max-w-[440px] gap-5"
         onSubmit={(event) => {
           event.preventDefault();
-          void onSave({ clientId, clientSecret }).then(() => setClientSecret(""));
+          void onSave({ clientId: trimmedClientId, clientSecret: trimmedSecret }).then(() =>
+            setClientSecret(""),
+          );
         }}
       >
         <FieldGroup>

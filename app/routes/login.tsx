@@ -36,6 +36,14 @@ export function safeNext(value: string | null): string {
   }
 }
 
+const SERVER_ROUTE_PREFIXES = new Set(["api", "assets", "strava", "auth"]);
+
+// Mirrors SPA_RESERVED_PREFIXES in auth_middleware.py: the SPA has no route for
+// these, so reaching them needs a real page load rather than client routing.
+function isServerRoute(path: string): boolean {
+  return SERVER_ROUTE_PREFIXES.has(path.slice(1).split(/[/?#]/, 1)[0]);
+}
+
 export default function Login() {
   const [searchParams] = useSearchParams();
   const status = useAuthStatus();
@@ -66,7 +74,7 @@ export default function Login() {
     return <Navigate to="/setup" replace />;
   }
   if (status.data.authenticated) {
-    return <Navigate to={next} replace />;
+    return isServerRoute(next) ? <ServerRedirect to={next} /> : <Navigate to={next} replace />;
   }
   return (
     <LoginView
@@ -75,6 +83,19 @@ export default function Login() {
       local={local}
       error={searchParams.get("error")}
     />
+  );
+}
+
+function ServerRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.assign(to);
+  }, [to]);
+  return (
+    <LoginCard>
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Spinner /> Loading…
+      </div>
+    </LoginCard>
   );
 }
 
@@ -170,6 +191,10 @@ function PasswordForm({ next }: { next: string }) {
   const mutation = useMutation({
     mutationFn: login,
     onSuccess: (status) => {
+      if (isServerRoute(next)) {
+        window.location.assign(next);
+        return;
+      }
       queryClient.setQueryData(queryKeys.authStatus, status);
       navigate(next, { replace: true });
     },
