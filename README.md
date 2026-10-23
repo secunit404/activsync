@@ -84,9 +84,9 @@ State (database and Garmin tokens) is persisted under `./data` (mounted at
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Proxy IPs trusted to set `X-Forwarded-Proto`/`-For` (see below) |
 | `ACTIVSYNC_PUBLIC_URL` | _(unset)_ | Public origin, e.g. `https://activsync.example.com`. Builds OAuth redirect URIs, is the expected `Origin`, and rejects other `Host` headers |
 | `ACTIVSYNC_ALLOWED_HOSTS` | _(unset)_ | Without a public URL, extra host names to accept besides IP addresses and `localhost`, comma-separated, e.g. `activsync.lan`. A leading dot (`.example.com`) also accepts subdomains |
-| `ACTIVSYNC_AUTH_PROXY_HEADER` | _(unset)_ | Header an authenticating proxy signs in with, e.g. `Remote-User` (see [Signing in](#signing-in)) |
-| `ACTIVSYNC_AUTH_PROXY_TRUSTED` | _(unset)_ | Address of the proxy allowed to send that header, e.g. `172.18.0.10/32`. Required with the header; must not include Docker's gateway (see [Signing in](#signing-in)) |
-| `ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY` | _(unset)_ | `1` allows a trusted range that includes Docker's gateway, for a proxy running on the Docker host itself (see [Signing in](#signing-in)) |
+| `ACTIVSYNC_AUTH_PROXY_HEADER` | _(unset)_ | Username header from an authenticating proxy, e.g. `Remote-User` (see [Through an authenticating proxy](#through-an-authenticating-proxy)) |
+| `ACTIVSYNC_AUTH_PROXY_TRUSTED` | _(unset)_ | The proxy's IP, e.g. `172.18.0.10/32`. Required with the header |
+| `ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY` | _(unset)_ | `1` when the proxy runs on the Docker host itself |
 | `ACTIVSYNC_AUTH_PROXY_USER` | _(unset)_ | The exact header value that is you. Required with the header |
 | `ACTIVSYNC_AUTH_DISABLED` | _(unset)_ | `1` turns sign-in off entirely. LAN-only installs that accept the risk |
 
@@ -95,121 +95,115 @@ timestamps (applied live, no restart needed).
 
 ### Strava's Authorization Callback Domain
 
-The setup wizard shows the exact value to enter. Two things it can't tell you:
-
-- **Reachable at more than one address?** (say a public domain *and* a LAN IP)
-  Only one can be registered, and subdomains of it are fine but an unrelated
-  address is not. Always press **Connect with Strava** from the address you
-  registered — everything else works on either.
-- **Behind an HTTPS proxy?** Set `FORWARDED_ALLOW_IPS` to the proxy's own
-  address (e.g. `172.18.0.10`) so the callback URL is built as `https://`.
-  Avoid `*`, even when the container is only reachable through the proxy: it
-  makes uvicorn take the client-supplied end of `X-Forwarded-For`, so clients
-  can pick their own sign-in rate-limit address. See
-  [Exposing ActivSync publicly](#exposing-activsync-publicly).
+The setup wizard shows the exact value to enter. Only one domain can be
+registered (its subdomains work too), so if you reach ActivSync at more than
+one address, press **Connect with Strava** from the registered one. Behind an
+HTTPS proxy, set `FORWARDED_ALLOW_IPS` so the callback is built as `https://`
+(see [Exposing ActivSync publicly](#exposing-activsync-publicly)).
 
 ## Signing in
 
-ActivSync has one user: you. The password you chose when claiming the install
-always works, and the other methods are added on top of it: single sign-on in
-**Settings → Access**, a trusted proxy header through environment variables.
-Sessions last 7 days without use and 30 days at most, the same limits Grafana
-uses by default.
+ActivSync has one user: you. Your password always works. Single sign-on and
+proxy sign-in are optional extras on top of it. Sessions last 7 days without
+use and 30 days at most.
 
-- **Password.** At least 15 characters; a few unrelated words make a good
-  passphrase. After five wrong guesses each further attempt waits longer, up
-  to 15 minutes. A browser that has signed in before keeps its own count of
-  wrong guesses, so someone guessing from elsewhere cannot lock you out of it.
-  When single sign-on is set to redirect to the provider automatically,
-  `/login?local=1` still shows the password form.
-- **Single sign-on (OIDC).** Any standards-compliant provider: Authentik,
-  Authelia, Keycloak, Pocket ID, Kanidm, Zitadel, Google. Create a client with
-  the redirect URI Settings shows (`<your origin>/auth/oidc/callback`), enter
-  its issuer URL (`https://`; `http://` only for `localhost`), client ID and
-  secret, then press **Link account** and enter your ActivSync password. Only
-  the account you link can sign in, so another account at the same provider is
-  refused. Removing single sign-on, changing its issuer or client ID, or
-  linking a different account signs out every single sign-on session.
-  **Upload logo** puts your provider's logo on the sign-in button
-  (PNG, JPEG or WebP up to 1 MB; SVG is not accepted). Without one the button
-  shows a key.
-- **Trusted proxy header.** For an authenticating reverse proxy. Set the three
-  `ACTIVSYNC_AUTH_PROXY_*` variables; ActivSync refuses to start if one is
-  missing or the trusted range is everything. The proxy's own sign-out signs
-  you out here too.
+### Password
+
+Chosen when you claim the install; at least 15 characters. Repeated wrong
+guesses are slowed down, up to 15 minutes, but a browser you have signed in
+from before is never locked out by someone guessing elsewhere.
+
+### Single sign-on (OIDC)
+
+Works with any OIDC provider: Authentik, Authelia, Keycloak, Pocket ID, Kanidm,
+Zitadel, Google.
+
+1. At your provider, create a client with the redirect URI shown in
+   **Settings → Access** (`<your origin>/auth/oidc/callback`).
+2. In **Settings → Access**, enter the issuer URL, client ID and secret.
+3. Press **Link account**. Only the account you link can sign in.
+
+**Go straight to the provider** skips the sign-in page and sends you to your
+provider right away; `/login?local=1` still shows the password form.
+**Upload logo** puts the provider's logo on the sign-in button.
+
+### Through an authenticating proxy
+
+If your reverse proxy already signs you in, ActivSync can trust the username
+header it forwards:
+
+```yaml
+    environment:
+      - ACTIVSYNC_AUTH_PROXY_HEADER=Remote-User
+      - ACTIVSYNC_AUTH_PROXY_USER=you              # the header value that is you
+      - ACTIVSYNC_AUTH_PROXY_TRUSTED=172.18.0.10/32  # your proxy's IP, nothing wider
+```
 
 | Proxy | Header |
 |---|---|
 | Authelia | `Remote-User` |
 | authentik outpost | `X-authentik-username` |
-| oauth2-proxy | `X-Forwarded-User` or `X-Forwarded-Preferred-Username` |
+| Pangolin | `Remote-User` (see [below](#pangolin)) |
+| oauth2-proxy | `X-Forwarded-User` (also set `--trusted-proxy-ip`) |
 | Tailscale serve | `Tailscale-User-Login` |
 
-The proxy must also remove any copy of that header a client sends. Authelia,
-authentik and Tailscale do. oauth2-proxy trusts every address by default; set
-`--trusted-proxy-ip` to your proxy's range.
+**Only the proxy may reach ActivSync.** Trust just the proxy's own IP (a
+`/32`) and keep port `8381` away from everyone else: remove `ports:`, use
+`127.0.0.1:8381:8381`, or firewall it to the proxy. ActivSync refuses to start if the trusted range
+includes Docker's gateway, since every connection from outside Docker arrives
+from it. If the proxy runs on the Docker host itself, set
+`ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY=1` and bind the port to `127.0.0.1`.
 
-Give the proxy a fixed address on the Docker network (`ipv4_address:
-172.18.0.10` under its network) and trust only that:
-`ACTIVSYNC_AUTH_PROXY_TRUSTED=172.18.0.10/32`. Do not publish `8381` beyond the
-proxy: remove `ports:` or bind `127.0.0.1:8381:8381`. Docker relays connections
-from the host and from IPv6 clients through the network's gateway (for example
-`172.18.0.1`), so a range that covers it would let anyone who reaches the port
-send the header and be signed in as you. ActivSync therefore refuses to start
-when a trusted range contains its default gateway. If the proxy runs on the
-Docker host itself, set `ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY=1` to allow it, and
-keep port `8381` reachable from that host alone; ActivSync logs a warning at
-startup while this is on.
+Not sure what value the proxy sends? Sign in through it once: ActivSync logs
+the value it received when it doesn't match `ACTIVSYNC_AUTH_PROXY_USER`.
 
-**Sign out everywhere** in Settings and changing your password also make every
-other browser sign in from scratch, as if it had never signed in before. The
-browser you do it from keeps its own wrong-guess count.
+#### Pangolin
+
+Protect the resource with Pangolin SSO and set the header to `Remote-User`.
+Pangolin sends it only after an SSO sign-in; with a PIN, password or email code
+you get ActivSync's own sign-in page instead.
+
+Trust the address of the machine that runs your Pangolin connector (Newt), not
+the Pangolin server: the connector is what opens the connection to ActivSync.
+
+- **Connector on another machine or VM:** trust that machine's IP, e.g.
+  `ACTIVSYNC_AUTH_PROXY_TRUSTED=192.168.1.20/32`, and set
+  `FORWARDED_ALLOW_IPS` to the same IP. Port `8381` has to stay published, so
+  firewall it to that machine.
+- **Connector in Docker next to ActivSync:** give the connector container a
+  fixed IP on a shared network, trust that, and drop `ports:`.
+
+If you are unsure which address it connects from, sign in through Pangolin
+once: ActivSync logs `ignored Remote-User from untrusted peer <address>`.
 
 ### Locked out?
 
-Run the recovery commands inside the container:
-
 ```sh
-docker compose exec activsync activsync-auth reset-password       # new password, signs everyone out
-docker compose exec activsync activsync-auth revoke-sessions      # sign everyone out
-docker compose exec activsync activsync-auth disable-oidc         # remove a broken SSO setup
-docker compose exec activsync activsync-auth status               # which methods are on; no secrets
+docker compose exec activsync activsync-auth reset-password    # new password, signs everyone out
+docker compose exec activsync activsync-auth revoke-sessions   # sign everyone out
+docker compose exec activsync activsync-auth disable-oidc      # remove a broken SSO setup
+docker compose exec activsync activsync-auth status            # which methods are on
 ```
 
-`reset-password` and `revoke-sessions` also forget every browser that has
-signed in before.
+**Sign out everywhere** in Settings, or changing your password, also signs out
+every other browser.
 
 ## Exposing ActivSync publicly
 
-- **Put it behind an HTTPS reverse proxy.** Sessions use a `__Host-` cookie
-  marked `Secure` once requests arrive as HTTPS. Set `FORWARDED_ALLOW_IPS` to
-  the proxy's address so ActivSync sees the original scheme and each client's
-  own address. Without it every visitor shares the proxy's address and its
-  sign-in rate limit; with `*` a client can pick the address it is limited
-  under.
-- **Claim it before you publish it.** The setup code is in the server log only,
-  so finding a fresh install is not enough to take it over, but there is no
-  reason to leave it unclaimed.
-- **Set `ACTIVSYNC_PUBLIC_URL`.** OIDC and Strava redirect URIs are then built
-  from it, it becomes the only accepted `Host`, and cross-site requests are
-  checked against it. Without it, ActivSync accepts only IP addresses,
-  `localhost`, and the names listed in `ACTIVSYNC_ALLOWED_HOSTS`, so a web page
-  cannot reach it through a domain that merely resolves to your server (DNS
-  rebinding). Opening it by a LAN name such as `activsync.lan` therefore needs
-  that name in `ACTIVSYNC_ALLOWED_HOSTS`.
-- **Running without Docker?** Start uvicorn with `--no-proxy-headers`, as the
-  image does. ActivSync applies `FORWARDED_ALLOW_IPS` itself, after recording
-  the real connecting address that proxy-header sign-in trusts.
+1. **Claim it first.** The setup code is only in the server log, but there's
+   no reason to leave a fresh install unclaimed online.
+2. **Put it behind an HTTPS reverse proxy** and set:
+   - `ACTIVSYNC_PUBLIC_URL=https://activsync.example.com`: the only host name
+     ActivSync answers to, also used for SSO and Strava redirects.
+   - `FORWARDED_ALLOW_IPS=<your proxy's IP>`: so ActivSync sees HTTPS and each
+     visitor's real IP for sign-in rate limits. Don't use `*`; it lets
+     visitors pick their own IP.
+3. **Opening it by a LAN name** (`activsync.lan`, a `.local` or Tailscale name)
+   without a public URL? Add it to `ACTIVSYNC_ALLOWED_HOSTS`, or every page
+   returns `400 Unknown host`. IP addresses and `localhost` always work.
 
-Upgrading from a version without sign-in: the first start stops at the claim
-step, even though setup was finished before. Read the code from the log as
-above. If you open ActivSync by a host name (through a reverse proxy, a `.local`
-name or a Tailscale name), set `ACTIVSYNC_PUBLIC_URL` or
-`ACTIVSYNC_ALLOWED_HOSTS` first, or every page returns `400 Unknown host`; the
-log names the rejected host. IP addresses and `localhost` keep working.
-ActivSync now also asks Strava for the `read` scope, so the first
-**Connect with Strava** in **Settings → Connections** after upgrading shows
-Strava's consent screen once.
+Running without Docker? Start uvicorn with `--no-proxy-headers`, as the image
+does; ActivSync applies `FORWARDED_ALLOW_IPS` itself.
 
 ## Hevy workouts
 
