@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/secunit404/activsync/compare/v2.1.0...v3.0.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* add authentication for public exposure ([#76](https://github.com/secunit404/activsync/issues/76))
+
+### Features
+
+* add authentication for public exposure ([#76](https://github.com/secunit404/activsync/issues/76)) ([90ba397](https://github.com/secunit404/activsync/commit/90ba3977c09b6247bb4edc1d98d353043a6bb6d1))
+
 ## [2.1.0](https://github.com/secunit404/activsync/compare/v2.0.1...v2.1.0) (2026-10-12)
 
 
