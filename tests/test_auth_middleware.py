@@ -391,9 +391,12 @@ def _call(app, method, path, *, root_path="", headers=None, body=b""):
         "server": ("localhost", 8381),
     }
     sent = []
+    # A real client sends its body once and then disconnects; a receive that
+    # never disconnects makes Starlette's FileResponse wait on it forever.
+    messages = iter([{"type": "http.request", "body": body, "more_body": False}])
 
     async def receive():
-        return {"type": "http.request", "body": body, "more_body": False}
+        return next(messages, {"type": "http.disconnect"})
 
     async def send(message):
         sent.append(message)
