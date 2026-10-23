@@ -111,9 +111,10 @@ The setup wizard shows the exact value to enter. Two things it can't tell you:
 ## Signing in
 
 ActivSync has one user: you. The password you chose when claiming the install
-always works, and the other methods are added on top of it in
-**Settings → Access**. Sessions last 7 days without use and 30 days at most,
-the same limits Grafana uses by default.
+always works, and the other methods are added on top of it: single sign-on in
+**Settings → Access**, a trusted proxy header through environment variables.
+Sessions last 7 days without use and 30 days at most, the same limits Grafana
+uses by default.
 
 - **Password.** At least 15 characters; a few unrelated words make a good
   passphrase. After five wrong guesses each further attempt waits longer, up
