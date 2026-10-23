@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -122,7 +123,36 @@ CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY,
+    public_id TEXT NOT NULL UNIQUE,
+    method TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    ip TEXT NOT NULL DEFAULT '',
+    user_agent TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS auth_oidc_logo (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    png BLOB NOT NULL,
+    sha256 TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 """
+
+
+def resolve_path(*, mock_mode: bool) -> str:
+    configured = os.environ.get("ACTIVSYNC_DB_PATH") or os.environ.get("G2S_DB_PATH")
+    if configured:
+        return configured
+    preferred = "/config/activsync-dev.db" if mock_mode else "/config/activsync.db"
+    legacy = "/config/dev-mock.db" if mock_mode else "/config/garmin2strava.db"
+    if os.path.exists(legacy) and not os.path.exists(preferred):
+        return legacy
+    return preferred
 
 
 def connect(path: str) -> sqlite3.Connection:
@@ -163,6 +193,9 @@ def connect(path: str) -> sqlite3.Connection:
     # them, so this stays in connect() rather than needing a version check.
     conn.execute("DROP TABLE IF EXISTS sessions")
     conn.execute("DELETE FROM app_config WHERE key = 'auth'")
+    # Sign in with Strava never shipped; a leftover session of that method no
+    # longer fits AuthMethod and would fail /auth/status.
+    conn.execute("DELETE FROM auth_sessions WHERE method = 'strava'")
     conn.commit()
     # Hevy sync tables live in their own module; local import avoids a cycle.
     from activsync import hevy_db

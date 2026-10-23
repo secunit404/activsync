@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+from auth_helpers import owner_client
 
 from activsync import db
 from activsync.server import create_app
@@ -17,7 +17,7 @@ def _web_build(tmp_path):
 
 def test_react_build_serves_all_spa_entry_routes_and_assets(tmp_path):
     conn = db.connect(str(tmp_path / "app.db"))
-    client = TestClient(create_app(conn, web_dir=_web_build(tmp_path)))
+    client = owner_client(create_app(conn, web_dir=_web_build(tmp_path)))
 
     for path in ("/", "/setup", "/settings"):
         response = client.get(path, follow_redirects=False)
@@ -33,7 +33,7 @@ def test_react_build_serves_all_spa_entry_routes_and_assets(tmp_path):
 
 def test_apple_touch_icon_is_served_as_png(tmp_path):
     conn = db.connect(str(tmp_path / "app.db"))
-    client = TestClient(create_app(conn, web_dir=_web_build(tmp_path)))
+    client = owner_client(create_app(conn, web_dir=_web_build(tmp_path)))
 
     response = client.get("/apple-touch-icon.png")
 
@@ -44,7 +44,7 @@ def test_apple_touch_icon_is_served_as_png(tmp_path):
 
 def test_spa_fallback_supports_future_client_routes_but_not_unknown_apis(tmp_path):
     conn = db.connect(str(tmp_path / "app.db"))
-    client = TestClient(create_app(conn, web_dir=_web_build(tmp_path)))
+    client = owner_client(create_app(conn, web_dir=_web_build(tmp_path)))
 
     client_route = client.get("/future/deep-link", follow_redirects=False)
     unknown_api = client.get("/api/v1/not-a-route", follow_redirects=False)

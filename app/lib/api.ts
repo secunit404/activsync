@@ -1,4 +1,4 @@
-export type SetupStep = "garmin" | "strava" | "hevy" | "syncing";
+export type SetupStep = "account" | "garmin" | "strava" | "hevy" | "syncing";
 export type PublishStatus =
   | "pending"
   | "held"
@@ -331,10 +331,25 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+export function loginPath(next: string): string {
+  return next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`;
+}
+
+/**
+ * A 401 from anything but the auth endpoints means the session ended. A full
+ * navigation, not a router push, so the in-memory query cache goes with it.
+ */
+function leaveForLogin() {
+  const { pathname, search } = window.location;
+  if (pathname === "/login") return;
+  window.location.assign(loginPath(`${pathname}${search}`));
 }
 
 export function getAppState(signal?: AbortSignal): Promise<AppState> {
@@ -484,6 +499,15 @@ export function disconnectHevy() {
   });
 }
 
+export type AuthorizeUrl = { url: string };
+
+export function startStravaConnect(signal?: AbortSignal): Promise<AuthorizeUrl> {
+  return requestJson<AuthorizeUrl>("/api/v1/settings/strava/authorize", {
+    method: "POST",
+    signal,
+  });
+}
+
 export function disconnectStrava() {
   return requestJson<SettingsActionResult>("/api/v1/settings/strava", {
     method: "DELETE",
@@ -622,15 +646,21 @@ export function restoreActivity(garminActivityId: number) {
   );
 }
 
-async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
+export async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      // The server rejects unsafe requests without it: a cross-site form or
+      // fetch cannot set a custom header without a CORS preflight.
+      "X-ActivSync-Request": "1",
       ...init.headers,
     },
   });
+  if (response.status === 401 && !url.startsWith("/api/v1/auth/")) {
+    leaveForLogin();
+  }
   if (response.status === 204) {
     return undefined as T;
   }
@@ -638,9 +668,14 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
     detail?: string;
   } | null;
   if (!response.ok) {
+    const retryAfter =
+      response.status === 429
+        ? Number(response.headers.get("Retry-After")) || null
+        : null;
     throw new ApiError(
       payload?.detail ?? `ActivSync request failed (${response.status})`,
       response.status,
+      retryAfter,
     );
   }
   return payload as T;

@@ -139,6 +139,24 @@ def test_connection_status_is_healthy_when_both_are_connected(conn):
     assert status["broken"] == []
 
 
+def test_connection_status_flags_a_narrowed_strava_grant(conn):
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    db.set_config_value(conn, "strava_tokens", {"refresh_token": "r", "scope": "read"})
+
+    status = view.connection_status(conn)
+
+    assert status["strava"]["connected"] is True
+    assert status["strava"]["status"] == "Reconnect needed — Strava did not grant upload access"
+    assert status["broken"] == ["strava"]
+
+
+def test_connection_status_trusts_tokens_that_never_recorded_a_scope(conn):
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    db.set_config_value(conn, "strava_tokens", {"refresh_token": "r"})
+
+    assert view.connection_status(conn)["strava"]["status"] == "Connected"
+
+
 def _template(conn, template_id, title, *, is_custom=False, muscle="chest"):
     from activsync import hevy_db
 

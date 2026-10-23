@@ -18,10 +18,11 @@ dev-web:
 	npm run dev:web
 
 # Wipe the dev database first, then run the dev server. Starts at a clean
-# first-run setup wizard so the whole onboarding flow can be tested.
+# first-run setup wizard, claim step included (the setup code is printed in
+# this terminal), so the whole onboarding flow can be tested.
 dev-fresh:
 	rm -f data/activsync-dev.db data/activsync-dev.db-shm data/activsync-dev.db-wal
-	$(MAKE) dev
+	ACTIVSYNC_DEV_SEED_OWNER=0 $(MAKE) dev
 
 # Run the development branch against real account state. Garmin and Strava
 # polling stay disabled; the Hevy leg runs with matched workouts held for an

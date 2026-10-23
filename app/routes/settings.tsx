@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router";
 
+import { AccessSettings } from "@/components/settings-access";
 import { CategorySettings } from "@/components/settings-categories";
 import { ConnectionsSettings } from "@/components/settings-connections";
 import { SettingsFooter } from "@/components/settings-footer";
@@ -12,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { useSettingsAction } from "@/hooks/use-settings-action";
 import { useSettingsDrafts } from "@/hooks/use-settings-drafts";
+import { LOGIN_ERRORS } from "@/lib/auth-errors";
 import { hevyDraftToPayload } from "@/lib/hevy-draft";
 import {
   getSettings,
@@ -77,6 +79,7 @@ export default function Settings() {
     <SettingsView
       state={settings.data}
       stravaError={searchParams.get("stravaError")}
+      oidcError={searchParams.get("oidcError")}
     />
   );
 }
@@ -84,9 +87,11 @@ export default function Settings() {
 export function SettingsView({
   state,
   stravaError,
+  oidcError,
 }: {
   state: SettingsState;
   stravaError?: string | null;
+  oidcError?: string | null;
 }) {
   const drafts = useSettingsDrafts(state);
   const savePreferencesAction = useSettingsAction(savePreferences);
@@ -125,8 +130,18 @@ export function SettingsView({
           <AlertDescription>{stravaError}</AlertDescription>
         </Alert>
       ) : null}
+      {oidcError ? (
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertTitle>Linking single sign-on failed</AlertTitle>
+          <AlertDescription>
+            {LOGIN_ERRORS[oidcError] ?? "Linking failed. Try again."}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="grid gap-5">
         <ConnectionsSettings state={state} />
+        <AccessSettings />
         <PreferencesSettings
           state={state}
           draft={drafts.preferencesDraft}

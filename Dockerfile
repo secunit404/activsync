@@ -52,4 +52,7 @@ EXPOSE 8381
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8381/health', timeout=3).status == 200 else 1)"
 
-CMD ["uvicorn", "activsync.main:app", "--host", "0.0.0.0", "--port", "8381"]
+# The app installs uvicorn's ProxyHeadersMiddleware itself, behind a capture
+# of the raw socket peer that proxy-header sign-in trusts; uvicorn's own copy
+# would rewrite the peer before the app could see it.
+CMD ["uvicorn", "activsync.main:app", "--host", "0.0.0.0", "--port", "8381", "--no-proxy-headers"]

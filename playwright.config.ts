@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { OWNER_STATE } from "./e2e/auth";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -12,6 +14,22 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
+    // Auth is on in the E2E server, as in production. auth-setup signs in
+    // once as the mock seed's owner and saves the cookie to OWNER_STATE,
+    // which every later project loads. auth.spec.ts runs next, alone: its
+    // claim test drops and re-creates that owner, so nothing may run beside
+    // it.
+    {
+      name: "auth-setup",
+      testMatch: /auth\.setup\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
+    {
+      name: "auth",
+      testMatch: /auth\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      dependencies: ["auth-setup"],
+    },
     // e2e/setup.spec.ts drives the first-run wizard, which requires
     // flipping the shared dev-mock server's onboarding flag off and back on
     // via POST /api/v1/dev/onboarding-state (see settings_api_routes.py).
@@ -24,18 +42,19 @@ export default defineConfig({
     {
       name: "setup-desktop",
       testMatch: /setup\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, storageState: OWNER_STATE },
+      dependencies: ["auth"],
     },
     {
       name: "setup-tablet",
       testMatch: /setup\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 834, height: 1112 } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 834, height: 1112 }, storageState: OWNER_STATE },
       dependencies: ["setup-desktop"],
     },
     {
       name: "setup-mobile",
       testMatch: /setup\.spec\.ts$/,
-      use: { ...devices["Pixel 7"] },
+      use: { ...devices["Pixel 7"], storageState: OWNER_STATE },
       dependencies: ["setup-tablet"],
     },
     // e2e/hevy-queue.spec.ts, e2e/backfill.spec.ts, and
@@ -60,19 +79,19 @@ export default defineConfig({
     {
       name: "hevy-queue",
       testMatch: /hevy-queue\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, storageState: OWNER_STATE },
       dependencies: ["setup-mobile"],
     },
     {
       name: "hevy-backfill",
       testMatch: /backfill\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, storageState: OWNER_STATE },
       dependencies: ["hevy-queue"],
     },
     {
       name: "strava-publish",
       testMatch: /strava-publish\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, storageState: OWNER_STATE },
       dependencies: ["hevy-backfill"],
     },
     // e2e/toast.spec.ts drives its toasts through bulk Exclude, which is a
@@ -86,25 +105,25 @@ export default defineConfig({
     {
       name: "toast",
       testMatch: /toast\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, storageState: OWNER_STATE },
       dependencies: ["strava-publish"],
     },
     {
       name: "desktop",
-      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast)\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast|auth)\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, storageState: OWNER_STATE },
       dependencies: ["toast"],
     },
     {
       name: "tablet",
-      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast)\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 834, height: 1112 } },
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast|auth)\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 834, height: 1112 }, storageState: OWNER_STATE },
       dependencies: ["toast"],
     },
     {
       name: "mobile",
-      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast)\.spec\.ts$/,
-      use: { ...devices["Pixel 7"] },
+      testIgnore: /(setup|hevy-queue|backfill|strava-publish|toast|auth)\.spec\.ts$/,
+      use: { ...devices["Pixel 7"], storageState: OWNER_STATE },
       dependencies: ["toast"],
     },
   ],

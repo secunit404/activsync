@@ -700,12 +700,15 @@ class FakeStravaClient:
         separator = "&" if "?" in redirect_uri else "?"
         return f"{redirect_uri}{separator}code=dev-mock-code&state={state}"
 
-    def exchange_code(self, code: str) -> None:
-        db.set_config_value(self._conn, "strava_tokens", {
+    def exchange_code(self, code: str, *, granted_scope: str | None = None) -> None:
+        tokens = {
             "access_token": "dev-mock-access-token",
             "refresh_token": "dev-mock-refresh-token",
             "expires_at": int(time.time()) + 6 * 3600,
-        })
+        }
+        if granted_scope is not None:
+            tokens["scope"] = granted_scope
+        db.set_config_value(self._conn, "strava_tokens", tokens)
 
     def disconnect(self) -> None:
         db.set_config_value(self._conn, "strava_tokens", None)

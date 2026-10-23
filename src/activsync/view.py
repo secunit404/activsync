@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import sqlite3
 
 from activsync import config, db, timeutil
+from activsync.strava_client import scope_is_sufficient
 
 GARMIN_ACTIVITY_URL = "https://connect.garmin.com/modern/activity/{}"
 STRAVA_ACTIVITY_URL = "https://www.strava.com/activities/{}"
@@ -473,6 +474,7 @@ def connection_status(conn: sqlite3.Connection, now: datetime | None = None) -> 
     )
     tokens = db.get_config_value(conn, "strava_tokens") or {}
     strava_connected = bool(tokens.get("refresh_token"))
+    strava_scope_ok = scope_is_sufficient(tokens.get("scope"))
 
     if garmin_connected:
         gs = garmin_status(conn, now)
@@ -481,9 +483,19 @@ def connection_status(conn: sqlite3.Connection, now: datetime | None = None) -> 
         garmin_line = {"status": "Disconnected — sync paused", "meta": ""}
 
     broken = [
-        name for name, ok in (("garmin", garmin_connected), ("strava", strava_connected))
+        name
+        for name, ok in (
+            ("garmin", garmin_connected),
+            ("strava", strava_connected and strava_scope_ok),
+        )
         if not ok
     ]
+    if not strava_connected:
+        strava_status = "Disconnected — publishing paused"
+    elif not strava_scope_ok:
+        strava_status = "Reconnect needed — Strava did not grant upload access"
+    else:
+        strava_status = "Connected"
     return {
         "garmin": {
             "connected": garmin_connected,
@@ -493,7 +505,7 @@ def connection_status(conn: sqlite3.Connection, now: datetime | None = None) -> 
         },
         "strava": {
             "connected": strava_connected,
-            "status": "Connected" if strava_connected else "Disconnected — publishing paused",
+            "status": strava_status,
             "meta": "",
         },
         "broken": broken,

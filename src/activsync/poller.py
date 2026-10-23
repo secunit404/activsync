@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from activsync import (
+    auth_core,
     config,
     db,
     events,
@@ -28,6 +29,7 @@ from activsync.strava_client import StravaClient, StravaRateLimitError
 logger = logging.getLogger("activsync.poller")
 
 _DEFAULT_TICK_SECONDS = 60
+_SESSION_PRUNE_SECONDS = 3600
 _HEVY_UPLOAD_RECHECK_SECONDS = 60
 
 
@@ -63,6 +65,7 @@ class Poller:
         self._last_strava_run: datetime | None = None
         self._last_hevy_run: datetime | None = None
         self._strava_backoff_until: datetime | None = None
+        self._last_session_prune: datetime | None = None
 
     def _get_garmin(self, now: datetime) -> GarminClient:
         """Build a token-only client and durably pause on an expired session."""
@@ -236,7 +239,16 @@ class Poller:
         connection, and a concurrent poll would interleave with it."""
         return bool(db.get_config_value(self._conn, "initial_sync_done", default=False))
 
+    def _prune_sessions(self, now: datetime) -> None:
+        if self._due(self._last_session_prune, now, _SESSION_PRUNE_SECONDS):
+            try:
+                auth_core.prune_expired_sessions(self._conn, now.timestamp())
+            except Exception:
+                logger.exception("session prune failed")
+            self._last_session_prune = now
+
     def _loop_once(self, now: datetime) -> None:
+        self._prune_sessions(now)
         if not self._ready_for_polling():
             return
 
@@ -317,7 +329,10 @@ class Poller:
 
     def _loop(self) -> None:
         while not self._stop_event.is_set():
-            self._loop_once(datetime.now(timezone.utc))
+            try:
+                self._loop_once(datetime.now(timezone.utc))
+            except Exception:
+                logger.exception("poll tick failed")
             self._stop_event.wait(self._tick_seconds)
 
     def start(self) -> None:

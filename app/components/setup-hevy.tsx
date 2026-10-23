@@ -11,14 +11,14 @@ export type HevyStepProps = {
   onSkip: () => Promise<unknown>;
 };
 
-/** Step 3: Hevy is optional — connect it now or skip and add it later. */
+/** Step 4: Hevy is optional — connect it now or skip and add it later. */
 export function HevyStep({ pending, onConnect, onSkip }: HevyStepProps) {
   const [apiKey, setApiKey] = useState("");
   return (
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 3: Hevy
+          Step 4: Hevy
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Connect Hevy (optional)

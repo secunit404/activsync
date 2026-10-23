@@ -223,8 +223,21 @@ body {
  * rendering fault.
  */
 .overlay-scroll {
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 50%) transparent;
+}
+
+/*
+ * Radix's scroll lock (react-remove-scroll-bar) adds the scrollbar's width as
+ * margin-right on <body> so content doesn't widen when the bar disappears.
+ * `scrollbar-gutter: stable` above already keeps that space, so the margin
+ * counted it twice and every dialog, sheet, select and menu nudged the page
+ * sideways. The `html` prefix outranks the library's own !important rule.
+ */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  --removed-body-scroll-bar-size: 0px;
 }
 
 

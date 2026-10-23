@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon, CheckIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, Navigate, useSearchParams } from "react-router";
 
+import { AccountStep } from "@/components/setup-account";
 import { GarminStep } from "@/components/setup-garmin";
 import { HevyStep } from "@/components/setup-hevy";
 import { SetupStepDots } from "@/components/setup-step-dots";
@@ -10,12 +11,14 @@ import { StravaStep } from "@/components/setup-strava";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useAuthStatus } from "@/hooks/use-auth-status";
 import { useSettingsAction } from "@/hooks/use-settings-action";
 import { cn } from "@/lib/utils";
 import {
   cancelGarminMfa,
   completeGarminMfa,
   getSettings,
+  loginPath,
   runInitialSync,
   saveStravaCredentials,
   setupGarmin,
@@ -31,6 +34,43 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export default function Setup() {
+  const status = useAuthStatus();
+
+  if (status.isPending) {
+    return (
+      <WizardCard className="min-h-[420px] items-center justify-center gap-3 text-muted-foreground">
+        <Spinner /> Loading setup…
+      </WizardCard>
+    );
+  }
+  if (status.isError) {
+    return (
+      <WizardCard className="gap-5 p-7 md:p-10">
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertTitle>Couldn’t load setup</AlertTitle>
+          <AlertDescription>{status.error.message}</AlertDescription>
+        </Alert>
+      </WizardCard>
+    );
+  }
+  if (!status.data.ownerClaimed && !status.data.authDisabled) {
+    return (
+      <WizardCard className="md:flex-row">
+        <SetupStepDots step="account" />
+        <main className="flex flex-1 flex-col gap-6 px-5 py-7 md:overflow-y-auto md:px-[46px] md:py-11">
+          <AccountStep />
+        </main>
+      </WizardCard>
+    );
+  }
+  if (!status.data.authenticated) {
+    return <Navigate to={loginPath("/setup")} replace />;
+  }
+  return <SignedInSetup />;
+}
+
+function SignedInSetup() {
   const [searchParams] = useSearchParams();
   const settings = useQuery({
     queryKey: queryKeys.settings,
@@ -126,7 +166,6 @@ export function SetupView({
             pending={strava.isPending}
             onSave={async (payload) => {
               await strava.mutateAsync(payload);
-              window.location.assign("/strava/connect");
             }}
           />
         ) : null}
@@ -183,7 +222,7 @@ function SyncStep({
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 4: Sync
+          Step 5: Sync
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Ready for the first sync

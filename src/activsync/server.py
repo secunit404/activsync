@@ -7,17 +7,26 @@ import logging
 import os
 import secrets
 import sqlite3
+import time
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlencode
 
+import httpx2
 import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from activsync import (
     api_routes,
+    auth_api_routes,
+    auth_core,
+    auth_middleware,
+    auth_oauth_routes,
+    auth_oidc,
     db,
     dev_mock,
     events,
@@ -26,6 +35,7 @@ from activsync import (
     onboarding,
     settings_api_routes,
 )
+from activsync.auth_api_routes import AuthorizeUrl
 from activsync.garmin_client import (
     GarminClient,
     begin_login as garmin_begin_login,
@@ -33,13 +43,13 @@ from activsync.garmin_client import (
     get_client as get_garmin_raw_client,
 )
 from activsync.hevy_client import HevyClient
-from activsync.strava_client import StravaAuthError, StravaClient
+from activsync.strava_client import StravaAuthError, StravaClient, scope_is_sufficient
 
 logger = logging.getLogger("activsync.server")
 
 STATIC_DIR = Path(__file__).parent / "static"
 WEB_DIR = Path(__file__).parent / "web"
-SPA_RESERVED_PREFIXES = ("api", "assets", "strava")
+SPA_RESERVED_PREFIXES = auth_middleware.SPA_RESERVED_PREFIXES
 
 
 def _garmin_token_dir() -> str:
@@ -100,10 +110,28 @@ def create_app(
     web_dir: Path | None = None,
     apply_hevy_match: Callable[[str, str], str] | None = None,
     process_hevy_workout: Callable[[str], str] | None = None,
+    oidc_transport: httpx2.AsyncBaseTransport | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="ActivSync", lifespan=lifespan)
+    # No /docs or /openapi.json: deny-by-default would otherwise serve them
+    # through the SPA rule's public GET fallback.
+    app = FastAPI(
+        title="ActivSync",
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     resolved_web_dir = web_dir or WEB_DIR
     react_index = resolved_web_dir / "index.html"
+    public_url = auth_core.public_url()
+    proxy = auth_middleware.ProxyAuthConfig.from_env(os.environ)
+    if proxy:
+        proxy.warn_if_trusting_gateway()
+    setup_code = auth_core.SetupCode(conn)
+    setup_code.ensure()
+    auth_core.prune_expired_sessions(conn, time.time())
+    app.state.db = conn
+    app.state.setup_code = setup_code
 
     if (resolved_web_dir / "assets").is_dir():
         app.mount(
@@ -145,6 +173,23 @@ def create_app(
         hevy_queue_api_routes.create_router(
             conn,
             apply_hevy_match=apply_hevy_match,
+        )
+    )
+    app.include_router(
+        auth_api_routes.create_router(
+            conn,
+            setup_code=setup_code,
+            limiter=auth_core.AttemptLimiter(),
+            public_url=public_url,
+            proxy=proxy,
+            mock_mode=_mock_mode,
+        )
+    )
+    app.include_router(
+        auth_oauth_routes.create_router(
+            conn,
+            oidc=auth_oidc.OidcProvider(conn, transport=oidc_transport),
+            public_url=public_url,
         )
     )
 
@@ -197,24 +242,26 @@ def create_app(
         query = urlencode({"stravaError": message})
         return RedirectResponse(f"{strava_landing_target()}?{query}", status_code=303)
 
-    @app.get("/strava/connect")
-    def strava_connect(request: Request):
+    @app.post("/api/v1/settings/strava/authorize", response_model=AuthorizeUrl)
+    def strava_connect(request: Request) -> AuthorizeUrl:
         credentials = db.get_config_value(conn, "strava_credentials") or {}
         if not credentials.get("client_id") or not credentials.get("client_secret"):
-            return strava_error(
-                "Save your Strava client ID and client secret before connecting."
+            raise HTTPException(
+                status_code=409,
+                detail="Save your Strava client ID and client secret before connecting.",
             )
         strava = _build_strava_client(conn)
-        redirect_uri = str(request.url_for("strava_callback"))
+        redirect_uri = auth_middleware.external_url(request, "strava_callback", public_url)
         state = secrets.token_urlsafe(32)
         db.set_config_value(conn, "strava_oauth_state", state)
-        return RedirectResponse(strava.authorize_url(redirect_uri, state))
+        return AuthorizeUrl(url=strava.authorize_url(redirect_uri, state))
 
     @app.get("/strava/callback")
     def strava_callback(
         code: str | None = None,
         state: str | None = None,
         error: str | None = None,
+        scope: str | None = None,
     ):
         expected_state = db.get_config_value(conn, "strava_oauth_state")
         db.set_config_value(conn, "strava_oauth_state", None)
@@ -242,12 +289,18 @@ def create_app(
 
         strava = _build_strava_client(conn)
         try:
-            strava.exchange_code(code)
+            strava.exchange_code(code, granted_scope=scope)
         except (requests.RequestException, StravaAuthError) as exc:
             logger.warning("strava code exchange failed: %s", exc)
             return strava_error(
                 "Could not complete the Strava connection. Check your client ID "
                 "and client secret, then try again."
+            )
+
+        if not scope_is_sufficient(scope):
+            return strava_error(
+                "Strava didn't grant upload access. Press Connect with Strava "
+                "again and leave both permissions ticked."
             )
 
         if onboarding.setup_step(conn) is not None:
@@ -270,4 +323,38 @@ def create_app(
             headers={"Cache-Control": "no-cache"},
         )
 
+    # Starlette runs the last-added middleware first, so this reads bottom-up
+    # as the request pipeline: peer capture, proxy headers, public scheme,
+    # security headers, authentication, CSRF, then the short-lived OAuth-state
+    # cookie Authlib keeps state, nonce and PKCE in.
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=auth_core.state_secret(conn),
+        session_cookie="activsync_oauth",
+        max_age=600,
+        same_site="lax",
+        https_only=bool(public_url and public_url.startswith("https://")),
+    )
+    app.add_middleware(auth_middleware.CsrfMiddleware, public_url=public_url)
+    app.add_middleware(
+        auth_middleware.AuthenticateMiddleware,
+        conn=conn,
+        public_url=public_url,
+        allowed_hosts=auth_core.allowed_hosts(),
+        proxy=proxy,
+    )
+    app.add_middleware(
+        auth_middleware.SecurityHeadersMiddleware,
+        content_security_policy=auth_middleware.content_security_policy(react_index),
+    )
+    app.add_middleware(auth_middleware.PublicSchemeMiddleware, public_url=public_url)
+    # The app owns proxy-header handling (uvicorn runs with --no-proxy-headers)
+    # so PeerCapture can record the real socket peer first: uvicorn's '*'
+    # takes the leftmost, client-controlled X-Forwarded-For entry, and that
+    # rewritten address must never decide who may assert the proxy header.
+    app.add_middleware(
+        ProxyHeadersMiddleware,
+        trusted_hosts=os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1"),
+    )
+    app.add_middleware(auth_middleware.PeerCaptureMiddleware)
     return app

@@ -1,0 +1,127 @@
+import time
+
+import pytest
+
+from activsync import auth_cli, auth_core, auth_devices, auth_oidc, db
+
+PASSWORD = "correct horse battery staple"
+
+
+@pytest.fixture
+def conn(tmp_path, monkeypatch):
+    path = tmp_path / "cli.db"
+    monkeypatch.setenv("ACTIVSYNC_DB_PATH", str(path))
+    return db.connect(str(path))
+
+
+def _answers(monkeypatch, *values):
+    replies = iter(values)
+    monkeypatch.setattr(auth_cli.getpass, "getpass", lambda prompt="": next(replies))
+
+
+def test_reset_password_sets_it_and_signs_everyone_out(conn, monkeypatch, capsys):
+    auth_core.set_password(conn, PASSWORD, time.time())
+    auth_core.create_session(conn, method="password", ip="", user_agent="", now=time.time())
+    for _ in range(7):
+        auth_core.record_failure(conn, time.time())
+    _answers(monkeypatch, "a brand new passphrase", "a brand new passphrase")
+
+    assert auth_cli.main(["reset-password"]) == 0
+
+    assert auth_core.verify_password(conn, "a brand new passphrase") is True
+    assert auth_core.list_sessions(conn) == []
+    assert auth_core.throttle_wait(conn, time.time()) == 0
+    assert "signed out" in capsys.readouterr().out
+
+
+def test_reset_password_forgets_trusted_devices(conn, monkeypatch):
+    auth_core.set_password(conn, PASSWORD, time.time())
+    device_id = auth_devices.trust_device(conn, time.time())
+    _answers(monkeypatch, "a brand new passphrase", "a brand new passphrase")
+
+    assert auth_cli.main(["reset-password"]) == 0
+
+    assert auth_devices.is_trusted(conn, device_id) is False
+
+
+def test_reset_password_refuses_a_mismatch_or_a_short_password(conn, monkeypatch):
+    auth_core.set_password(conn, PASSWORD, time.time())
+    device_id = auth_devices.trust_device(conn, time.time())
+
+    _answers(monkeypatch, "a brand new passphrase", "something else entirely")
+    assert auth_cli.main(["reset-password"]) == 1
+    _answers(monkeypatch, "short")
+    assert auth_cli.main(["reset-password"]) == 1
+    assert auth_core.verify_password(conn, PASSWORD) is True
+    assert auth_devices.is_trusted(conn, device_id) is True
+
+
+def test_revoke_sessions(conn, capsys):
+    for _ in range(2):
+        auth_core.create_session(conn, method="password", ip="", user_agent="", now=time.time())
+
+    assert auth_cli.main(["revoke-sessions"]) == 0
+
+    assert auth_core.list_sessions(conn) == []
+    assert "Signed out 2 session(s)." in capsys.readouterr().out
+
+
+def test_revoke_sessions_forgets_trusted_devices_like_sign_out_everywhere(conn):
+    device_id = auth_devices.trust_device(conn, time.time())
+
+    assert auth_cli.main(["revoke-sessions"]) == 0
+
+    assert auth_devices.is_trusted(conn, device_id) is False
+
+
+def test_disable_oidc_signs_out_single_sign_on_sessions_only(conn, capsys):
+    auth_oidc.save_config(
+        conn,
+        display_name="Pocket ID",
+        issuer="https://id.example.com",
+        client_id="activsync",
+        client_secret="very-secret-value",
+        scopes="openid",
+        auto_redirect=False,
+    )
+    auth_oidc.set_linked(conn, iss="https://id.example.com", sub="owner-sub", label="andreas")
+    sso = auth_core.create_session(conn, method="oidc", ip="", user_agent="", now=time.time())
+    password = auth_core.create_session(
+        conn, method="password", ip="", user_agent="", now=time.time()
+    )
+
+    assert auth_cli.main(["disable-oidc"]) == 0
+
+    assert auth_oidc.load_config(conn) is None
+    assert auth_core.resolve_session(conn, sso, time.time()) is None
+    assert auth_core.resolve_session(conn, password, time.time()) is not None
+    assert "Single sign-on removed" in capsys.readouterr().out
+
+
+def test_status_never_prints_the_hash(conn, capsys):
+    auth_core.set_password(conn, PASSWORD, time.time())
+
+    assert auth_cli.main(["status"]) == 0
+
+    out = capsys.readouterr().out
+    assert "Owner claimed:        yes" in out
+    assert "Active sessions:      0" in out
+    assert db.get_config_value(conn, "auth_owner")["password_hash"] not in out
+
+
+def test_db_path_follows_the_server(monkeypatch, tmp_path):
+    monkeypatch.delenv("ACTIVSYNC_DB_PATH", raising=False)
+    monkeypatch.delenv("G2S_DB_PATH", raising=False)
+    assert db.resolve_path(mock_mode=False) == "/config/activsync.db"
+    monkeypatch.setenv("G2S_DB_PATH", str(tmp_path / "legacy.db"))
+    assert db.resolve_path(mock_mode=False) == str(tmp_path / "legacy.db")
+
+
+def test_status_describes_the_proxy_from_the_environment(conn, monkeypatch, capsys):
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User")
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_TRUSTED", "172.18.0.10/32")
+    monkeypatch.setenv("ACTIVSYNC_AUTH_PROXY_USER", "andreas")
+
+    assert auth_cli.main(["status"]) == 0
+
+    assert "Proxy header:         Remote-User from 172.18.0.10/32" in capsys.readouterr().out

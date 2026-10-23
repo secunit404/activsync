@@ -27,7 +27,7 @@ export type GarminStepProps = {
 };
 
 /**
- * Step 1: Garmin sign-in (frame `2d`) plus the MFA prompt (frame `3c`),
+ * Step 2: Garmin sign-in (frame `2d`) plus the MFA prompt (frame `3c`),
  * layered on top as a `ResponsiveOverlay` rather than swapping the step's
  * own content — the overlay opens the instant `state.setup.mfaRequired`
  * comes back true and closes on verify, cancel, or any other dismissal.
@@ -111,7 +111,7 @@ export function GarminStep({
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 1: Garmin
+          Step 2: Garmin
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Connect your Garmin account

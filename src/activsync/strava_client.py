@@ -32,6 +32,14 @@ MAX_ACTIVITY_PAGES = 10
 
 DEFAULT_MATCH_TOLERANCE_MINUTES = 5
 
+# `read` is listed explicitly because Strava only treats a repeat authorization
+# as already granted (and skips the consent screen) when the request names every
+# scope it grants, and it always grants `read`. activity:read_all, not just
+# activity:read, so duplicate detection also sees activities the athlete has
+# marked private.
+STRAVA_SCOPE = "read,activity:write,activity:read_all"
+REQUIRED_SCOPES = frozenset({"activity:write", "activity:read_all"})
+
 
 class StravaAuthError(Exception):
     """Raised when Strava rejects our credentials or refresh token."""
@@ -106,6 +114,14 @@ def _raise_if_rate_limited(response, now: datetime | None = None) -> None:
     )
 
 
+def scope_is_sufficient(granted: str | None) -> bool:
+    """`None` means the grant was never reported, as for tokens stored before
+    scopes were recorded; only a reported, narrower grant is a problem."""
+    if granted is None:
+        return True
+    return REQUIRED_SCOPES <= set(granted.split(","))
+
+
 def _parse_start_date(raw: str) -> datetime:
     return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
@@ -143,19 +159,16 @@ class StravaClient:
         return bool(tokens and tokens.get("refresh_token"))
 
     def authorize_url(self, redirect_uri: str, state: str) -> str:
-        # activity:read_all (not just activity:read) so duplicate-detection
-        # also sees activities the athlete has marked private — otherwise a
-        # private duplicate wouldn't be found and we'd re-upload it anyway.
         # `state` is echoed back to the callback unchanged; the caller keeps
         # the issued value and rejects any callback that doesn't match.
         return (
             f"{STRAVA_AUTHORIZE_URL}?client_id={self._client_id}"
             f"&redirect_uri={redirect_uri}&response_type=code"
-            f"&approval_prompt=auto&scope=activity:write,activity:read_all"
+            f"&approval_prompt=auto&scope={STRAVA_SCOPE}"
             f"&state={state}"
         )
 
-    def exchange_code(self, code: str) -> None:
+    def exchange_code(self, code: str, *, granted_scope: str | None = None) -> None:
         response = requests.post(STRAVA_TOKEN_URL, data={
             "client_id": self._client_id,
             "client_secret": self._client_secret,
@@ -164,11 +177,14 @@ class StravaClient:
         }, timeout=30)
         response.raise_for_status()
         payload = response.json()
-        db.set_config_value(self._conn, "strava_tokens", {
+        tokens = {
             "access_token": payload["access_token"],
             "refresh_token": payload["refresh_token"],
             "expires_at": payload["expires_at"],
-        })
+        }
+        if granted_scope is not None:
+            tokens["scope"] = granted_scope
+        db.set_config_value(self._conn, "strava_tokens", tokens)
         logger.info("strava connected")
 
     def _get_access_token(self) -> str:
@@ -191,6 +207,7 @@ class StravaClient:
 
         payload = response.json()
         refreshed = {
+            **tokens,
             "access_token": payload["access_token"],
             "refresh_token": payload["refresh_token"],
             "expires_at": payload["expires_at"],

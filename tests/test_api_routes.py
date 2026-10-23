@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
-from fastapi.testclient import TestClient
+from auth_helpers import owner_client
 
 from activsync import api_routes, config, db, hevy_db
 from activsync import server as server_module
@@ -22,7 +22,7 @@ def _connect_publish_services(conn):
 
 def test_app_state_starts_at_garmin_setup(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
-    response = TestClient(create_app(conn)).get("/api/v1/app")
+    response = owner_client(create_app(conn)).get("/api/v1/app")
 
     assert response.status_code == 200
     payload = response.json()
@@ -48,7 +48,7 @@ def test_app_state_reports_connected_services_and_hevy(tmp_path, monkeypatch):
     db.set_config_value(conn, "settings", {"hevy_enabled": True})
     monkeypatch.setenv("ACTIVSYNC_DEV_MOCK_DATA", "1")
 
-    response = TestClient(create_app(conn)).get("/api/v1/app")
+    response = owner_client(create_app(conn)).get("/api/v1/app")
 
     assert response.status_code == 200
     payload = response.json()
@@ -70,7 +70,7 @@ def test_app_state_exposes_and_dismisses_reconnect_report(tmp_path):
         "catch_up_report",
         {"new": 4, "held": 3, "linked": 1, "days": 12},
     )
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     before = client.get("/api/v1/app")
     dismissed = client.delete("/api/v1/catch-up-report")
@@ -104,7 +104,7 @@ def test_hevy_match_choice_runs_one_injected_strategy(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     _seed_awaiting_hevy_match(conn)
     calls = []
-    client = TestClient(
+    client = owner_client(
         create_app(
             conn,
             apply_hevy_match=lambda hevy_id, strategy: (
@@ -159,7 +159,7 @@ def test_hevy_workout_detail_exposes_stored_sets_and_description_preview(tmp_pat
         },
     )
 
-    response = TestClient(create_app(conn)).get("/api/v1/hevy/hevy-detail")
+    response = owner_client(create_app(conn)).get("/api/v1/hevy/hevy-detail")
 
     assert response.status_code == 200
     payload = response.json()
@@ -200,7 +200,7 @@ def test_hevy_workout_detail_exposes_stored_sets_and_description_preview(tmp_pat
 def test_hevy_workout_detail_rejects_unknown_workout(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
 
-    response = TestClient(create_app(conn)).get("/api/v1/hevy/missing")
+    response = owner_client(create_app(conn)).get("/api/v1/hevy/missing")
 
     assert response.status_code == 404
 
@@ -208,7 +208,7 @@ def test_hevy_workout_detail_rejects_unknown_workout(tmp_path):
 def test_hevy_match_choice_rejects_unknown_strategy(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     _seed_awaiting_hevy_match(conn)
-    client = TestClient(create_app(conn, apply_hevy_match=lambda *_: "merged"))
+    client = owner_client(create_app(conn, apply_hevy_match=lambda *_: "merged"))
 
     response = client.post(
         "/api/v1/hevy/hevy-match/match", json={"strategy": "erase"}
@@ -223,7 +223,7 @@ def test_hevy_match_choice_requires_awaiting_state(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     _seed_awaiting_hevy_match(conn)
     hevy_db.set_workout_status(conn, "hevy-match", "merged")
-    client = TestClient(create_app(conn, apply_hevy_match=lambda *_: "merged"))
+    client = owner_client(create_app(conn, apply_hevy_match=lambda *_: "merged"))
 
     response = client.post(
         "/api/v1/hevy/hevy-match/match", json={"strategy": "merge"}
@@ -250,7 +250,7 @@ def test_hevy_match_choice_rejects_replace_for_published_activity(tmp_path):
     db.set_published(conn, 123, 456, datetime.now(timezone.utc))
     assert hevy_db.claim_source(conn, "hevy-match", 123)
     apply_match = MagicMock(return_value="replaced")
-    client = TestClient(create_app(conn, apply_hevy_match=apply_match))
+    client = owner_client(create_app(conn, apply_hevy_match=apply_match))
 
     response = client.post(
         "/api/v1/hevy/hevy-match/match", json={"strategy": "replace"}
@@ -268,7 +268,7 @@ def test_hevy_match_choice_marks_rejected_key_for_reconnect(tmp_path):
     def reject_key(_hevy_id, _strategy):
         raise HevyAuthError("bad key")
 
-    client = TestClient(create_app(conn, apply_hevy_match=reject_key))
+    client = owner_client(create_app(conn, apply_hevy_match=reject_key))
 
     response = client.post(
         "/api/v1/hevy/hevy-match/match", json={"strategy": "describe"}
@@ -296,7 +296,7 @@ def test_skipping_an_awaiting_match_releases_its_garmin_claim(tmp_path):
     )
     db.set_published(conn, 123, 456, datetime.now(timezone.utc))
     assert hevy_db.claim_source(conn, "hevy-match", 123)
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     queue = client.get("/api/v1/hevy/queue")
     response = client.post("/api/v1/hevy/hevy-match/skip")
@@ -331,7 +331,7 @@ def test_hevy_queue_json_actions_without_an_open_operation(tmp_path):
             {"exercises": []},
         )
         hevy_db.set_workout_status(conn, hevy_id, status, error=error)
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     queue = client.get("/api/v1/hevy/queue")
     retried = client.post("/api/v1/hevy/needs-map/retry")
@@ -384,7 +384,7 @@ def test_activities_page_filters_sorts_and_uses_camel_case(tmp_path):
     )
     db.set_published(conn, 2, 987654, now)
 
-    response = TestClient(create_app(conn)).get(
+    response = owner_client(create_app(conn)).get(
         "/api/v1/activities?sort=oldest&status=held&pageSize=10"
     )
 
@@ -430,7 +430,7 @@ def test_activities_page_clamps_to_last_page_and_builds_strava_link(tmp_path):
         )
         db.set_published(conn, activity_id, 9000 + activity_id, now)
 
-    response = TestClient(create_app(conn)).get(
+    response = owner_client(create_app(conn)).get(
         "/api/v1/activities?page=99&pageSize=10"
     )
 
@@ -481,7 +481,7 @@ def test_activities_week_total_sums_current_week_excluding_excluded(tmp_path, mo
     add(3, monday, 99 * 60, "excluded")    # must not count
     add(4, last_week, 60 * 60, "pending")  # must not count
 
-    response = TestClient(create_app(conn)).get("/api/v1/activities")
+    response = owner_client(create_app(conn)).get("/api/v1/activities")
 
     assert response.status_code == 200
     assert response.json()["weekTotal"] == {"seconds": 3720, "display": "1h 02m"}
@@ -519,7 +519,7 @@ def test_activities_week_total_uses_configured_timezone_for_week_boundary(
             boundary_start,
             garmin_data='{"duration": 1800}',
         )
-        response = TestClient(create_app(conn)).get("/api/v1/activities")
+        response = owner_client(create_app(conn)).get("/api/v1/activities")
         return response.json()["weekTotal"]["seconds"]
 
     assert week_total_seconds_for("UTC") == 1800
@@ -564,7 +564,7 @@ def test_activities_week_total_sums_float_durations_without_per_row_truncation(
     add(2, 100.9)
     add(3, 100.9)
 
-    response = TestClient(create_app(conn)).get("/api/v1/activities")
+    response = owner_client(create_app(conn)).get("/api/v1/activities")
 
     assert response.status_code == 200
     # 100.9 * 3 == 302.7 -> rounds to 303, not 300 (3 x int(100.9)).
@@ -608,7 +608,7 @@ def test_activities_week_total_excludes_future_dated_activity(tmp_path, monkeypa
     add(1, this_week, 30 * 60)
     add(2, next_week, 45 * 60)  # future-dated, must not count
 
-    response = TestClient(create_app(conn)).get("/api/v1/activities")
+    response = owner_client(create_app(conn)).get("/api/v1/activities")
 
     assert response.status_code == 200
     assert response.json()["weekTotal"] == {"seconds": 1800, "display": "30m"}
@@ -655,7 +655,7 @@ def test_activities_week_total_spans_dst_spring_forward_transition(
     add(1, this_monday, 40 * 60)
     add(2, last_friday, 60 * 60)  # prior week, must not count
 
-    response = TestClient(create_app(conn)).get("/api/v1/activities")
+    response = owner_client(create_app(conn)).get("/api/v1/activities")
 
     assert response.status_code == 200
     assert response.json()["weekTotal"] == {"seconds": 2400, "display": "40m"}
@@ -663,7 +663,7 @@ def test_activities_week_total_spans_dst_spring_forward_transition(
 
 def test_activities_page_rejects_unknown_status_and_page_size(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     assert client.get("/api/v1/activities?status=queued").status_code == 422
     assert client.get("/api/v1/activities?pageSize=25").status_code == 422
@@ -692,7 +692,7 @@ def test_publish_activity_returns_json_and_updates_status(tmp_path, monkeypatch)
     monkeypatch.setattr(server_module, "_build_garmin_client", lambda conn: fake_garmin)
     monkeypatch.setattr(server_module, "_build_strava_client", lambda conn: fake_strava)
 
-    response = TestClient(create_app(conn)).post("/api/v1/activities/21/publish")
+    response = owner_client(create_app(conn)).post("/api/v1/activities/21/publish")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -729,7 +729,7 @@ def test_bulk_publish_returns_counts(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "_build_garmin_client", lambda conn: fake_garmin)
     monkeypatch.setattr(server_module, "_build_strava_client", lambda conn: fake_strava)
 
-    response = TestClient(create_app(conn)).post(
+    response = owner_client(create_app(conn)).post(
         "/api/v1/activities/publish", json={"activityIds": [31, 32]}
     )
 
@@ -755,7 +755,7 @@ def test_edit_exclude_and_restore_activity_json_actions(tmp_path, monkeypatch):
     fake_garmin = MagicMock()
     monkeypatch.setattr(server_module, "_build_garmin_client", lambda conn: fake_garmin)
     monkeypatch.setattr(server_module, "_build_strava_client", lambda conn: MagicMock())
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     edit_response = client.put(
         "/api/v1/activities/41",
@@ -788,7 +788,7 @@ def test_json_actions_return_actionable_errors(tmp_path):
         "pending",
         now,
     )
-    client = TestClient(create_app(conn))
+    client = owner_client(create_app(conn))
 
     publish_response = client.post("/api/v1/activities/51/publish")
     blank_edit_response = client.put(

@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { useActivityActions } from "@/hooks/use-activity-actions";
-import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { useSelection } from "@/hooks/use-selection";
 import {
   ApiError,
@@ -65,7 +64,6 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export default function Activities() {
-  useLiveRefresh();
   const [searchParams] = useSearchParams();
   const query = activityQueryFrom(searchParams);
   const setTabBarHidden = useOutletContext<TabBarVisibilityContext>();

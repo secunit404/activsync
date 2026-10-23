@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+import sys
 from contextlib import asynccontextmanager
 
-from activsync import config, db, logging_setup, timeutil
+from activsync import auth_core, auth_middleware, config, db, logging_setup, timeutil
 from activsync.dev_seed import seed as seed_dev_data
 from activsync.garmin_client import GarminClient, get_client as get_garmin_raw_client
 from activsync.hevy_client import HevyClient
@@ -29,17 +30,17 @@ MANUAL_ONLY = _env_enabled("ACTIVSYNC_MANUAL_ONLY")
 # by `make dev` / `make dev-fresh`, so a fresh mock DB can boot straight past
 # the first-run wizard for E2E specs while local dev still starts at it.
 E2E_SEED_ONBOARDED = (_env_value("ACTIVSYNC_DEV_E2E_ONBOARDED") or "").lower() in ("1", "true", "yes")
+# Set by `make dev` and the E2E server, not by `make dev-fresh`, whose wiped
+# DB must start at the claim step.
+DEV_SEED_OWNER = _env_enabled("ACTIVSYNC_DEV_SEED_OWNER")
+
+try:
+    auth_middleware.ProxyAuthConfig.from_env(os.environ)
+except ValueError as exc:
+    raise SystemExit(f"ActivSync cannot start: {exc}") from exc
 
 
-def _default_db_path() -> str:
-    preferred = "/config/activsync-dev.db" if MOCK_MODE else "/config/activsync.db"
-    legacy = "/config/dev-mock.db" if MOCK_MODE else "/config/garmin2strava.db"
-    if os.path.exists(legacy) and not os.path.exists(preferred):
-        return legacy
-    return preferred
-
-
-DB_PATH = _env_value("ACTIVSYNC_DB_PATH", "G2S_DB_PATH") or _default_db_path()
+DB_PATH = db.resolve_path(mock_mode=MOCK_MODE)
 GARMIN_TOKEN_DIR = _env_value("ACTIVSYNC_GARMIN_TOKEN_DIR", "G2S_GARMIN_TOKEN_DIR") or "/config/.garminconnect"
 
 _conn = db.connect(DB_PATH)
@@ -48,7 +49,7 @@ if MOCK_MODE:
     # env var alone can't reach a real database. seed_dev_data's own guard
     # (never touch a DB holding non-dev activity IDs) is what protects a real
     # database pointed at by ACTIVSYNC_DB_PATH if MOCK_MODE is set against it.
-    seed_dev_data(_conn, mark_onboarded=E2E_SEED_ONBOARDED)
+    seed_dev_data(_conn, mark_onboarded=E2E_SEED_ONBOARDED, seed_owner=DEV_SEED_OWNER)
 
 
 def _resolve_log_timezone() -> str:
@@ -65,6 +66,20 @@ logging_setup.configure_logging(
     level=os.environ.get("ACTIVSYNC_LOG_LEVEL", "INFO"),
     tz_name=_resolve_log_timezone(),
 )
+
+
+def _bind_host(argv: list[str]) -> str:
+    """The app cannot ask uvicorn where it is bound, so read the CLI flag the
+    Dockerfile and npm scripts pass, falling back to uvicorn's default."""
+    for index, arg in enumerate(argv):
+        if arg == "--host" and index + 1 < len(argv):
+            return argv[index + 1]
+        if arg.startswith("--host="):
+            return arg.split("=", 1)[1]
+    return os.environ.get("UVICORN_HOST", "127.0.0.1")
+
+
+auth_core.warn_if_disabled_on_network(_bind_host(sys.argv))
 
 
 def _garmin_factory() -> GarminClient:

@@ -144,3 +144,4 @@ def test_dev_taxonomy_is_large_enough_to_exercise_the_collapsed_picker(conn):
     """The picker only collapses past 18 categories. A dev list under that
     renders a shape production never shows."""
     assert len(dev_mock.garmin_activity_types()) > 18
+

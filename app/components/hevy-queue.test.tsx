@@ -258,10 +258,9 @@ test("an already-published match links Strava and withholds Replace", () => {
   );
 
   expect(screen.getByText(/Already on Strava/)).toBeVisible();
-  expect(screen.getByRole("link", { name: /Strava/ })).toHaveAttribute(
-    "href",
-    "https://www.strava.com/activities/222",
-  );
+  const strava = screen.getByRole("link", { name: "View on Strava" });
+  expect(strava).toHaveAttribute("href", "https://www.strava.com/activities/222");
+  expect(strava).toHaveClass("font-bold");
   expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Merge" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Description only" })).toBeVisible();

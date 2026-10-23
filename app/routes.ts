@@ -24,4 +24,5 @@ export default [
     route("settings", "./routes/settings.tsx"),
   ]),
   route("setup", "./routes/setup.tsx"),
+  route("login", "./routes/login.tsx"),
 ] satisfies RouteConfig;

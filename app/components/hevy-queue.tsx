@@ -288,9 +288,9 @@ function QueueRow({
           onClick={onView}
         />
         {item.matchedStravaUrl ? (
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="font-bold">
             <a href={item.matchedStravaUrl} target="_blank" rel="noreferrer">
-              Strava ↗
+              View on Strava <span aria-hidden="true">↗</span>
             </a>
           </Button>
         ) : null}

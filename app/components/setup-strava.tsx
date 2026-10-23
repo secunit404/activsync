@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { StravaConnectButton } from "@/components/strava-connect-button";
+import { useStravaConnectUrl } from "@/hooks/use-strava-authorize-url";
 import type { SettingsState } from "@/lib/api";
 
 export type StravaStepProps = {
@@ -16,15 +18,22 @@ export type StravaStepProps = {
   }) => Promise<void>;
 };
 
-/** Step 2: Strava app credentials, then the OAuth handoff. */
+/** Step 3: Strava app credentials, then the OAuth handoff. */
 export function StravaStep({ state, pending, onSave }: StravaStepProps) {
   const [clientId, setClientId] = useState(state.credentials.stravaClientId);
   const [clientSecret, setClientSecret] = useState("");
+  const saved =
+    Boolean(state.credentials.stravaClientId) && state.credentials.stravaClientSecretSaved;
+  const trimmedClientId = clientId.trim();
+  const trimmedSecret = clientSecret.trim();
+  const dirty =
+    trimmedClientId !== state.credentials.stravaClientId || Boolean(trimmedSecret);
+  const authorize = useStravaConnectUrl(state.credentials.stravaClientId, saved);
   return (
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
         <p className="font-mono text-[11px] tracking-[0.2em] text-[var(--sync)] uppercase">
-          Step 2: Strava
+          Step 3: Strava
         </p>
         <h2 className="text-2xl font-extrabold tracking-[-0.02em] md:text-[30px]">
           Authorize Strava
@@ -38,7 +47,9 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
         className="grid max-w-[440px] gap-5"
         onSubmit={(event) => {
           event.preventDefault();
-          void onSave({ clientId, clientSecret });
+          void onSave({ clientId: trimmedClientId, clientSecret: trimmedSecret }).then(() =>
+            setClientSecret(""),
+          );
         }}
       >
         <FieldGroup>
@@ -81,8 +92,12 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
         </Alert>
         <Button type="submit" className="h-12 sm:w-fit" disabled={pending}>
           {pending ? <Spinner /> : null}
-          {pending ? "Saving…" : "Save and authorize"}
+          {pending ? "Saving…" : "Save credentials"}
         </Button>
+        <StravaConnectButton
+          href={saved && !dirty ? (authorize.data?.url ?? null) : null}
+          error={authorize.error?.message}
+        />
         <p className="text-sm text-muted-foreground">
           Need the keys? See{" "}
           <a

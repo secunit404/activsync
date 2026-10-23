@@ -10,10 +10,11 @@ import { test, expect } from "./fixtures";
 //     other than the literal string "mfa" (`dev_mock.begin_login`), the
 //     same hook e2e/setup.spec.ts already relies on.
 //   - Strava: credentials are saved via `PUT
-//     /api/v1/settings/strava-credentials`, then "Connect" does a real
-//     `window.location.assign("/strava/connect")`. In mock mode
+//     /api/v1/settings/strava-credentials`, then the "Connect with Strava"
+//     button links to the authorize URL `POST
+//     /api/v1/settings/strava/authorize` issued. In mock mode
 //     `FakeStravaClient.authorize_url` loops straight back to our own
-//     `/strava/callback` with a placeholder code instead of bouncing to
+//     `/strava/callback` with a placeholder code instead of pointing at
 //     strava.com (see `dev_mock.py`), so the whole OAuth round trip
 //     completes locally and lands back on /settings — a real page
 //     navigation Playwright follows like any other.
@@ -65,10 +66,9 @@ test("connecting Strava in mock mode and publishing an activity succeeds end to 
   await stravaDialog
     .getByLabel("Strava client secret")
     .fill("mock-strava-client-secret");
-  // One action, not the old save-then-authorize pair: this saves the
-  // credentials and then redirects straight to /strava/connect, which in
-  // mock mode completes the OAuth round trip and lands back on /settings.
-  await stravaDialog.getByRole("button", { name: "Save & connect" }).click();
+  await stravaDialog.getByRole("button", { name: "Save credentials" }).click();
+  await expect(page.getByText("Strava credentials saved.")).toBeVisible();
+  await stravaDialog.getByRole("link", { name: "Connect with Strava" }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(stravaStatus.getByText("Connected", { exact: true })).toBeVisible();
 

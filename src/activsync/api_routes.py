@@ -55,7 +55,7 @@ class Connections(ApiModel):
 
 class SetupState(ApiModel):
     complete: bool
-    step: Literal["garmin", "strava", "hevy", "syncing"] | None
+    step: Literal["account", "garmin", "strava", "hevy", "syncing"] | None
 
 
 class HevyState(ApiModel):
