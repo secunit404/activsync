@@ -25,3 +25,29 @@ jobs:
             build
             ci
             chore
+            revert
+          scopes: |
+            activities
+            api
+            auth
+            db
+            deps
+            docker
+            garmin
+            hevy
+            main
+            onboarding
+            readme
+            settings
+            strava
+            sync
+            ui
+      # Changelog-visible types need a scope so release notes group by area.
+      - name: Require a scope on changelog types
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$TITLE" =~ ^(feat|fix|perf|refactor|docs|revert)!?: ]]; then
+            echo "::error::'$TITLE' needs a scope, e.g. fix(sync): ... (see the scopes list in pr-title.yml)"
+            exit 1
+          fi
