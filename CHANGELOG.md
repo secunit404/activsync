@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/secunit404/activsync/compare/v3.0.0...v3.0.1) (2026-10-24)
+
+
+### Documentation
+
+* simplify the sign-in README and add Pangolin ([#80](https://github.com/secunit404/activsync/issues/80)) ([2c25abe](https://github.com/secunit404/activsync/commit/2c25abe8c06945939efc14f03bbe2e980f56bb48))
+
 ## [3.0.0](https://github.com/secunit404/activsync/compare/v2.1.0...v3.0.0) (2026-10-23)
 
 
