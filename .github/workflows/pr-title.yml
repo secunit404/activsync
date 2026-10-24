@@ -47,7 +47,7 @@ jobs:
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if [[ "$TITLE" =~ ^(feat|fix|perf|refactor|docs|revert)!?: ]]; then
+          if [[ "$TITLE" =~ ^(feat|fix|perf|revert)!?: ]]; then
             echo "::error::'$TITLE' needs a scope, e.g. fix(sync): ... (see the scopes list in pr-title.yml)"
             exit 1
           fi
