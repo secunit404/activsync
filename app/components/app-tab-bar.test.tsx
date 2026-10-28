@@ -4,12 +4,13 @@ import { expect, test } from "vitest";
 
 import { AppTabBar } from "./app-tab-bar";
 
-function renderTabBar(hidden?: boolean, path = "/") {
+function renderTabBar(hidden?: boolean, path = "/", reviewCount?: number) {
+  const element = <AppTabBar hidden={hidden} reviewCount={reviewCount} />;
   const router = createMemoryRouter(
     [
-      { path: "/", element: <AppTabBar hidden={hidden} /> },
-      { path: "/hevy", element: <AppTabBar hidden={hidden} /> },
-      { path: "/hevy/mappings", element: <AppTabBar hidden={hidden} /> },
+      { path: "/", element },
+      { path: "/hevy", element },
+      { path: "/hevy/mappings", element },
     ],
     { initialEntries: [path] },
   );
@@ -50,4 +51,17 @@ test("slides the indicator under the active tab", () => {
   expect(screen.getByTestId("app-tab-bar-indicator")).toHaveStyle({
     transform: "translateX(100%)",
   });
+});
+
+test("badges the Activities tab with the review count", () => {
+  renderTabBar(false, "/hevy", 3);
+  const link = screen.getByRole("link", { name: "Activities, 3 need review" });
+  expect(link).toHaveTextContent("3");
+  expect(screen.getAllByTestId("review-badge")).toHaveLength(1);
+});
+
+test("shows no badge when nothing needs review", () => {
+  renderTabBar(false, "/", 0);
+  expect(screen.getByRole("link", { name: "Activities" })).toBeInTheDocument();
+  expect(screen.queryByTestId("review-badge")).toBeNull();
 });

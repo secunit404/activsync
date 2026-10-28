@@ -2,6 +2,8 @@ import { Activity, Dumbbell, Settings, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";
 
+import { ReviewBadge, reviewNavLabel } from "@/components/review-badge";
+
 type RailDestination = {
   to: string;
   label: string;
@@ -15,12 +17,18 @@ const destinations: RailDestination[] = [
 ];
 
 /**
- * Persistent 74px desktop icon rail. Nav only — no data props — so it unit
- * tests without a QueryClientProvider. `children` is a footer slot the
- * layout route fills with <AppVersionFooter>, since that needs query data
- * the rail itself must not depend on.
+ * Persistent 74px desktop icon rail. Nav only — no queries of its own — so it
+ * unit tests without a QueryClientProvider. `children` is a footer slot the
+ * layout route fills with <AppVersionFooter>, and `reviewCount` (the
+ * Activities badge) is likewise handed in from the layout's app-state query.
  */
-export function AppRail({ children }: { children?: ReactNode }) {
+export function AppRail({
+  children,
+  reviewCount = 0,
+}: {
+  children?: ReactNode;
+  reviewCount?: number;
+}) {
   return (
     <nav
       data-testid="app-rail"
@@ -37,10 +45,13 @@ export function AppRail({ children }: { children?: ReactNode }) {
           <li key={to}>
             <NavLink
               to={to}
-              aria-label={label}
-              className="grid size-[42px] place-items-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-popover aria-[current=page]:text-primary"
+              aria-label={to === "/" ? reviewNavLabel(label, reviewCount) : label}
+              className="relative grid size-[42px] place-items-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-popover aria-[current=page]:text-primary"
             >
               <Icon className="size-[19px]" aria-hidden="true" />
+              {to === "/" ? (
+                <ReviewBadge count={reviewCount} className="-top-1.5 -right-1.5" />
+              ) : null}
             </NavLink>
           </li>
         ))}

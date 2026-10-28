@@ -77,7 +77,7 @@ function SignedInLayout({ status }: { status: AuthStatus }) {
           <AuthDisabledBanner />
         </div>
       ) : null}
-      <AppRail>
+      <AppRail reviewCount={data?.reviewCount}>
         <div className="mt-auto flex flex-col items-center gap-4">
           <SignOutButton method={status.method} />
           {data ? <AppVersionFooter
@@ -93,7 +93,7 @@ function SignedInLayout({ status }: { status: AuthStatus }) {
       <div className="pb-[calc(74px+env(safe-area-inset-bottom))] md:pb-0 md:pl-[74px]">
         <Outlet context={setTabBarHidden} />
       </div>
-      <AppTabBar hidden={tabBarHidden} />
+      <AppTabBar hidden={tabBarHidden} reviewCount={data?.reviewCount} />
     </div>
   );
 }
