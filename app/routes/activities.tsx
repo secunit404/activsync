@@ -195,6 +195,7 @@ export function ActivitiesView({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.appState }),
   });
   const broken = appState?.connections.broken ?? [];
+  const stravaBroken = broken.includes("strava");
   const catchUpReport = appState?.catchUpReport ?? null;
   const pollIntervals = appState?.pollIntervals;
 
@@ -336,7 +337,7 @@ export function ActivitiesView({
             aria-live="polite"
             className="min-w-0 text-[13px] leading-snug text-muted-foreground"
           >
-            {statusDescription(view, pollIntervals)}
+            {statusDescription(view, pollIntervals, stravaBroken)}
           </p>
         </div>
       </div>
@@ -357,7 +358,7 @@ export function ActivitiesView({
         // AttentionBanner's copy: a broken Garmin connection still lets
         // publishing continue for activities already synced). Exclude is a
         // purely local write, so it stays enabled either way.
-        publishDisabled={broken.includes("strava")}
+        publishDisabled={stravaBroken}
         selectAll={selectAllState(
           data.items.map((activity) => activity.garminActivityId),
           selection.selected,
@@ -392,6 +393,7 @@ export function ActivitiesView({
           status={data.status}
           counts={data.counts}
           pollIntervals={pollIntervals}
+          stravaBroken={stravaBroken}
         />
       )}
 

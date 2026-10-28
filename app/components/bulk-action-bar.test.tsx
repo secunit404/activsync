@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { MemoryRouter } from "react-router";
 import { expect, test, vi } from "vitest";
 
 import { BulkActionBar } from "./bulk-action-bar";
@@ -16,7 +17,11 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof BulkActionBar>
     busy: false,
     ...overrides,
   };
-  render(<BulkActionBar {...props} />);
+  render(
+    <MemoryRouter>
+      <BulkActionBar {...props} />
+    </MemoryRouter>,
+  );
   return props;
 }
 
@@ -94,15 +99,19 @@ test("disables Exclude and Publish while busy", () => {
 // A broken Strava connection means Publish would fail immediately on
 // submit (see AttentionBanner's copy) — Exclude is a purely local write and
 // stays clickable regardless.
-test("publishDisabled disables only Publish, with an explanatory title", () => {
+test("publishDisabled disables only Publish and says how to fix it, visibly", () => {
   renderBar({ publishDisabled: true });
   for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
     expect(button).not.toBeDisabled();
   }
   for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Reconnect Strava to resume publishing.");
+    expect(button).toHaveAccessibleDescription("Reconnect Strava to publish.");
   }
+  expect(screen.getByRole("link", { name: "Reconnect Strava" })).toHaveAttribute(
+    "href",
+    "/settings#connections",
+  );
 });
 
 // A mixed selection acts on the subset the server would accept rather than
@@ -131,6 +140,8 @@ test("Publish is disabled when nothing selected can be published", () => {
   for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
     expect(button).toBeDisabled();
   }
+  // The dock keeps one height while rows are ticked: only an outage adds a line.
+  expect(screen.queryByText(/can be published/)).not.toBeInTheDocument();
   // Exclude is unaffected — the two subsets are independent.
   for (const button of screen.getAllByRole("button", { name: /Exclude/ })) {
     expect(button).not.toBeDisabled();
@@ -141,7 +152,7 @@ test("publishDisabled is false by default, so Publish stays enabled", () => {
   renderBar();
   for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
     expect(button).not.toBeDisabled();
-    expect(button).not.toHaveAttribute("title");
+    expect(button).not.toHaveAccessibleDescription();
   }
 });
 

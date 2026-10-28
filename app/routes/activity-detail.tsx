@@ -193,7 +193,7 @@ export default function ActivityDetail() {
         <StatusPill status={activity.publishStatus} publishing={publishPhase !== undefined} />
         {publishPhase === undefined ? (
           <span className="min-w-0 text-[13px] leading-snug text-muted-foreground">
-            {activityExplanation(activity, appState.data?.pollIntervals)}
+            {activityExplanation(activity, appState.data?.pollIntervals, connectionsBroken)}
           </span>
         ) : null}
       </span>

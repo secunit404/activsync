@@ -236,6 +236,21 @@ test("the selected filter is explained in one line, with the Strava check interv
   expect(group).toHaveAccessibleDescription("Kept off Strava for good, unless you restore it.");
 });
 
+test("pending and its empty state promise nothing while Strava is disconnected", () => {
+  renderAt("/?status=pending", { ...activities, status: "pending", items: [] }, {
+    ...connected,
+    connections: { ...connected.connections, broken: ["strava"] },
+  });
+  expect(screen.getByRole("radiogroup", { name: "Show activities" })).toHaveAccessibleDescription(
+    "Publishes to Strava once Strava is reconnected.",
+  );
+  expect(
+    screen.getByText(
+      "New activities whose type has auto-sync on wait here until Strava is reconnected.",
+    ),
+  ).toBeInTheDocument();
+});
+
 test("backlog and missing rows say why they wait, on the table and the cards", () => {
   renderAt("/?status=review", {
     ...activities,

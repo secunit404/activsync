@@ -24,6 +24,16 @@ test("pending names the Strava check interval when it is known", () => {
   );
 });
 
+test("pending promises nothing while Strava is disconnected", () => {
+  const intervals = { garminMinutes: 20, stravaMinutes: 10 };
+  expect(statusDescription("pending", intervals, true)).toBe(
+    "Publishes to Strava once Strava is reconnected.",
+  );
+  expect(activityExplanation({ publishStatus: "pending", holdReason: null }, intervals, true)).toBe(
+    "Publishes to Strava once Strava is reconnected.",
+  );
+});
+
 test("the detail line prefers the hold reason over the generic held description", () => {
   expect(activityExplanation({ publishStatus: "held", holdReason: "backlog" })).toBe(
     "Older activity found after a reconnect",
