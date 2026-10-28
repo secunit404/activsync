@@ -182,4 +182,13 @@ test("header checkbox is indeterminate when only some rows are selected", () => 
   renderTable({ activities: [run, lift], selected: new Set([12345]) });
   const headerCheckbox = screen.getByRole("checkbox", { name: "Select all activities" });
   expect(headerCheckbox).toHaveAttribute("data-state", "indeterminate");
+  expect(headerCheckbox).toHaveAttribute("aria-checked", "mixed");
+});
+
+// A selected id whose row a background refetch moved off this list must not
+// count towards "all selected" for the rows actually shown.
+test("header checkbox counts only the rows on screen", () => {
+  renderTable({ activities: [run, lift], selected: new Set([12345, 424242]) });
+  const headerCheckbox = screen.getByRole("checkbox", { name: "Select all activities" });
+  expect(headerCheckbox).toHaveAttribute("aria-checked", "mixed");
 });
