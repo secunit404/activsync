@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from activsync import auth_core, config, db, dev_mock, hevy_db
 
-SEED_VERSION = 11
+SEED_VERSION = 13
 
 DEV_PASSWORD = "activsync-dev-password"
 
@@ -103,9 +103,17 @@ def seed(
                 "avg_hr": 142 - activity_number % 8,
                 "max_hr": 168 - activity_number % 6,
             }
+            # Older held samples stand in for an outage backlog, so both
+            # hold reasons have something to render.
+            if status != "held":
+                hold_reason = None
+            elif offset >= 6:
+                hold_reason = "backlog"
+            else:
+                hold_reason = "category"
             db.insert_activity(
                 conn, activity_id, activity_type, title, description, start.strftime("%Y-%m-%d %H:%M:%S"),
-                f"dev-{activity_id}", status, now, json.dumps(data),
+                f"dev-{activity_id}", status, now, json.dumps(data), hold_reason,
             )
 
     _seed_hevy(conn, now)
@@ -113,12 +121,22 @@ def seed(
     db.set_config_value(
         conn,
         "settings",
-        {**config.DEFAULT_CONFIG, "hevy_match_mode": "review"},
+        {
+            **config.DEFAULT_CONFIG,
+            "hevy_match_mode": "review",
+            "held_activity_types": _held_sample_types(samples),
+        },
     )
     # One source of truth with the fake Garmin client, so a seeded dev DB
     # and a refreshed one show the same categories.
     db.set_config_value(conn, "garmin_activity_types", dev_mock.garmin_activity_types())
     db.set_config_value(conn, "dev_seed_version", SEED_VERSION)
+
+
+def _held_sample_types(samples: list[tuple]) -> list[str]:
+    """The types the samples hold by category, so Settings shows auto-sync
+    off for exactly the types the list says are held for that reason."""
+    return sorted({sample[0] for sample in samples if sample[-1] == "held"})
 
 
 def _mark_onboarding_complete(conn: sqlite3.Connection) -> None:

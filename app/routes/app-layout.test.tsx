@@ -119,6 +119,7 @@ function appState(reviewCount: number): AppState {
     catchUpReport: null,
     update: { latest: null, available: false, repoUrl: "", releaseUrl: "" },
     reviewCount,
+    pollIntervals: { garminMinutes: 20, stravaMinutes: 5 },
   };
 }
 

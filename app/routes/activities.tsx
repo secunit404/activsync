@@ -14,7 +14,7 @@ import { ActivitiesSkeleton } from "@/components/activities-skeleton";
 import { ActivitiesTable } from "@/components/activities-table";
 import { ActivityCard } from "@/components/activity-card";
 import { ActivitiesEmptyState } from "@/components/activities-empty-state";
-import { ActivityStatusFilter } from "@/components/activity-status-filter";
+import { ActivityStatusFilter, ReviewSliceChip } from "@/components/activity-status-filter";
 import { ActivitySortSelect, ActivitySortToggle } from "@/components/activity-sort-select";
 import { AttentionBanner } from "@/components/attention-banner";
 import { BulkActionBar } from "@/components/bulk-action-bar";
@@ -22,6 +22,7 @@ import { CatchUpReport } from "@/components/catch-up-report";
 import { ConnectionError } from "@/components/connection-error";
 import { PageContainer, PageHeader } from "@/components/page-header";
 import { isExcludableStatus, isPublishableStatus } from "@/lib/activity-metrics";
+import { statusDescription } from "@/lib/activity-status";
 import {
   defaultActivityView,
   parseActivityView,
@@ -175,7 +176,8 @@ export function ActivitiesView({
    * and catch-up report are irrelevant to what's being tested — defaults to
    * "nothing broken, nothing to catch up on".
    */
-  appState?: Pick<AppState, "connections" | "catchUpReport">;
+  appState?: Pick<AppState, "connections" | "catchUpReport"> &
+    Partial<Pick<AppState, "pollIntervals">>;
   onTabBarHiddenChange?: TabBarVisibilityContext;
   /** True while a filter/page change is loading behind the kept-previous data. */
   isRefetching?: boolean;
@@ -193,6 +195,7 @@ export function ActivitiesView({
   });
   const broken = appState?.connections.broken ?? [];
   const catchUpReport = appState?.catchUpReport ?? null;
+  const pollIntervals = appState?.pollIntervals;
 
   // Selection must not survive a filter or page change — a stale id from a
   // page the user has since left would publish/exclude something they can
@@ -297,11 +300,27 @@ export function ActivitiesView({
 
       <CatchUpReport report={catchUpReport} onDismiss={() => dismissCatchUp.mutate()} />
 
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <ActivityStatusFilter counts={data.counts} value={view} />
+      <div className="grid gap-2.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <ActivityStatusFilter
+              counts={data.counts}
+              value={view}
+              descriptionId="activity-status-description"
+            />
+          </div>
+          <ActivitySortSelect />
         </div>
-        <ActivitySortSelect />
+        <div className="flex items-center gap-2.5 px-1">
+          <ReviewSliceChip view={view} />
+          <p
+            id="activity-status-description"
+            aria-live="polite"
+            className="min-w-0 text-[13px] leading-snug text-muted-foreground"
+          >
+            {statusDescription(view, pollIntervals)}
+          </p>
+        </div>
       </div>
 
       <BulkActionBar
@@ -341,7 +360,11 @@ export function ActivitiesView({
           </div>
         </>
       ) : (
-        <ActivitiesEmptyState status={data.status} />
+        <ActivitiesEmptyState
+          status={data.status}
+          counts={data.counts}
+          pollIntervals={pollIntervals}
+        />
       )}
 
       <ActivitiesPagination page={data.pagination.page} pageCount={data.pagination.pageCount} />

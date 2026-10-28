@@ -5,6 +5,7 @@ import { StatusPill } from "@/components/status-pill";
 import { TypePill } from "@/components/type-pill";
 import { Checkbox } from "@/components/ui/checkbox";
 import { activityEffort } from "@/lib/activity-metrics";
+import { rowReason } from "@/lib/activity-status";
 import type { Activity } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { MetaList } from "@/components/meta-list";
@@ -102,6 +103,7 @@ function ActivityRow({
   const { search } = useLocation();
   const href = { pathname: `/${activity.garminActivityId}`, search };
   const effort = activityEffort(activity);
+  const reason = publishing ? null : rowReason(activity);
 
   return (
     <tr
@@ -143,7 +145,14 @@ function ActivityRow({
       <td className="px-2 py-3 font-mono text-[13px]">{activity.detail.distance || "—"}</td>
       <td className="hidden px-2 py-3 font-mono text-[13px] lg:table-cell">{effort || "—"}</td>
       <td className="px-2 py-3">
-        <StatusPill status={activity.publishStatus} publishing={publishing} />
+        <div className="flex flex-col items-start gap-1">
+          <StatusPill status={activity.publishStatus} publishing={publishing} />
+          {reason ? (
+            <span title={reason} className="block max-w-52 truncate text-xs text-muted-foreground">
+              {reason}
+            </span>
+          ) : null}
+        </div>
       </td>
       <td className="px-2 py-3 text-center text-muted-foreground">
         <ChevronRightIcon className="inline size-4" aria-hidden="true" />

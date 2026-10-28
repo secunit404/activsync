@@ -87,6 +87,53 @@ def test_app_state_exposes_and_dismisses_reconnect_report(tmp_path):
     assert after.json()["catchUpReport"] is None
 
 
+def test_app_state_reports_poll_intervals(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    client = owner_client(create_app(conn))
+
+    defaults = client.get("/api/v1/app").json()["pollIntervals"]
+    db.set_config_value(
+        conn,
+        "settings",
+        {"garmin_poll_interval_minutes": 30, "strava_poll_interval_minutes": 2},
+    )
+    configured = client.get("/api/v1/app").json()["pollIntervals"]
+
+    assert defaults == {
+        "garminMinutes": config.DEFAULT_CONFIG["garmin_poll_interval_minutes"],
+        "stravaMinutes": config.DEFAULT_CONFIG["strava_poll_interval_minutes"],
+    }
+    assert configured == {"garminMinutes": 30, "stravaMinutes": 2}
+
+
+def test_activities_carry_the_hold_reason_only_while_held(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+    for activity_id, status, reason in (
+        (1, "held", "backlog"),
+        (2, "held", "category"),
+        (3, "held", None),
+        (4, "pending", None),
+    ):
+        db.insert_activity(
+            conn, activity_id, "running", f"Run {activity_id}", "",
+            f"2026-07-1{activity_id} 08:00:00", f"hash-{activity_id}",
+            status, now, "{}", reason,
+        )
+    db.set_publish_status(conn, 1, "missing")
+
+    items = owner_client(create_app(conn)).get(
+        "/api/v1/activities?sort=oldest"
+    ).json()["items"]
+
+    assert {item["garminActivityId"]: item["holdReason"] for item in items} == {
+        1: None,
+        2: "category",
+        3: None,
+        4: None,
+    }
+
+
 def _seed_awaiting_hevy_match(conn):
     hevy_db.upsert_workout(
         conn,

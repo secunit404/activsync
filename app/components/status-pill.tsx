@@ -1,5 +1,6 @@
-import { cn } from "@/lib/utils";
+import { statusDescription } from "@/lib/activity-status";
 import type { PublishStatus } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 /**
  * Tone tint per status: a 12%-opacity background of the status color behind
@@ -30,6 +31,7 @@ export function StatusPill({
   const { label, className } = publishing ? publishingConfig : statusConfig[status];
   return (
     <span
+      title={publishing ? undefined : statusDescription(status)}
       className={cn(
         "inline-flex w-fit items-center justify-center rounded-md px-2.5 py-1 font-mono text-[11px] font-semibold tracking-[0.02em]",
         className,

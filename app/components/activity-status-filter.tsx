@@ -1,5 +1,6 @@
+import { XIcon } from "lucide-react";
 import { useRef, type KeyboardEvent } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { reviewCountOf, type ActivityView } from "@/lib/activity-view";
 import type { PublishStatus } from "@/lib/api";
@@ -28,6 +29,16 @@ function countClass(segment: Segment): string {
   return "text-foreground";
 }
 
+/** Held and Missing are slices of Needs review, reached by deep link only. */
+const reviewSlices: Partial<Record<ActivityView, string>> = {
+  held: "Only held",
+  missing: "Only missing",
+};
+
+function segmentFor(view: ActivityView): ActivityView {
+  return view in reviewSlices ? "review" : view;
+}
+
 /**
  * The status counts ARE the filters: one radio group whose options carry
  * their counts. `value` is the view on screen, which can differ from the
@@ -38,14 +49,17 @@ function countClass(segment: Segment): string {
 export function ActivityStatusFilter({
   counts,
   value,
+  descriptionId,
 }: {
   counts: Record<PublishStatus, number>;
   value: ActivityView;
+  /** Id of the element explaining the selected view. */
+  descriptionId?: string;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const segments = segmentsFor(counts);
-  const selectedIndex = segments.findIndex((segment) => segment.value === value);
+  const selectedIndex = segments.findIndex((segment) => segment.value === segmentFor(value));
   const focusableIndex = selectedIndex === -1 ? 0 : selectedIndex;
 
   const select = (view: ActivityView) => {
@@ -77,6 +91,7 @@ export function ActivityStatusFilter({
     <div
       role="radiogroup"
       aria-label="Show activities"
+      aria-describedby={descriptionId}
       className="flex max-w-full gap-0.5 overflow-x-auto rounded-xl border border-border p-1 sm:inline-flex sm:gap-1"
     >
       {segments.map((segment, index) => {
@@ -113,5 +128,31 @@ export function ActivityStatusFilter({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Names the slice of Needs review a Held or Missing link narrowed the list
+ * to, and widens it back to the whole of Needs review.
+ */
+export function ReviewSliceChip({ view }: { view: ActivityView }) {
+  const [searchParams] = useSearchParams();
+  const label = reviewSlices[view];
+  if (!label) {
+    return null;
+  }
+  const next = new URLSearchParams(searchParams);
+  next.set("status", "review");
+  next.delete("page");
+
+  return (
+    <Link
+      to={{ search: next.toString() }}
+      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-accent py-0.5 pr-1.5 pl-2.5 text-xs font-medium text-accent-foreground outline-none hover:border-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      {label}
+      <XIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
+      <span className="sr-only">, show all that need review</span>
+    </Link>
   );
 }

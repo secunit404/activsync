@@ -106,7 +106,8 @@ const anotherActivity: Activity = {
 function renderAt(
   path: string,
   data: ActivitiesPage = activities,
-  appState?: Pick<AppState, "connections" | "catchUpReport">,
+  appState?: Pick<AppState, "connections" | "catchUpReport"> &
+    Partial<Pick<AppState, "pollIntervals">>,
 ) {
   const queryClient = new QueryClient();
   const router = createMemoryRouter(
@@ -170,28 +171,97 @@ test("a cleared inbox says so and offers every activity in one tap", () => {
   );
 });
 
-test("renders an empty state when there are no activities at all", () => {
-  renderAt("/");
-  expect(screen.getByText("No activities found")).toBeInTheDocument();
-  // No status is applied (data.status is null) — the copy must say so is
-  // an onboarding/fresh-install state, not imply a filter is hiding rows.
+const connected: Pick<AppState, "connections" | "catchUpReport" | "pollIntervals"> = {
+  connections: {
+    garmin: { connected: true, status: "", meta: "", email: "" },
+    strava: { connected: true, status: "", meta: "" },
+    broken: [],
+  },
+  catchUpReport: null,
+  pollIntervals: { garminMinutes: 20, stravaMinutes: 5 },
+};
+
+test("an empty history says when Garmin is checked next and points at the connections", () => {
+  renderAt("/", activities, connected);
+  expect(screen.getByText("No activities yet")).toBeInTheDocument();
   expect(
-    screen.getByText("Activities will appear here after the first Garmin sync."),
+    screen.getByText(
+      "ActivSync checks Garmin every 20 min. New activities show up here after the next check.",
+    ),
   ).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Check connections" })).toHaveAttribute(
+    "href",
+    "/settings#connections",
+  );
 });
 
-// A user who filters to Held and sees a bare "No activities found" would
-// think their data vanished — the description must name the active filter
-// so it reads as "nothing here yet for this filter", not "everything's gone".
-test("distinguishes an empty filtered view from a genuinely empty history", () => {
-  renderAt("/", { ...activities, status: "held", items: [] });
-  expect(screen.getByText("No activities found")).toBeInTheDocument();
-  expect(
-    screen.getByText("There are no held activities in the current sync history."),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByText("Activities will appear here after the first Garmin sync."),
-  ).not.toBeInTheDocument();
+test.each([
+  ["pending", "Nothing waiting to publish", "Choose which types auto-sync"],
+  ["held", "Nothing held for review", "Show all activities"],
+  ["missing", "Nothing missing from Strava", "Show all activities"],
+  ["published", "Nothing published yet", "Show what needs review"],
+  ["excluded", "Nothing excluded", "Show what needs review"],
+] as const)("an empty %s filter explains itself", (status, title, nextStep) => {
+  renderAt(`/?status=${status}`, { ...activities, status, items: [] });
+  const empty = screen.getByText(title).closest<HTMLElement>("[data-slot='empty']")!;
+  if (nextStep) {
+    expect(within(empty).getByRole("link", { name: nextStep })).toBeInTheDocument();
+  } else {
+    expect(within(empty).queryByRole("link")).not.toBeInTheDocument();
+  }
+});
+
+test.each([
+  ["published", "Nothing published yet"],
+  ["excluded", "Nothing excluded"],
+] as const)("an empty %s filter offers review only while something waits", (status, title) => {
+  renderAt(`/?status=${status}`, {
+    ...activities,
+    status,
+    counts: { ...activities.counts, held: 0, missing: 0 },
+  });
+  expect(screen.getByText(title)).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Show what needs review" })).not.toBeInTheDocument();
+});
+
+test("the selected filter is explained in one line, with the Strava check interval for pending", async () => {
+  const router = renderAt("/?status=review", { ...activities, status: "review" }, connected);
+  const group = screen.getByRole("radiogroup", { name: "Show activities" });
+  expect(group).toHaveAccessibleDescription("Held or removed from Strava. These wait for you.");
+
+  await act(() => router.navigate("/?status=pending"));
+  expect(group).toHaveAccessibleDescription("Publishes to Strava on its own, usually within 5 min.");
+
+  await act(() => router.navigate("/?status=excluded"));
+  expect(group).toHaveAccessibleDescription("Kept off Strava for good, unless you restore it.");
+});
+
+test("backlog and missing rows say why they wait, on the table and the cards", () => {
+  renderAt("/?status=review", {
+    ...activities,
+    status: "review",
+    items: [
+      { ...oneActivity, publishStatus: "held", holdReason: "backlog" },
+      { ...anotherActivity, publishStatus: "missing" },
+      { ...oneActivity, garminActivityId: 7, title: "Ride", publishStatus: "held" },
+    ],
+  });
+  const table = screen.getByTestId("activities-table");
+  const cards = screen.getByTestId("activities-cards");
+  for (const scope of [table, cards]) {
+    expect(within(scope).getByText("Older activity found after a reconnect")).toBeInTheDocument();
+    expect(within(scope).getByText("Removed from Strava after publishing")).toHaveAttribute(
+      "title",
+      "Removed from Strava after publishing",
+    );
+    expect(within(scope).queryByText("Auto-sync is off for this type")).not.toBeInTheDocument();
+  }
+});
+
+test("pending rows carry no reason line", () => {
+  renderAt("/", { ...activities, items: [oneActivity] });
+  expect(screen.queryByText("Auto-sync is off for this type")).not.toBeInTheDocument();
+  expect(screen.queryByText("Removed from Strava after publishing")).not.toBeInTheDocument();
 });
 
 test("renders an attention banner for each broken connection, naming each service", () => {

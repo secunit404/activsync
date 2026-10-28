@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 
 import type { ActivityView } from "@/lib/activity-view";
 import type { PublishStatus } from "@/lib/api";
-import { ActivityStatusFilter } from "./activity-status-filter";
+import { ActivityStatusFilter, ReviewSliceChip } from "./activity-status-filter";
 
 const counts: Record<PublishStatus, number> = {
   pending: 2,
@@ -98,13 +98,41 @@ test("arrow keys move focus and selection, wrapping at the ends", async () => {
   expect(new URLSearchParams(router.state.location.search).get("status")).toBe("all");
 });
 
-test("a legacy single-status link checks nothing but keeps the group reachable", () => {
-  renderAt("/?status=held", "held");
+test.each(["held", "missing"] as const)(
+  "a %s link checks Needs review, the list it is a slice of",
+  (view) => {
+    renderAt(`/?status=${view}`, view);
 
-  for (const radio of screen.getAllByRole("radio")) {
-    expect(radio).not.toBeChecked();
-  }
-  expect(screen.getByRole("radio", { name: /Needs review/ })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: /Needs review/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Needs review/ })).toHaveAttribute("tabindex", "0");
+  },
+);
+
+test.each([
+  ["held", "Only held"],
+  ["missing", "Only missing"],
+] as const)("the %s slice shows a chip that widens back to Needs review", async (view, label) => {
+  const router = createMemoryRouter(
+    [{ path: "*", element: <ReviewSliceChip view={view} /> }],
+    { initialEntries: [`/?status=${view}&page=2&sort=oldest`] },
+  );
+  render(<RouterProvider router={router} />);
+
+  await userEvent.click(screen.getByRole("link", { name: `${label}, show all that need review` }));
+
+  const search = new URLSearchParams(router.state.location.search);
+  expect(search.get("status")).toBe("review");
+  expect(search.get("sort")).toBe("oldest");
+  expect(search.has("page")).toBe(false);
+});
+
+test("the whole Needs review list has no chip", () => {
+  const router = createMemoryRouter(
+    [{ path: "*", element: <ReviewSliceChip view="review" /> }],
+    { initialEntries: ["/?status=review"] },
+  );
+  render(<RouterProvider router={router} />);
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
 });
 
 test("the review count is the only coloured count, and only while something waits", () => {
