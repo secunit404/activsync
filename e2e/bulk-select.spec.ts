@@ -22,14 +22,18 @@ test("selecting rows reveals the bulk bar", async ({ page }) => {
 // as a failed action. Both actions now report the eligible subset, which can
 // never exceed the raw selection.
 test("bulk actions report only the rows they can act on", async ({ page }) => {
-  // Select-all lives in the desktop/tablet table header; the mobile card
-  // layout has no equivalent, so there is no way to build a mixed selection
-  // in one click there.
-  test.skip(test.info().project.name === "mobile", "no select-all on mobile");
-
-  await page.getByRole("checkbox", { name: "Select all activities" }).check();
-
   const bar = page.getByTestId("bulk-action-bar");
+  // Phones have no table header; their select-all appears in the dock once
+  // a card is checked.
+  if (test.info().project.name === "mobile") {
+    await firstRowCheckbox(page).check();
+  }
+  await page.getByRole("checkbox", { name: "Select all activities" }).click();
+  await expect(page.getByRole("checkbox", { name: "Select all activities" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+
   await expect(bar).toBeVisible();
 
   const selected = Number(
@@ -87,12 +91,35 @@ test("selecting a row leaves the list where it was", async ({ page }) => {
 });
 
 test("a partial selection marks select-all as mixed", async ({ page }) => {
-  test.skip(test.info().project.name === "mobile", "no select-all on mobile");
   await firstRowCheckbox(page).check();
   await expect(page.getByRole("checkbox", { name: "Select all activities" })).toHaveAttribute(
     "aria-checked",
     "mixed",
   );
+});
+
+test("on phones the dock selects the whole page, without moving the list", async ({ page }) => {
+  test.skip(test.info().project.name !== "mobile", "phones only; the table header has its own");
+  await firstRowCheckbox(page).check();
+
+  const bar = page.getByTestId("bulk-action-bar");
+  const selectAll = bar.getByRole("checkbox", { name: "Select all activities" });
+  await expect(selectAll).toHaveAttribute("aria-checked", "mixed");
+
+  const barHeight = (await bar.boundingBox())?.height;
+  const listTop = await documentTop(page);
+  const cardCount = await page.getByTestId("activities-cards").locator(":scope > div").count();
+
+  await selectAll.click();
+
+  await expect(selectAll).toHaveAttribute("aria-checked", "true");
+  await expect(bar).toContainText(`${cardCount} selected`);
+  expect((await bar.boundingBox())?.height).toBe(barHeight);
+  expect(await documentTop(page)).toBe(listTop);
+
+  await selectAll.click();
+  await expect(bar).toBeHidden();
+  await expect(page.getByTestId("app-tab-bar")).toBeVisible();
 });
 
 test("Escape clears the selection", async ({ page }) => {
@@ -120,4 +147,12 @@ test("selection controls are at least 44px tall on touch", async ({ page }) => {
     const box = await bar.getByRole("button", { name }).first().boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   }
+  const selectAllHitArea = await bar
+    .getByRole("checkbox", { name: "Select all activities" })
+    .evaluate((el) => {
+      const after = getComputedStyle(el, "::after");
+      return { width: parseFloat(after.width), height: parseFloat(after.height) };
+    });
+  expect(selectAllHitArea.width).toBeGreaterThanOrEqual(44);
+  expect(selectAllHitArea.height).toBeGreaterThanOrEqual(44);
 });

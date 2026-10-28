@@ -32,7 +32,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useActivityActions } from "@/hooks/use-activity-actions";
 import { usePublishQueue } from "@/hooks/use-publish-queue";
-import { useSelection } from "@/hooks/use-selection";
+import { selectAllState, useSelection } from "@/hooks/use-selection";
 import {
   ApiError,
   dismissCatchUpReport,
@@ -363,6 +363,11 @@ export function ActivitiesView({
         // publishing continue for activities already synced). Exclude is a
         // purely local write, so it stays enabled either way.
         publishDisabled={broken.includes("strava")}
+        selectAll={selectAllState(
+          data.items.map((activity) => activity.garminActivityId),
+          selection.selected,
+        )}
+        onToggleAll={toggleAll}
       />
 
       {data.items.length > 0 ? (

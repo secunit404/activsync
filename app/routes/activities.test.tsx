@@ -370,6 +370,27 @@ test("the selection count is announced through a polite live region", async () =
   expect(status).toHaveTextContent("1 selected");
 });
 
+// Phones show cards, with no table header to hold a select-all, so the
+// dock carries one while a selection exists. jsdom applies no CSS, so both
+// it and the (desktop) table header are in the tree here.
+test("the dock's select-all goes from mixed to the whole page, then to none", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+
+  const bar = screen.getByTestId("bulk-action-bar");
+  const selectAll = within(bar).getByRole("checkbox", { name: "Select all activities" });
+  expect(selectAll).toHaveAttribute("aria-checked", "mixed");
+
+  await userEvent.click(selectAll);
+
+  expect(within(bar).getAllByText("2 selected").length).toBeGreaterThan(0);
+  expect(selectAll).toHaveAttribute("aria-checked", "true");
+
+  await userEvent.click(selectAll);
+
+  expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+});
+
 test("Escape clears the selection", async () => {
   renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
   await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);

@@ -20,6 +20,22 @@ export type UseSelectionResult<T> = {
  * set" test), not a stylistic preference, since callers may still be
  * holding a reference to the prior `selected` value (e.g. mid-render).
  */
+/**
+ * The select-all control's state for the rows on screen. Counted against
+ * those rows, not `selected.size`: an id can stay selected after a
+ * background refetch moves its row out of the list.
+ */
+export function selectAllState<T>(
+  ids: readonly T[],
+  selected: ReadonlySet<T>,
+): boolean | "indeterminate" {
+  const onPage = ids.filter((id) => selected.has(id)).length;
+  if (onPage === 0) {
+    return false;
+  }
+  return onPage === ids.length ? true : "indeterminate";
+}
+
 export function useSelection<T = number>(): UseSelectionResult<T> {
   const [selected, setSelected] = useState<ReadonlySet<T>>(() => new Set());
 
