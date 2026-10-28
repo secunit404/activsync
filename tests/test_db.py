@@ -130,6 +130,17 @@ def test_list_activities_filters_by_status(conn):
     assert [row["garmin_activity_id"] for row in held] == [8]
 
 
+def test_count_activities_counts_only_the_given_statuses(conn):
+    now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+    for activity_id, status in ((1, "pending"), (2, "held"), (3, "missing"), (4, "held")):
+        db.insert_activity(
+            conn, activity_id, "running", "Run", "", "2026-07-09 09:00:00", "x", status, now
+        )
+
+    assert db.count_activities(conn, ("held", "missing")) == 3
+    assert db.count_activities(conn, ("excluded",)) == 0
+
+
 def test_list_active_ids_since_excludes_removed(conn):
     now = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
     db.insert_activity(conn, 9, "running", "Run", "", "2026-07-09 09:00:00", "x", "pending", now)

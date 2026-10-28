@@ -98,6 +98,7 @@ class AppState(ApiModel):
     hevy: HevyState
     catch_up_report: CatchUpReport | None
     update: UpdateState
+    review_count: int
 
 
 PublishStatus = Literal["pending", "held", "published", "missing", "excluded"]
@@ -111,6 +112,11 @@ PUBLISH_STATUSES: tuple[PublishStatus, ...] = (
     "missing",
     "excluded",
 )
+# The statuses only the owner can move on: the poller never publishes a held
+# row, and a missing one (deleted on Strava) stays missing until republished
+# or excluded. "review" filters the list to exactly these.
+REVIEW_STATUSES: tuple[PublishStatus, ...] = ("held", "missing")
+StatusFilter = PublishStatus | Literal["review"]
 
 
 class ActivityDetail(ApiModel):
@@ -174,7 +180,7 @@ class PaginationState(ApiModel):
 class ActivitiesPage(ApiModel):
     items: list[Activity]
     sort: SortOrder
-    status: PublishStatus | None
+    status: StatusFilter | None
     counts: dict[PublishStatus, int]
     week_total: WeekTotal
     pagination: PaginationState
@@ -226,6 +232,7 @@ def create_router(
             ),
             catch_up_report=db.get_config_value(conn, "catch_up_report"),
             update=UpdateState.from_status(update),
+            review_count=db.count_activities(conn, REVIEW_STATUSES),
         )
 
     @router.delete("/catch-up-report", status_code=204)
@@ -236,7 +243,7 @@ def create_router(
     @router.get("/activities", response_model=ActivitiesPage)
     def activities_page(
         sort: SortOrder = "newest",
-        status: PublishStatus | None = None,
+        status: StatusFilter | None = None,
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=20, alias="pageSize"),
     ) -> ActivitiesPage:
@@ -267,8 +274,9 @@ def create_router(
             if week_start <= local_start < week_end:
                 week_seconds += activity["duration_seconds"] or 0
 
+        wanted = REVIEW_STATUSES if status == "review" else (status,)
         filtered = (
-            [activity for activity in all_activities if activity["publish_status"] == status]
+            [activity for activity in all_activities if activity["publish_status"] in wanted]
             if status is not None
             else all_activities
         )

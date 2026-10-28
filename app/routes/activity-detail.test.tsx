@@ -81,6 +81,7 @@ const appStateFixture: AppState = {
   hevy: { enabled: false, connected: false, status: "" },
   catchUpReport: null,
   update: { latest: null, available: false, repoUrl: "", releaseUrl: "" },
+  reviewCount: 0,
 };
 
 getAppState.mockResolvedValue(appStateFixture);
@@ -95,10 +96,12 @@ function renderDetail(
     edit = false,
     activities = activity ? [activity] : [],
     broken = [] as AppState["connections"]["broken"],
+    listSearch = "",
   }: {
     edit?: boolean;
     activities?: Activity[];
     broken?: AppState["connections"]["broken"];
+    listSearch?: string;
   } = {},
 ) {
   const client = new QueryClient({
@@ -110,7 +113,11 @@ function renderDetail(
   });
 
   const id = activity?.garminActivityId ?? 999;
-  const initialPath = `/${id}${edit ? "?edit=1" : ""}`;
+  const search = new URLSearchParams(listSearch);
+  if (edit) {
+    search.set("edit", "1");
+  }
+  const initialPath = `/${id}${search.size > 0 ? `?${search}` : ""}`;
 
   const router = createMemoryRouter(
     [
@@ -149,6 +156,19 @@ test("closing the overlay returns to the list", async () => {
   const { router } = renderDetail(fixture, {});
   await userEvent.keyboard("{Escape}");
   expect(router.state.location.pathname).toBe("/");
+});
+
+test("closing the overlay returns to the same filtered list", async () => {
+  const { router } = renderDetail(fixture, { listSearch: "status=all&page=2" });
+  await userEvent.keyboard("{Escape}");
+  expect(router.state.location.pathname).toBe("/");
+  expect(router.state.location.search).toBe("?status=all&page=2");
+});
+
+test("entering edit mode keeps the list's filter in the URL", async () => {
+  const { router } = renderDetail(fixture, { listSearch: "status=held" });
+  await userEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+  expect(router.state.location.search).toBe("?status=held&edit=1");
 });
 
 test("renders the stat grid, description and Garmin link in view mode", () => {

@@ -1,28 +1,33 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ActivityIcon } from "lucide-react";
 import { useEffect } from "react";
-import { Navigate, Outlet, useNavigate, useOutletContext, useSearchParams } from "react-router";
+import {
+  Navigate,
+  Outlet,
+  useMatch,
+  useNavigate,
+  useOutletContext,
+  useSearchParams,
+} from "react-router";
 
 import { ActivitiesPagination } from "@/components/activities-pagination";
 import { ActivitiesSkeleton } from "@/components/activities-skeleton";
 import { ActivitiesTable } from "@/components/activities-table";
 import { ActivityCard } from "@/components/activity-card";
-import { ActivityFilterPills } from "@/components/activity-filter-pills";
-import { ActivitySortSelect } from "@/components/activity-sort-select";
+import { ActivitiesEmptyState } from "@/components/activities-empty-state";
+import { ActivityStatusFilter } from "@/components/activity-status-filter";
+import { ActivitySortSelect, ActivitySortToggle } from "@/components/activity-sort-select";
 import { AttentionBanner } from "@/components/attention-banner";
 import { BulkActionBar } from "@/components/bulk-action-bar";
 import { CatchUpReport } from "@/components/catch-up-report";
 import { ConnectionError } from "@/components/connection-error";
 import { PageContainer, PageHeader } from "@/components/page-header";
-import { StatTile, statTileToneClass, type StatTileTone } from "@/components/stat-tile";
 import { isExcludableStatus, isPublishableStatus } from "@/lib/activity-metrics";
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+  defaultActivityView,
+  parseActivityView,
+  statusFilterFor,
+  type ActivityView,
+} from "@/lib/activity-view";
 import { Spinner } from "@/components/ui/spinner";
 import { useActivityActions } from "@/hooks/use-activity-actions";
 import { usePublishQueue } from "@/hooks/use-publish-queue";
@@ -36,7 +41,6 @@ import {
   type ActivityQuery,
   type AppState,
   type PageSize,
-  type PublishStatus,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -45,13 +49,6 @@ import type { Route } from "./+types/activities";
 /** Threaded down from `AppLayout` via `Outlet` context — see its docstring. */
 type TabBarVisibilityContext = (hidden: boolean) => void;
 
-const publishStatuses = new Set<PublishStatus>([
-  "pending",
-  "held",
-  "published",
-  "missing",
-  "excluded",
-]);
 const pageSizes = new Set<PageSize>([10, 20, 50, 100]);
 
 export function meta(): Route.MetaDescriptors {
@@ -66,7 +63,11 @@ export function meta(): Route.MetaDescriptors {
 
 export default function Activities() {
   const [searchParams] = useSearchParams();
-  const query = activityQueryFrom(searchParams);
+  const urlView = parseActivityView(searchParams.get("status"));
+  // Only the list itself picks a default. A detail deep link without a
+  // status keeps the old "everything" list behind it, so the activity it
+  // names can still be found.
+  const onList = useMatch("/") !== null;
   const setTabBarHidden = useOutletContext<TabBarVisibilityContext>();
 
   // appState is fetched here (not just in app-layout.tsx) so this route can
@@ -77,6 +78,10 @@ export default function Activities() {
     queryKey: queryKeys.appState,
     queryFn: ({ signal }) => getAppState(signal),
   });
+  const view: ActivityView | null =
+    urlView ??
+    (!onList ? "all" : appState.data ? defaultActivityView(appState.data.reviewCount) : null);
+  const query = activityQueryFrom(searchParams, view ?? "all");
   const activities = useQuery({
     queryKey: queryKeys.activities(query),
     queryFn: ({ signal }) => getActivities(query, signal),
@@ -87,11 +92,8 @@ export default function Activities() {
     // `isFetching` while `data` keeps the last-known rows, which the view
     // reflects with a subtle indicator rather than the full skeleton.
     placeholderData: keepPreviousData,
+    enabled: view !== null,
   });
-
-  if (appState.isPending || activities.isPending) {
-    return <ActivitiesSkeleton />;
-  }
 
   if (appState.isError || activities.isError) {
     // Either query's error can be an ApiError (the backend responded with a
@@ -114,8 +116,25 @@ export default function Activities() {
     );
   }
 
+  if (appState.isPending) {
+    return <ActivitiesSkeleton />;
+  }
+
   if (!appState.data.setup.complete) {
     return <Navigate to="/setup" replace />;
+  }
+
+  if (urlView === null && onList && view !== null) {
+    // Written into the URL rather than re-derived on every render: clearing
+    // the last held activity must leave the owner on the emptied inbox, not
+    // flip the page to All underneath them.
+    const next = new URLSearchParams(searchParams);
+    next.set("status", view);
+    return <Navigate to={{ search: next.toString() }} replace />;
+  }
+
+  if (activities.isPending) {
+    return <ActivitiesSkeleton />;
   }
 
   return (
@@ -162,6 +181,7 @@ export function ActivitiesView({
   isRefetching?: boolean;
 }) {
   const [searchParams] = useSearchParams();
+  const view = parseActivityView(searchParams.get("status")) ?? data.status ?? "all";
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const selection = useSelection();
@@ -241,7 +261,7 @@ export function ActivitiesView({
   return (
     <PageContainer
       className={cn(
-        "grid gap-6 py-8 md:gap-7 md:py-10",
+        "grid gap-5 py-6 md:gap-7 md:py-10",
         // The mobile bulk bar is fixed-bottom, same slot as the tab bar
         // (which AppLayout already reserves 74px for); give the page a
         // little extra clearance only while it's actually showing, so the
@@ -253,16 +273,16 @@ export function ActivitiesView({
         title="Activities"
         description="Review your Garmin sync history before it reaches Strava."
         action={
-          isRefetching ? (
-            // Absolute, not a flex child: in the flow this stole ~32px from
-            // the text column, which pushed the description onto an extra
-            // line and grew the header by a full line height. Every filter
-            // click then bumped the entire page down and back — the flicker.
-            <Spinner
-              aria-label="Loading activities"
-              className="absolute top-0 right-0 size-4 text-muted-foreground"
-            />
-          ) : undefined
+          // Absolute, not a flex child: in the flow the spinner stole ~32px
+          // from the text column, which pushed the description onto an extra
+          // line and grew the header by a full line height. Every filter
+          // click then bumped the entire page down and back — the flicker.
+          <div className="absolute top-0 right-0 flex items-center gap-3">
+            {isRefetching ? (
+              <Spinner aria-label="Loading activities" className="size-4 text-muted-foreground" />
+            ) : null}
+            <ActivitySortToggle />
+          </div>
         }
       />
 
@@ -277,17 +297,9 @@ export function ActivitiesView({
 
       <CatchUpReport report={catchUpReport} onDismiss={() => dismissCatchUp.mutate()} />
 
-      <StatStrip data={data} />
-
-      {
-        // One row at every width. This was stacked below `sm:` because the
-        // full-width "Newest first" select overlapped the last filter pill at
-        // 375px; the select now collapses to a 44px icon control on mobile
-        // (see ActivitySortSelect), which fits beside the pills.
-      }
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <div className="min-w-0 flex-1">
-          <ActivityFilterPills counts={data.counts} />
+          <ActivityStatusFilter counts={data.counts} value={view} />
         </div>
         <ActivitySortSelect />
       </div>
@@ -329,19 +341,7 @@ export function ActivitiesView({
           </div>
         </>
       ) : (
-        <Empty className="min-h-64">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ActivityIcon />
-            </EmptyMedia>
-            <EmptyTitle>No activities found</EmptyTitle>
-            <EmptyDescription>
-              {data.status
-                ? `There are no ${data.status} activities in the current sync history.`
-                : "Activities will appear here after the first Garmin sync."}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <ActivitiesEmptyState status={data.status} />
       )}
 
       <ActivitiesPagination page={data.pagination.page} pageCount={data.pagination.pageCount} />
@@ -349,75 +349,14 @@ export function ActivitiesView({
   );
 }
 
-type StatDefinition = { label: string; value: string; tone: StatTileTone };
-
-function statDefinitions(data: ActivitiesPage): StatDefinition[] {
-  return [
-    { label: "PENDING", value: String(data.counts.pending), tone: "pending" },
-    { label: "HELD", value: String(data.counts.held), tone: "held" },
-    { label: "PUBLISHED", value: String(data.counts.published), tone: "published" },
-    { label: "THIS WEEK", value: data.weekTotal.display, tone: "neutral" },
-  ];
-}
-
-/**
- * Two parallel layouts switched by CSS breakpoint (never JS — see
- * ResponsiveOverlay's precedent): a tablet/desktop grid of individually
- * bordered StatTile cards (2-up at the 834px tablet width per handoff frame
- * `5c`, 4-up from `lg:` up per frame `1a`), and a mobile single card with a
- * divided flex row of compact cells, matching the mobile `1a` frame exactly
- * rather than reusing the desktop card shape at a smaller size.
- */
-function StatStrip({ data }: { data: ActivitiesPage }) {
-  const stats = statDefinitions(data);
-
-  return (
-    <section aria-label="Activity totals">
-      <div
-        data-testid="stat-tiles-grid"
-        className="hidden grid-cols-2 gap-3 md:grid lg:grid-cols-4 lg:gap-3.5"
-      >
-        {stats.map((stat) => (
-          <StatTile key={stat.label} label={stat.label} value={stat.value} tone={stat.tone} />
-        ))}
-      </div>
-
-      <div
-        data-testid="stat-tiles-strip"
-        className="flex divide-x divide-border rounded-xl border border-border bg-card md:hidden"
-      >
-        {stats.map((stat) => (
-          <div key={stat.label} className="flex flex-1 flex-col items-center gap-1 px-1 py-2.5">
-            <span className="font-mono text-[9px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-              {stat.label}
-            </span>
-            <span
-              className={cn(
-                "font-mono text-lg leading-none font-extrabold",
-                statTileToneClass[stat.tone],
-              )}
-            >
-              {stat.value}
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function activityQueryFrom(searchParams: URLSearchParams): ActivityQuery {
-  const rawStatus = searchParams.get("status");
+function activityQueryFrom(searchParams: URLSearchParams, view: ActivityView): ActivityQuery {
   const rawSort = searchParams.get("sort");
   const rawPage = Number(searchParams.get("page"));
   const rawPageSize = Number(searchParams.get("pageSize"));
 
   return {
     sort: rawSort === "oldest" ? "oldest" : "newest",
-    status:
-      rawStatus !== null && publishStatuses.has(rawStatus as PublishStatus)
-        ? (rawStatus as PublishStatus)
-        : null,
+    status: statusFilterFor(view),
     page: Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1,
     pageSize: pageSizes.has(rawPageSize as PageSize) ? (rawPageSize as PageSize) : 20,
   };

@@ -83,7 +83,14 @@ export default function ActivityDetail() {
     setDescription(activity.description);
   }
 
-  const close = () => navigate("..");
+  const withoutEdit = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("edit");
+    return next;
+  };
+  // The list's filter, sort and page ride along in the search, so closing
+  // returns to exactly the list the owner opened this from.
+  const close = () => navigate({ pathname: "..", search: withoutEdit().toString() });
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       close();
@@ -116,8 +123,12 @@ export default function ActivityDetail() {
     "activityId" in actions.variables &&
     actions.variables.activityId === activity.garminActivityId;
 
-  const enterEdit = () => setSearchParams({ edit: "1" });
-  const exitEdit = () => setSearchParams({}, { replace: true });
+  const enterEdit = () => {
+    const next = new URLSearchParams(searchParams);
+    next.set("edit", "1");
+    setSearchParams(next);
+  };
+  const exitEdit = () => setSearchParams(withoutEdit(), { replace: true });
 
   const handlePublish = () => publishQueue.publishOne(activity.garminActivityId);
   const handleUndoPublish = () => publishQueue.undo(activity.garminActivityId);

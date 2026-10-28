@@ -358,6 +358,15 @@ def list_activities(
     return [dict(row) for row in rows]
 
 
+def count_activities(conn: sqlite3.Connection, statuses: tuple[str, ...]) -> int:
+    placeholders = ", ".join("?" for _ in statuses)
+    row = conn.execute(
+        f"SELECT COUNT(*) AS total FROM activities WHERE publish_status IN ({placeholders})",
+        statuses,
+    ).fetchone()
+    return row["total"]
+
+
 def list_activities_started_since(
     conn: sqlite3.Connection, window_start: str
 ) -> list[dict]:

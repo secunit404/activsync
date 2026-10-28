@@ -5,6 +5,8 @@ export type PublishStatus =
   | "published"
   | "missing"
   | "excluded";
+/** A list filter: one status, or "review" for every status awaiting the owner. */
+export type StatusFilter = PublishStatus | "review";
 export type SortOrder = "newest" | "oldest";
 export type PageSize = 10 | 20 | 50 | 100;
 
@@ -47,6 +49,8 @@ export type AppState = {
     days: number;
   } | null;
   update: UpdateState;
+  /** Held plus missing activities: the ones only the owner can move on. */
+  reviewCount: number;
 };
 
 export type ActivityDetail = {
@@ -95,7 +99,7 @@ export type Activity = {
 
 export type ActivityQuery = {
   sort: SortOrder;
-  status: PublishStatus | null;
+  status: StatusFilter | null;
   page: number;
   pageSize: PageSize;
 };
@@ -108,7 +112,7 @@ export type WeekTotal = {
 export type ActivitiesPage = {
   items: Activity[];
   sort: SortOrder;
-  status: PublishStatus | null;
+  status: StatusFilter | null;
   counts: Record<PublishStatus, number>;
   weekTotal: WeekTotal;
   pagination: {

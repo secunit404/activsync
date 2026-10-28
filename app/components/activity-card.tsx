@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { formatTypeLabel } from "@/components/type-pill";
 import { StatusPill } from "@/components/status-pill";
@@ -37,7 +37,8 @@ export function ActivityCard({
   onToggle,
 }: ActivityCardProps) {
   const navigate = useNavigate();
-  const href = `/${activity.garminActivityId}`;
+  const { search } = useLocation();
+  const href = { pathname: `/${activity.garminActivityId}`, search };
   const source = activity.hevyBadge ? "via Hevy" : formatTypeLabel(activity.activityType);
   const stats = [activity.detail.duration, activity.detail.distance, activityEffort(activity)];
 
