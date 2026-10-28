@@ -602,6 +602,16 @@ def exclude(conn: sqlite3.Connection, garmin_activity_id: int) -> None:
     db.set_publish_status(conn, garmin_activity_id, "excluded")
 
 
+def restore_status(
+    conn: sqlite3.Connection,
+    garmin_activity_id: int,
+    status: str,
+    hold_reason: str | None,
+) -> None:
+    """Put an excluded row back exactly where it was, for an undone exclude."""
+    db.set_publish_status(conn, garmin_activity_id, status, hold_reason)
+
+
 def unexclude(conn: sqlite3.Connection, garmin_activity_id: int, cfg: dict) -> None:
     row = db.get_activity(conn, garmin_activity_id)
     held_types = set(cfg["held_activity_types"])

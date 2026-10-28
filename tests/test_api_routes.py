@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from auth_helpers import owner_client
 
 from activsync import api_routes, config, db, hevy_db
@@ -851,6 +853,46 @@ def test_edit_exclude_and_restore_activity_json_actions(tmp_path, monkeypatch):
     fake_garmin.update_activity_metadata.assert_called_once_with(
         41, "New title", "New description"
     )
+
+
+@pytest.mark.parametrize(
+    ("status", "hold_reason", "body"),
+    [
+        ("held", "backlog", {"status": "held", "holdReason": "backlog"}),
+        ("missing", None, {"status": "missing"}),
+        ("pending", None, {"status": "pending"}),
+    ],
+)
+def test_undoing_an_exclude_restores_the_previous_status(tmp_path, status, hold_reason, body):
+    conn = db.connect(str(tmp_path / "test.db"))
+    now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+    db.insert_activity(
+        conn, 42, "running", "Run", "", "2026-07-19 12:00:00", "hash-42", status, now,
+        hold_reason=hold_reason,
+    )
+    client = owner_client(create_app(conn))
+
+    client.post("/api/v1/activities/42/exclude")
+    response = client.post("/api/v1/activities/42/restore", json=body)
+
+    assert response.status_code == 200
+    row = db.get_activity(conn, 42)
+    assert row["publish_status"] == status
+    assert row["hold_reason"] == hold_reason
+
+
+def test_restore_rejects_a_status_an_exclude_never_came_from(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+    db.insert_activity(
+        conn, 43, "running", "Run", "", "2026-07-19 12:00:00", "hash-43", "excluded", now
+    )
+    client = owner_client(create_app(conn))
+
+    response = client.post("/api/v1/activities/43/restore", json={"status": "published"})
+
+    assert response.status_code == 422
+    assert db.get_activity(conn, 43)["publish_status"] == "excluded"
 
 
 def test_json_actions_return_actionable_errors(tmp_path):

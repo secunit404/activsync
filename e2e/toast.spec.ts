@@ -63,3 +63,23 @@ test("toast can be dismissed manually", async ({ page }) => {
   await page.getByRole("button", { name: /close/i }).click();
   await expect(toastRegion(page)).toBeHidden();
 });
+
+test("Undo on the exclude toast puts the activity back where it was", async ({ page }) => {
+  const row = page
+    .locator("tr:visible")
+    .filter({ hasText: "PENDING" })
+    .first();
+  const title = await row.getByRole("link").first().innerText();
+  await row.getByRole("checkbox").check();
+  await bulkActionBar(page).getByRole("button", { name: /^Exclude [1-9]/ }).click();
+
+  const toast = toastRegion(page);
+  await expect(toast).toContainText("Excluded 1 activity");
+  const sameRow = page.locator("tr:visible").filter({ hasText: title });
+  await expect(sameRow).toContainText("EXCLUDED");
+
+  await toast.getByRole("button", { name: "Undo" }).click();
+
+  await expect(toast).toContainText("Restored 1 activity");
+  await expect(sameRow).toContainText("PENDING");
+});

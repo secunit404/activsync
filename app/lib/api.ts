@@ -653,10 +653,20 @@ export function excludeActivity(garminActivityId: number) {
   );
 }
 
-export function restoreActivity(garminActivityId: number) {
+/** Where an undone exclude goes back to: the status the row had before it. */
+export type RestoreTarget = {
+  status: "pending" | "held" | "missing";
+  holdReason: HoldReason | null;
+};
+
+/**
+ * Without a `target` the server re-derives the status from the auto-sync
+ * rules (a manual Restore); with one it puts the row back exactly there.
+ */
+export function restoreActivity(garminActivityId: number, target?: RestoreTarget) {
   return requestJson<ActivityActionResult>(
     `/api/v1/activities/${garminActivityId}/restore`,
-    { method: "POST" },
+    target ? { method: "POST", body: JSON.stringify(target) } : { method: "POST" },
   );
 }
 

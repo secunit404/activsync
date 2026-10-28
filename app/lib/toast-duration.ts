@@ -10,3 +10,10 @@
  * default plus a per-call override.
  */
 export const ERROR_TOAST_DURATION_MS = 8000;
+
+/**
+ * A toast that carries Undo stays long enough to reach the button from a
+ * phone held one-handed; the action has already happened, so nothing waits
+ * on it.
+ */
+export const UNDO_TOAST_DURATION_MS = 8000;

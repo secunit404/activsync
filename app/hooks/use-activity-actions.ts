@@ -5,14 +5,19 @@ import {
   editActivity,
   excludeActivity,
   restoreActivity,
+  type Activity,
   type ActivityActionResult,
+  type RestoreTarget,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
-import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
+import { ERROR_TOAST_DURATION_MS, UNDO_TOAST_DURATION_MS } from "@/lib/toast-duration";
+
+/** What an exclude needs to know to be undone: the row and where it was. */
+export type ExcludeTarget = Pick<Activity, "garminActivityId" | "publishStatus" | "holdReason">;
 
 export type ActivityActionInput =
-  | { type: "exclude"; activityId: number }
-  | { type: "exclude-many"; activityIds: number[] }
+  | { type: "exclude"; activity: ExcludeTarget }
+  | { type: "exclude-many"; activities: ExcludeTarget[] }
   | { type: "restore"; activityId: number }
   | {
       type: "edit";
@@ -20,6 +25,9 @@ export type ActivityActionInput =
       title: string;
       description: string;
     };
+
+/** An exclude also reports which rows it actually excluded, for Undo. */
+export type ActivityActionOutcome = ActivityActionResult & { excluded?: ExcludeTarget[] };
 
 export type ActivityActionState = {
   isPending: boolean;
@@ -32,7 +40,9 @@ export function useActivityActions() {
   return useMutation({
     mutationFn: runActivityAction,
     onSuccess: (result, action) => {
-      if (action.type !== "edit") {
+      if (result.excluded?.length) {
+        toastExcluded(queryClient, result, result.excluded);
+      } else if (action.type !== "edit") {
         toastActionResult(result);
       }
     },
@@ -64,14 +74,63 @@ export async function invalidateActivityQueries(queryClient: QueryClient) {
   ]);
 }
 
-function runActivityAction(
-  action: ActivityActionInput,
-): Promise<ActivityActionResult> {
+/**
+ * Exclude is applied on the click, never deferred: a pending activity held
+ * back only in this tab would still publish if the owner left. Undo instead
+ * puts each row back where it was, so an undone backlog hold or missing row
+ * cannot start publishing on its own.
+ */
+function toastExcluded(
+  queryClient: QueryClient,
+  result: ActivityActionResult,
+  excluded: ExcludeTarget[],
+) {
+  const show = result.severity === "warning" ? toast.warning : toast;
+  show(result.message, {
+    duration: UNDO_TOAST_DURATION_MS,
+    action: { label: "Undo", onClick: () => void undoExclude(queryClient, excluded) },
+  });
+}
+
+async function undoExclude(queryClient: QueryClient, excluded: ExcludeTarget[]) {
+  const results = await Promise.allSettled(
+    excluded.map((activity) =>
+      restoreActivity(activity.garminActivityId, restoreTargetOf(activity)),
+    ),
+  );
+  const failed = results.filter((result) => result.status === "rejected").length;
+  const restored = results.length - failed;
+
+  if (failed === 0) {
+    const noun = restored === 1 ? "activity" : "activities";
+    toast(`Restored ${restored} ${noun}`, { description: "Back where they were." });
+  } else {
+    toast.error(
+      restored === 0
+        ? "Could not undo the exclude"
+        : `Restored ${restored}; ${failed} stayed excluded`,
+      { duration: ERROR_TOAST_DURATION_MS },
+    );
+  }
+  await invalidateActivityQueries(queryClient);
+}
+
+function restoreTargetOf(activity: ExcludeTarget): RestoreTarget {
+  const { publishStatus, holdReason } = activity;
+  if (publishStatus === "pending" || publishStatus === "missing") {
+    return { status: publishStatus, holdReason: null };
+  }
+  return { status: "held", holdReason };
+}
+
+async function runActivityAction(action: ActivityActionInput): Promise<ActivityActionOutcome> {
   switch (action.type) {
-    case "exclude":
-      return excludeActivity(action.activityId);
+    case "exclude": {
+      const result = await excludeActivity(action.activity.garminActivityId);
+      return { ...result, excluded: [action.activity] };
+    }
     case "exclude-many":
-      return excludeMany(action.activityIds);
+      return excludeMany(action.activities);
     case "restore":
       return restoreActivity(action.activityId);
     case "edit":
@@ -86,15 +145,18 @@ function runActivityAction(
 /**
  * There is no bulk-exclude endpoint (unlike publish), so this fires one
  * `excludeActivity` call per id and folds the settled results into a single
- * `ActivityActionResult` — one toast and one query invalidation, the same
- * shape the bulk-publish endpoint already returns for its own partial
- * failures. Resolves (never rejects) unless every call failed, so a caller
- * that clears the selection `onSuccess` also clears it on a partial
- * failure, keeping only a total failure selected for retry.
+ * outcome — one toast and one query invalidation, the same shape the
+ * bulk-publish endpoint already returns for its own partial failures.
+ * Resolves (never rejects) unless every call failed, so a caller that clears
+ * the selection `onSuccess` also clears it on a partial failure, keeping only
+ * a total failure selected for retry.
  */
-async function excludeMany(activityIds: number[]): Promise<ActivityActionResult> {
-  const results = await Promise.allSettled(activityIds.map((id) => excludeActivity(id)));
-  const succeeded = results.filter((result) => result.status === "fulfilled").length;
+async function excludeMany(activities: ExcludeTarget[]): Promise<ActivityActionOutcome> {
+  const results = await Promise.allSettled(
+    activities.map((activity) => excludeActivity(activity.garminActivityId)),
+  );
+  const excluded = activities.filter((_, index) => results[index].status === "fulfilled");
+  const succeeded = excluded.length;
   const failed = results.length - succeeded;
 
   if (failed === 0) {
@@ -105,6 +167,7 @@ async function excludeMany(activityIds: number[]): Promise<ActivityActionResult>
       publishedCount: 0,
       failedCount: 0,
       blockedCount: 0,
+      excluded,
     };
   }
 
@@ -122,5 +185,6 @@ async function excludeMany(activityIds: number[]): Promise<ActivityActionResult>
     publishedCount: 0,
     failedCount: failed,
     blockedCount: 0,
+    excluded,
   };
 }
