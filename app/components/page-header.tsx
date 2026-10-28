@@ -28,9 +28,16 @@ export function PageHeader({
   title,
   description,
   action,
+  headingId,
 }: {
   title: string;
   description: string;
+  /**
+   * Makes the heading a programmatic focus target (never a tab stop), for
+   * when the control that held focus disappears and there is nowhere closer
+   * to put it.
+   */
+  headingId?: string;
   /**
    * Right-aligned slot for a status chip or an inline loading indicator.
    * `relative` below is for actions that opt out of the flex flow entirely
@@ -51,7 +58,13 @@ export function PageHeader({
             alt="ActivSync"
             className="size-8 shrink-0 rounded-[9px] object-cover md:hidden"
           />
-          <h1 className="min-w-0 text-4xl leading-none font-bold tracking-[-0.05em]">{title}</h1>
+          <h1
+            id={headingId}
+            tabIndex={headingId ? -1 : undefined}
+            className="min-w-0 text-4xl leading-none font-bold tracking-[-0.05em] outline-none"
+          >
+            {title}
+          </h1>
         </div>
         <p className="max-w-2xl text-muted-foreground">{description}</p>
       </div>

@@ -177,6 +177,36 @@ test("hands focus back to where it came from when it closes under it", async () 
   expect(origin).toHaveFocus();
 });
 
+// Safari never focuses a checkbox on click, so a mouse selection followed by
+// Tab into the bar arrives from <body> with no origin to go back to.
+test("falls back when the bar closes with no origin to return to", async () => {
+  function Harness() {
+    const [count, setCount] = useState(2);
+    return (
+      <>
+        <button type="button">First row checkbox</button>
+        <BulkActionBar
+          count={count}
+          excludableCount={count}
+          publishableCount={count}
+          onClear={() => setCount(0)}
+          onExclude={vi.fn()}
+          onPublish={vi.fn()}
+          busy={false}
+          fallbackFocus={() => screen.getByRole("button", { name: "First row checkbox" })}
+        />
+      </>
+    );
+  }
+  render(<Harness />);
+  screen.getAllByRole("button", { name: "Clear" })[0].focus();
+
+  await userEvent.keyboard("{Enter}");
+
+  expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "First row checkbox" })).toHaveFocus();
+});
+
 test("is a labelled region", () => {
   renderBar();
   expect(screen.getByRole("region", { name: "Selected activities" })).toBe(

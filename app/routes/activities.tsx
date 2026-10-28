@@ -21,6 +21,7 @@ import { BulkActionBar } from "@/components/bulk-action-bar";
 import { CatchUpReport } from "@/components/catch-up-report";
 import { ConnectionError } from "@/components/connection-error";
 import { PageContainer, PageHeader } from "@/components/page-header";
+import { ACTIVITIES_HEADING_ID, selectionFallbackTarget } from "@/lib/activity-focus";
 import { isExcludableStatus, isPublishableStatus } from "@/lib/activity-metrics";
 import { statusDescription } from "@/lib/activity-status";
 import {
@@ -297,6 +298,7 @@ export function ActivitiesView({
     >
       <PageHeader
         title="Activities"
+        headingId={ACTIVITIES_HEADING_ID}
         description="Review your Garmin sync history before it reaches Strava."
         action={
           // Absolute, not a flex child: in the flow the spinner stole ~32px
@@ -368,6 +370,7 @@ export function ActivitiesView({
           selection.selected,
         )}
         onToggleAll={toggleAll}
+        fallbackFocus={selectionFallbackTarget}
       />
 
       {data.items.length > 0 ? (

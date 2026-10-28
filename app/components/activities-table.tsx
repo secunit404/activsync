@@ -39,7 +39,7 @@ export function ActivitiesTable({
     >
       <table className="w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="border-b border-border bg-card font-mono text-[10.5px] tracking-[0.1em] text-muted-foreground">
+          <tr className="border-b border-border bg-card font-mono text-xs tracking-[0.08em] text-muted-foreground">
             <th scope="col" className="w-[38px] px-4 py-3 pointer-coarse:py-3.5">
               <Checkbox
                 aria-label="Select all activities"
@@ -116,6 +116,7 @@ function ActivityRow({
     >
       <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
         <Checkbox
+          data-activity-checkbox=""
           aria-label={`Select ${activity.title}`}
           checked={selected}
           onCheckedChange={() => onToggle(activity.garminActivityId)}
@@ -125,7 +126,8 @@ function ActivityRow({
         <div className="flex min-w-0 flex-col gap-0.5">
           <Link
             to={href}
-            className="truncate font-semibold hover:underline"
+            data-activity-link={activity.garminActivityId}
+            className="truncate font-semibold hover:underline rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             onClick={(event) => event.stopPropagation()}
           >
             {activity.title}

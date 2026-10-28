@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
@@ -269,4 +270,62 @@ test("forwards onOpenAutoFocus so a consumer can redirect initial focus", () => 
     </ResponsiveOverlay>,
   );
   expect(onOpenAutoFocus).toHaveBeenCalled();
+});
+
+// Radix returns focus only to a Dialog.Trigger. These overlays open from
+// links and route changes, so without a default focus fell to <body>.
+test("returns focus to whatever opened it when it closes", async () => {
+  function Opener() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>
+          Open details
+        </button>
+        <ResponsiveOverlay open={open} onOpenChange={setOpen} title="Details">
+          <p>Body</p>
+        </ResponsiveOverlay>
+      </>
+    );
+  }
+  render(<Opener />);
+  const opener = screen.getByRole("button", { name: "Open details" });
+  opener.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+  await userEvent.keyboard("{Escape}");
+
+  await waitFor(() => expect(opener).toHaveFocus());
+});
+
+test("onCloseAutoFocus replaces the default return target", async () => {
+  function Opener() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>
+          Open details
+        </button>
+        <button type="button">Elsewhere</button>
+        <ResponsiveOverlay
+          open={open}
+          onOpenChange={setOpen}
+          title="Details"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            screen.getByRole("button", { name: "Elsewhere" }).focus();
+          }}
+        >
+          <p>Body</p>
+        </ResponsiveOverlay>
+      </>
+    );
+  }
+  render(<Opener />);
+  screen.getByRole("button", { name: "Open details" }).focus();
+  await userEvent.keyboard("{Enter}");
+  await userEvent.keyboard("{Escape}");
+
+  await waitFor(() => expect(screen.getByRole("button", { name: "Elsewhere" })).toHaveFocus());
 });

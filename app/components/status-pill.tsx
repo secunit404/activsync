@@ -33,7 +33,7 @@ export function StatusPill({
     <span
       title={publishing ? undefined : statusDescription(status)}
       className={cn(
-        "inline-flex w-fit items-center justify-center rounded-md px-2.5 py-1 font-mono text-[11px] font-semibold tracking-[0.02em]",
+        "inline-flex w-fit items-center justify-center rounded-md px-2.5 py-1 font-mono text-xs font-semibold tracking-[0.02em]",
         className,
       )}
     >

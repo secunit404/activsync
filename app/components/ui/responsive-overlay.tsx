@@ -38,6 +38,14 @@ export type ResponsiveOverlayProps = {
    */
   onOpenAutoFocus?: (event: Event) => void;
   /**
+   * By default focus returns to whatever held it when the overlay opened.
+   * Radix only returns it to a `Dialog.Trigger`, and these overlays are
+   * opened by links and route changes instead, so without this it dropped
+   * to `<body>`. Pass this to choose the target yourself; it replaces the
+   * default entirely, so call `event.preventDefault()` yourself.
+   */
+  onCloseAutoFocus?: (event: Event) => void;
+  /**
    * `"alertdialog"` for a destructive confirmation — it interrupts to ask
    * for a decision, rather than presenting a plain content surface. Plain
    * `"dialog"` (the default) covers every other consumer.
@@ -101,9 +109,11 @@ export function ResponsiveOverlay({
   size = "default",
   footer,
   onOpenAutoFocus,
+  onCloseAutoFocus,
   role = "dialog",
   children,
 }: ResponsiveOverlayProps) {
+  const openerRef = useRef<Element | null>(null);
   // Drag-to-dismiss lives on the grab handle only, which is `md:hidden` — so
   // desktop is excluded by CSS rather than by a `window.innerWidth` branch,
   // keeping this component's "no JS breakpoint" property intact. Handle-only
@@ -194,11 +204,23 @@ export function ResponsiveOverlay({
           // visible focus ring on a control the user did not choose. Focus
           // the panel instead (Radix gives Content `tabindex="-1"`): the trap,
           // Escape, and Tab-into-the-dialog all still work, with no ring.
-          onOpenAutoFocus={
-            onOpenAutoFocus ??
+          onOpenAutoFocus={(event) => {
+            openerRef.current = document.activeElement;
+            if (onOpenAutoFocus) {
+              onOpenAutoFocus(event);
+              return;
+            }
+            event.preventDefault();
+            contentRef.current?.focus();
+          }}
+          onCloseAutoFocus={
+            onCloseAutoFocus ??
             ((event) => {
               event.preventDefault();
-              contentRef.current?.focus();
+              const opener = openerRef.current;
+              if (opener instanceof HTMLElement && opener.isConnected && opener !== document.body) {
+                opener.focus();
+              }
             })
           }
           // A toast's own buttons (the publish Undo) sit outside the panel;

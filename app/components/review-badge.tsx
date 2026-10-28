@@ -27,7 +27,7 @@ export function ReviewBadge({ count, className }: { count: number; className?: s
       aria-hidden="true"
       data-testid="review-badge"
       className={cn(
-        "pointer-events-none absolute grid h-[17px] min-w-[17px] place-items-center rounded-full bg-warning px-1 font-mono text-[10px] leading-none font-bold text-background tabular-nums ring-2 ring-rail",
+        "pointer-events-none absolute grid h-[18px] min-w-[18px] place-items-center rounded-full bg-warning px-1 font-mono text-[11px] leading-none font-bold text-background tabular-nums ring-2 ring-rail",
         className,
       )}
     >

@@ -169,22 +169,22 @@ export function BackfillRow({
             </Button>
           ) : null}
         {kind === "match" ? (
-        <span className="shrink-0 rounded-md bg-success/10 px-2.5 py-1 font-mono text-[10.5px] font-semibold text-success uppercase">
+        <span className="shrink-0 rounded-md bg-success/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-success uppercase">
           Match
         </span>
         ) : null}
         {item.stravaActivityId ? (
-          <span className="shrink-0 rounded-md bg-[#fc4c02]/10 px-2.5 py-1 font-mono text-[10.5px] font-semibold text-[#d94500] uppercase">
+          <span className="shrink-0 rounded-md bg-[#fc4c02]/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-[#d94500] uppercase">
             On Strava
           </span>
         ) : null}
         {kind === "create" ? (
-        <span className="shrink-0 rounded-md bg-primary/10 px-2.5 py-1 font-mono text-[10.5px] font-semibold text-primary uppercase">
+        <span className="shrink-0 rounded-md bg-primary/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-primary uppercase">
           Create
         </span>
         ) : null}
         {tracked ? (
-        <span className="shrink-0 rounded-md bg-secondary px-2.5 py-1 font-mono text-[10.5px] font-semibold text-muted-foreground uppercase">
+        <span className="shrink-0 rounded-md bg-secondary px-2.5 py-1 font-mono text-[11px] font-semibold text-muted-foreground uppercase">
           Tracked
         </span>
         ) : null}

@@ -47,7 +47,7 @@ export function AppVersionFooter({
       </a>
       <div className="flex items-center gap-1">
         <span
-          className="font-mono text-[9px] text-muted-foreground/70"
+          className="font-mono text-[11px] text-muted-foreground"
           title={`ActivSync ${label === "dev" ? version : label}`}
         >
           {label}

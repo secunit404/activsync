@@ -338,3 +338,12 @@ test("Undo publish in the overlay cancels before anything is sent", async () => 
     vi.useRealTimers();
   }
 });
+
+test("headings step down from the dialog title without skipping a level", () => {
+  renderDetail(fixture);
+  const levels = within(screen.getByRole("dialog"))
+    .getAllByRole("heading")
+    .map((heading) => Number(heading.tagName.slice(1)));
+  expect(levels).toEqual([2, 3]);
+  expect(screen.getByRole("heading", { name: "Description", level: 3 })).toBeInTheDocument();
+});

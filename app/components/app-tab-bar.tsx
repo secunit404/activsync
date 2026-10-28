@@ -72,7 +72,6 @@ export function AppTabBar({ hidden = false, reviewCount = 0 }: AppTabBarProps) {
           <NavLink
             key={to}
             to={to}
-            aria-label={to === "/" ? reviewNavLabel(label, reviewCount) : label}
             className="relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-muted-foreground transition-colors aria-[current=page]:text-primary"
           >
             <span className="relative">
@@ -85,6 +84,11 @@ export function AppTabBar({ hidden = false, reviewCount = 0 }: AppTabBarProps) {
               ) : null}
             </span>
             <span className="text-[11px] font-medium">{label}</span>
+            {to === "/" && reviewCount > 0 ? (
+              <span className="sr-only">
+                {reviewNavLabel(label, reviewCount).slice(label.length)}
+              </span>
+            ) : null}
           </NavLink>
         ))}
       </div>

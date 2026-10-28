@@ -220,7 +220,7 @@ export function GarminStep({
         }
       >
         <div ref={mfaBodyRef} className="flex flex-col gap-5">
-          <p className="font-mono text-[10.5px] tracking-[0.14em] text-[var(--sync)] uppercase">
+          <p className="font-mono text-[11px] tracking-[0.14em] text-[var(--sync)] uppercase">
             Garmin two-factor
           </p>
           <MfaCodeInput length={6} onComplete={setCode} disabled={pending} />

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +31,13 @@ type BulkActionBarProps = {
    */
   selectAll?: boolean | "indeterminate";
   onToggleAll?: () => void;
+  /**
+   * Where focus goes when the bar closes under it and the control it came
+   * from is gone, or was never focused: Safari does not focus a checkbox on
+   * click, so a mouse selection followed by Tab into the bar records no
+   * origin at all.
+   */
+  fallbackFocus?: () => HTMLElement | null;
 };
 
 const publishDisabledReason = "Reconnect Strava to resume publishing.";
@@ -80,11 +87,16 @@ export function BulkActionBar({
   publishDisabled = false,
   selectAll,
   onToggleAll,
+  fallbackFocus,
 }: BulkActionBarProps) {
   // Where focus came from before it entered the bar, so it can go back there
   // when the bar unmounts under it (Clear, Escape, a finished action) rather
   // than being dropped on <body>.
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const fallbackFocusRef = useRef(fallbackFocus);
+  useEffect(() => {
+    fallbackFocusRef.current = fallbackFocus;
+  }, [fallbackFocus]);
 
   const barRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) {
@@ -104,10 +116,12 @@ export function BulkActionBar({
       observer.disconnect();
       root.setProperty("--bottom-bar-height", "74px");
       root.removeProperty("--bulk-bar-clearance");
-      const target = returnFocusRef.current;
-      if (node.contains(document.activeElement) && target?.isConnected) {
-        target.focus();
+      if (!node.contains(document.activeElement)) {
+        return;
       }
+      const origin = returnFocusRef.current;
+      const target = origin?.isConnected ? origin : fallbackFocusRef.current?.();
+      target?.focus();
     };
   }, []);
 
@@ -129,7 +143,7 @@ export function BulkActionBar({
       aria-label="Selected activities"
       onFocus={(event) => {
         const from = event.relatedTarget;
-        if (from instanceof HTMLElement && !event.currentTarget.contains(from)) {
+        if (from instanceof HTMLElement && from !== document.body && !event.currentTarget.contains(from)) {
           returnFocusRef.current = from;
         }
       }}
