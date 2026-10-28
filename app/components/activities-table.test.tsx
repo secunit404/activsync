@@ -80,11 +80,13 @@ const lift: Activity = {
 function renderTable({
   activities = [run],
   selected = new Set<number>(),
+  publishingIds = new Set<number>(),
   onToggle = vi.fn(),
   onToggleAll = vi.fn(),
 }: {
   activities?: Activity[];
   selected?: ReadonlySet<number>;
+  publishingIds?: ReadonlySet<number>;
   onToggle?: (id: number) => void;
   onToggleAll?: () => void;
 } = {}) {
@@ -96,6 +98,7 @@ function renderTable({
           <ActivitiesTable
             activities={activities}
             selected={selected}
+            publishingIds={publishingIds}
             onToggle={onToggle}
             onToggleAll={onToggleAll}
           />
@@ -191,4 +194,13 @@ test("header checkbox counts only the rows on screen", () => {
   renderTable({ activities: [run, lift], selected: new Set([12345, 424242]) });
   const headerCheckbox = screen.getByRole("checkbox", { name: "Select all activities" });
   expect(headerCheckbox).toHaveAttribute("aria-checked", "mixed");
+});
+
+test("a publishing row hides its reason without removing it, so the row keeps its size", () => {
+  const backlog: Activity = { ...run, publishStatus: "held", holdReason: "backlog" };
+  renderTable({ activities: [backlog], publishingIds: new Set([backlog.garminActivityId]) });
+  expect(screen.getByText("PUBLISHING…")).toBeInTheDocument();
+  const reason = screen.getByText("Older activity found after a reconnect");
+  expect(reason).toHaveClass("invisible");
+  expect(reason).toHaveAttribute("aria-hidden", "true");
 });

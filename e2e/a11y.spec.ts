@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+import { reportBroken } from "./broken-connections";
 
 const WCAG_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -33,5 +34,14 @@ test("the activity detail has no WCAG AA violations", async ({ page }) => {
 test("the selection bar has no WCAG AA violations", async ({ page }) => {
   await page.getByRole("checkbox").nth(1).check();
   await expect(page.getByRole("region", { name: "Selected activities" })).toBeVisible();
+  expect(await violations(page)).toEqual([]);
+});
+
+test("the merged reconnect banner has no WCAG AA violations", async ({ page }) => {
+  await reportBroken(page, ["garmin", "strava"]);
+  await page.goto("/?status=missing");
+  await expect(page.getByText("Reconnect Garmin and Strava")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Reconnect/ })).toHaveCount(2);
+  await expect(page.getByRole("link", { name: /^Only missing/ })).toBeVisible();
   expect(await violations(page)).toEqual([]);
 });

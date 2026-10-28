@@ -3,9 +3,9 @@ import { expect, test } from "vitest";
 
 import { TypePill } from "./type-pill";
 
-test("renders a short type as-is", () => {
+test("renders a short type as-is, at the 12px reading floor", () => {
   render(<TypePill type="running" />);
-  expect(screen.getByText("RUNNING")).toBeInTheDocument();
+  expect(screen.getByText("RUNNING")).toHaveClass("text-xs");
 });
 
 test("truncates a long type and keeps the raw value discoverable via title", () => {
