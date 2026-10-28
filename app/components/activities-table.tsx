@@ -12,6 +12,7 @@ import { MetaList } from "@/components/meta-list";
 type ActivitiesTableProps = {
   activities: Activity[];
   selected: ReadonlySet<number>;
+  publishingIds?: ReadonlySet<number>;
   onToggle: (id: number) => void;
   onToggleAll: () => void;
 };
@@ -25,6 +26,7 @@ type ActivitiesTableProps = {
 export function ActivitiesTable({
   activities,
   selected,
+  publishingIds = new Set(),
   onToggle,
   onToggleAll,
 }: ActivitiesTableProps) {
@@ -75,6 +77,7 @@ export function ActivitiesTable({
               key={activity.garminActivityId}
               activity={activity}
               selected={selected.has(activity.garminActivityId)}
+              publishing={publishingIds.has(activity.garminActivityId)}
               onToggle={onToggle}
             />
           ))}
@@ -87,10 +90,12 @@ export function ActivitiesTable({
 function ActivityRow({
   activity,
   selected,
+  publishing,
   onToggle,
 }: {
   activity: Activity;
   selected: boolean;
+  publishing: boolean;
   onToggle: (id: number) => void;
 }) {
   const navigate = useNavigate();
@@ -137,7 +142,7 @@ function ActivityRow({
       <td className="px-2 py-3 font-mono text-[13px]">{activity.detail.distance || "—"}</td>
       <td className="hidden px-2 py-3 font-mono text-[13px] lg:table-cell">{effort || "—"}</td>
       <td className="px-2 py-3">
-        <StatusPill status={activity.publishStatus} />
+        <StatusPill status={activity.publishStatus} publishing={publishing} />
       </td>
       <td className="px-2 py-3 text-center text-muted-foreground">
         <ChevronRightIcon className="inline size-4" aria-hidden="true" />

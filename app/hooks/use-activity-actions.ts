@@ -1,11 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
   editActivity,
   excludeActivity,
-  publishActivities,
-  publishActivity,
   restoreActivity,
   type ActivityActionResult,
 } from "@/lib/api";
@@ -13,8 +11,6 @@ import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
 export type ActivityActionInput =
-  | { type: "publish"; activityId: number }
-  | { type: "publish-many"; activityIds: number[] }
   | { type: "exclude"; activityId: number }
   | { type: "exclude-many"; activityIds: number[] }
   | { type: "restore"; activityId: number }
@@ -36,37 +32,42 @@ export function useActivityActions() {
   return useMutation({
     mutationFn: runActivityAction,
     onSuccess: (result, action) => {
-      if (action.type === "edit") {
-        return;
-      }
-      if (result.severity === "warning") {
-        toast.warning(result.message);
-      } else {
-        toast.success(result.message);
+      if (action.type !== "edit") {
+        toastActionResult(result);
       }
     },
     onError: (error, action) => {
       if (action.type !== "edit") {
-        toast.error(error.message, { duration: ERROR_TOAST_DURATION_MS });
+        toastActionError(error);
       }
     },
-    onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.appState }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.allActivities }),
-      ]);
-    },
+    onSettled: () => invalidateActivityQueries(queryClient),
   });
+}
+
+export function toastActionResult(result: ActivityActionResult) {
+  if (result.severity === "warning") {
+    toast.warning(result.message);
+  } else {
+    toast.success(result.message);
+  }
+}
+
+export function toastActionError(error: Error) {
+  toast.error(error.message, { duration: ERROR_TOAST_DURATION_MS });
+}
+
+export async function invalidateActivityQueries(queryClient: QueryClient) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.appState }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.allActivities }),
+  ]);
 }
 
 function runActivityAction(
   action: ActivityActionInput,
 ): Promise<ActivityActionResult> {
   switch (action.type) {
-    case "publish":
-      return publishActivity(action.activityId);
-    case "publish-many":
-      return publishActivities(action.activityIds);
     case "exclude":
       return excludeActivity(action.activityId);
     case "exclude-many":

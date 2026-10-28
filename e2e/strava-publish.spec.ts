@@ -83,6 +83,11 @@ test("connecting Strava in mock mode and publishing an activity succeeds end to 
   await bulkActionBar.getByRole("button", { name: /^Publish/ }).click();
 
   const toastRegion = page.getByRole("status", { name: /notifications/i });
-  await expect(toastRegion).toContainText(/Published 1 activity to Strava/i);
+  await expect(toastRegion).toContainText("Publishing to Strava…");
+  await expect(row.getByText("PUBLISHING…", { exact: true })).toBeVisible();
+  // The request only goes out once the 5s undo window has elapsed.
+  await expect(toastRegion).toContainText(/Published 1 activity to Strava/i, {
+    timeout: 15_000,
+  });
   await expect(row.getByText("PUBLISHED", { exact: true })).toBeVisible();
 });

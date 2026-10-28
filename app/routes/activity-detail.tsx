@@ -12,6 +12,7 @@ import { ActivityDetailView, ActivityDetailViewFooter } from "@/components/activ
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { formatTypeLabel } from "@/components/type-pill";
 import { useActivityActions } from "@/hooks/use-activity-actions";
+import { usePublishQueue } from "@/hooks/use-publish-queue";
 import { getAppState, type Activity } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
@@ -32,7 +33,7 @@ export function clientLoader({ params }: Route.ClientLoaderArgs) {
   return null;
 }
 
-type ActionType = "publish" | "exclude" | "restore" | "edit";
+type ActionType = "exclude" | "restore" | "edit";
 
 /**
  * Activity detail — view (`2a`) and edit (`2b`), one `ResponsiveOverlay`
@@ -58,6 +59,7 @@ export default function ActivityDetail() {
   );
   const editing = searchParams.get("edit") === "1";
   const actions = useActivityActions();
+  const publishQueue = usePublishQueue();
   const appState = useQuery({
     queryKey: queryKeys.appState,
     queryFn: ({ signal }) => getAppState(signal),
@@ -117,9 +119,8 @@ export default function ActivityDetail() {
   const enterEdit = () => setSearchParams({ edit: "1" });
   const exitEdit = () => setSearchParams({}, { replace: true });
 
-  const handlePublish = () => {
-    actions.mutate({ type: "publish", activityId: activity.garminActivityId });
-  };
+  const handlePublish = () => publishQueue.publishOne(activity.garminActivityId);
+  const handleUndoPublish = () => publishQueue.undo(activity.garminActivityId);
   const handleExclude = () => {
     actions.mutate({ type: "exclude", activityId: activity.garminActivityId });
   };
@@ -149,7 +150,8 @@ export default function ActivityDetail() {
   };
 
   const dirty = title !== activity.title || description !== activity.description;
-  const busy = actions.isPending;
+  const publishPhase = publishQueue.queued.get(activity.garminActivityId);
+  const busy = actions.isPending || publishPhase !== undefined;
 
   const eyebrow = (
     <MetaList
@@ -181,11 +183,13 @@ export default function ActivityDetail() {
             activity={activity}
             connectionsBroken={connectionsBroken}
             busy={busy}
-            isPublishing={isPending("publish")}
+            publishPhase={publishPhase}
+            isPublishing={publishPhase === "sending"}
             isExcluding={isPending("exclude")}
             isRestoring={isPending("restore")}
             onEdit={enterEdit}
             onPublish={handlePublish}
+            onUndoPublish={handleUndoPublish}
             onExclude={handleExclude}
             onRestore={handleRestore}
           />

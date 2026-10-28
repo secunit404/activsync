@@ -15,8 +15,17 @@ const statusConfig: Record<PublishStatus, { label: string; className: string }> 
   excluded: { label: "EXCLUDED", className: "bg-secondary text-muted-foreground" },
 };
 
-export function StatusPill({ status }: { status: PublishStatus }) {
-  const { label, className } = statusConfig[status];
+const publishingConfig = { label: "PUBLISHING…", className: "bg-info/12 text-info" };
+
+/** `publishing` overrides `status` while a publish waits out its undo window or is in flight. */
+export function StatusPill({
+  status,
+  publishing = false,
+}: {
+  status: PublishStatus;
+  publishing?: boolean;
+}) {
+  const { label, className } = publishing ? publishingConfig : statusConfig[status];
   return (
     <span
       className={cn(

@@ -210,6 +210,15 @@ body {
   }
 }
 
+@keyframes publish-undo-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 /*
  * Overlay scroll regions. The handoff called for hiding the scrollbar chrome
  * entirely, but that left no signal at all that a long body continued — and
@@ -304,6 +313,12 @@ html body[data-scroll-locked] {
   background: #20272e !important;
   border-color: #39414b !important;
   box-shadow: var(--shadow-toast) !important;
+}
+
+/* A modal Radix dialog sets `pointer-events: none` on <body>, which the
+   toaster inherits; visible toasts must stay pressable over an open overlay. */
+[data-sonner-toast][data-visible="true"] {
+  pointer-events: auto;
 }
 
 [data-sonner-toast][data-type="error"] {

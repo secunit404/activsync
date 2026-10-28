@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
+import { PUBLISH_UNDO_WINDOW_MS } from "@/hooks/use-publish-queue";
 import type { Activity, AppState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import ActivityDetail from "./activity-detail";
@@ -83,6 +84,10 @@ const appStateFixture: AppState = {
 };
 
 getAppState.mockResolvedValue(appStateFixture);
+
+beforeEach(() => {
+  publishActivity.mockClear();
+});
 
 function renderDetail(
   activity: Activity | null,
@@ -246,7 +251,7 @@ test("disables Publish when Strava is disconnected", () => {
   }
 });
 
-test("publishing calls publishActivity with the activity id", async () => {
+test("publishing waits out the undo window, then calls publishActivity with the activity id", async () => {
   publishActivity.mockResolvedValue({
     message: "Published Morning run to Strava",
     severity: "success",
@@ -254,7 +259,40 @@ test("publishing calls publishActivity with the activity id", async () => {
     failedCount: 0,
     blockedCount: 0,
   });
-  renderDetail(fixture);
-  await userEvent.click(screen.getAllByRole("button", { name: /Publish/ })[0]);
-  await waitFor(() => expect(publishActivity).toHaveBeenCalledWith(12345));
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderDetail(fixture);
+    await user.click(screen.getAllByRole("button", { name: /Publish/ })[0]);
+
+    expect(screen.getAllByRole("button", { name: "Undo publish" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("status")).toHaveTextContent(/Publishing to Strava in 5 seconds/);
+    for (const button of screen.getAllByRole("button", { name: "Exclude" })) {
+      expect(button).toBeDisabled();
+    }
+    expect(publishActivity).not.toHaveBeenCalled();
+
+    await act(() => vi.advanceTimersByTimeAsync(PUBLISH_UNDO_WINDOW_MS));
+
+    expect(publishActivity).toHaveBeenCalledWith(12345);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("Undo publish in the overlay cancels before anything is sent", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderDetail(fixture);
+    await user.click(screen.getAllByRole("button", { name: /Publish/ })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Undo publish" })[0]);
+
+    await act(() => vi.advanceTimersByTimeAsync(PUBLISH_UNDO_WINDOW_MS * 2));
+
+    expect(publishActivity).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button", { name: "Publish to Strava" }).length).toBeGreaterThan(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
