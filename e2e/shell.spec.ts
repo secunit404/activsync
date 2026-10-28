@@ -23,3 +23,46 @@ test("nav moves between destinations", async ({ page }) => {
   await nav.getByRole("link", { name: "Hevy" }).click();
   await expect(page).toHaveURL(/\/hevy$/);
 });
+
+const pages = [
+  { path: "/", title: "Activities" },
+  { path: "/hevy", title: "Hevy" },
+  { path: "/settings", title: "Settings" },
+];
+
+for (const { path, title } of pages) {
+  test(`${title} names itself in the tab title and has no wordmark eyebrow`, async ({ page }) => {
+    await page.goto(path);
+    const heading = page.getByRole("heading", { level: 1, name: title });
+    await expect(heading).toBeVisible();
+    await expect(page).toHaveTitle(`${title} - ActivSync`);
+    await expect(page.locator("header").getByLabel("ActivSync")).toHaveCount(0);
+  });
+
+  // Phones have no rail, so the page header carries the logo mark, on the
+  // heading's own row rather than a row above it.
+  test(`${title} shows the logo beside its heading on phones only`, async ({ page }) => {
+    await page.goto(path);
+    const heading = page.getByRole("heading", { level: 1, name: title });
+    const logo = page.locator("header").getByRole("img", { name: "ActivSync" });
+    if (test.info().project.name !== "mobile") {
+      await expect(logo).toBeHidden();
+      return;
+    }
+    await expect(logo).toBeVisible();
+    await expect(heading).toBeVisible();
+    const centre = (box: { y: number; height: number }) => box.y + box.height / 2;
+    await expect
+      .poll(async () => {
+        const [logoBox, headingBox] = [await logo.boundingBox(), await heading.boundingBox()];
+        if (!logoBox || !headingBox) return false;
+        return (
+          logoBox.width >= 28 &&
+          logoBox.width <= 32 &&
+          logoBox.x < headingBox.x &&
+          Math.abs(centre(logoBox) - centre(headingBox)) <= 2
+        );
+      })
+      .toBe(true);
+  });
+}

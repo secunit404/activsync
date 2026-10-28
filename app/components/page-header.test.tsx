@@ -9,11 +9,23 @@ test("renders the title as the page heading", () => {
   expect(screen.getByText("Review your sync history.")).toBeVisible();
 });
 
-test("shows the ActivSync eyebrow by default", () => {
+// The rail carries the brand from md: up; phones have no rail, so the
+// header shows the logo mark there instead of a wordmark eyebrow.
+test("shows the logo mark, not a wordmark eyebrow", () => {
   render(<PageHeader title="Settings" description="Manage connections." />);
-  // AppBrand splits the wordmark across two coloured spans, so match its
-  // aria-label rather than a single text node.
-  expect(screen.getByLabelText("ActivSync")).toBeVisible();
+  const logo = screen.getByRole("img", { name: "ActivSync" });
+  expect(logo).toHaveAttribute("src", "/favicon.ico");
+  expect(logo.className).toContain("md:hidden");
+  expect(screen.queryByLabelText("ActivSync")).not.toBeInTheDocument();
+  expect(screen.queryByText(/activ/i)).not.toBeInTheDocument();
+});
+
+test("the logo sits in the heading's row, not a row of its own", () => {
+  render(<PageHeader title="Settings" description="Manage connections." />);
+  const logo = screen.getByRole("img", { name: "ActivSync" });
+  expect(logo.parentElement).toBe(
+    screen.getByRole("heading", { level: 1, name: "Settings" }).parentElement,
+  );
 });
 
 test("renders an action beside the title when given", () => {
@@ -25,7 +37,7 @@ test("renders an action beside the title when given", () => {
 
 test("omits the action slot entirely when none is given", () => {
   const { container } = render(<PageHeader title="Hevy" description="Workouts." />);
-  expect(container.textContent).toBe("ActivSyncHevyWorkouts.");
+  expect(container.textContent).toBe("HevyWorkouts.");
 });
 
 test("the container constrains and centres its children", () => {
