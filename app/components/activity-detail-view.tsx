@@ -49,7 +49,7 @@ export function ActivityDetailView({ activity }: { activity: Activity }) {
       <div className="flex flex-wrap gap-2.5" aria-label="Activity links">
         <Button asChild variant="outline" size="sm">
           <a href={activity.garminUrl} target="_blank" rel="noreferrer">
-            Garmin
+            View on Garmin
             <ExternalLinkIcon data-icon="inline-end" />
           </a>
         </Button>
