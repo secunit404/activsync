@@ -135,6 +135,22 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     user_agent TEXT NOT NULL DEFAULT ''
 );
 
+-- One row per activity the owner chose to publish: the undo window's
+-- deadline and, once sent, the outcome the page that asked can read back.
+-- See publish_schedule.py.
+CREATE TABLE IF NOT EXISTS publish_schedule (
+    garmin_activity_id INTEGER PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    batch_kind TEXT NOT NULL,
+    deadline REAL NOT NULL,
+    state TEXT NOT NULL,
+    prior_status TEXT NOT NULL,
+    message TEXT,
+    finished_at REAL
+);
+
+CREATE INDEX IF NOT EXISTS publish_schedule_batch ON publish_schedule (batch_id);
+
 CREATE TABLE IF NOT EXISTS auth_oidc_logo (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     png BLOB NOT NULL,
@@ -403,6 +419,16 @@ def oldest_unpublished_start_time(conn: sqlite3.Connection) -> str | None:
         "WHERE publish_status IN ('pending', 'held')"
     ).fetchone()
     return row["oldest"] if row and row["oldest"] else None
+
+
+def scheduled_publish_ids(conn: sqlite3.Connection) -> set[int]:
+    """Activities whose publish is waiting out its undo window or being sent
+    by the publish scheduler. Nothing else may publish them meanwhile."""
+    rows = conn.execute(
+        "SELECT garmin_activity_id FROM publish_schedule "
+        "WHERE state IN ('waiting', 'sending')"
+    ).fetchall()
+    return {row["garmin_activity_id"] for row in rows}
 
 
 def get_config_value(conn: sqlite3.Connection, key: str, default=None):

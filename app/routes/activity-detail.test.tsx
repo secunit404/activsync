@@ -9,18 +9,36 @@ import type { Activity, AppState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import ActivityDetail from "./activity-detail";
 
-const { editActivity, publishActivity, excludeActivity, restoreActivity, getAppState } =
-  vi.hoisted(() => ({
-    editActivity: vi.fn(),
-    publishActivity: vi.fn(),
-    excludeActivity: vi.fn(),
-    restoreActivity: vi.fn(),
-    getAppState: vi.fn(),
-  }));
+const {
+  editActivity,
+  schedulePublishActivity,
+  cancelPublish,
+  getPublishBatch,
+  excludeActivity,
+  restoreActivity,
+  getAppState,
+} = vi.hoisted(() => ({
+  editActivity: vi.fn(),
+  schedulePublishActivity: vi.fn(),
+  cancelPublish: vi.fn(),
+  getPublishBatch: vi.fn(),
+  excludeActivity: vi.fn(),
+  restoreActivity: vi.fn(),
+  getAppState: vi.fn(),
+}));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, editActivity, publishActivity, excludeActivity, restoreActivity, getAppState };
+  return {
+    ...actual,
+    editActivity,
+    schedulePublishActivity,
+    cancelPublish,
+    getPublishBatch,
+    excludeActivity,
+    restoreActivity,
+    getAppState,
+  };
 });
 
 const baseDetail: Activity["detail"] = {
@@ -64,6 +82,8 @@ const fixture: Activity = {
   garminUrl: "https://connect.garmin.com/modern/activity/12345",
   stravaUrl: null,
   hevyBadge: null,
+  publishScheduledAt: null,
+  publishPhase: null,
   detail: { ...baseDetail, distance: "10.2 km", duration: "52:14", avgHr: "156 bpm" },
 };
 
@@ -88,7 +108,26 @@ const appStateFixture: AppState = {
 getAppState.mockResolvedValue(appStateFixture);
 
 beforeEach(() => {
-  publishActivity.mockClear();
+  schedulePublishActivity.mockReset().mockResolvedValue({
+    batchId: "batch",
+    publishScheduledAt: "2026-07-19T12:00:05+00:00",
+    remainingMs: PUBLISH_UNDO_WINDOW_MS,
+    undoWindowMs: PUBLISH_UNDO_WINDOW_MS,
+  });
+  cancelPublish.mockReset().mockResolvedValue({ message: "Nothing was sent to Strava." });
+  getPublishBatch.mockReset().mockResolvedValue({
+    batchId: "batch",
+    state: "done",
+    remainingMs: 0,
+    result: {
+      message: "Published Morning run to Strava",
+      severity: "success",
+      publishedCount: 0,
+      failedCount: 0,
+      blockedCount: 0,
+    },
+    error: null,
+  });
 });
 
 function renderDetail(
@@ -306,36 +345,30 @@ test("a connected Strava shows no reconnect line", () => {
   expect(screen.queryByRole("link", { name: "Reconnect Strava" })).not.toBeInTheDocument();
 });
 
-test("publishing waits out the undo window, then calls publishActivity with the activity id", async () => {
-  publishActivity.mockResolvedValue({
-    message: "Published Morning run to Strava",
-    severity: "success",
-    publishedCount: 1,
-    failedCount: 0,
-    blockedCount: 0,
-  });
+test("publishing schedules it on the server and offers Undo publish for the window", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderDetail(fixture);
     await user.click(screen.getAllByRole("button", { name: /Publish/ })[0]);
 
+    expect(schedulePublishActivity).toHaveBeenCalledWith(12345);
     expect(screen.getAllByRole("button", { name: "Undo publish" }).length).toBeGreaterThan(0);
     expect(screen.getByRole("status")).toHaveTextContent(/Publishing to Strava in 5 seconds/);
     for (const button of screen.getAllByRole("button", { name: "Exclude" })) {
       expect(button).toBeDisabled();
     }
-    expect(publishActivity).not.toHaveBeenCalled();
+    expect(getPublishBatch).not.toHaveBeenCalled();
 
     await act(() => vi.advanceTimersByTimeAsync(PUBLISH_UNDO_WINDOW_MS));
 
-    expect(publishActivity).toHaveBeenCalledWith(12345);
+    expect(getPublishBatch).toHaveBeenCalledWith("batch");
   } finally {
     vi.useRealTimers();
   }
 });
 
-test("Undo publish in the overlay cancels before anything is sent", async () => {
+test("Undo publish in the overlay cancels on the server", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -345,10 +378,40 @@ test("Undo publish in the overlay cancels before anything is sent", async () => 
 
     await act(() => vi.advanceTimersByTimeAsync(PUBLISH_UNDO_WINDOW_MS * 2));
 
-    expect(publishActivity).not.toHaveBeenCalled();
+    expect(cancelPublish).toHaveBeenCalledWith([12345]);
+    expect(getPublishBatch).not.toHaveBeenCalled();
     expect(screen.getAllByRole("button", { name: "Publish to Strava" }).length).toBeGreaterThan(0);
   } finally {
     vi.useRealTimers();
+  }
+});
+
+test("a publish waiting on the server, started elsewhere, shows PUBLISHING… and Undo publish", async () => {
+  const waiting = {
+    ...fixture,
+    publishScheduledAt: "2026-07-19T12:00:05+00:00",
+    publishPhase: "waiting" as const,
+  };
+  renderDetail(waiting);
+
+  expect(screen.getByTestId("activity-status-line")).toHaveTextContent("PUBLISHING…");
+  expect(screen.getByRole("status")).toHaveTextContent(/Publishing to Strava in 5 seconds/);
+  await userEvent.click(screen.getAllByRole("button", { name: "Undo publish" })[0]);
+
+  expect(cancelPublish).toHaveBeenCalledWith([12345]);
+});
+
+test("a publish the server is already sending offers no undo", () => {
+  renderDetail({
+    ...fixture,
+    publishScheduledAt: "2026-07-19T12:00:05+00:00",
+    publishPhase: "sending",
+  });
+
+  expect(screen.getByTestId("activity-status-line")).toHaveTextContent("PUBLISHING…");
+  expect(screen.queryByRole("button", { name: "Undo publish" })).not.toBeInTheDocument();
+  for (const button of screen.getAllByRole("button", { name: /Publishing…/ })) {
+    expect(button).toBeDisabled();
   }
 });
 

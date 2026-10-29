@@ -225,7 +225,12 @@ export function ActivitiesView({
     selection.selected.has(activity.garminActivityId),
   );
   const selectedCount = selectedActivities.length;
-  const publishingIds = new Set(publishQueue.queued.keys());
+  const publishingIds = new Set([
+    ...publishQueue.queued.keys(),
+    ...data.items
+      .filter((activity) => activity.publishPhase !== null)
+      .map((activity) => activity.garminActivityId),
+  ]);
 
   // Bulk actions fire on the subset the server would accept, not the whole
   // selection — mirrors `api_routes.py`'s per-activity status guards, so a

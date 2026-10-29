@@ -8,15 +8,23 @@ import { PUBLISH_UNDO_WINDOW_MS } from "@/hooks/use-publish-queue";
 import type { Activity, ActivitiesPage, AppState } from "@/lib/api";
 import { ActivitiesView } from "./activities";
 
-const { publishActivities, excludeActivity, dismissCatchUpReport } = vi.hoisted(() => ({
-  publishActivities: vi.fn(),
-  excludeActivity: vi.fn(),
-  dismissCatchUpReport: vi.fn(),
-}));
+const { schedulePublishActivities, getPublishBatch, excludeActivity, dismissCatchUpReport } =
+  vi.hoisted(() => ({
+    schedulePublishActivities: vi.fn(),
+    getPublishBatch: vi.fn(),
+    excludeActivity: vi.fn(),
+    dismissCatchUpReport: vi.fn(),
+  }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, publishActivities, excludeActivity, dismissCatchUpReport };
+  return {
+    ...actual,
+    schedulePublishActivities,
+    getPublishBatch,
+    excludeActivity,
+    dismissCatchUpReport,
+  };
 });
 
 // These spies are module-level, so call counts accumulate across tests
@@ -94,6 +102,8 @@ const oneActivity: Activity = {
   garminUrl: "https://connect.garmin.com/modern/activity/12345",
   stravaUrl: null,
   hevyBadge: null,
+  publishScheduledAt: null,
+  publishPhase: null,
   detail: activityDetail,
 };
 
@@ -487,13 +497,25 @@ test("selecting a filter clears the selection", async () => {
   expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
 });
 
-test("publishing the selection clears it, marks the rows publishing, and sends after the undo window", async () => {
-  publishActivities.mockResolvedValue({
-    message: "Published 1 activity to Strava",
-    severity: "success",
-    publishedCount: 1,
-    failedCount: 0,
-    blockedCount: 0,
+test("publishing the selection clears it, marks the rows publishing, and schedules it on the server", async () => {
+  schedulePublishActivities.mockResolvedValue({
+    batchId: "batch",
+    publishScheduledAt: "2026-07-19T12:00:05+00:00",
+    remainingMs: PUBLISH_UNDO_WINDOW_MS,
+    undoWindowMs: PUBLISH_UNDO_WINDOW_MS,
+  });
+  getPublishBatch.mockResolvedValue({
+    batchId: "batch",
+    state: "done",
+    remainingMs: 0,
+    result: {
+      message: "Published 1 activity to Strava",
+      severity: "success",
+      publishedCount: 1,
+      failedCount: 0,
+      blockedCount: 0,
+    },
+    error: null,
   });
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
@@ -504,7 +526,8 @@ test("publishing the selection clears it, marks the rows publishing, and sends a
     await user.click(screen.getAllByRole("button", { name: /Publish 1/ })[0]);
 
     expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
-    expect(publishActivities).not.toHaveBeenCalled();
+    expect(schedulePublishActivities).toHaveBeenCalledWith([12345]);
+    expect(getPublishBatch).not.toHaveBeenCalled();
     const morningRow = within(screen.getByRole("table")).getByRole("row", { name: /Morning run/ });
     expect(within(morningRow).getByText("PUBLISHING…")).toBeInTheDocument();
     const pushDayRow = within(screen.getByRole("table")).getByRole("row", { name: /Push Day/ });
@@ -512,11 +535,26 @@ test("publishing the selection clears it, marks the rows publishing, and sends a
 
     await act(() => vi.advanceTimersByTimeAsync(PUBLISH_UNDO_WINDOW_MS));
 
-    expect(publishActivities).toHaveBeenCalledWith([12345]);
+    expect(getPublishBatch).toHaveBeenCalledWith("batch");
     await waitFor(() => expect(within(morningRow).queryByText("PUBLISHING…")).not.toBeInTheDocument());
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("a row the server is publishing reads PUBLISHING… and is left out of a bulk publish", async () => {
+  const waiting = {
+    ...oneActivity,
+    publishScheduledAt: "2026-07-19T12:00:05+00:00",
+    publishPhase: "waiting" as const,
+  };
+  renderAt("/", { ...activities, items: [waiting, anotherActivity] });
+
+  const morningRow = within(screen.getByRole("table")).getByRole("row", { name: /Morning run/ });
+  expect(within(morningRow).getByText("PUBLISHING…")).toBeInTheDocument();
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+
+  expect(screen.queryByRole("button", { name: /Publish 1/ })).not.toBeInTheDocument();
 });
 
 test("excluding the selection calls excludeActivity for each selected id and clears the selection", async () => {

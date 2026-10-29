@@ -9,6 +9,7 @@ import secrets
 import sqlite3
 import time
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -33,6 +34,7 @@ from activsync import (
     hevy_queue_api_routes,
     hevy_tools_api_routes,
     onboarding,
+    publish_schedule,
     settings_api_routes,
 )
 from activsync.auth_api_routes import AuthorizeUrl
@@ -111,12 +113,33 @@ def create_app(
     apply_hevy_match: Callable[[str, str], str] | None = None,
     process_hevy_workout: Callable[[str], str] | None = None,
     oidc_transport: httpx2.AsyncBaseTransport | None = None,
+    publish_scheduler: publish_schedule.PublishScheduler | None = None,
 ) -> FastAPI:
+    scheduler = publish_scheduler or publish_schedule.PublishScheduler(
+        conn,
+        build_garmin_client=_build_garmin_client,
+        build_strava_client=_build_strava_client,
+    )
+
+    # The scheduler runs in mock mode too, unlike the poller, so it is
+    # started here rather than by the caller's lifespan.
+    @asynccontextmanager
+    async def run_with_scheduler(app):
+        scheduler.start()
+        try:
+            if lifespan is None:
+                yield
+            else:
+                async with lifespan(app):
+                    yield
+        finally:
+            scheduler.stop()
+
     # No /docs or /openapi.json: deny-by-default would otherwise serve them
     # through the SPA rule's public GET fallback.
     app = FastAPI(
         title="ActivSync",
-        lifespan=lifespan,
+        lifespan=run_with_scheduler,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
@@ -132,6 +155,7 @@ def create_app(
     auth_core.prune_expired_sessions(conn, time.time())
     app.state.db = conn
     app.state.setup_code = setup_code
+    app.state.publish_scheduler = scheduler
 
     if (resolved_web_dir / "assets").is_dir():
         app.mount(
@@ -147,6 +171,7 @@ def create_app(
             mock_mode=_mock_mode,
             build_garmin_client=_build_garmin_client,
             build_strava_client=_build_strava_client,
+            publish_scheduler=scheduler,
         )
     )
     app.include_router(

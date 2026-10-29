@@ -104,8 +104,14 @@ export type Activity = {
   garminUrl: string;
   stravaUrl: string | null;
   hevyBadge: string | null;
+  /** The undo window's deadline while a publish waits out the window or is being sent. */
+  publishScheduledAt: string | null;
+  /** `waiting` can still be undone; `sending` is past the deadline. */
+  publishPhase: PublishPhase | null;
   detail: ActivityDetail;
 };
+
+export type PublishPhase = "waiting" | "sending";
 
 export type ActivityQuery = {
   sort: SortOrder;
@@ -618,18 +624,55 @@ export function chooseHevyMatch(hevyId: string, strategy: HevyMatchStrategy) {
   );
 }
 
-export function publishActivity(garminActivityId: number) {
-  return requestJson<ActivityActionResult>(
-    `/api/v1/activities/${garminActivityId}/publish`,
+export type PublishScheduled = {
+  batchId: string;
+  publishScheduledAt: string;
+  remainingMs: number;
+  undoWindowMs: number;
+};
+
+export type PublishBatch = {
+  batchId: string;
+  state: PublishPhase | "done";
+  remainingMs: number;
+  result: ActivityActionResult | null;
+  error: string | null;
+};
+
+/** The server sends it once the undo window ends, whether or not this page is still open. */
+export function schedulePublishActivity(garminActivityId: number) {
+  return requestJson<PublishScheduled>(
+    `/api/v1/activities/${garminActivityId}/publish/schedule`,
     { method: "POST" },
   );
 }
 
-export function publishActivities(activityIds: number[]) {
-  return requestJson<ActivityActionResult>("/api/v1/activities/publish", {
+export function schedulePublishActivities(activityIds: readonly number[]) {
+  return requestJson<PublishScheduled>("/api/v1/activities/publish/schedule", {
     method: "POST",
     body: JSON.stringify({ activityIds }),
   });
+}
+
+/** 409 once the server has started sending: too late to undo. */
+export function cancelPublish(activityIds: readonly number[]) {
+  const [only] = activityIds;
+  return activityIds.length === 1
+    ? requestJson<ActivityActionResult>(`/api/v1/activities/${only}/publish/cancel`, {
+        method: "POST",
+      })
+    : requestJson<ActivityActionResult>("/api/v1/activities/publish/cancel", {
+        method: "POST",
+        body: JSON.stringify({ activityIds }),
+      });
+}
+
+/** 404 once the batch was undone, from this page or another. */
+export function getPublishBatch(batchId: string) {
+  return requestJson<PublishBatch>(
+    `/api/v1/activities/publish/batches/${encodeURIComponent(batchId)}`,
+    { method: "GET" },
+  );
 }
 
 export function editActivity(

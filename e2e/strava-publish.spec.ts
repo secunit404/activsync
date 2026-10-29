@@ -2,6 +2,9 @@ import type { Page } from "@playwright/test";
 
 import { test, expect } from "./fixtures";
 
+// The tests below need the connections the first one makes.
+test.describe.configure({ mode: "serial" });
+
 // The seeded e2e DB never sets `strava_tokens` or `garmin_credentials_verified`
 // (see `src/activsync/dev_seed.py` — it inserts activity rows directly,
 // bypassing the sync path entirely), so every publish control starts
@@ -89,16 +92,86 @@ test("connecting Strava in mock mode and publishing an activity succeeds end to 
   const toastRegion = page.getByRole("status", { name: /notifications/i });
   await expect(toastRegion).toContainText("Publishing to Strava…");
   await expect(row.getByText("PUBLISHING…", { exact: true })).toBeVisible();
-  // The request only goes out once the 5s undo window has elapsed.
+  // The server sends it once the 5s undo window has elapsed.
   await expect(toastRegion).toContainText(/Published 1 activity to Strava/i, {
     timeout: 15_000,
   });
   await expect(row.getByText("PUBLISHED", { exact: true })).toBeVisible();
 });
 
+async function serverActivity(page: Page, title: string) {
+  const response = await page.request.get("/api/v1/activities?pageSize=100");
+  const { items } = (await response.json()) as {
+    items: { title: string; publishStatus: string; publishPhase: string | null }[];
+  };
+  return items.find((item) => item.title === title);
+}
+
 function tableRow(page: Page, title: string) {
   return page.getByTestId("activities-table").locator("tr", { hasText: title });
 }
+
+test("a publish still goes through when the page is reloaded inside the undo window", async ({
+  page,
+}) => {
+  await page.getByRole("link", { name: "Forest trail run #2", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Publish to Strava" }).locator("visible=true").click();
+  await expect(page.getByRole("status", { name: /notifications/i })).toContainText(
+    "Publishing to Strava…",
+  );
+
+  await page.reload();
+
+  const statusLine = page.getByRole("dialog").getByTestId("activity-status-line");
+  await expect(statusLine).toContainText("PUBLISHING…");
+  await expect(statusLine).toContainText("PUBLISHED", { timeout: 15_000 });
+  await expect(statusLine).not.toContainText("PUBLISHING…");
+  expect((await serverActivity(page, "Forest trail run #2"))?.publishStatus).toBe("published");
+});
+
+test("Undo inside the window sends nothing", async ({ page }) => {
+  const row = tableRow(page, "Indoor bike #2");
+  await row.getByRole("checkbox", { name: "Select Indoor bike #2" }).check();
+  await page.getByTestId("bulk-action-bar").getByRole("button", { name: /^Publish/ }).click();
+  const toastRegion = page.getByRole("status", { name: /notifications/i });
+  await expect(row.getByText("PUBLISHING…", { exact: true })).toBeVisible();
+
+  await toastRegion.getByRole("button", { name: "Undo" }).click();
+
+  await expect(toastRegion).toContainText("Not published");
+  // Past the deadline the server would have sent it, had the undo not held.
+  await page.waitForTimeout(6_000);
+  await expect(row.getByText("PENDING", { exact: true })).toBeVisible();
+  const activity = await serverActivity(page, "Indoor bike #2");
+  expect(activity?.publishStatus).toBe("pending");
+  expect(activity?.publishPhase).toBeNull();
+});
+
+test("a publish still goes through after the page is closed inside the undo window", async ({
+  page,
+  context,
+}) => {
+  await page.getByRole("link", { name: "Mountain hike #3", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Publish to Strava" })
+    .locator("visible=true")
+    .click();
+  await expect(page.getByRole("status", { name: /notifications/i })).toContainText(
+    "Publishing to Strava…",
+  );
+
+  await page.close();
+  const later = await context.newPage();
+  await later.waitForTimeout(6_000);
+  await later.goto("/?status=all");
+
+  await expect(tableRow(later, "Mountain hike #3").getByText("PUBLISHED", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  expect((await serverActivity(later, "Mountain hike #3"))?.publishStatus).toBe("published");
+});
 
 async function tableLayout(page: Page) {
   return page.getByTestId("activities-table").evaluate((table) => ({

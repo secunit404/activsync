@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -149,6 +150,20 @@ def _under_hevy_settlement_hold(conn: sqlite3.Connection, row: dict) -> bool:
     return last_success is None or last_success < release_after
 
 
+# The poller, the publish scheduler and the immediate publish routes run on
+# different threads. Two of them uploading the same activity at once would
+# both miss each other in find_existing_activity (Strava is still processing
+# the first upload) and post a duplicate, so one activity publishes at a time
+# and the second caller re-reads the row after the first has finished.
+_PUBLISH_LOCKS: dict[int, threading.Lock] = {}
+_PUBLISH_LOCKS_GUARD = threading.Lock()
+
+
+def _publish_lock(garmin_activity_id: int) -> threading.Lock:
+    with _PUBLISH_LOCKS_GUARD:
+        return _PUBLISH_LOCKS.setdefault(garmin_activity_id, threading.Lock())
+
+
 def _publish_row(
     conn: sqlite3.Connection,
     garmin: GarminClient,
@@ -158,6 +173,19 @@ def _publish_row(
     *,
     manual: bool = False,
 ) -> None:
+    with _publish_lock(garmin_activity_id):
+        _publish_row_locked(conn, garmin, strava, garmin_activity_id, now, manual=manual)
+
+
+def _publish_row_locked(
+    conn: sqlite3.Connection,
+    garmin: GarminClient,
+    strava: StravaClient,
+    garmin_activity_id: int,
+    now: datetime,
+    *,
+    manual: bool,
+) -> None:
     blocking = hevy_db.blocking_workout_for_activity(conn, garmin_activity_id)
     if blocking is not None:
         raise PublishBlocked(
@@ -165,6 +193,8 @@ def _publish_row(
         )
 
     row = db.get_activity(conn, garmin_activity_id)
+    if db.is_published(row):
+        return
     if not manual and _under_hevy_settlement_hold(conn, row):
         raise PublishBlocked("settlement hold")
     start_time = datetime.strptime(row["start_time"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
@@ -340,6 +370,11 @@ def publish_pending(
     for status in statuses:
         for row in db.list_activities(conn, status=status):
             if manual and row["garmin_activity_id"] not in garmin_activity_ids:
+                continue
+            # Read per row, not once up front: the owner can press Publish
+            # while this pass is uploading earlier rows, and a row waiting
+            # out its undo window must stay unsent until the window ends.
+            if not manual and row["garmin_activity_id"] in db.scheduled_publish_ids(conn):
                 continue
             try:
                 _publish_row(

@@ -32,6 +32,8 @@ function activity(id: number, title: string): Activity {
     garminUrl: "https://connect.garmin.com/modern/activity/1",
     stravaUrl: null,
     hevyBadge: null,
+    publishScheduledAt: null,
+    publishPhase: null,
     detail: {} as Activity["detail"],
   };
 }

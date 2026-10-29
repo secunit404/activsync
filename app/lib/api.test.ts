@@ -5,8 +5,10 @@ import {
   getActivities,
   getAppState,
   loginPath,
-  publishActivities,
-  publishActivity,
+  cancelPublish,
+  getPublishBatch,
+  schedulePublishActivities,
+  schedulePublishActivity,
 } from "@/lib/api";
 import { login } from "@/lib/auth-api";
 
@@ -35,11 +37,11 @@ describe("requestJson", () => {
   it("sends JSON headers and returns the parsed payload", async () => {
     const fetchMock = mockFetch({ json: async () => ({ message: "ok" }) });
 
-    const result = await publishActivity(42);
+    const result = await schedulePublishActivity(42);
 
     expect(result).toEqual({ message: "ok" });
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/v1/activities/42/publish");
+    expect(url).toBe("/api/v1/activities/42/publish/schedule");
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({
       Accept: "application/json",
@@ -50,10 +52,33 @@ describe("requestJson", () => {
   it("serialises a request body", async () => {
     const fetchMock = mockFetch({});
 
-    await publishActivities([1, 2]);
+    await schedulePublishActivities([1, 2]);
 
     const [, init] = fetchMock.mock.calls[0];
     expect(JSON.parse(init.body as string)).toEqual({ activityIds: [1, 2] });
+  });
+
+  it("cancels one publish by id and several in one body", async () => {
+    const fetchMock = mockFetch({});
+
+    await cancelPublish([42]);
+    await cancelPublish([1, 2]);
+
+    const [[oneUrl, oneInit], [manyUrl, manyInit]] = fetchMock.mock.calls;
+    expect(oneUrl).toBe("/api/v1/activities/42/publish/cancel");
+    expect(oneInit.method).toBe("POST");
+    expect(manyUrl).toBe("/api/v1/activities/publish/cancel");
+    expect(JSON.parse(manyInit.body as string)).toEqual({ activityIds: [1, 2] });
+  });
+
+  it("reads a publish batch by id", async () => {
+    const fetchMock = mockFetch({});
+
+    await getPublishBatch("abc");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/activities/publish/batches/abc");
+    expect(init.method).toBe("GET");
   });
 
   it("puts query state in the URL rather than a body", async () => {
@@ -74,7 +99,7 @@ describe("requestJson", () => {
       json: async () => ({ detail: "Nothing to retry." }),
     });
 
-    await expect(publishActivity(42)).rejects.toMatchObject({
+    await expect(schedulePublishActivity(42)).rejects.toMatchObject({
       name: "ApiError",
       message: "Nothing to retry.",
       status: 409,
@@ -84,7 +109,7 @@ describe("requestJson", () => {
   it("falls back to a generic message when the error body has no detail", async () => {
     mockFetch({ ok: false, status: 500, json: async () => null });
 
-    await expect(publishActivity(42)).rejects.toThrow(
+    await expect(schedulePublishActivity(42)).rejects.toThrow(
       "ActivSync request failed (500)",
     );
   });
@@ -97,7 +122,7 @@ describe("requestJson", () => {
       },
     });
 
-    await expect(publishActivity(42)).resolves.toBeUndefined();
+    await expect(schedulePublishActivity(42)).resolves.toBeUndefined();
   });
 
   it("exposes ApiError as an Error subclass so catch blocks can narrow", () => {
@@ -109,7 +134,7 @@ describe("requestJson", () => {
   it("marks every request with the CSRF header the server requires", async () => {
     const fetchMock = mockFetch({});
 
-    await publishActivity(42);
+    await schedulePublishActivity(42);
 
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers).toMatchObject({ "X-ActivSync-Request": "1" });
