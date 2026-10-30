@@ -54,7 +54,8 @@ const sessions: AuthSession[] = [
     createdAt: "2026-10-10T08:00:00+00:00",
     lastSeenAt: "2026-10-11T08:00:00+00:00",
     ip: "198.51.100.4",
-    userAgent: "Safari",
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
     current: false,
   },
 ];
@@ -172,22 +173,99 @@ test("a proxy sign-in says so and offers no sign-out", async () => {
   expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
 });
 
-test("lists sessions and revokes another one", async () => {
+test("signing out one session asks first and names the browser", async () => {
   renderAccess();
 
   const list = await screen.findByRole("list", { name: "Signed-in sessions" });
   expect(await within(list).findByText("This browser")).toBeVisible();
-  await userEvent.click(within(list).getByRole("button", { name: /Single sign-on session from 198\.51\.100\.4/ }));
+  expect(within(list).getByText(/Safari on iOS/)).toBeVisible();
+  await userEvent.click(within(list).getByRole("button", { name: "Sign out Safari on iOS" }));
+
+  const dialog = await screen.findByRole("alertdialog", { name: "Sign out this browser?" });
+  expect(api.revokeSession).not.toHaveBeenCalled();
+  await userEvent.click(within(dialog).getByRole("button", { name: "Sign out" }));
 
   await vi.waitFor(() => expect(api.revokeSession).toHaveBeenCalledWith("phone-id", expect.anything()));
 });
 
-test("signs out everywhere else", async () => {
+test("cancelling the sign-out leaves the session alone", async () => {
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+  await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(api.revokeSession).not.toHaveBeenCalled();
+});
+
+test("a session with an unreadable user agent falls back to its address", async () => {
+  api.getSessions.mockResolvedValue([
+    sessions[0],
+    { ...sessions[1], userAgent: "curl/8.4.0" },
+  ]);
+  renderAccess();
+
+  expect(
+    await screen.findByRole("button", {
+      name: "Sign out the Single sign-on session from 198.51.100.4",
+    }),
+  ).toBeVisible();
+});
+
+test("signing out one session leaves the other rows usable", async () => {
+  api.getSessions.mockResolvedValue([
+    sessions[0],
+    sessions[1],
+    { ...sessions[1], publicId: "laptop-id", userAgent: "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0" },
+  ]);
+  api.revokeSession.mockReturnValue(new Promise(() => {}));
+  renderAccess();
+
+  await userEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Sign out" }));
+
+  await vi.waitFor(() =>
+    expect(screen.getByRole("button", { name: "Sign out Safari on iOS", hidden: true })).toBeDisabled(),
+  );
+  expect(screen.getByRole("button", { name: "Sign out Firefox on Linux", hidden: true })).toBeEnabled();
+});
+
+test("signs out everywhere else only after confirming", async () => {
   renderAccess();
 
   await userEvent.click(await screen.findByRole("button", { name: "Sign out everywhere else" }));
+  const dialog = await screen.findByRole("alertdialog", { name: "Sign out everywhere else?" });
+  expect(api.revokeOtherSessions).not.toHaveBeenCalled();
+  await userEvent.click(within(dialog).getByRole("button", { name: "Sign out everywhere else" }));
 
   await vi.waitFor(() => expect(api.revokeOtherSessions).toHaveBeenCalled());
+});
+
+test("removing single sign-on asks first and then sends the password", async () => {
+  api.removeOidcConfig.mockResolvedValue({ message: "Single sign-on removed." });
+  await openOidcEditor();
+
+  await userEvent.click(screen.getByRole("button", { name: "Remove single sign-on" }));
+  const dialog = await screen.findByRole("alertdialog", { name: "Remove single sign-on?" });
+  expect(api.removeOidcConfig).not.toHaveBeenCalled();
+  await userEvent.click(within(dialog).getByRole("button", { name: "Remove single sign-on" }));
+
+  await vi.waitFor(() =>
+    expect(api.removeOidcConfig).toHaveBeenCalledWith("my long passphrase", expect.anything()),
+  );
+});
+
+test("cancelling the removal keeps single sign-on", async () => {
+  await openOidcEditor();
+
+  await userEvent.click(screen.getByRole("button", { name: "Remove single sign-on" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+  await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(api.removeOidcConfig).not.toHaveBeenCalled();
 });
 
 test("offers a sign-out button for password sessions", async () => {
