@@ -65,3 +65,59 @@ test("clearing the selection hides the bar and restores the tab bar", async ({ p
   await expect(page.getByTestId("bulk-action-bar")).toBeHidden();
   await expect(page.getByTestId("app-tab-bar")).toBeVisible();
 });
+
+function firstListItem(page: Page) {
+  return test.info().project.name === "mobile"
+    ? page.getByTestId("activities-cards").locator(":scope > div").first()
+    : page.getByTestId("activities-table").locator("tbody tr").first();
+}
+
+const documentTop = (page: Page) =>
+  firstListItem(page).evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+
+// The bar used to mount in the flow above the table, pushing every row
+// ~86px down under the cursor the moment the first box was checked.
+test("selecting a row leaves the list where it was", async ({ page }) => {
+  const before = await documentTop(page);
+
+  await firstRowCheckbox(page).check();
+  await expect(page.getByTestId("bulk-action-bar")).toBeVisible();
+
+  expect(await documentTop(page)).toBe(before);
+});
+
+test("a partial selection marks select-all as mixed", async ({ page }) => {
+  test.skip(test.info().project.name === "mobile", "no select-all on mobile");
+  await firstRowCheckbox(page).check();
+  await expect(page.getByRole("checkbox", { name: "Select all activities" })).toHaveAttribute(
+    "aria-checked",
+    "mixed",
+  );
+});
+
+test("Escape clears the selection", async ({ page }) => {
+  await firstRowCheckbox(page).check();
+  await expect(page.getByTestId("bulk-action-bar")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByTestId("bulk-action-bar")).toBeHidden();
+});
+
+test("selection controls are at least 44px tall on touch", async ({ page }) => {
+  test.skip(test.info().project.name !== "mobile", "touch only");
+  const checkbox = firstRowCheckbox(page);
+  const hitArea = await checkbox.evaluate((el) => {
+    const after = getComputedStyle(el, "::after");
+    return { width: parseFloat(after.width), height: parseFloat(after.height) };
+  });
+  expect(hitArea.width).toBeGreaterThanOrEqual(44);
+  expect(hitArea.height).toBeGreaterThanOrEqual(44);
+
+  await checkbox.check();
+  const bar = page.getByTestId("bulk-action-bar");
+  for (const name of [/^Clear$/, /^Exclude \d+$/, /^Publish \d+$/]) {
+    const box = await bar.getByRole("button", { name }).first().boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
+});

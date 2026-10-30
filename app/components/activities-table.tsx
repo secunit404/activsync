@@ -31,8 +31,13 @@ export function ActivitiesTable({
   onToggle,
   onToggleAll,
 }: ActivitiesTableProps) {
-  const allSelected = activities.length > 0 && selected.size === activities.length;
-  const someSelected = selected.size > 0 && !allSelected;
+  // Counted against the rows on screen, not `selected.size`: an id can stay
+  // selected after a background refetch moves its row out of this list.
+  const selectedOnPage = activities.filter((activity) =>
+    selected.has(activity.garminActivityId),
+  ).length;
+  const allSelected = activities.length > 0 && selectedOnPage === activities.length;
+  const someSelected = selectedOnPage > 0 && !allSelected;
 
   return (
     <div
@@ -42,7 +47,7 @@ export function ActivitiesTable({
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border bg-card font-mono text-[10.5px] tracking-[0.1em] text-muted-foreground">
-            <th scope="col" className="w-[38px] px-4 py-3">
+            <th scope="col" className="w-[38px] px-4 py-3 pointer-coarse:py-3.5">
               <Checkbox
                 aria-label="Select all activities"
                 checked={allSelected ? true : someSelected ? "indeterminate" : false}

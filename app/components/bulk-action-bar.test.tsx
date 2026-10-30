@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { expect, test, vi } from "vitest";
 
 import { BulkActionBar } from "./bulk-action-bar";
@@ -41,6 +42,14 @@ test("shows the count and never lists the selected activity names", () => {
   renderBar();
   expect(screen.getAllByText("2 selected").length).toBeGreaterThan(0);
   expect(screen.queryByText(/Morning Run/)).toBeNull();
+});
+
+test("the count reads in the neutral foreground, leaving orange to Publish", () => {
+  renderBar();
+  for (const count of screen.getAllByText("2 selected")) {
+    expect(count).toHaveClass("text-foreground");
+    expect(count).not.toHaveClass("text-primary");
+  }
 });
 
 // Only one element carries the testid the E2E spec queries with a single
@@ -134,4 +143,43 @@ test("publishDisabled is false by default, so Publish stays enabled", () => {
     expect(button).not.toBeDisabled();
     expect(button).not.toHaveAttribute("title");
   }
+});
+
+test("hands focus back to where it came from when it closes under it", async () => {
+  function Harness() {
+    const [count, setCount] = useState(2);
+    return (
+      <>
+        <button type="button">Row checkbox</button>
+        <BulkActionBar
+          count={count}
+          excludableCount={count}
+          publishableCount={count}
+          onClear={() => setCount(0)}
+          onExclude={vi.fn()}
+          onPublish={vi.fn()}
+          busy={false}
+        />
+      </>
+    );
+  }
+  render(<Harness />);
+  const origin = screen.getByRole("button", { name: "Row checkbox" });
+  origin.focus();
+  await userEvent.tab();
+  expect(screen.getByTestId("bulk-action-bar")).toContainElement(
+    document.activeElement as HTMLElement,
+  );
+
+  await userEvent.keyboard("{Enter}");
+
+  expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+  expect(origin).toHaveFocus();
+});
+
+test("is a labelled region", () => {
+  renderBar();
+  expect(screen.getByRole("region", { name: "Selected activities" })).toBe(
+    screen.getByTestId("bulk-action-bar"),
+  );
 });

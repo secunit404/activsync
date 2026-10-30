@@ -261,15 +261,38 @@ export function ActivitiesView({
 
   const handleReconnect = () => navigate("/settings#connections");
 
+  const hasSelection = selectedCount > 0;
+  const clearSelection = selection.clear;
+  useEffect(() => {
+    if (!hasSelection) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      // An open dialog, menu or listbox owns Escape: the detail overlay
+      // renders over this list with the selection still alive behind it.
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')
+      ) {
+        return;
+      }
+      clearSelection();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [hasSelection, clearSelection]);
+
   return (
     <PageContainer
       className={cn(
         "grid gap-5 py-6 md:gap-7 md:py-10",
-        // The mobile bulk bar is fixed-bottom, same slot as the tab bar
-        // (which AppLayout already reserves 74px for); give the page a
-        // little extra clearance only while it's actually showing, so the
-        // last table row/card isn't tucked underneath it.
-        selectedCount > 0 && "pb-32 md:pb-10",
+        // The bulk bar is fixed-bottom at every size (on mobile in the tab
+        // bar's slot, which AppLayout already reserves 74px for); give the
+        // page extra clearance below the list only while it's showing, so
+        // the last row/card and the pagination can scroll out from under it.
+        // Bottom padding only — nothing above the list moves.
+        hasSelection && "pb-32 md:pb-28",
       )}
     >
       <PageHeader
@@ -322,6 +345,10 @@ export function ActivitiesView({
           </p>
         </div>
       </div>
+
+      <p role="status" className="sr-only">
+        {hasSelection ? `${selectedCount} selected` : ""}
+      </p>
 
       <BulkActionBar
         count={selectedCount}

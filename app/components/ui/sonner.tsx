@@ -51,7 +51,9 @@ const Toaster = ({ theme = "dark", ...props }: ToasterProps) => {
       theme={theme}
       className="toaster group"
       duration={5000}
-      offset={{ bottom: 24, right: 24 }}
+      // `--bulk-bar-clearance` is set only while the desktop bulk dock is
+      // up (see `BulkActionBar`), lifting toasts clear of it.
+      offset={{ bottom: "calc(24px + var(--bulk-bar-clearance, 0px))", right: 24 }}
       mobileOffset={{
         // `--bottom-bar-height` is written from JS as a plain pixel count, so
         // it cannot carry the safe-area inset itself — neither the tab bar's

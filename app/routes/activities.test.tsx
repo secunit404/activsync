@@ -357,6 +357,46 @@ test("checking a row reveals the bulk action bar with the right count", async ()
   expect(within(bar).getAllByText("1 selected").length).toBeGreaterThan(0);
 });
 
+test("the selection count is announced through a polite live region", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  const status = screen
+    .getAllByRole("status")
+    .find((node) => node.classList.contains("sr-only"));
+  expect(status).toBeDefined();
+  expect(status).toHaveTextContent("");
+
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+
+  expect(status).toHaveTextContent("1 selected");
+});
+
+test("Escape clears the selection", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+  expect(screen.getByTestId("bulk-action-bar")).toBeInTheDocument();
+
+  await userEvent.keyboard("{Escape}");
+
+  expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+});
+
+// The detail overlay renders over the list with the selection alive behind
+// it; Escape there closes the overlay and must leave the selection alone.
+test("Escape inside an open dialog leaves the selection alone", async () => {
+  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+  const dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  document.body.append(dialog);
+
+  try {
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByTestId("bulk-action-bar")).toBeInTheDocument();
+  } finally {
+    dialog.remove();
+  }
+});
+
 // The now-deleted dashboard disabled Publish while a connection was broken;
 // the redesigned BulkActionBar must keep doing so, or a user sees the
 // AttentionBanner saying publishing is paused directly above an enabled

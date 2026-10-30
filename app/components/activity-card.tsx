@@ -47,8 +47,10 @@ export function ActivityCard({
   return (
     <div
       onClick={() => navigate(href)}
+      // gap-3.5 matches the checkbox's 14px touch hit-area overhang, so a
+      // tap on its edge can never land on the title link beside it.
       className={cn(
-        "flex cursor-pointer items-center gap-3 rounded-xl border border-border p-3.5",
+        "flex cursor-pointer items-center gap-3.5 rounded-xl border border-border p-3.5",
         selected && "border-primary/30 bg-primary/5",
       )}
     >
