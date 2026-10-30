@@ -20,10 +20,12 @@ export function ActivitiesEmptyState({
   status,
   counts,
   pollIntervals,
+  stravaBroken = false,
 }: {
   status: StatusFilter | null;
   counts?: Record<PublishStatus, number>;
   pollIntervals?: PollIntervals;
+  stravaBroken?: boolean;
 }) {
   const [searchParams] = useSearchParams();
   const viewSearch = (view: string) => {
@@ -53,6 +55,7 @@ export function ActivitiesEmptyState({
 
   const copy = emptyCopy(status, {
     garminMinutes: pollIntervals?.garminMinutes,
+    stravaBroken,
     reviewCount: counts ? reviewCountOf(counts) : 0,
     showAll,
     review: { label: "Show what needs review", to: viewSearch("review") },
@@ -86,6 +89,7 @@ function emptyCopy(
   status: Exclude<StatusFilter, "review"> | null,
   context: {
     garminMinutes?: number;
+    stravaBroken: boolean;
     reviewCount: number;
     showAll: NextStep;
     review: NextStep;
@@ -95,8 +99,9 @@ function emptyCopy(
     case "pending":
       return {
         title: "Nothing waiting to publish",
-        description:
-          "New activities whose type has auto-sync on wait here until the next Strava check.",
+        description: context.stravaBroken
+          ? "New activities whose type has auto-sync on wait here until Strava is reconnected."
+          : "New activities whose type has auto-sync on wait here until the next Strava check.",
         next: { label: "Choose which types auto-sync", to: "/settings#autosync" },
       };
     case "held":

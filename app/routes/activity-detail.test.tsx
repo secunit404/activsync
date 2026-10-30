@@ -286,11 +286,24 @@ test("a published activity only offers Edit, no Publish or Exclude", () => {
   expect(screen.queryByRole("button", { name: /Publish/ })).not.toBeInTheDocument();
 });
 
-test("disables Publish when Strava is disconnected", () => {
+test("disables Publish when Strava is disconnected, and says how to fix it", () => {
   renderDetail(fixture, { broken: ["strava"] });
   for (const button of screen.getAllByRole("button", { name: /Publish/ })) {
     expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription("Reconnect Strava to publish.");
   }
+  expect(screen.getByRole("link", { name: "Reconnect Strava" })).toHaveAttribute(
+    "href",
+    "/settings#connections",
+  );
+  expect(screen.getByTestId("activity-status-line")).toHaveTextContent(
+    "Publishes to Strava once Strava is reconnected.",
+  );
+});
+
+test("a connected Strava shows no reconnect line", () => {
+  renderDetail(fixture);
+  expect(screen.queryByRole("link", { name: "Reconnect Strava" })).not.toBeInTheDocument();
 });
 
 test("publishing waits out the undo window, then calls publishActivity with the activity id", async () => {

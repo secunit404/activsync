@@ -7,13 +7,21 @@ function withinMinutes(minutes: number): string {
 
 /**
  * One line on what a status (or filter) means for the owner. Pending names
- * the Strava check interval when it is known, since that is when it goes out.
+ * the Strava check interval when it is known, since that is when it goes out,
+ * and promises nothing while the Strava connection is broken.
  */
-export function statusDescription(view: ActivityView, intervals?: PollIntervals): string {
+export function statusDescription(
+  view: ActivityView,
+  intervals?: PollIntervals,
+  stravaBroken = false,
+): string {
   switch (view) {
     case "review":
       return "Held or removed from Strava. These wait for you.";
     case "pending":
+      if (stravaBroken) {
+        return "Publishes to Strava once Strava is reconnected.";
+      }
       return intervals
         ? `Publishes to Strava on its own, usually ${withinMinutes(intervals.stravaMinutes)}.`
         : "Publishes to Strava on its own at the next check.";
@@ -66,9 +74,10 @@ export function rowReason(activity: Pick<Activity, "publishStatus" | "holdReason
 export function activityExplanation(
   activity: Pick<Activity, "publishStatus" | "holdReason">,
   intervals?: PollIntervals,
+  stravaBroken = false,
 ): string {
   if (activity.publishStatus === "held") {
     return waitingReason(activity) ?? statusDescription("held", intervals);
   }
-  return statusDescription(activity.publishStatus, intervals);
+  return statusDescription(activity.publishStatus, intervals, stravaBroken);
 }

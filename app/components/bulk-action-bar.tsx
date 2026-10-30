@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 
+import { PublishBlockedNote } from "@/components/publish-blocked-note";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,8 +41,6 @@ type BulkActionBarProps = {
   fallbackFocus?: () => HTMLElement | null;
 };
 
-const publishDisabledReason = "Reconnect Strava to resume publishing.";
-const nothingExcludableReason = "None of the selected activities can be excluded.";
 
 /**
  * Contextual action bar for the Activities screen's bulk selection (handoff
@@ -93,6 +92,7 @@ export function BulkActionBar({
   // when the bar unmounts under it (Clear, Escape, a finished action) rather
   // than being dropped on <body>.
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const blockedNoteId = useId();
   const fallbackFocusRef = useRef(fallbackFocus);
   useEffect(() => {
     fallbackFocusRef.current = fallbackFocus;
@@ -134,6 +134,10 @@ export function BulkActionBar({
   // own eligible subset is empty.
   const excludeBlocked = busy || excludableCount === 0;
   const publishBlocked = busy || publishDisabled || publishableCount === 0;
+  // Only the outage gets a line: it holds for the whole selection, so the
+  // dock keeps one height while rows are ticked. An empty eligible subset
+  // already reads in the button's own count.
+  const publishDescribedBy = publishDisabled ? blockedNoteId : undefined;
 
   return (
     <div
@@ -197,8 +201,7 @@ export function BulkActionBar({
             className="flex-[1.4]"
             onClick={onPublish}
             disabled={publishBlocked}
-            title={publishDisabled ? publishDisabledReason : undefined}
-            aria-description={publishDisabled ? publishDisabledReason : undefined}
+            aria-describedby={publishDescribedBy}
           >
             {busy ? <Spinner /> : null}
             Publish {publishableCount}
@@ -228,17 +231,22 @@ export function BulkActionBar({
             className={touchTarget}
             onClick={onPublish}
             disabled={publishBlocked}
-            title={publishDisabled ? publishDisabledReason : undefined}
-            aria-description={publishDisabled ? publishDisabledReason : undefined}
+            aria-describedby={publishDescribedBy}
           >
             {busy ? <Spinner /> : null}
             Publish {publishableCount}
           </Button>
         </div>
       </div>
+
+      {publishDisabled ? (
+        <PublishBlockedNote id={blockedNoteId} className="px-1 md:pr-0.5 md:text-right" />
+      ) : null}
     </div>
   );
 }
+
+const nothingExcludableReason = "None of the selected activities can be excluded.";
 
 const touchTarget = "pointer-coarse:h-11 pointer-coarse:px-4";
 

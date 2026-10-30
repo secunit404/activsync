@@ -1,13 +1,13 @@
 import { ExternalLinkIcon, Undo2Icon } from "lucide-react";
+import { useId } from "react";
 
+import { PublishBlockedNote } from "@/components/publish-blocked-note";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { PUBLISH_UNDO_WINDOW_MS, type PublishPhase } from "@/hooks/use-publish-queue";
 import { activityDetailMetrics, isPublishableStatus } from "@/lib/activity-metrics";
 import type { Activity } from "@/lib/api";
-
-const publishDisabledReason = "Reconnect Strava to resume publishing.";
 
 /**
  * Body content for the activity detail overlay's view mode (handoff frame
@@ -113,6 +113,8 @@ export function ActivityDetailViewFooter({
 }: ActivityDetailViewFooterProps) {
   const excluded = activity.publishStatus === "excluded";
   const publishable = isPublishableStatus(activity.publishStatus);
+  const blockedNoteId = useId();
+  const showBlockedNote = publishable && connectionsBroken && publishPhase !== "waiting";
 
   const editButton = (className: string) => (
     <Button variant="outline" className={className} disabled={busy} onClick={onEdit}>
@@ -184,8 +186,7 @@ export function ActivityDetailViewFooter({
         className={className}
         disabled={busy || connectionsBroken}
         aria-busy={isPublishing}
-        title={connectionsBroken ? publishDisabledReason : undefined}
-        aria-description={connectionsBroken ? publishDisabledReason : undefined}
+        aria-describedby={showBlockedNote ? blockedNoteId : undefined}
         onClick={onPublish}
       >
         {isPublishing ? (
@@ -223,6 +224,9 @@ export function ActivityDetailViewFooter({
           {publishButton("")}
         </div>
       </div>
+      {showBlockedNote ? (
+        <PublishBlockedNote id={blockedNoteId} className="mt-2.5 md:text-right" />
+      ) : null}
     </>
   );
 }

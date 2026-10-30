@@ -45,3 +45,11 @@ test("the merged reconnect banner has no WCAG AA violations", async ({ page }) =
   await expect(page.getByRole("link", { name: /^Only missing/ })).toBeVisible();
   expect(await violations(page)).toEqual([]);
 });
+
+test("a blocked selection bar has no WCAG AA violations", async ({ page }) => {
+  await reportBroken(page, ["strava"]);
+  await page.reload();
+  await page.getByRole("checkbox").nth(1).check();
+  await expect(page.getByRole("link", { name: "Reconnect Strava" })).toBeVisible();
+  expect(await violations(page)).toEqual([]);
+});
