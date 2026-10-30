@@ -324,3 +324,79 @@ test("confirming the dialog disconnects Hevy", async () => {
   await waitFor(() => expect(disconnectHevy).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
 });
+
+function renderSettingsWithRefetch(state: SettingsState) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const view = (next: SettingsState) => (
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <SettingsView state={next} />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  const utils = render(view(state));
+  return { refetch: (next: SettingsState) => utils.rerender(view(next)) };
+}
+
+test("a refetch keeps unsaved edits and follows the server for untouched fields", async () => {
+  const { refetch } = renderSettingsWithRefetch(connectedState);
+  const garmin = screen.getByLabelText("Garmin sync interval (min)");
+  await userEvent.clear(garmin);
+  await userEvent.type(garmin, "45");
+
+  refetch({
+    ...connectedState,
+    preferences: { ...connectedState.preferences, lookbackDays: 14 },
+  });
+
+  expect(screen.getByLabelText("Garmin sync interval (min)")).toHaveValue(45);
+  expect(screen.getByLabelText("Activity history window (days)")).toHaveValue(14);
+  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  expect(screen.queryByText(/changed on the server/i)).toBeNull();
+});
+
+test("a refetch that moves an edited field keeps the draft and says so", async () => {
+  const { refetch } = renderSettingsWithRefetch(connectedState);
+  const garmin = screen.getByLabelText("Garmin sync interval (min)");
+  await userEvent.clear(garmin);
+  await userEvent.type(garmin, "45");
+
+  refetch({
+    ...connectedState,
+    preferences: { ...connectedState.preferences, garminPollIntervalMinutes: 30 },
+  });
+
+  expect(screen.getByLabelText("Garmin sync interval (min)")).toHaveValue(45);
+  expect(screen.getByText(/changed on the server while you were editing/i)).toBeVisible();
+
+  await userEvent.click(screen.getByRole("button", { name: "Discard" }));
+  expect(screen.getByLabelText("Garmin sync interval (min)")).toHaveValue(30);
+  expect(screen.queryByText(/changed on the server/i)).toBeNull();
+});
+
+test("an activity type edit survives a refetch", async () => {
+  const { refetch } = renderSettingsWithRefetch(connectedState);
+  await userEvent.click(screen.getByRole("switch", { name: /Running/ }));
+
+  refetch({ ...connectedState, version: "0.1.1" });
+
+  expect(screen.getByRole("switch", { name: /Running/ })).toBeChecked();
+  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+});
+
+test("once the server reflects the saved edit nothing stays dirty", async () => {
+  const { refetch } = renderSettingsWithRefetch(connectedState);
+  const garmin = screen.getByLabelText("Garmin sync interval (min)");
+  await userEvent.clear(garmin);
+  await userEvent.type(garmin, "45");
+
+  refetch({
+    ...connectedState,
+    preferences: { ...connectedState.preferences, garminPollIntervalMinutes: 45 },
+  });
+
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  expect(screen.queryByText(/changed on the server/i)).toBeNull();
+});

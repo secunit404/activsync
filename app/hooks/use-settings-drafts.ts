@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { SettingsState } from "@/lib/api";
+import { mergeDraft } from "@/lib/draft-merge";
 import { hevyDraftFromState, hevyDraftsEqual } from "@/lib/hevy-draft";
 
 type PreferencesDraft = SettingsState["preferences"];
@@ -11,12 +12,12 @@ type PreferencesDraft = SettingsState["preferences"];
  * footer. Connections isn't here — its dialogs act immediately and aren't
  * part of the pending-changes flow.
  *
- * Resyncing to fresh server data (e.g. after a successful Save invalidates
- * and refetches `settings`) happens by comparing `state` to the last-synced
- * reference during render and resetting drafts right there if it changed —
- * React's documented alternative to a `useEffect` for this exact case, and
- * why `state` must come from a query with structural sharing (react-query's
- * default) so the reference is only new when the data actually changed.
+ * When `state` changes (SSE refresh, a connection action, a Save) the drafts
+ * are merged during render rather than reset — React's documented alternative
+ * to a `useEffect` for this case. Fields the owner changed keep their draft;
+ * untouched fields follow the server. `serverChangedUnderDraft` flags a
+ * touched field the server also moved. After a Save the draft equals the new
+ * server value, so nothing stays dirty.
  */
 export function useSettingsDrafts(state: SettingsState) {
   const [syncedState, setSyncedState] = useState(state);
@@ -27,11 +28,29 @@ export function useSettingsDrafts(state: SettingsState) {
   const [hevyDraft, setHevyDraft] = useState(() => hevyDraftFromState(state.hevy));
   const [discardToken, setDiscardToken] = useState(0);
 
+  const [conflict, setConflict] = useState(false);
+
   if (state !== syncedState) {
+    const preferences = mergeDraft(
+      preferencesDraft,
+      syncedState.preferences,
+      state.preferences,
+    );
+    const types = mergeDraft(
+      selectedTypes,
+      enabledTypeKeys(syncedState.activityTypes),
+      enabledTypeKeys(state.activityTypes),
+    );
+    const hevy = mergeDraft(
+      hevyDraft,
+      hevyDraftFromState(syncedState.hevy),
+      hevyDraftFromState(state.hevy),
+    );
     setSyncedState(state);
-    setPreferencesDraft(state.preferences);
-    setSelectedTypes(enabledTypeKeys(state.activityTypes));
-    setHevyDraft(hevyDraftFromState(state.hevy));
+    setPreferencesDraft(preferences.value);
+    setSelectedTypes(types.value);
+    setHevyDraft(hevy.value);
+    setConflict(preferences.conflict || types.conflict || hevy.conflict);
   }
 
   const preferencesDirty = !preferencesEqual(preferencesDraft, state.preferences);
@@ -42,11 +61,14 @@ export function useSettingsDrafts(state: SettingsState) {
   const hevyDirty =
     state.hevy.connected && !hevyDraftsEqual(hevyDraft, hevyDraftFromState(state.hevy));
 
+  const dirty = preferencesDirty || activityTypesDirty || hevyDirty;
+
   function discard() {
     setPreferencesDraft(state.preferences);
     setSelectedTypes(enabledTypeKeys(state.activityTypes));
     setHevyDraft(hevyDraftFromState(state.hevy));
     setDiscardToken((token) => token + 1);
+    setConflict(false);
   }
 
   return {
@@ -59,7 +81,8 @@ export function useSettingsDrafts(state: SettingsState) {
     preferencesDirty,
     activityTypesDirty,
     hevyDirty,
-    dirty: preferencesDirty || activityTypesDirty || hevyDirty,
+    dirty,
+    serverChangedUnderDraft: dirty && conflict,
     discard,
     discardToken,
   };
