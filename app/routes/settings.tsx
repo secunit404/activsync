@@ -160,6 +160,7 @@ export function SettingsView({
         />
         <SettingsFooter
           dirty={drafts.dirty}
+          serverChangedUnderDraft={drafts.serverChangedUnderDraft}
           saving={saving}
           onDiscard={drafts.discard}
           onSave={handleSave}
