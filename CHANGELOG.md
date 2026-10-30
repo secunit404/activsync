@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.1.0](https://github.com/secunit404/activsync/compare/v3.0.0...v3.1.0) (2026-10-30)
+
+
+### Features
+
+* **activities:** a publish goes through even if you leave the page during the undo ([#103](https://github.com/secunit404/activsync/issues/103)) ([08589bf](https://github.com/secunit404/activsync/commit/08589bfc3c16ae63104e8e242cecdd12482a0fc8))
+* **activities:** excluding activities can be undone from the toast ([#102](https://github.com/secunit404/activsync/issues/102)) ([9c43345](https://github.com/secunit404/activsync/commit/9c433450772bc1c9d4133438ad215020714b110b))
+* **activities:** held activities say why they're waiting ([#96](https://github.com/secunit404/activsync/issues/96)) ([faa0de8](https://github.com/secunit404/activsync/commit/faa0de85bb26fa41e44561620208a0a6e81b05f4))
+* **activities:** open on what needs your review, with one filter row ([#94](https://github.com/secunit404/activsync/issues/94)) ([c9113be](https://github.com/secunit404/activsync/commit/c9113be0b3d9914e5c4e30d2e385d47a29145514))
+* **activities:** phones can select the whole page from the selection bar ([#98](https://github.com/secunit404/activsync/issues/98)) ([844e801](https://github.com/secunit404/activsync/commit/844e80123a62dedaf4d70c9ea2bd088ccb86c7dc))
+* **activities:** publishing to Strava waits a few seconds with an undo ([#93](https://github.com/secunit404/activsync/issues/93)) ([c3e6ba7](https://github.com/secunit404/activsync/commit/c3e6ba7e78f7616e11867f249f147e252057a290))
+* **activities:** the Activities nav shows how many activities need review ([#95](https://github.com/secunit404/activsync/issues/95)) ([481a3d8](https://github.com/secunit404/activsync/commit/481a3d8a51213b4378e26c6dd8d88128d010118e))
+* **ui:** page headers drop the small ActivSync label; phones show the logo instead ([#92](https://github.com/secunit404/activsync/issues/92)) ([4bfee8f](https://github.com/secunit404/activsync/commit/4bfee8f8a99fa6b546d1d3d352786688e186bd97))
+
+
+### Bug Fixes
+
+* **activities:** a blocked Publish says why and links to Reconnect Strava, on phones too ([#101](https://github.com/secunit404/activsync/issues/101)) ([291346b](https://github.com/secunit404/activsync/commit/291346bd5caea2e1aa8bd3e10a6692c969323b52))
+* **activities:** activity links read View on Garmin and View on Strava ([#91](https://github.com/secunit404/activsync/issues/91)) ([9669dd1](https://github.com/secunit404/activsync/commit/9669dd1c9103d3a185c8cda375917f9fec6ba126))
+* **activities:** even rows, one compact reconnect banner and a clearer subtitle ([#100](https://github.com/secunit404/activsync/issues/100)) ([907532c](https://github.com/secunit404/activsync/commit/907532c17ab1100eb98d9203ca5c39494eccfbe7))
+* **activities:** keyboard and screen reader users keep their place ([#99](https://github.com/secunit404/activsync/issues/99)) ([034fd5f](https://github.com/secunit404/activsync/commit/034fd5f068b9c147797d9cf50decc39b79cb7a12))
+* **activities:** pagination buttons stay put on the first and last page ([#90](https://github.com/secunit404/activsync/issues/90)) ([1c52b17](https://github.com/secunit404/activsync/commit/1c52b1701194f62d4f82417cba828363005ee2d4))
+* **activities:** selecting rows no longer shifts the list, and partial selection shows a dash ([#97](https://github.com/secunit404/activsync/issues/97)) ([cd410c5](https://github.com/secunit404/activsync/commit/cd410c5476eeff18daf876399aab90e56e6653e8))
+* **ui:** toast close and action buttons sit cleanly at the right edge ([#89](https://github.com/secunit404/activsync/issues/89)) ([ecdd115](https://github.com/secunit404/activsync/commit/ecdd11598faa0b78a461b83fbe5d0ea195ab5055))
+
 ## [3.0.0](https://github.com/secunit404/activsync/compare/v2.1.0...v3.0.0) (2026-10-23)
 
 
