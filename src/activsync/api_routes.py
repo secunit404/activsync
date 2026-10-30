@@ -17,6 +17,7 @@ from activsync import (
     db,
     events,
     onboarding,
+    publish_schedule,
     sync,
     timeutil,
     update_check,
@@ -167,6 +168,10 @@ class Activity(ApiModel):
     strava_url: str | None
     hevy_badge: str | None
     detail: ActivityDetail
+    # Set while a publish waits out its undo window ("waiting", undoable) or
+    # is being sent ("sending"), so every open page shows it.
+    publish_scheduled_at: str | None = None
+    publish_phase: Literal["waiting", "sending"] | None = None
 
 
 class WeekTotal(ApiModel):
@@ -218,12 +223,79 @@ class ActivityActionResult(ApiModel):
     blocked_count: int = 0
 
 
+class PublishScheduled(ApiModel):
+    batch_id: str
+    publish_scheduled_at: str
+    remaining_ms: int
+    undo_window_ms: int
+
+
+class CancelPublishRequest(ApiModel):
+    activity_ids: list[int] = Field(min_length=1)
+
+
+class PublishBatch(ApiModel):
+    batch_id: str
+    state: Literal["waiting", "sending", "done"]
+    remaining_ms: int
+    result: ActivityActionResult | None = None
+    error: str | None = None
+
+
+def _batch_outcome(
+    rows: list[dict], titles: dict[int, str]
+) -> tuple[ActivityActionResult | None, str | None]:
+    """The same toast the immediate publish routes return, built from what
+    the scheduler recorded."""
+    if rows[0]["batch_kind"] == "single":
+        row = rows[0]
+        title = titles.get(row["garmin_activity_id"], "Activity")
+        if row["state"] == publish_schedule.PUBLISHED:
+            verb = "Republished" if row["prior_status"] == "missing" else "Published"
+            return ActivityActionResult(message=f"{verb} {title} to Strava"), None
+        if row["state"] == publish_schedule.SKIPPED:
+            return None, f"{title} was no longer publishable, so nothing was sent."
+        return None, row["message"] or "Could not publish activity"
+
+    counts = {state: 0 for state in (
+        publish_schedule.PUBLISHED, publish_schedule.FAILED,
+        publish_schedule.BLOCKED, publish_schedule.SKIPPED,
+    )}
+    for row in rows:
+        counts[row["state"]] += 1
+    published = counts[publish_schedule.PUBLISHED]
+    failed = counts[publish_schedule.FAILED]
+    blocked = counts[publish_schedule.BLOCKED]
+    skipped = counts[publish_schedule.SKIPPED]
+    if failed or blocked or skipped:
+        parts = [f"Published {published}"]
+        if failed:
+            parts.append(f"{failed} failed and stayed ready to retry")
+        if blocked:
+            parts.append(f"{blocked} blocked by Hevy sync")
+        if skipped:
+            parts.append(f"{skipped} no longer publishable")
+        return ActivityActionResult(
+            message="; ".join(parts),
+            severity="warning",
+            published_count=published,
+            failed_count=failed,
+            blocked_count=blocked,
+        ), None
+    noun = "activity" if published == 1 else "activities"
+    return ActivityActionResult(
+        message=f"Published {published} {noun} to Strava",
+        published_count=published,
+    ), None
+
+
 def create_router(
     conn: sqlite3.Connection,
     *,
     mock_mode: Callable[[], bool],
     build_garmin_client: Callable[[sqlite3.Connection], GarminClient],
     build_strava_client: Callable[[sqlite3.Connection], StravaClient],
+    publish_scheduler: publish_schedule.PublishScheduler,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["frontend"])
 
@@ -305,11 +377,23 @@ def create_router(
         first_index = (current_page - 1) * page_size
         page_items = filtered[first_index : first_index + page_size]
 
+        scheduled = publish_schedule.active_by_activity(conn)
+
+        def schedule_fields(activity_id: int) -> dict:
+            entry = scheduled.get(activity_id)
+            if entry is None:
+                return {}
+            return {
+                "publish_scheduled_at": publish_schedule.deadline_iso(entry["deadline"]),
+                "publish_phase": entry["state"],
+            }
+
         activities = [
             Activity.model_validate(
                 {
                     **activity,
                     "strava_url": view.strava_url_for(activity),
+                    **schedule_fields(activity["garmin_activity_id"]),
                 }
             )
             for activity in page_items
@@ -433,6 +517,94 @@ def create_router(
         return ActivityActionResult(
             message=f"Published {stats.published} {noun} to Strava",
             published_count=stats.published,
+        )
+
+    def schedule_publish(activities: list[dict], kind: str) -> PublishScheduled:
+        if any(
+            activity["publish_status"] not in publish_schedule.PUBLISHABLE_STATUSES
+            for activity in activities
+        ):
+            detail = (
+                "Only pending, held, or missing activities can be published"
+                if kind == "single"
+                else "Some selected activities are no longer publishable. Refresh and try again."
+            )
+            raise HTTPException(status_code=409, detail=detail)
+        require_publish_connections()
+        try:
+            batch = publish_scheduler.schedule(activities, kind=kind)
+        except publish_schedule.AlreadyScheduled as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Already publishing to Strava. Refresh to see where it stands.",
+            ) from exc
+        remaining = batch.deadline - publish_scheduler.now()
+        return PublishScheduled(
+            batch_id=batch.batch_id,
+            publish_scheduled_at=publish_schedule.deadline_iso(batch.deadline),
+            remaining_ms=max(0, round(remaining * 1000)),
+            undo_window_ms=round(publish_scheduler.window_seconds * 1000),
+        )
+
+    @router.post(
+        "/activities/{garmin_activity_id}/publish/schedule",
+        response_model=PublishScheduled,
+    )
+    def schedule_publish_activity(garmin_activity_id: int) -> PublishScheduled:
+        return schedule_publish([require_activity(garmin_activity_id)], "single")
+
+    @router.post("/activities/publish/schedule", response_model=PublishScheduled)
+    def schedule_publish_activities(payload: PublishActivitiesRequest) -> PublishScheduled:
+        activity_ids = sorted(set(payload.activity_ids))
+        return schedule_publish(
+            [require_activity(activity_id) for activity_id in activity_ids], "bulk"
+        )
+
+    def cancel_publish(activity_ids: list[int]) -> ActivityActionResult:
+        cancelled = publish_scheduler.cancel(activity_ids)
+        if cancelled:
+            return ActivityActionResult(message="Nothing was sent to Strava.")
+        if any(publish_schedule.get(conn, activity_id) for activity_id in activity_ids):
+            raise HTTPException(
+                status_code=409,
+                detail="Too late to undo: it is already being sent to Strava.",
+            )
+        raise HTTPException(status_code=409, detail="Nothing is waiting to publish.")
+
+    @router.post(
+        "/activities/{garmin_activity_id}/publish/cancel",
+        response_model=ActivityActionResult,
+    )
+    def cancel_publish_activity(garmin_activity_id: int) -> ActivityActionResult:
+        return cancel_publish([garmin_activity_id])
+
+    @router.post("/activities/publish/cancel", response_model=ActivityActionResult)
+    def cancel_publish_activities(payload: CancelPublishRequest) -> ActivityActionResult:
+        return cancel_publish(sorted(set(payload.activity_ids)))
+
+    @router.get("/activities/publish/batches/{batch_id}", response_model=PublishBatch)
+    def publish_batch(batch_id: str) -> PublishBatch:
+        rows = publish_schedule.batch_rows(conn, batch_id)
+        if not rows:
+            raise HTTPException(
+                status_code=404, detail="Nothing is publishing under that id."
+            )
+        remaining_ms = max(
+            0, round((rows[0]["deadline"] - publish_scheduler.now()) * 1000)
+        )
+        states = {row["state"] for row in rows}
+        if publish_schedule.WAITING in states:
+            return PublishBatch(batch_id=batch_id, state="waiting", remaining_ms=remaining_ms)
+        if publish_schedule.SENDING in states:
+            return PublishBatch(batch_id=batch_id, state="sending", remaining_ms=0)
+        titles = {
+            row["garmin_activity_id"]: activity["title"]
+            for row in rows
+            if (activity := db.get_activity(conn, row["garmin_activity_id"]))
+        }
+        result, error = _batch_outcome(rows, titles)
+        return PublishBatch(
+            batch_id=batch_id, state="done", remaining_ms=0, result=result, error=error
         )
 
     @router.put(

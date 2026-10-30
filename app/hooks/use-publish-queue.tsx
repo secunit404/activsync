@@ -7,11 +7,21 @@ import {
   toastActionError,
   toastActionResult,
 } from "@/hooks/use-activity-actions";
-import { publishActivities, publishActivity, type ActivityActionResult } from "@/lib/api";
+import {
+  ApiError,
+  cancelPublish,
+  getPublishBatch,
+  schedulePublishActivities,
+  schedulePublishActivity,
+  type PublishPhase,
+  type PublishScheduled,
+} from "@/lib/api";
 
+/** Mirrors `publish_schedule.UNDO_WINDOW_SECONDS`; a pytest holds the two equal. */
 export const PUBLISH_UNDO_WINDOW_MS = 5000;
+const BATCH_POLL_MS = 1000;
 
-export type PublishPhase = "waiting" | "sending";
+export type { PublishPhase };
 
 type QueuedPublish = {
   key: number;
@@ -46,60 +56,132 @@ function getPhases() {
   return phases;
 }
 
+function toastNotPublished() {
+  toast("Not published", { description: "Nothing was sent to Strava." });
+}
+
+function asError(error: unknown) {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 /**
  * Publishing is the one action that changes the owner's Strava account, so it
- * never fires on the click itself: the request waits out
- * `PUBLISH_UNDO_WINDOW_MS` behind an Undo toast, and only an elapsed window
- * sends it. The queue lives at module scope rather than in a component so a
- * publish started in the detail overlay survives the overlay closing, and the
- * list and the overlay agree on which rows are mid-publish.
+ * never fires on the click itself. The click asks the server to schedule it;
+ * the server holds it for the undo window and then sends it, so locking the
+ * phone or closing the tab no longer loses a publish the owner confirmed.
+ * This page only mirrors that: an Undo toast with a countdown, then the
+ * outcome it reads back. The queue lives at module scope rather than in a
+ * component so a publish started in the detail overlay survives the overlay
+ * closing, and the list and the overlay agree on which rows are mid-publish.
  */
-function queuePublish(
+async function queuePublish(
   queryClient: QueryClient,
   activityIds: readonly number[],
-  send: () => Promise<ActivityActionResult>,
+  schedule: () => Promise<PublishScheduled>,
 ) {
   const key = nextKey++;
   const toastId = `publish-${key}`;
-  const deadline = Date.now() + PUBLISH_UNDO_WINDOW_MS;
-  const remove = () => setQueue(queue.filter((entry) => entry.key !== key));
+  let scheduled: PublishScheduled | null = null;
+  let undoRequested = false;
+  let undoing = false;
+  let settled = false;
+  let sendTimer: number | undefined = undefined;
+  let pollTimer: number | undefined;
 
-  // A plain in-page timer on purpose: closing or reloading the tab inside the
-  // window drops it, so nothing is sent. The owner never saw it go through.
-  const timer = window.setTimeout(async () => {
+  const setPhase = (phase: PublishPhase) =>
+    setQueue(queue.map((entry) => (entry.key === key ? { ...entry, phase } : entry)));
+
+  // The refetch lands before the entry goes, so the rows never fall back to
+  // the server state this page last read (still "waiting") in between.
+  const settle = async (report: () => void) => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    window.clearTimeout(sendTimer);
+    window.clearTimeout(pollTimer);
+    toast.dismiss(toastId);
+    report();
+    await invalidateActivityQueries(queryClient);
+    setQueue(queue.filter((entry) => entry.key !== key));
+  };
+
+  const poll = async (batchId: string) => {
+    if (settled) {
+      return;
+    }
+    try {
+      const batch = await getPublishBatch(batchId);
+      if (batch.state === "done") {
+        await settle(() => {
+          if (batch.error) {
+            toastActionError(new Error(batch.error));
+          } else if (batch.result) {
+            toastActionResult(batch.result);
+          }
+        });
+        return;
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        await settle(toastNotPublished);
+        return;
+      }
+    }
+    pollTimer = window.setTimeout(() => void poll(batchId), BATCH_POLL_MS);
+  };
+
+  const startSending = (batchId: string) => {
+    if (settled || queue.find((entry) => entry.key === key)?.phase === "sending") {
+      return;
+    }
+    window.clearTimeout(sendTimer);
     toast.loading(publishingLabel(activityIds.length), {
       id: toastId,
       description: undefined,
       action: undefined,
     });
-    setQueue(
-      queue.map((entry) => (entry.key === key ? { ...entry, phase: "sending" } : entry)),
-    );
-    try {
-      const result = await send();
-      toast.dismiss(toastId);
-      toastActionResult(result);
-    } catch (error) {
-      toast.dismiss(toastId);
-      toastActionError(error instanceof Error ? error : new Error(String(error)));
-    } finally {
-      await invalidateActivityQueries(queryClient);
-      remove();
-    }
-  }, PUBLISH_UNDO_WINDOW_MS);
-
-  const cancel = () => {
-    if (queue.find((entry) => entry.key === key)?.phase !== "waiting") {
-      return;
-    }
-    window.clearTimeout(timer);
-    remove();
-    toast.dismiss(toastId);
-    toast("Not published", { description: "Nothing was sent to Strava." });
+    setPhase("sending");
+    void poll(batchId);
   };
 
-  setQueue([...queue, { key, activityIds, phase: "waiting", cancel }]);
+  const cancel = async () => {
+    if (settled || undoing || queue.find((entry) => entry.key === key)?.phase !== "waiting") {
+      return;
+    }
+    if (scheduled === null) {
+      undoRequested = true;
+      return;
+    }
+    undoing = true;
+    try {
+      await cancelPublish(activityIds);
+      await settle(toastNotPublished);
+    } catch (error) {
+      undoing = false;
+      toastActionError(asError(error));
+      if (error instanceof ApiError && error.status === 409) {
+        startSending(scheduled.batchId);
+      }
+    }
+  };
 
+  setQueue([...queue, { key, activityIds, phase: "waiting", cancel: () => void cancel() }]);
+
+  try {
+    scheduled = await schedule();
+  } catch (error) {
+    await settle(() => toastActionError(asError(error)));
+    return;
+  }
+  if (undoRequested) {
+    await cancel();
+    return;
+  }
+
+  const { batchId, remainingMs, undoWindowMs } = scheduled;
+  const deadline = Date.now() + remainingMs;
+  sendTimer = window.setTimeout(() => startSending(batchId), remainingMs);
   toast(publishingLabel(activityIds.length), {
     id: toastId,
     duration: Infinity,
@@ -107,15 +189,31 @@ function queuePublish(
     // Undo is the one way out, so the toast offers nothing else.
     closeButton: false,
     dismissible: false,
-    description: <UndoCountdown deadline={deadline} />,
-    action: { label: "Undo", onClick: cancel },
+    description: <UndoCountdown deadline={deadline} windowMs={undoWindowMs} />,
+    action: {
+      label: "Undo",
+      onClick: (event) => {
+        // The toast stays up until the server confirms the undo.
+        event.preventDefault();
+        void cancel();
+      },
+    },
   });
 }
 
-function undoPublish(activityId: number) {
-  queue
-    .find((entry) => entry.phase === "waiting" && entry.activityIds.includes(activityId))
-    ?.cancel();
+/**
+ * Undo for a publish this page did not start (another device, or this page
+ * before a reload): the server state still shows it waiting.
+ */
+async function undoServerPublish(queryClient: QueryClient, activityId: number) {
+  try {
+    await cancelPublish([activityId]);
+    toastNotPublished();
+  } catch (error) {
+    toastActionError(asError(error));
+  } finally {
+    await invalidateActivityQueries(queryClient);
+  }
 }
 
 function publishingLabel(count: number) {
@@ -127,18 +225,29 @@ export function usePublishQueue() {
   const queued = useSyncExternalStore(subscribe, getPhases, getPhases);
   const publishOne = useCallback(
     (activityId: number) =>
-      queuePublish(queryClient, [activityId], () => publishActivity(activityId)),
+      void queuePublish(queryClient, [activityId], () => schedulePublishActivity(activityId)),
     [queryClient],
   );
   const publishMany = useCallback(
     (activityIds: number[]) =>
-      queuePublish(queryClient, activityIds, () => publishActivities(activityIds)),
+      void queuePublish(queryClient, activityIds, () => schedulePublishActivities(activityIds)),
     [queryClient],
   );
-  return { queued, publishOne, publishMany, undo: undoPublish };
+  const undo = useCallback(
+    (activityId: number) => {
+      const local = queue.find((entry) => entry.activityIds.includes(activityId));
+      if (local) {
+        local.cancel();
+      } else {
+        void undoServerPublish(queryClient, activityId);
+      }
+    },
+    [queryClient],
+  );
+  return { queued, publishOne, publishMany, undo };
 }
 
-function UndoCountdown({ deadline }: { deadline: number }) {
+function UndoCountdown({ deadline, windowMs }: { deadline: number; windowMs: number }) {
   const [now, setNow] = useState(() => Date.now());
   const [drainMs] = useState(() => Math.max(0, deadline - Date.now()));
   useEffect(() => {
@@ -155,7 +264,7 @@ function UndoCountdown({ deadline }: { deadline: number }) {
         Sends in {Math.ceil(remainingMs / 1000)}s
       </span>
       <span className="sr-only">
-        Sends in {PUBLISH_UNDO_WINDOW_MS / 1000} seconds unless you undo.
+        Sends in {windowMs / 1000} seconds unless you undo.
       </span>
       <span
         aria-hidden="true"

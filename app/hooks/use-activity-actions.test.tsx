@@ -19,8 +19,6 @@ vi.mock("sonner", () => ({ toast }));
 vi.mock("@/lib/api", () => ({
   editActivity: vi.fn(),
   excludeActivity,
-  publishActivities: vi.fn(),
-  publishActivity: vi.fn(),
   restoreActivity,
 }));
 

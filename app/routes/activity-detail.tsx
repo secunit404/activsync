@@ -180,7 +180,8 @@ export default function ActivityDetail() {
   };
 
   const dirty = title !== activity.title || description !== activity.description;
-  const publishPhase = publishQueue.queued.get(activity.garminActivityId);
+  const publishPhase =
+    publishQueue.queued.get(activity.garminActivityId) ?? activity.publishPhase ?? undefined;
   const busy = actions.isPending || publishPhase !== undefined;
 
   const eyebrow = (

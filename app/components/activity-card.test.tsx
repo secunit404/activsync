@@ -47,6 +47,8 @@ const run: Activity = {
   garminUrl: "https://connect.garmin.com/modern/activity/12345",
   stravaUrl: null,
   hevyBadge: null,
+  publishScheduledAt: null,
+  publishPhase: null,
   detail: {
     ...baseDetail,
     distance: "10.2 km",
@@ -62,6 +64,8 @@ const lift: Activity = {
   title: "Push Day",
   publishStatus: "published",
   hevyBadge: "replace",
+  publishScheduledAt: null,
+  publishPhase: null,
   detail: {
     ...baseDetail,
     duration: "48:00",
