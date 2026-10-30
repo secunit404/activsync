@@ -1,6 +1,7 @@
 import { Activity, Dumbbell, Settings, type LucideIcon } from "lucide-react";
 import { NavLink, useLocation } from "react-router";
 
+import { ReviewBadge, reviewNavLabel } from "@/components/review-badge";
 import { cn } from "@/lib/utils";
 
 type TabDestination = {
@@ -33,6 +34,8 @@ type AppTabBarProps = {
    * context, since the two bars must never both be visible at once.
    */
   hidden?: boolean;
+  /** Held + missing activities, shown as a badge on the Activities tab. */
+  reviewCount?: number;
 };
 
 /**
@@ -42,7 +45,7 @@ type AppTabBarProps = {
  * the 74px slot `AppLayout` reserves (and `--bottom-bar-height` in app.css)
  * covers the 58px capsule plus that margin.
  */
-export function AppTabBar({ hidden = false }: AppTabBarProps) {
+export function AppTabBar({ hidden = false, reviewCount = 0 }: AppTabBarProps) {
   const { pathname } = useLocation();
   const current = activeIndex(pathname);
 
@@ -69,10 +72,18 @@ export function AppTabBar({ hidden = false }: AppTabBarProps) {
           <NavLink
             key={to}
             to={to}
-            aria-label={label}
+            aria-label={to === "/" ? reviewNavLabel(label, reviewCount) : label}
             className="relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-muted-foreground transition-colors aria-[current=page]:text-primary"
           >
-            <Icon className="size-[18px]" aria-hidden="true" />
+            <span className="relative">
+              <Icon className="size-[18px]" aria-hidden="true" />
+              {to === "/" ? (
+                <ReviewBadge
+                  count={reviewCount}
+                  className="-top-2 left-[calc(100%-5px)]"
+                />
+              ) : null}
+            </span>
             <span className="text-[11px] font-medium">{label}</span>
           </NavLink>
         ))}
