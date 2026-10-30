@@ -147,7 +147,7 @@ export function CategorySettings({
                   sliding under it, and the list it sits in is already `card`.
                   Same treatment as the muscle-group headers in
                   `routes/hevy-mappings.tsx`. */}
-              <p className="sticky top-0 z-10 bg-muted px-4 py-1.5 font-mono text-[10.5px] tracking-[.14em] text-muted-foreground uppercase">
+              <p className="sticky top-0 z-10 bg-muted px-4 py-1.5 font-mono text-xs tracking-[.12em] text-muted-foreground uppercase">
                 {category.toUpperCase()}
               </p>
               {items.map((item) => (

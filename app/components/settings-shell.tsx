@@ -42,14 +42,14 @@ export function SettingsShell({
 }) {
   return (
     <PageContainer className="min-h-screen">
-      <main className="grid gap-6 py-8 md:py-10">
+      <div className="grid gap-6 py-8 md:py-10">
         <PageHeader
           title={title}
           description={description}
           action={development ? <Badge variant="outline">Mock data</Badge> : undefined}
         />
         {children}
-      </main>
+      </div>
       {version && update ? (
         // Mobile-only: the rail (app-rail.tsx, visible md: and up) renders
         // its own AppVersionFooter whenever it's shown, so an unconditional

@@ -76,7 +76,7 @@ function Destination({
 }) {
   return (
     <>
-      <dt className="text-[10px] leading-[18px] tracking-[0.08em] text-muted-foreground/60 uppercase">
+      <dt className="text-[11px] leading-[18px] tracking-[0.08em] text-muted-foreground/60 uppercase">
         {label}
       </dt>
       <dd className="min-w-0 truncate text-muted-foreground">
@@ -89,7 +89,7 @@ function Destination({
 
 function Tag({ children }: { children: string }) {
   return (
-    <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 align-middle font-mono text-[10px] text-muted-foreground">
+    <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 align-middle font-mono text-[11px] text-muted-foreground">
       {children}
     </span>
   );

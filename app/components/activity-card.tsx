@@ -55,6 +55,7 @@ export function ActivityCard({
       )}
     >
       <Checkbox
+        data-activity-checkbox=""
         aria-label={`Select ${activity.title}`}
         checked={selected}
         onClick={(event) => event.stopPropagation()}
@@ -64,8 +65,9 @@ export function ActivityCard({
         <div className="flex items-center justify-between gap-2">
           <Link
             to={href}
+            data-activity-link={activity.garminActivityId}
             onClick={(event) => event.stopPropagation()}
-            className="truncate text-[15px] font-bold hover:underline"
+            className="truncate text-[15px] font-bold hover:underline rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {activity.title}
           </Link>

@@ -29,7 +29,7 @@ export function ActivityDetailView({ activity }: { activity: Activity }) {
         <dl className="grid grid-cols-3 gap-x-3 gap-y-4 md:grid-cols-4 md:gap-x-4 md:gap-y-[18px]">
           {metrics.map(([label, value]) => (
             <div key={label} className="flex flex-col gap-[3px]">
-              <dt className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground md:text-[10.5px]">
+              <dt className="font-mono text-xs tracking-[0.08em] text-muted-foreground">
                 {label}
               </dt>
               <dd className="font-mono text-[15px] font-semibold md:text-base">{value}</dd>
@@ -41,13 +41,13 @@ export function ActivityDetailView({ activity }: { activity: Activity }) {
       <Separator />
 
       <div className="grid gap-2">
-        <h4 className="text-[13px] font-semibold text-foreground/90">Description</h4>
+        <h3 className="text-[13px] font-semibold text-foreground/90">Description</h3>
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
           {activity.description || "No description yet."}
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2.5" aria-label="Activity links">
+      <div role="group" className="flex flex-wrap gap-2.5" aria-label="Activity links">
         <Button asChild variant="outline" size="sm">
           <a href={activity.garminUrl} target="_blank" rel="noreferrer">
             View on Garmin

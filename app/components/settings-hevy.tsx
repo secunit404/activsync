@@ -333,7 +333,7 @@ export function HevySettings({
                   >
                     Plain-text preview
                   </h3>
-                  <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground uppercase">
+                  <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[11px] text-muted-foreground uppercase">
                     Sample data
                   </span>
                 </div>
@@ -401,7 +401,7 @@ export function HevySettings({
           <details className="rounded-xl border border-border/70 bg-muted">
             <summary className="flex cursor-pointer items-center gap-2.5 px-4 py-3 font-semibold">
               Device and profile overrides
-              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] font-normal tracking-[.06em] text-muted-foreground uppercase">
+              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[11px] font-normal tracking-[.06em] text-muted-foreground uppercase">
                 Advanced
               </span>
             </summary>

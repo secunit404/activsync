@@ -20,6 +20,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 import type { Route } from "./+types/activity-detail";
 import { MetaList } from "@/components/meta-list";
+import { activityReturnTarget } from "@/lib/activity-focus";
 
 // `:id` (see app/routes.ts) has no built-in way to constrain its shape to
 // "numeric" the way an Express-style `:id(\d+)` would — React Router route
@@ -56,9 +57,8 @@ export default function ActivityDetail() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activities = useOutletContext<Activity[]>();
-  const activity = activities.find(
-    (item) => item.garminActivityId === Number(id),
-  );
+  const activityId = Number(id);
+  const activity = activities.find((item) => item.garminActivityId === activityId);
   const editing = searchParams.get("edit") === "1";
   const actions = useActivityActions();
   const publishQueue = usePublishQueue();
@@ -85,6 +85,19 @@ export default function ActivityDetail() {
     setDescription(activity.description);
   }
 
+  // The list as it stood while this activity was still in it, so closing
+  // after a Publish or Exclude that dropped it from the filter can land on
+  // the row that took its place.
+  const listOrder = activities.map((item) => item.garminActivityId);
+  const [returnOrder, setReturnOrder] = useState(listOrder);
+  if (activity && listOrder.join() !== returnOrder.join()) {
+    setReturnOrder(listOrder);
+  }
+  const returnFocus = (event: Event) => {
+    event.preventDefault();
+    activityReturnTarget(activityId, returnOrder)?.focus();
+  };
+
   const withoutEdit = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("edit");
@@ -108,6 +121,7 @@ export default function ActivityDetail() {
       <ResponsiveOverlay
         open
         onOpenChange={handleOpenChange}
+        onCloseAutoFocus={returnFocus}
         title="Activity not found"
         mobile="sheet"
       >
@@ -190,6 +204,7 @@ export default function ActivityDetail() {
     <ResponsiveOverlay
       open
       onOpenChange={handleOpenChange}
+      onCloseAutoFocus={returnFocus}
       title={activity.title}
       description={eyebrow}
       mobile="sheet"

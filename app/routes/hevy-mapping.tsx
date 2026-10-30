@@ -501,8 +501,8 @@ function DestinationSection({
         <span
           className={
             status.tone === "warning"
-              ? "shrink-0 rounded bg-warning/10 px-1.5 py-0.5 font-mono text-[10px] text-warning"
-              : "shrink-0 rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+              ? "shrink-0 rounded bg-warning/10 px-1.5 py-0.5 font-mono text-[11px] text-warning"
+              : "shrink-0 rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
           }
         >
           {status.label}

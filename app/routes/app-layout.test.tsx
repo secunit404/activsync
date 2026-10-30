@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -139,4 +140,31 @@ test("the rail and tab bar badge Activities with the review count and follow ref
 
   expect(await screen.findAllByRole("link", { name: "Activities" })).toHaveLength(2);
   expect(screen.queryByTestId("review-badge")).toBeNull();
+});
+
+test("the page sits in the one main landmark, beside labelled navigation", async () => {
+  getAuthStatus.mockResolvedValue(status());
+  renderAt("/hevy");
+
+  const page = await screen.findByText("hevy page");
+  const mains = screen.getAllByRole("main");
+  expect(mains).toHaveLength(1);
+  expect(mains[0]).toContainElement(page);
+  for (const nav of screen.getAllByRole("navigation")) {
+    expect(nav).toHaveAccessibleName("Primary");
+    expect(mains[0]).not.toContainElement(nav);
+  }
+});
+
+test("Skip to content is the first tab stop and moves focus into main", async () => {
+  getAuthStatus.mockResolvedValue(status());
+  renderAt("/hevy");
+  await screen.findByText("hevy page");
+
+  await userEvent.tab();
+  const skip = screen.getByRole("link", { name: "Skip to content" });
+  expect(skip).toHaveFocus();
+
+  await userEvent.keyboard("{Enter}");
+  expect(screen.getByRole("main")).toHaveFocus();
 });
