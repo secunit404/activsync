@@ -8,13 +8,17 @@ export const test = base.extend<{ seeded: void }>({
     // showing. /api/v1/activities is fetched by the real activities.tsx
     // (Task 7) every time "/" loads — wait on both so later specs aren't
     // racing an unpopulated page.
+    //
+    // `status=all` because the specs exercise the whole ledger (pending and
+    // excluded rows); a bare "/" lands on Needs review whenever the seed has
+    // held activities — see activities-inbox.spec.ts.
     const appStateResponse = page.waitForResponse((r) =>
       r.url().includes("/api/v1/app")
     );
     const activitiesResponse = page.waitForResponse((r) =>
       r.url().includes("/api/v1/activities")
     );
-    await Promise.all([appStateResponse, activitiesResponse, page.goto("/")]);
+    await Promise.all([appStateResponse, activitiesResponse, page.goto("/?status=all")]);
     await use();
   }, { auto: true }],
 });

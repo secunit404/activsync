@@ -72,7 +72,9 @@ test("connecting Strava in mock mode and publishing an activity succeeds end to 
   await expect(page).toHaveURL(/\/settings$/);
   await expect(stravaStatus.getByText("Connected", { exact: true })).toBeVisible();
 
-  await page.goto("/");
+  // All, not the default Needs review view: once published, the row leaves
+  // the review list, and the assertion below follows it to PUBLISHED.
+  await page.goto("/?status=all");
   const row = page
     .getByTestId("activities-table")
     .locator("tr", { hasText: "Saturday ride #2" });

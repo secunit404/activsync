@@ -413,6 +413,38 @@ def test_activities_page_filters_sorts_and_uses_camel_case(tmp_path):
     assert payload["items"][0]["detail"]["duration"] == "25m 00s"
 
 
+def test_review_filter_lists_held_and_missing_and_app_state_counts_them(tmp_path):
+    conn = db.connect(str(tmp_path / "test.db"))
+    now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+    for activity_id, status in (
+        (1, "held"),
+        (2, "missing"),
+        (3, "pending"),
+        (4, "published"),
+        (5, "excluded"),
+    ):
+        db.insert_activity(
+            conn,
+            activity_id,
+            "running",
+            f"Run {activity_id}",
+            "",
+            f"2026-07-1{activity_id} 08:00:00",
+            f"hash-{activity_id}",
+            status,
+            now,
+        )
+    client = owner_client(create_app(conn))
+
+    page = client.get("/api/v1/activities?status=review&sort=oldest").json()
+    app_state = client.get("/api/v1/app").json()
+
+    assert page["status"] == "review"
+    assert [item["garminActivityId"] for item in page["items"]] == [1, 2]
+    assert page["pagination"]["totalCount"] == 2
+    assert app_state["reviewCount"] == 2
+
+
 def test_activities_page_clamps_to_last_page_and_builds_strava_link(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)

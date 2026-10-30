@@ -26,12 +26,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// The stat strip renders two parallel layouts (tablet/desktop grid vs. the
-// mobile single-card strip) switched by CSS breakpoint, not JS — per the
-// project convention of never branching on window size in code (see
-// ResponsiveOverlay). jsdom has no layout engine, so both subtrees are
-// present in every test render; counts are kept distinct per status so
-// getByText inside a scoped container is unambiguous.
+// Counts are kept distinct per status so a count in an accessible name
+// identifies exactly one filter option.
 const activities: ActivitiesPage = {
   items: [],
   sort: "newest",
@@ -136,49 +132,42 @@ test("renders the page heading and subtitle", () => {
   ).toBeInTheDocument();
 });
 
-test("renders the four stat tiles from the activities page data", () => {
+test("shows the status counts as one filter control, not as separate tiles", () => {
   renderAt("/");
-  const grid = screen.getByTestId("stat-tiles-grid");
-  expect(within(grid).getByText("PENDING")).toBeInTheDocument();
-  expect(within(grid).getByText("HELD")).toBeInTheDocument();
-  expect(within(grid).getByText("PUBLISHED")).toBeInTheDocument();
-  expect(within(grid).getByText("THIS WEEK")).toBeInTheDocument();
-  expect(within(grid).getByText("2")).toBeInTheDocument();
-  expect(within(grid).getByText("5")).toBeInTheDocument();
-  expect(within(grid).getByText("34")).toBeInTheDocument();
-  // weekTotal.display is rendered verbatim, never reformatted client-side.
-  expect(within(grid).getByText("7h 42m")).toBeInTheDocument();
+  expect(screen.getByRole("radiogroup", { name: "Show activities" })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: /Needs review\s*8/ })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: /Excluded\s*1/ })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: /^All\s*45/ })).toBeInTheDocument();
+  expect(screen.queryByText("THIS WEEK")).not.toBeInTheDocument();
 });
 
-test("renders the mobile compact strip with the same data", () => {
-  renderAt("/");
-  const strip = screen.getByTestId("stat-tiles-strip");
-  expect(within(strip).getByText("PENDING")).toBeInTheDocument();
-  expect(within(strip).getByText("34")).toBeInTheDocument();
-  expect(within(strip).getByText("7h 42m")).toBeInTheDocument();
-});
-
-test("renders the filter pills wired to the same counts", () => {
-  renderAt("/");
-  expect(
-    screen.getByRole("group", { name: "Filter activities by status" }),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /^All/ })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Missing/ })).toBeInTheDocument();
+test("with no status param the control reflects the list on screen", () => {
+  renderAt("/", { ...activities, status: "review" });
+  expect(screen.getByRole("radio", { name: /Needs review/ })).toBeChecked();
 });
 
 // Ported from the deleted home.test.tsx ("reports activity filter changes
-// and resets the page"). ActivityFilterPills now owns the URL directly
-// instead of calling back into an onQueryChange prop, so this asserts the
-// resulting URL state rather than a spy call.
+// and resets the page"). The filter control owns the URL directly instead of
+// calling back into an onQueryChange prop, so this asserts the resulting URL
+// state rather than a spy call.
 test("selecting a filter resets the page to 1", () => {
   const router = renderAt("/?status=published&page=4");
 
-  fireEvent.click(screen.getByRole("button", { name: /Held/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /Needs review/ }));
 
   const search = new URLSearchParams(router.state.location.search);
-  expect(search.get("status")).toBe("held");
+  expect(search.get("status")).toBe("review");
   expect(search.has("page")).toBe(false);
+});
+
+test("a cleared inbox says so and offers every activity in one tap", () => {
+  renderAt("/?status=review&sort=oldest", { ...activities, status: "review", items: [] });
+  expect(screen.getByText("Nothing waiting for you")).toBeInTheDocument();
+  expect(screen.queryByText("No activities found")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Show all activities" })).toHaveAttribute(
+    "href",
+    "/?status=all&sort=oldest",
+  );
 });
 
 test("renders an empty state when there are no activities at all", () => {
@@ -281,7 +270,7 @@ test("renders a table row (desktop) and a card (mobile) for each activity", () =
   ).toBeInTheDocument();
   // Both the table row and the mobile card render "Morning run" — the two
   // layouts are switched by CSS breakpoint only (never JS), so jsdom keeps
-  // both subtrees in the DOM regardless of viewport, same as the stat strip.
+  // both subtrees in the DOM regardless of viewport.
   expect(screen.getAllByText("Morning run")).toHaveLength(2);
 });
 
@@ -348,7 +337,7 @@ test("selecting a filter clears the selection", async () => {
   await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
   expect(screen.getAllByTestId("bulk-action-bar").length).toBeGreaterThan(0);
 
-  fireEvent.click(screen.getByRole("button", { name: /Held/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /Needs review/ }));
 
   expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
 });

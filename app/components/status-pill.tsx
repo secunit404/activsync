@@ -8,7 +8,9 @@ import type { PublishStatus } from "@/lib/api";
  * PublishStatus, so all five are covered here.
  */
 const statusConfig: Record<PublishStatus, { label: string; className: string }> = {
-  pending: { label: "PENDING", className: "bg-primary/12 text-primary" },
+  // Neutral, not brand orange: pending needs nothing from the owner (the
+  // poller publishes it), and orange is kept for the Publish action itself.
+  pending: { label: "PENDING", className: "bg-secondary text-foreground" },
   held: { label: "HELD", className: "bg-warning/12 text-warning" },
   published: { label: "PUBLISHED", className: "bg-success/12 text-success" },
   missing: { label: "MISSING", className: "bg-destructive/12 text-destructive" },

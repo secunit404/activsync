@@ -1,5 +1,5 @@
 import { ChevronRightIcon } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { StatusPill } from "@/components/status-pill";
 import { TypePill } from "@/components/type-pill";
@@ -99,7 +99,8 @@ function ActivityRow({
   onToggle: (id: number) => void;
 }) {
   const navigate = useNavigate();
-  const href = `/${activity.garminActivityId}`;
+  const { search } = useLocation();
+  const href = { pathname: `/${activity.garminActivityId}`, search };
   const effort = activityEffort(activity);
 
   return (
