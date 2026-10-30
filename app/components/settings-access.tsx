@@ -32,7 +32,7 @@ export function AccessSettings() {
       id="access"
       title="Access"
       description="How you sign in to ActivSync, and where you are signed in."
-      contentClassName="grid gap-7"
+      contentClassName="grid grid-cols-[minmax(0,1fr)] gap-7"
     >
       {status.data?.method === "proxy" ? (
         <p className="text-sm">

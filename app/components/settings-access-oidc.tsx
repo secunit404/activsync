@@ -10,6 +10,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -34,7 +35,7 @@ export function OidcSettings() {
   const data = config.data;
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       <h3 className="text-sm font-semibold">Single sign-on (OIDC)</h3>
       {data.configured ? (
         <p className="text-sm text-muted-foreground">
@@ -75,6 +76,7 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
   const [scopes, setScopes] = useState(config.scopes);
   const [autoRedirect, setAutoRedirect] = useState(config.autoRedirect);
   const [currentPassword, setCurrentPassword] = useState("");
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const save = useAuthAction(saveOidcConfig);
   const remove = useAuthAction(removeOidcConfig);
   const pending = save.isPending || remove.isPending;
@@ -168,7 +170,7 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
             type="button"
             variant="destructive"
             disabled={pending || currentPassword === ""}
-            onClick={() => remove.mutate(currentPassword, { onSuccess: onDone })}
+            onClick={() => setConfirmingRemove(true)}
           >
             Remove single sign-on
           </Button>
@@ -177,6 +179,24 @@ function OidcForm({ config, onDone }: { config: OidcConfig; onDone: () => void }
           Cancel
         </Button>
       </div>
+      <ConfirmDialog
+        open={confirmingRemove}
+        onOpenChange={setConfirmingRemove}
+        title="Remove single sign-on?"
+        description={`Sign-in through ${config.displayName || "your provider"} stops working, its logo is removed, and everyone signed in that way is signed out. You'll sign in with your ActivSync password from now on.`}
+        confirmLabel="Remove single sign-on"
+        pendingLabel="Removing…"
+        pending={remove.isPending}
+        onConfirm={() =>
+          remove.mutate(currentPassword, {
+            onSuccess: () => {
+              setConfirmingRemove(false);
+              onDone();
+            },
+            onError: () => setConfirmingRemove(false),
+          })
+        }
+      />
     </form>
   );
 }
