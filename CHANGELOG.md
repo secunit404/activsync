@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.2.0](https://github.com/secunit404/activsync/compare/v3.1.0...v3.2.0) (2026-10-30)
+
+
+### Features
+
+* **hevy:** merging a Hevy workout into Garmin waits a few seconds with an undo ([#105](https://github.com/secunit404/activsync/issues/105)) ([e4b707a](https://github.com/secunit404/activsync/commit/e4b707a33e3ef5aa9851d3d1d22bea9c4290648d))
+
+
+### Bug Fixes
+
+* **settings:** signing out and removing single sign-on ask first ([#108](https://github.com/secunit404/activsync/issues/108)) ([a7d2d7d](https://github.com/secunit404/activsync/commit/a7d2d7dc82555e49deca85bc80683fd9b3cb1497))
+* **settings:** unsaved changes survive background refreshes ([#107](https://github.com/secunit404/activsync/issues/107)) ([33270fc](https://github.com/secunit404/activsync/commit/33270fc848484ef0c9495874bd15ca226e3bea3c))
+
 ## [3.1.0](https://github.com/secunit404/activsync/compare/v3.0.0...v3.1.0) (2026-10-30)
 
 
