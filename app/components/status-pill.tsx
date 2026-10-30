@@ -24,20 +24,27 @@ const publishingConfig = { label: "PUBLISHING…", className: "bg-info/12 text-i
 export function StatusPill({
   status,
   publishing = false,
+  reservePublishingWidth = false,
 }: {
   status: PublishStatus;
   publishing?: boolean;
+  /**
+   * Sizes the pill to fit PUBLISHING… whatever it shows, so switching to it
+   * and back never resizes the table column it sits in.
+   */
+  reservePublishingWidth?: boolean;
 }) {
   const { label, className } = publishing ? publishingConfig : statusConfig[status];
   return (
     <span
       title={publishing ? undefined : statusDescription(status)}
       className={cn(
-        "inline-flex w-fit items-center justify-center rounded-md px-2.5 py-1 font-mono text-xs font-semibold tracking-[0.02em]",
+        "inline-grid w-fit shrink-0 justify-items-center rounded-md px-2.5 py-1 font-mono text-xs font-semibold tracking-[0.02em]",
+        reservePublishingWidth && "after:invisible after:[grid-area:1/1] after:content-['PUBLISHING…']",
         className,
       )}
     >
-      {label}
+      <span className="[grid-area:1/1]">{label}</span>
     </span>
   );
 }

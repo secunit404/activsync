@@ -129,7 +129,7 @@ test("renders the page heading and subtitle", () => {
   renderAt("/");
   expect(screen.getByRole("heading", { name: "Activities" })).toBeInTheDocument();
   expect(
-    screen.getByText("Review your Garmin sync history before it reaches Strava."),
+    screen.getByText("Decide what reaches Strava, and see everything synced from Garmin."),
   ).toBeInTheDocument();
 });
 
@@ -264,7 +264,7 @@ test("pending rows carry no reason line", () => {
   expect(screen.queryByText("Removed from Strava after publishing")).not.toBeInTheDocument();
 });
 
-test("renders an attention banner for each broken connection, naming each service", () => {
+test("merges both broken connections into one banner naming each service", () => {
   renderAt("/", activities, {
     connections: {
       garmin: { connected: false, status: "", meta: "", email: "" },
@@ -274,10 +274,10 @@ test("renders an attention banner for each broken connection, naming each servic
     catchUpReport: null,
   });
 
-  const alerts = screen.getAllByRole("alert");
-  expect(alerts).toHaveLength(2);
-  expect(alerts.some((alert) => /Garmin/.test(alert.textContent ?? ""))).toBe(true);
-  expect(alerts.some((alert) => /Strava/.test(alert.textContent ?? ""))).toBe(true);
+  expect(screen.getByText("Reconnect Garmin and Strava")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reconnect Garmin" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reconnect Strava" })).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 test("renders no attention banner when nothing is broken", () => {
@@ -289,7 +289,7 @@ test("renders no attention banner when nothing is broken", () => {
     },
     catchUpReport: null,
   });
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /reconnect/i })).not.toBeInTheDocument();
 });
 
 test("clicking Reconnect on the attention banner navigates to Settings connections", async () => {
@@ -444,8 +444,7 @@ test("disables Publish (not Exclude) when Strava is broken", async () => {
 });
 
 // A broken Garmin connection alone does not pause publishing (see
-// AttentionBanner's copy: "Strava publishing continues for activities
-// already synced").
+// AttentionBanner's copy: "Synced activities still publish").
 test("keeps Publish enabled when only Garmin is broken", async () => {
   renderAt("/", { ...activities, items: [oneActivity, anotherActivity] }, {
     connections: {

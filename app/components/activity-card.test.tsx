@@ -69,7 +69,7 @@ const lift: Activity = {
   },
 };
 
-function renderCard(activity: Activity, props: Partial<{ selected: boolean; onToggle: (id: number) => void }> = {}) {
+function renderCard(activity: Activity, props: Partial<{ selected: boolean; publishing: boolean; onToggle: (id: number) => void }> = {}) {
   const router = createMemoryRouter(
     [
       {
@@ -78,6 +78,7 @@ function renderCard(activity: Activity, props: Partial<{ selected: boolean; onTo
           <ActivityCard
             activity={activity}
             selected={props.selected ?? false}
+            publishing={props.publishing ?? false}
             onToggle={props.onToggle ?? vi.fn()}
           />
         ),
@@ -151,4 +152,12 @@ test("tints the card when selected", () => {
     "data-state",
     "checked",
   );
+});
+
+test("a publishing card hides its reason without removing it, so the card keeps its height", () => {
+  renderCard({ ...run, publishStatus: "held", holdReason: "backlog" }, { publishing: true });
+  expect(screen.getByText("PUBLISHING…")).toBeInTheDocument();
+  const reason = screen.getByText("Older activity found after a reconnect");
+  expect(reason).toHaveClass("invisible");
+  expect(reason).toHaveAttribute("aria-hidden", "true");
 });

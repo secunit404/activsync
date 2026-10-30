@@ -104,7 +104,7 @@ function ActivityRow({
   const { search } = useLocation();
   const href = { pathname: `/${activity.garminActivityId}`, search };
   const effort = activityEffort(activity);
-  const reason = publishing ? null : rowReason(activity);
+  const reason = rowReason(activity);
 
   return (
     <tr
@@ -144,14 +144,24 @@ function ActivityRow({
       <td className="px-2 py-3">
         <TypePill type={activity.activityType} />
       </td>
-      <td className="px-2 py-3 font-mono text-[13px]">{activity.detail.duration || "—"}</td>
-      <td className="px-2 py-3 font-mono text-[13px]">{activity.detail.distance || "—"}</td>
-      <td className="hidden px-2 py-3 font-mono text-[13px] lg:table-cell">{effort || "—"}</td>
+      <td className="px-2 py-3 font-mono text-[13px] whitespace-nowrap">{activity.detail.duration || "—"}</td>
+      <td className="px-2 py-3 font-mono text-[13px] whitespace-nowrap">{activity.detail.distance || "—"}</td>
+      <td className="hidden px-2 py-3 font-mono text-[13px] whitespace-nowrap lg:table-cell">{effort || "—"}</td>
       <td className="px-2 py-3">
-        <div className="flex flex-col items-start gap-1">
-          <StatusPill status={activity.publishStatus} publishing={publishing} />
+        {/* One line, truncating rather than wrapping, so every row keeps the
+            same height whichever pill it shows. */}
+        <div className="grid grid-cols-[auto_minmax(0,max-content)] items-center gap-2">
+          <StatusPill status={activity.publishStatus} publishing={publishing} reservePublishingWidth />
           {reason ? (
-            <span title={reason} className="block max-w-52 truncate text-xs text-muted-foreground">
+            // Hidden, not removed, while publishing so the row and column keep their size.
+            <span
+              title={reason}
+              aria-hidden={publishing || undefined}
+              className={cn(
+                "max-w-52 truncate text-xs text-muted-foreground",
+                publishing && "invisible",
+              )}
+            >
               {reason}
             </span>
           ) : null}

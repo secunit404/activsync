@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import { test, expect } from "./fixtures";
 
 // The seeded e2e DB never sets `strava_tokens` or `garmin_credentials_verified`
@@ -92,4 +94,36 @@ test("connecting Strava in mock mode and publishing an activity succeeds end to 
     timeout: 15_000,
   });
   await expect(row.getByText("PUBLISHED", { exact: true })).toBeVisible();
+});
+
+function tableRow(page: Page, title: string) {
+  return page.getByTestId("activities-table").locator("tr", { hasText: title });
+}
+
+async function tableLayout(page: Page) {
+  return page.getByTestId("activities-table").evaluate((table) => ({
+    columns: [...table.querySelectorAll("thead th")].map((th) => th.getBoundingClientRect().width),
+    rows: [...table.querySelectorAll("tbody tr")].map((tr) => tr.getBoundingClientRect().height),
+  }));
+}
+
+// Narrow enough that a row's reason wraps under its pill, which is where
+// dropping the reason while publishing used to shrink the row.
+test("publishing and undoing leave the table layout as it was", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  // Held, not Needs review: once Strava is connected the background check
+  // can turn seeded published rows into Missing mid-test, adding rows.
+  await page.goto("/?status=held");
+  const row = tableRow(page, "Mountain hike #1");
+  await expect(row.getByText("Older activity found after a reconnect")).toBeVisible();
+  const before = await tableLayout(page);
+
+  await row.getByRole("checkbox", { name: "Select Mountain hike #1" }).check();
+  await page.getByTestId("bulk-action-bar").getByRole("button", { name: /^Publish/ }).click();
+  await expect(row.getByText("PUBLISHING…", { exact: true })).toBeVisible();
+  expect(await tableLayout(page)).toEqual(before);
+
+  await page.getByRole("status", { name: /notifications/i }).getByRole("button", { name: "Undo" }).click();
+  await expect(row.getByText("HELD", { exact: true })).toBeVisible();
+  expect(await tableLayout(page)).toEqual(before);
 });

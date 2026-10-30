@@ -148,7 +148,7 @@ function UndoCountdown({ deadline }: { deadline: number }) {
   const remainingMs = Math.max(0, deadline - now);
 
   return (
-    <span className="grid w-40 max-w-full gap-2">
+    <span className="grid w-full gap-2">
       {/* The ticking number stays out of the live region, or every second
           would be re-announced; the static sentence below is read once. */}
       <span aria-hidden="true" className="font-mono tabular-nums">

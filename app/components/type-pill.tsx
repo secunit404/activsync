@@ -11,7 +11,7 @@
 export function TypePill({ type }: { type: string }) {
   return (
     <span
-      className="inline-block max-w-[10rem] truncate font-mono text-[11px] text-muted-foreground"
+      className="inline-block max-w-[10rem] truncate align-middle font-mono text-xs text-muted-foreground"
       title={type}
     >
       {formatTypeLabel(type)}

@@ -42,7 +42,7 @@ export function ActivityCard({
   const href = { pathname: `/${activity.garminActivityId}`, search };
   const source = activity.hevyBadge ? "via Hevy" : formatTypeLabel(activity.activityType);
   const stats = [activity.detail.duration, activity.detail.distance, activityEffort(activity)];
-  const reason = publishing ? null : rowReason(activity);
+  const reason = rowReason(activity);
 
   return (
     <div
@@ -74,7 +74,12 @@ export function ActivityCard({
           <StatusPill status={activity.publishStatus} publishing={publishing} />
         </div>
         {reason ? (
-          <p title={reason} className="truncate text-xs text-muted-foreground">
+          // Hidden, not removed, while publishing so the card keeps its height.
+          <p
+            title={reason}
+            aria-hidden={publishing || undefined}
+            className={cn("truncate text-xs text-muted-foreground", publishing && "invisible")}
+          >
             {reason}
           </p>
         ) : null}
