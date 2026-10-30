@@ -24,16 +24,22 @@ test("shows the current page and total page count", () => {
   expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
 });
 
-test("hides Previous on the first page", () => {
+// Kept in place, disabled, so the cluster does not shift between pages.
+test("disables Previous on the first page without removing it", () => {
   renderAt("/", { page: 1, pageCount: 3 });
-  expect(screen.queryByRole("link", { name: "Go to previous page" })).not.toBeInTheDocument();
+  const previous = screen.getByRole("link", { name: "Go to previous page" });
+  expect(previous).toHaveAttribute("aria-disabled", "true");
+  expect(previous).not.toHaveAttribute("href");
   expect(screen.getByRole("link", { name: "Go to next page" })).toBeInTheDocument();
 });
 
-test("hides Next on the last page", () => {
+test("disables Next on the last page without removing it", () => {
   renderAt("/", { page: 3, pageCount: 3 });
   expect(screen.getByRole("link", { name: "Go to previous page" })).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Go to next page" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Go to next page" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
 });
 
 // Ported from the deleted home.test.tsx ("reports next-page navigation"),

@@ -43,31 +43,34 @@ export function ActivitiesPagination({ page, pageCount }: ActivitiesPaginationPr
         Page {page} of {pageCount}
       </span>
       <Pagination className="mx-0 w-auto">
+        {/* Both stay rendered, disabled at the ends, so the cluster keeps its
+            width and Next does not jump sideways between page 1 and 2. */}
         <PaginationContent>
-          {page > 1 ? (
-            <PaginationItem>
-              <PaginationPrevious
-                href="#"
-                onClick={(event) => {
-                  event.preventDefault();
-                  goToPage(page - 1);
-                }}
-              />
-            </PaginationItem>
-          ) : null}
-          {page < pageCount ? (
-            <PaginationItem>
-              <PaginationNext
-                href="#"
-                onClick={(event) => {
-                  event.preventDefault();
-                  goToPage(page + 1);
-                }}
-              />
-            </PaginationItem>
-          ) : null}
+          <PaginationItem>
+            <PaginationPrevious {...pageLink(page > 1, () => goToPage(page - 1))} />
+          </PaginationItem>
+          <PaginationItem>
+            <PaginationNext {...pageLink(page < pageCount, () => goToPage(page + 1))} />
+          </PaginationItem>
         </PaginationContent>
       </Pagination>
     </div>
   );
+}
+
+function pageLink(enabled: boolean, go: () => void) {
+  if (!enabled) {
+    return {
+      role: "link",
+      "aria-disabled": true,
+      className: "pointer-events-none opacity-50",
+    };
+  }
+  return {
+    href: "#",
+    onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      go();
+    },
+  };
 }
