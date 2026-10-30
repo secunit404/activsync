@@ -294,7 +294,7 @@ html body[data-scroll-locked] {
  * selector specificity.
  */
 [data-sonner-toast] {
-  align-items: flex-start !important;
+  align-items: center !important;
   gap: 12px !important;
   padding: 14px 16px !important;
   /* A toast floats above everything, so it takes the `popover` level. Written
@@ -332,23 +332,70 @@ html body[data-scroll-locked] {
   color: var(--muted-foreground) !important;
 }
 
+/* The content column takes the slack, so the trailing control (the action,
+   or the close button) always sits flush right instead of hugging the text. */
+[data-sonner-toast] [data-content] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The action and the close button share one 28px control height and sit in
+   the same trailing slot, centred with the content like the icon. The action
+   reads as the app's outline button rather than sonner's inverted pill. */
+[data-sonner-toast] [data-button] {
+  position: relative;
+  height: 28px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  border: 1px solid var(--input) !important;
+  border-radius: calc(var(--radius) * 0.8) !important;
+  background: color-mix(in oklch, var(--input) 70%, transparent) !important;
+  color: var(--foreground) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+}
+
+[data-sonner-toast] [data-button]:hover {
+  background: var(--input) !important;
+}
+
 [data-sonner-toast] [data-close-button] {
-  position: static !important;
+  position: relative !important;
+  inset: auto !important;
   transform: none !important;
   order: 3;
-  align-self: flex-start;
   flex-shrink: 0;
-  width: 16px !important;
-  height: 16px !important;
+  width: 28px !important;
+  height: 28px !important;
+  /* Pulls the glyph out to the padding edge so its visual right margin
+     matches the icon's left one; the hit box still ends inside the toast. */
+  margin-right: -6px !important;
   border: none !important;
+  border-radius: calc(var(--radius) * 0.8) !important;
   background: transparent !important;
-  color: #7a838f !important;
+  color: var(--muted-foreground) !important;
 }
 
 [data-sonner-toast] [data-close-button]:hover {
-  background: transparent !important;
+  background: var(--input) !important;
   border-color: transparent !important;
   color: var(--foreground) !important;
+}
+
+[data-sonner-toast] [data-button]:focus-visible,
+[data-sonner-toast] [data-close-button]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent) !important;
+}
+
+/* Touch: grow the tap area to 44px without growing the drawn control. The
+   toast's 14px/16px padding leaves room, so nothing pokes past its edge. */
+@media (pointer: coarse) {
+  [data-sonner-toast] [data-button]::after,
+  [data-sonner-toast] [data-close-button]::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
 }
 
 @theme inline {
