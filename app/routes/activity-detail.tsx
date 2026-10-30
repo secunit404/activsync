@@ -133,11 +133,14 @@ export default function ActivityDetail() {
     );
   }
 
-  const isPending = (type: ActionType) =>
-    actions.isPending &&
-    actions.variables?.type === type &&
-    "activityId" in actions.variables &&
-    actions.variables.activityId === activity.garminActivityId;
+  const isPending = (type: ActionType) => {
+    const variables = actions.isPending ? actions.variables : undefined;
+    if (variables?.type !== type) {
+      return false;
+    }
+    const id = "activity" in variables ? variables.activity.garminActivityId : variables.activityId;
+    return id === activity.garminActivityId;
+  };
 
   const enterEdit = () => {
     const next = new URLSearchParams(searchParams);
@@ -149,7 +152,7 @@ export default function ActivityDetail() {
   const handlePublish = () => publishQueue.publishOne(activity.garminActivityId);
   const handleUndoPublish = () => publishQueue.undo(activity.garminActivityId);
   const handleExclude = () => {
-    actions.mutate({ type: "exclude", activityId: activity.garminActivityId });
+    actions.mutate({ type: "exclude", activity });
   };
   const handleRestore = () => {
     actions.mutate({ type: "restore", activityId: activity.garminActivityId });

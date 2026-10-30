@@ -197,6 +197,15 @@ class EditActivityRequest(ApiModel):
     description: str = ""
 
 
+class RestoreActivityRequest(ApiModel):
+    """Where an undone exclude goes back to. Without it, restore re-derives
+    the status from the auto-sync rules, which would let an undone backlog
+    hold or missing row publish on its own."""
+
+    status: Literal["pending", "held", "missing"]
+    hold_reason: Literal["category", "backlog"] | None = None
+
+
 class PublishActivitiesRequest(ApiModel):
     activity_ids: list[int] = Field(min_length=1)
 
@@ -471,11 +480,16 @@ def create_router(
         "/activities/{garmin_activity_id}/restore",
         response_model=ActivityActionResult,
     )
-    def restore_activity(garmin_activity_id: int) -> ActivityActionResult:
+    def restore_activity(
+        garmin_activity_id: int, payload: RestoreActivityRequest | None = None
+    ) -> ActivityActionResult:
         activity = require_activity(garmin_activity_id)
         if activity["publish_status"] != "excluded":
             raise HTTPException(status_code=409, detail="Activity is not excluded")
-        sync.unexclude(conn, garmin_activity_id, config.load_config(conn))
+        if payload is None:
+            sync.unexclude(conn, garmin_activity_id, config.load_config(conn))
+        else:
+            sync.restore_status(conn, garmin_activity_id, payload.status, payload.hold_reason)
         events.bus.publish("refresh")
         return ActivityActionResult(message=f"Restored {activity['title']}")
 

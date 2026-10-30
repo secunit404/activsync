@@ -234,9 +234,9 @@ export function ActivitiesView({
   const actionableActivities = selectedActivities.filter(
     (activity) => !publishingIds.has(activity.garminActivityId),
   );
-  const excludableIds = actionableActivities
-    .filter((activity) => isExcludableStatus(activity.publishStatus))
-    .map((activity) => activity.garminActivityId);
+  const excludableActivities = actionableActivities.filter((activity) =>
+    isExcludableStatus(activity.publishStatus),
+  );
   const publishableIds = actionableActivities
     .filter((activity) => isPublishableStatus(activity.publishStatus))
     .map((activity) => activity.garminActivityId);
@@ -256,7 +256,7 @@ export function ActivitiesView({
 
   const handleExclude = () => {
     activityActions.mutate(
-      { type: "exclude-many", activityIds: excludableIds },
+      { type: "exclude-many", activities: excludableActivities },
       { onSuccess: () => selection.clear() },
     );
   };
@@ -348,7 +348,7 @@ export function ActivitiesView({
 
       <BulkActionBar
         count={selectedCount}
-        excludableCount={excludableIds.length}
+        excludableCount={excludableActivities.length}
         publishableCount={publishableIds.length}
         onClear={selection.clear}
         onExclude={handleExclude}
