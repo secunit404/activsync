@@ -140,6 +140,22 @@ def test_dev_seed_stores_what_the_fake_garmin_reports(conn):
             == dev_mock.FakeGarminClient(conn).fetch_activity_types())
 
 
+def test_dev_seed_turns_auto_sync_off_for_the_types_it_holds(conn):
+    """A category hold reads as "Auto-sync is off for this type", so the
+    seeded settings have to agree with every category-held row."""
+    dev_seed.seed(conn)
+
+    held_types = set(config.load_config(conn)["held_activity_types"])
+    category_held = {
+        row["activity_type"]
+        for row in db.list_activities(conn, status="held")
+        if row.get("hold_reason") == sync.HOLD_CATEGORY
+    }
+    assert category_held
+    assert held_types == category_held
+    assert sync.reconcile_held_activities(conn, sorted(held_types)) == 0
+
+
 def test_dev_taxonomy_is_large_enough_to_exercise_the_collapsed_picker(conn):
     """The picker only collapses past 18 categories. A dev list under that
     renders a shape production never shows."""

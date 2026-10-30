@@ -9,10 +9,12 @@ import {
   ActivityDetailEditFooter,
 } from "@/components/activity-detail-edit";
 import { ActivityDetailView, ActivityDetailViewFooter } from "@/components/activity-detail-view";
+import { StatusPill } from "@/components/status-pill";
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { formatTypeLabel } from "@/components/type-pill";
 import { useActivityActions } from "@/hooks/use-activity-actions";
 import { usePublishQueue } from "@/hooks/use-publish-queue";
+import { activityExplanation } from "@/lib/activity-status";
 import { getAppState, type Activity } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
@@ -165,13 +167,23 @@ export default function ActivityDetail() {
   const busy = actions.isPending || publishPhase !== undefined;
 
   const eyebrow = (
-    <MetaList
-      items={[
-        editing && "EDITING",
-        `${activity.startDateDisplay} ${activity.startClockDisplay}`,
-        formatTypeLabel(activity.activityType),
-      ]}
-    />
+    <span className="flex flex-col gap-2.5">
+      <MetaList
+        items={[
+          editing && "EDITING",
+          `${activity.startDateDisplay} ${activity.startClockDisplay}`,
+          formatTypeLabel(activity.activityType),
+        ]}
+      />
+      <span data-testid="activity-status-line" className="flex min-w-0 items-center gap-2.5">
+        <StatusPill status={activity.publishStatus} publishing={publishPhase !== undefined} />
+        {publishPhase === undefined ? (
+          <span className="min-w-0 text-[13px] leading-snug text-muted-foreground">
+            {activityExplanation(activity, appState.data?.pollIntervals)}
+          </span>
+        ) : null}
+      </span>
+    </span>
   );
 
   return (

@@ -51,6 +51,12 @@ export type AppState = {
   update: UpdateState;
   /** Held plus missing activities: the ones only the owner can move on. */
   reviewCount: number;
+  pollIntervals: PollIntervals;
+};
+
+export type PollIntervals = {
+  garminMinutes: number;
+  stravaMinutes: number;
 };
 
 export type ActivityDetail = {
@@ -79,6 +85,9 @@ export type ActivityDetail = {
   totalVolume: string;
 };
 
+/** `category`: its type's auto-sync is off. `backlog`: found by a reconnect catch-up. */
+export type HoldReason = "category" | "backlog";
+
 export type Activity = {
   garminActivityId: number;
   activityType: string;
@@ -87,7 +96,8 @@ export type Activity = {
   startTime: string;
   publishStatus: PublishStatus;
   stravaActivityId: number | null;
-  holdReason: string | null;
+  /** Set only while held. A held row without one predates the column: a category hold. */
+  holdReason: HoldReason | null;
   startDateDisplay: string;
   startMonthYearDisplay: string;
   startClockDisplay: string;

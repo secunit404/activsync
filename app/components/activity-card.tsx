@@ -4,6 +4,7 @@ import { formatTypeLabel } from "@/components/type-pill";
 import { StatusPill } from "@/components/status-pill";
 import { Checkbox } from "@/components/ui/checkbox";
 import { activityEffort } from "@/lib/activity-metrics";
+import { rowReason } from "@/lib/activity-status";
 import type { Activity } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { MetaList } from "@/components/meta-list";
@@ -41,6 +42,7 @@ export function ActivityCard({
   const href = { pathname: `/${activity.garminActivityId}`, search };
   const source = activity.hevyBadge ? "via Hevy" : formatTypeLabel(activity.activityType);
   const stats = [activity.detail.duration, activity.detail.distance, activityEffort(activity)];
+  const reason = publishing ? null : rowReason(activity);
 
   return (
     <div
@@ -67,6 +69,11 @@ export function ActivityCard({
           </Link>
           <StatusPill status={activity.publishStatus} publishing={publishing} />
         </div>
+        {reason ? (
+          <p title={reason} className="truncate text-xs text-muted-foreground">
+            {reason}
+          </p>
+        ) : null}
         <MetaList
           className="font-mono text-[11.5px] text-muted-foreground"
           items={[`${activity.startDateDisplay} ${activity.startClockDisplay}`, source]}

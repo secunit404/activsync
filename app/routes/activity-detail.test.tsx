@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -82,6 +82,7 @@ const appStateFixture: AppState = {
   catchUpReport: null,
   update: { latest: null, available: false, repoUrl: "", releaseUrl: "" },
   reviewCount: 0,
+  pollIntervals: { garminMinutes: 20, stravaMinutes: 5 },
 };
 
 getAppState.mockResolvedValue(appStateFixture);
@@ -141,6 +142,27 @@ function renderDetail(
 
   return { router, client };
 }
+
+test.each([
+  [{ publishStatus: "held", holdReason: "category" }, "HELD", "Auto-sync is off for this type"],
+  [{ publishStatus: "held", holdReason: "backlog" }, "HELD", "Older activity found after a reconnect"],
+  [
+    { publishStatus: "missing", holdReason: null },
+    "MISSING",
+    "Removed from Strava after publishing. Republish or exclude.",
+  ],
+  [
+    { publishStatus: "pending", holdReason: null },
+    "PENDING",
+    "Publishes to Strava on its own, usually within 5 min.",
+  ],
+] as const)("the header shows the status and what it means (%o)", (status, pill, line) => {
+  renderDetail({ ...fixture, ...status });
+  const header = screen.getByTestId("activity-status-line");
+  expect(within(header).getByText(pill)).toBeInTheDocument();
+  expect(header).toHaveTextContent(line);
+  expect(screen.getByRole("dialog")).toHaveAccessibleDescription(expect.stringContaining(line));
+});
 
 test("unpublished activity warns that edits reach Garmin only", () => {
   renderDetail({ ...fixture, publishStatus: "pending" }, { edit: true });

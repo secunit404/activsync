@@ -88,6 +88,11 @@ class UpdateState(ApiModel):
         )
 
 
+class PollIntervals(ApiModel):
+    garmin_minutes: int
+    strava_minutes: int
+
+
 class AppState(ApiModel):
     name: Literal["ActivSync"] = "ActivSync"
     version: str
@@ -99,6 +104,7 @@ class AppState(ApiModel):
     catch_up_report: CatchUpReport | None
     update: UpdateState
     review_count: int
+    poll_intervals: PollIntervals
 
 
 PublishStatus = Literal["pending", "held", "published", "missing", "excluded"]
@@ -233,6 +239,10 @@ def create_router(
             catch_up_report=db.get_config_value(conn, "catch_up_report"),
             update=UpdateState.from_status(update),
             review_count=db.count_activities(conn, REVIEW_STATUSES),
+            poll_intervals=PollIntervals(
+                garmin_minutes=cfg["garmin_poll_interval_minutes"],
+                strava_minutes=cfg["strava_poll_interval_minutes"],
+            ),
         )
 
     @router.delete("/catch-up-report", status_code=204)
