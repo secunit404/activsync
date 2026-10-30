@@ -321,7 +321,11 @@ export type HevyQueueItem = {
   matchedGarminTitle: string | null;
   matchedStravaActivityId: number | null;
   matchedStravaUrl: string | null;
+  matchScheduledAt: string | null;
+  matchPhase: HevyMatchPhase | null;
 };
+
+export type HevyMatchPhase = "waiting" | "applying";
 
 export type HevyQueueState = {
   enabled: boolean;
@@ -617,10 +621,39 @@ export function runHevyQueueAction(hevyId: string, action: HevyQueueAction) {
   );
 }
 
-export function chooseHevyMatch(hevyId: string, strategy: HevyMatchStrategy) {
-  return requestJson<{ message: string }>(
+export type HevyMatchScheduled = {
+  deadline: string;
+  strategy: HevyMatchStrategy;
+  remainingMs: number;
+  undoWindowMs: number;
+};
+
+export type HevyMatchStatus = {
+  state: HevyMatchPhase | "done" | "failed" | "skipped";
+  message: string | null;
+};
+
+/** The server applies it once the undo window ends, whether or not this page is still open. */
+export function scheduleHevyMatch(hevyId: string, strategy: HevyMatchStrategy) {
+  return requestJson<HevyMatchScheduled>(
     `/api/v1/hevy/${encodeURIComponent(hevyId)}/match`,
     { method: "POST", body: JSON.stringify({ strategy }) },
+  );
+}
+
+/** 409 once the server has started updating Garmin: too late to undo. */
+export function cancelHevyMatch(hevyId: string) {
+  return requestJson<{ cancelled: boolean }>(
+    `/api/v1/hevy/${encodeURIComponent(hevyId)}/match/cancel`,
+    { method: "POST" },
+  );
+}
+
+/** 404 once the decision was undone, from this page or another. */
+export function getHevyMatchStatus(hevyId: string) {
+  return requestJson<HevyMatchStatus>(
+    `/api/v1/hevy/${encodeURIComponent(hevyId)}/match/status`,
+    { method: "GET" },
   );
 }
 

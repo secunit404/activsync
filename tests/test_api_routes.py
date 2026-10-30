@@ -8,7 +8,6 @@ from auth_helpers import owner_client
 
 from activsync import api_routes, config, db, hevy_db
 from activsync import server as server_module
-from activsync.hevy_client import HevyAuthError
 from activsync.server import create_app
 
 
@@ -149,7 +148,7 @@ def _seed_awaiting_hevy_match(conn):
     hevy_db.set_workout_status(conn, "hevy-match", "awaiting_match")
 
 
-def test_hevy_match_choice_runs_one_injected_strategy(tmp_path):
+def test_hevy_match_choice_schedules_instead_of_applying(tmp_path):
     conn = db.connect(str(tmp_path / "test.db"))
     _seed_awaiting_hevy_match(conn)
     calls = []
@@ -167,8 +166,9 @@ def test_hevy_match_choice_runs_one_injected_strategy(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"message": "Merged Leg Day."}
-    assert calls == [("hevy-match", "merge")]
+    assert response.json()["strategy"] == "merge"
+    assert calls == []
+    assert client.app.state.hevy_match_scheduler.run_due() == 0
 
 
 def test_hevy_workout_detail_exposes_stored_sets_and_description_preview(tmp_path):
@@ -308,24 +308,6 @@ def test_hevy_match_choice_rejects_replace_for_published_activity(tmp_path):
     assert response.status_code == 409
     assert "already on Strava" in response.json()["detail"]
     apply_match.assert_not_called()
-
-
-def test_hevy_match_choice_marks_rejected_key_for_reconnect(tmp_path):
-    conn = db.connect(str(tmp_path / "test.db"))
-    _seed_awaiting_hevy_match(conn)
-
-    def reject_key(_hevy_id, _strategy):
-        raise HevyAuthError("bad key")
-
-    client = owner_client(create_app(conn, apply_hevy_match=reject_key))
-
-    response = client.post(
-        "/api/v1/hevy/hevy-match/match", json={"strategy": "describe"}
-    )
-
-    assert response.status_code == 401
-    assert "reconnect Hevy" in response.json()["detail"]
-    assert db.get_config_value(conn, "hevy_auth_ok") is False
 
 
 def test_skipping_an_awaiting_match_releases_its_garmin_claim(tmp_path):

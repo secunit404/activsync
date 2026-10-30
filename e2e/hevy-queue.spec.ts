@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import { test, expect } from "./fixtures";
 
 // The seeded e2e DB has no `hevy_api_key`, so Hevy starts disconnected (see
@@ -43,7 +45,7 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
 
   // Cancel: the previously-native `window.confirm()` would have hung
   // Playwright's CDP browser here — this dialog does not.
-  await row.getByRole("button", { name: "Skip", exact: true }).click();
+  await row.getByRole("button", { name: "Skip Ring circuit (Hevy)", exact: true }).click();
   const dialog = page.getByRole("alertdialog", { name: "Skip this workout?" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAccessibleDescription("Skip Ring circuit (Hevy)?");
@@ -51,10 +53,10 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Ring circuit (Hevy)")).toBeVisible();
-  await expect(row.getByRole("button", { name: "Unskip" })).not.toBeVisible();
+  await expect(row.getByRole("button", { name: "Unskip Ring circuit (Hevy)" })).not.toBeVisible();
 
   // Confirm: the destructive action actually runs.
-  await row.getByRole("button", { name: "Skip", exact: true }).click();
+  await row.getByRole("button", { name: "Skip Ring circuit (Hevy)", exact: true }).click();
   await page
     .getByRole("alertdialog", { name: "Skip this workout?" })
     .getByRole("button", { name: "Skip", exact: true })
@@ -62,6 +64,48 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
 
   await expect(page.getByText(/^Skipped .+\.$/)).toBeVisible();
   await expect(page.getByRole("alertdialog")).toBeHidden();
-  await expect(row.getByRole("button", { name: "Unskip" })).toBeVisible();
-  await expect(row.getByRole("button", { name: "Skip", exact: true })).not.toBeVisible();
+  await expect(row.getByRole("button", { name: "Unskip Ring circuit (Hevy)" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Skip Ring circuit (Hevy)", exact: true })).not.toBeVisible();
+});
+
+// "Leg day (Hevy)" is the seeded awaiting-match workout. The mock server
+// applies a decision with dev_mock.apply_hevy_match once the 5s undo window
+// passes. The undo test runs first and leaves the workout awaiting a
+// decision; the apply test then consumes it.
+test.describe("merge undo window", () => {
+  test.describe.configure({ mode: "serial" });
+
+  const row = (page: Page) => page.getByRole("listitem").filter({ hasText: "Leg day (Hevy)" });
+
+  test("Merge then Undo leaves the workout awaiting a decision", async ({ page }) => {
+    await page.goto("/hevy");
+    const leg = row(page);
+
+    await leg.getByRole("button", { name: "Merge Leg day (Hevy)" }).click();
+    await expect(page.getByText("Merging Leg day (Hevy) into Garmin…")).toBeVisible();
+    await expect(leg.getByRole("button", { name: "Undo Leg day (Hevy)" })).toBeVisible();
+    await expect(leg.getByRole("button", { name: "Merge Leg day (Hevy)" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+
+    await expect(page.getByText("Not changed")).toBeVisible();
+    await expect(page.getByText("Garmin was left as it was.")).toBeVisible();
+    await expect(leg.getByRole("button", { name: "Merge Leg day (Hevy)" })).toBeVisible();
+    await page.waitForTimeout(6000);
+    await expect(leg.getByRole("button", { name: "Merge Leg day (Hevy)" })).toBeVisible();
+  });
+
+  test("Merge, left alone past the window, is applied and the row leaves awaiting", async ({
+    page,
+  }) => {
+    await page.goto("/hevy");
+    const leg = row(page);
+
+    await leg.getByRole("button", { name: "Merge Leg day (Hevy)" }).click();
+    await expect(leg.getByRole("button", { name: "Undo Leg day (Hevy)" })).toBeVisible();
+
+    await expect(page.getByText("Merged Leg day (Hevy).")).toBeVisible({ timeout: 15_000 });
+    await expect(leg.getByRole("button", { name: "Merge Leg day (Hevy)" })).toHaveCount(0);
+    await expect(leg.getByRole("button", { name: "Undo Leg day (Hevy)" })).toHaveCount(0);
+  });
 });

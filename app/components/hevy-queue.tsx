@@ -8,8 +8,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { HevyWorkoutDetailContent } from "@/components/hevy-workout-detail";
 import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
+import { useHevyMatchQueue, type HevyMatchPhase } from "@/hooks/use-hevy-match-queue";
 import {
-  chooseHevyMatch,
   getHevyWorkout,
   runHevyQueueAction,
   type HevyMatchStrategy,
@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { MetaList } from "@/components/meta-list";
 
 type QueueCommand = HevyQueueAction | HevyMatchStrategy;
+type RowCommand = QueueCommand | "undo";
 type ConfirmableAction = "skip" | "resync-fresh" | "replace";
 
 const CONFIRM_COPY: Record<
@@ -49,10 +50,6 @@ const CONFIRM_COPY: Record<
     pendingLabel: "Replacing…",
   },
 };
-
-function isMatchStrategy(action: QueueCommand): action is HevyMatchStrategy {
-  return action === "merge" || action === "replace" || action === "describe";
-}
 
 type QueueRowKind = "in-flight" | "problem" | "skipped";
 type Tone = "info" | "warning" | "destructive" | "muted";
@@ -83,11 +80,10 @@ export function HevyQueue({
     { item: HevyQueueItem; action: ConfirmableAction } | null
   >(null);
   const [detailTarget, setDetailTarget] = useState<HevyQueueItem | null>(null);
+  const matches = useHevyMatchQueue();
   const action = useMutation({
-    mutationFn: ({ hevyId, action }: { hevyId: string; action: QueueCommand }) =>
-      isMatchStrategy(action)
-        ? chooseHevyMatch(hevyId, action)
-        : runHevyQueueAction(hevyId, action),
+    mutationFn: ({ hevyId, action }: { hevyId: string; action: HevyQueueAction }) =>
+      runHevyQueueAction(hevyId, action),
     onSuccess: (result) => {
       toast.success(result.message);
       onQueueChanged?.();
@@ -102,7 +98,18 @@ export function HevyQueue({
     },
   });
 
-  const runAction = (item: HevyQueueItem, nextAction: QueueCommand) => {
+  const chooseMatch = (item: HevyQueueItem, strategy: HevyMatchStrategy) =>
+    matches.choose(item.hevyId, item.title, strategy, onQueueChanged);
+
+  const runAction = (item: HevyQueueItem, nextAction: RowCommand) => {
+    if (nextAction === "undo") {
+      matches.undo(item.hevyId);
+      return;
+    }
+    if (nextAction === "merge" || nextAction === "describe") {
+      chooseMatch(item, nextAction);
+      return;
+    }
     if (
       nextAction === "skip" ||
       nextAction === "resync-fresh" ||
@@ -148,6 +155,7 @@ export function HevyQueue({
                 kind={kind}
                 busy={action.isPending}
                 pending={action.isPending && action.variables?.hevyId === item.hevyId}
+                matchPhase={matches.queued.get(item.hevyId) ?? item.matchPhase}
                 onView={() => setDetailTarget(item)}
                 onAction={(nextAction) => runAction(item, nextAction)}
               />
@@ -167,10 +175,14 @@ export function HevyQueue({
           pendingLabel={CONFIRM_COPY[confirmTarget.action].pendingLabel}
           pending={confirmPending}
           onConfirm={async () => {
-            await action.mutateAsync({
-              hevyId: confirmTarget.item.hevyId,
-              action: confirmTarget.action,
-            });
+            if (confirmTarget.action === "replace") {
+              chooseMatch(confirmTarget.item, "replace");
+            } else {
+              await action.mutateAsync({
+                hevyId: confirmTarget.item.hevyId,
+                action: confirmTarget.action,
+              });
+            }
             setConfirmTarget(null);
           }}
         />
@@ -216,6 +228,7 @@ function QueueRow({
   kind,
   busy,
   pending,
+  matchPhase,
   onView,
   onAction,
 }: {
@@ -223,10 +236,12 @@ function QueueRow({
   kind: QueueRowKind;
   busy: boolean;
   pending: boolean;
+  matchPhase: HevyMatchPhase | null;
   onView: () => void;
-  onAction: (action: QueueCommand) => void;
+  onAction: (action: RowCommand) => void;
 }) {
   const tone = toneFor(kind, item);
+  const context = item.title;
 
   return (
     // Two columns on mobile (dot | content) with the actions on their own row
@@ -272,6 +287,8 @@ function QueueRow({
                 ? `Matched ${item.matchedGarminTitle ?? `Garmin activity ${item.matchedGarminActivityId}`}`
                 : (item.error ?? queueStatusLabel(item)),
               item.awaitingMatch && item.matchedStravaActivityId && "Already on Strava",
+              matchPhase === "waiting" && "Applying shortly — Undo to cancel",
+              matchPhase === "applying" && "Updating Garmin…",
             ]}
           />
         </p>
@@ -283,6 +300,7 @@ function QueueRow({
         <ActionButton
           label="View workout"
           busyLabel="Opening…"
+          context={context}
           disabled={false}
           pending={false}
           onClick={onView}
@@ -294,11 +312,32 @@ function QueueRow({
             </a>
           </Button>
         ) : null}
-        {item.awaitingMatch ? (
+        {item.awaitingMatch && matchPhase === "waiting" ? (
+          <ActionButton
+            label="Undo"
+            busyLabel="Undoing…"
+            context={context}
+            disabled={false}
+            pending={false}
+            onClick={() => onAction("undo")}
+          />
+        ) : null}
+        {item.awaitingMatch && matchPhase === "applying" ? (
+          <ActionButton
+            label="Updating Garmin…"
+            busyLabel="Updating Garmin…"
+            context={context}
+            disabled
+            pending
+            onClick={() => undefined}
+          />
+        ) : null}
+        {item.awaitingMatch && matchPhase === null ? (
           <>
             <ActionButton
               label="Merge"
               busyLabel="Applying…"
+              context={context}
               disabled={busy}
               pending={pending}
               onClick={() => onAction("merge")}
@@ -307,6 +346,7 @@ function QueueRow({
               <ActionButton
                 label="Replace"
                 busyLabel="Replacing…"
+                context={context}
                 disabled={busy}
                 pending={pending}
                 onClick={() => onAction("replace")}
@@ -315,6 +355,7 @@ function QueueRow({
             <ActionButton
               label="Description only"
               busyLabel="Applying…"
+              context={context}
               disabled={busy}
               pending={pending}
               onClick={() => onAction("describe")}
@@ -322,6 +363,7 @@ function QueueRow({
             <ActionButton
               label="Skip"
               busyLabel="Skipping…"
+              context={context}
               disabled={busy}
               pending={pending}
               onClick={() => onAction("skip")}
@@ -346,6 +388,7 @@ function QueueRow({
               <ActionButton
                 label="Re-sync fresh"
                 busyLabel="Queuing…"
+                context={context}
                 disabled={busy}
                 pending={pending}
                 onClick={() => onAction("resync-fresh")}
@@ -354,6 +397,7 @@ function QueueRow({
             <ActionButton
               label="Retry"
               busyLabel="Queuing…"
+              context={context}
               disabled={busy}
               pending={pending}
               onClick={() => onAction("retry")}
@@ -362,6 +406,7 @@ function QueueRow({
               <ActionButton
                 label="Skip"
                 busyLabel="Skipping…"
+                context={context}
                 disabled={busy}
                 pending={pending}
                 onClick={() => onAction("skip")}
@@ -373,6 +418,7 @@ function QueueRow({
           <ActionButton
             label="Unskip"
             busyLabel="Restoring…"
+            context={context}
             disabled={busy}
             pending={pending}
             onClick={() => onAction("unskip")}
@@ -416,20 +462,29 @@ function WorkoutDetails({ item, onClose }: { item: HevyQueueItem; onClose: () =>
 function ActionButton({
   label,
   busyLabel,
+  context,
   disabled,
   pending,
   onClick,
 }: {
   label: string;
   busyLabel: string;
+  context: string;
   disabled: boolean;
   pending: boolean;
   onClick: () => void;
 }) {
+  const shown = pending ? busyLabel : label;
   return (
-    <Button variant="outline" size="sm" disabled={disabled} onClick={onClick}>
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      aria-label={`${shown} ${context}`}
+      onClick={onClick}
+    >
       {pending ? <Spinner data-icon="inline-start" /> : null}
-      {pending ? busyLabel : label}
+      {shown}
     </Button>
   );
 }

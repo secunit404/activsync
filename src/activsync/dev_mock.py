@@ -31,7 +31,7 @@ import json
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
 
-from activsync import db
+from activsync import db, hevy_db
 from activsync.garmin_client import ActivityRecord, MfaRequired, SubcategoryRejected
 
 MFA_TRIGGER_PASSWORD = "mfa"
@@ -763,6 +763,22 @@ class FakeStravaClient:
         self, strava_activity_id: int, name: str, description: str
     ) -> None:
         return None
+
+
+_HEVY_MATCH_STATUS = {"merge": "merged", "replace": "replaced", "describe": "described"}
+
+
+def apply_hevy_match(conn: sqlite3.Connection, hevy_id: str, strategy: str) -> str:
+    """Stand-in for Poller.apply_hevy_match: records the owner's choice on the
+    seeded workout without touching Garmin."""
+    row = hevy_db.get_workout(conn, hevy_id)
+    if row is None or not row["source_garmin_activity_id"]:
+        raise LookupError("Unknown Hevy workout.")
+    status = _HEVY_MATCH_STATUS[strategy]
+    hevy_db.link_target(conn, hevy_id, row["source_garmin_activity_id"], strategy)
+    hevy_db.set_workout_status(conn, hevy_id, status)
+    hevy_db.set_applied(conn, hevy_id, "garmin", row["source_updated_at"])
+    return status
 
 
 class MockHevyClient:

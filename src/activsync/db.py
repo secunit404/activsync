@@ -151,6 +151,18 @@ CREATE TABLE IF NOT EXISTS publish_schedule (
 
 CREATE INDEX IF NOT EXISTS publish_schedule_batch ON publish_schedule (batch_id);
 
+-- One row per Hevy workout the owner chose a match strategy for: the undo
+-- window's deadline and, once applied, the outcome the page can read back.
+-- See hevy_match_schedule.py.
+CREATE TABLE IF NOT EXISTS hevy_match_schedule (
+    hevy_id TEXT PRIMARY KEY,
+    strategy TEXT NOT NULL,
+    deadline REAL NOT NULL,
+    state TEXT NOT NULL,
+    message TEXT,
+    finished_at REAL
+);
+
 CREATE TABLE IF NOT EXISTS auth_oidc_logo (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     png BLOB NOT NULL,
