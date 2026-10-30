@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import secrets
@@ -31,6 +32,7 @@ from activsync import (
     db,
     dev_mock,
     events,
+    hevy_match_schedule,
     hevy_queue_api_routes,
     hevy_tools_api_routes,
     onboarding,
@@ -114,18 +116,25 @@ def create_app(
     process_hevy_workout: Callable[[str], str] | None = None,
     oidc_transport: httpx2.AsyncBaseTransport | None = None,
     publish_scheduler: publish_schedule.PublishScheduler | None = None,
+    hevy_match_scheduler: hevy_match_schedule.HevyMatchScheduler | None = None,
 ) -> FastAPI:
     scheduler = publish_scheduler or publish_schedule.PublishScheduler(
         conn,
         build_garmin_client=_build_garmin_client,
         build_strava_client=_build_strava_client,
     )
+    if _mock_mode():
+        apply_hevy_match = functools.partial(dev_mock.apply_hevy_match, conn)
+    match_scheduler = hevy_match_scheduler or hevy_match_schedule.HevyMatchScheduler(
+        conn, apply_hevy_match=apply_hevy_match
+    )
 
-    # The scheduler runs in mock mode too, unlike the poller, so it is
+    # The schedulers run in mock mode too, unlike the poller, so they are
     # started here rather than by the caller's lifespan.
     @asynccontextmanager
     async def run_with_scheduler(app):
         scheduler.start()
+        match_scheduler.start()
         try:
             if lifespan is None:
                 yield
@@ -133,6 +142,7 @@ def create_app(
                 async with lifespan(app):
                     yield
         finally:
+            match_scheduler.stop()
             scheduler.stop()
 
     # No /docs or /openapi.json: deny-by-default would otherwise serve them
@@ -156,6 +166,7 @@ def create_app(
     app.state.db = conn
     app.state.setup_code = setup_code
     app.state.publish_scheduler = scheduler
+    app.state.hevy_match_scheduler = match_scheduler
 
     if (resolved_web_dir / "assets").is_dir():
         app.mount(
@@ -197,7 +208,7 @@ def create_app(
     app.include_router(
         hevy_queue_api_routes.create_router(
             conn,
-            apply_hevy_match=apply_hevy_match,
+            match_scheduler=match_scheduler,
         )
     )
     app.include_router(

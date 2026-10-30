@@ -204,15 +204,17 @@ def _hevy_time_display(start_time: str, tz_name: str) -> str:
 
 def hevy_summary(conn: sqlite3.Connection) -> dict:
     """In-flight and problem Hevy workouts for the dashboard queue."""
-    from activsync import hevy_db
+    from activsync import hevy_db, hevy_match_schedule
 
     cfg = config.load_config(conn)
     tz_name = cfg["display_timezone"]
+    decisions = hevy_match_schedule.active_by_workout(conn)
 
     def rows_for(statuses: tuple[str, ...]) -> list[dict]:
         rows: list[dict] = []
         for status in statuses:
             for row in hevy_db.list_workouts(conn, status=status):
+                decision = decisions.get(row["hevy_id"])
                 matched_activity = (
                     db.get_activity(conn, row["source_garmin_activity_id"])
                     if row["source_garmin_activity_id"] is not None
@@ -242,6 +244,12 @@ def hevy_summary(conn: sqlite3.Connection) -> dict:
                         else None
                     ),
                     "matched_strava_url": strava_url_for(matched_activity),
+                    "match_scheduled_at": (
+                        hevy_match_schedule.deadline_iso(decision["deadline"])
+                        if decision
+                        else None
+                    ),
+                    "match_phase": decision["state"] if decision else None,
                 })
         return rows
 

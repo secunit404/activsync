@@ -11,24 +11,40 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const { chooseHevyMatch, getHevyWorkout, runHevyQueueAction } = vi.hoisted(() => ({
-  chooseHevyMatch: vi.fn(),
-  getHevyWorkout: vi.fn(),
-  runHevyQueueAction: vi.fn(),
-}));
+const { scheduleHevyMatch, cancelHevyMatch, getHevyMatchStatus, getHevyWorkout, runHevyQueueAction } =
+  vi.hoisted(() => ({
+    scheduleHevyMatch: vi.fn(),
+    cancelHevyMatch: vi.fn(),
+    getHevyMatchStatus: vi.fn(),
+    getHevyWorkout: vi.fn(),
+    runHevyQueueAction: vi.fn(),
+  }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, chooseHevyMatch, getHevyWorkout, runHevyQueueAction };
+  return {
+    ...actual,
+    scheduleHevyMatch,
+    cancelHevyMatch,
+    getHevyMatchStatus,
+    getHevyWorkout,
+    runHevyQueueAction,
+  };
 });
 
-const { toastSuccess, toastError } = vi.hoisted(() => ({
+const { toastSuccess, toastError, toastBase } = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  toastBase: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: toastSuccess, error: toastError },
+  toast: Object.assign(toastBase, {
+    success: toastSuccess,
+    error: toastError,
+    loading: vi.fn(),
+    dismiss: vi.fn(),
+  }),
 }));
 
 function item(overrides: Partial<HevyQueueItem>): HevyQueueItem {
@@ -46,6 +62,8 @@ function item(overrides: Partial<HevyQueueItem>): HevyQueueItem {
     matchedGarminTitle: null,
     matchedStravaActivityId: null,
     matchedStravaUrl: null,
+    matchScheduledAt: null,
+    matchPhase: null,
     ...overrides,
   };
 }
@@ -126,7 +144,7 @@ test("retry calls the queue action and reports success via toast", async () => {
     }),
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await userEvent.click(screen.getByRole("button", { name: "Retry Leg Day" }));
 
   await waitFor(() =>
     expect(runHevyQueueAction).toHaveBeenCalledWith("hevy-1", "retry"),
@@ -150,10 +168,10 @@ test("an awaiting match offers per-workout strategies", () => {
   );
 
   expect(screen.getByText(/matched morning strength/i)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Merge" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Description only" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Merge Leg Day" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Replace Leg Day" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Description only Leg Day" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Skip Leg Day" })).toBeInTheDocument();
 });
 
 test("loads and shows the actual Hevy workout only after opening details", async () => {
@@ -192,7 +210,7 @@ test("loads and shows the actual Hevy workout only after opening details", async
   );
 
   expect(getHevyWorkout).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole("button", { name: "View workout" }));
+  await userEvent.click(screen.getByRole("button", { name: "View workout Leg Day" }));
 
   const dialog = await screen.findByRole("dialog", { name: "Leg Day" });
   expect(getHevyWorkout).toHaveBeenCalledWith("hevy-1", expect.any(AbortSignal));
@@ -202,24 +220,88 @@ test("loads and shows the actual Hevy workout only after opening details", async
   expect(within(dialog).getByText(/Description only always uses/i)).toBeInTheDocument();
 });
 
-test("merge applies the selected strategy to the awaiting workout", async () => {
-  chooseHevyMatch.mockResolvedValue({ message: "Merged Leg Day." });
-  renderQueue(
-    emptyQueue({
-      counts: { inFlight: 1, problems: 0, skipped: 0 },
-      inFlight: [item({ status: "awaiting_match", awaitingMatch: true })],
-    }),
-  );
+const scheduled = {
+  deadline: "2026-07-22T12:00:05+00:00",
+  strategy: "merge",
+  remainingMs: 5000,
+  undoWindowMs: 5000,
+};
 
-  await userEvent.click(screen.getByRole("button", { name: "Merge" }));
+// The queue of scheduled decisions lives at module scope, so a test that
+// schedules one must undo it or the next test starts with that row locked.
+async function undoAndSettle() {
+  cancelHevyMatch.mockResolvedValue({ cancelled: true });
+  await userEvent.click(await screen.findByRole("button", { name: "Undo Leg Day" }));
+  expect(await screen.findByRole("button", { name: "Merge Leg Day" })).toBeEnabled();
+}
 
-  await waitFor(() =>
-    expect(chooseHevyMatch).toHaveBeenCalledWith("hevy-1", "merge"),
-  );
+function awaitingQueue(overrides: Partial<HevyQueueItem> = {}) {
+  return emptyQueue({
+    counts: { inFlight: 1, problems: 0, skipped: 0 },
+    inFlight: [item({ status: "awaiting_match", awaitingMatch: true, ...overrides })],
+  });
+}
+
+test("merge schedules the choice instead of applying it, and offers Undo", async () => {
+  scheduleHevyMatch.mockResolvedValue(scheduled);
+  renderQueue(awaitingQueue());
+
+  await userEvent.click(screen.getByRole("button", { name: "Merge Leg Day" }));
+
+  await waitFor(() => expect(scheduleHevyMatch).toHaveBeenCalledWith("hevy-1", "merge"));
+  expect(screen.getByRole("button", { name: "Undo Leg Day" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "Merge Leg Day" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Skip Leg Day" })).not.toBeInTheDocument();
+  expect(screen.getByText(/Applying shortly/)).toBeVisible();
+  await undoAndSettle();
 });
 
-test("replace asks for confirmation before applying", async () => {
-  chooseHevyMatch.mockResolvedValue({ message: "Replaced Leg Day." });
+test("description only schedules straight away too", async () => {
+  scheduleHevyMatch.mockResolvedValue({ ...scheduled, strategy: "describe" });
+  renderQueue(awaitingQueue());
+
+  await userEvent.click(screen.getByRole("button", { name: "Description only Leg Day" }));
+
+  await waitFor(() => expect(scheduleHevyMatch).toHaveBeenCalledWith("hevy-1", "describe"));
+  await undoAndSettle();
+});
+
+test("Undo cancels the scheduled choice and puts the strategy buttons back", async () => {
+  scheduleHevyMatch.mockResolvedValue(scheduled);
+  cancelHevyMatch.mockResolvedValue({ cancelled: true });
+  renderQueue(awaitingQueue());
+
+  await userEvent.click(screen.getByRole("button", { name: "Merge Leg Day" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Undo Leg Day" }));
+
+  await waitFor(() => expect(cancelHevyMatch).toHaveBeenCalledWith("hevy-1"));
+  expect(await screen.findByRole("button", { name: "Merge Leg Day" })).toBeEnabled();
+});
+
+test("a decision scheduled elsewhere shows Undo, and Undo cancels it on the server", async () => {
+  cancelHevyMatch.mockResolvedValue({ cancelled: true });
+  renderQueue(
+    awaitingQueue({ matchPhase: "waiting", matchScheduledAt: "2026-07-22T12:00:05+00:00" }),
+  );
+
+  expect(screen.queryByRole("button", { name: "Merge Leg Day" })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Undo Leg Day" }));
+
+  await waitFor(() => expect(cancelHevyMatch).toHaveBeenCalledWith("hevy-1"));
+  expect(scheduleHevyMatch).not.toHaveBeenCalled();
+});
+
+test("a decision being applied shows a disabled Updating Garmin state", () => {
+  renderQueue(awaitingQueue({ matchPhase: "applying" }));
+
+  expect(screen.getByRole("button", { name: "Updating Garmin… Leg Day" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Undo Leg Day" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Merge Leg Day" })).not.toBeInTheDocument();
+  expect(screen.getAllByText("Updating Garmin…").length).toBeGreaterThan(0);
+});
+
+test("replace asks for confirmation before scheduling", async () => {
+  scheduleHevyMatch.mockResolvedValue({ ...scheduled, strategy: "replace" });
   renderQueue(
     emptyQueue({
       counts: { inFlight: 1, problems: 0, skipped: 0 },
@@ -227,17 +309,18 @@ test("replace asks for confirmation before applying", async () => {
     }),
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Replace" }));
+  await userEvent.click(screen.getByRole("button", { name: "Replace Leg Day" }));
   const dialog = screen.getByRole("alertdialog", {
     name: "Replace this Garmin workout?",
   });
+  expect(scheduleHevyMatch).not.toHaveBeenCalled();
   await userEvent.click(
     within(dialog).getByRole("button", { name: "Replace Garmin workout" }),
   );
 
-  await waitFor(() =>
-    expect(chooseHevyMatch).toHaveBeenCalledWith("hevy-1", "replace"),
-  );
+  await waitFor(() => expect(scheduleHevyMatch).toHaveBeenCalledWith("hevy-1", "replace"));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  await undoAndSettle();
 });
 
 test("an already-published match links Strava and withholds Replace", () => {
@@ -261,9 +344,9 @@ test("an already-published match links Strava and withholds Replace", () => {
   const strava = screen.getByRole("link", { name: "View on Strava" });
   expect(strava).toHaveAttribute("href", "https://www.strava.com/activities/222");
   expect(strava).toHaveClass("font-bold");
-  expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Merge" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "Description only" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Replace Leg Day" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Merge Leg Day" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Description only Leg Day" })).toBeVisible();
 });
 
 test("skip opens a confirmation dialog with the real copy, and does nothing when cancelled", async () => {
@@ -274,7 +357,7 @@ test("skip opens a confirmation dialog with the real copy, and does nothing when
     }),
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+  await userEvent.click(screen.getByRole("button", { name: "Skip Leg Day" }));
 
   const dialog = screen.getByRole("alertdialog", { name: "Skip this workout?" });
   expect(dialog).toHaveAccessibleDescription("Skip Leg Day?");
@@ -296,7 +379,7 @@ test("skip runs the action once confirmed in the dialog", async () => {
     onQueueChanged,
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+  await userEvent.click(screen.getByRole("button", { name: "Skip Leg Day" }));
   const dialog = screen.getByRole("alertdialog", { name: "Skip this workout?" });
   await userEvent.click(within(dialog).getByRole("button", { name: "Skip" }));
 
@@ -314,7 +397,7 @@ test("unskip is offered for skipped items and calls the unskip action", async ()
     }),
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Unskip" }));
+  await userEvent.click(screen.getByRole("button", { name: "Unskip Mobility Flow" }));
 
   await waitFor(() => expect(runHevyQueueAction).toHaveBeenCalledWith("hevy-2", "unskip"));
 });
@@ -335,7 +418,7 @@ test("resync-fresh is only offered when the item is resyncable, and asks for con
     }),
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Re-sync fresh" }));
+  await userEvent.click(screen.getByRole("button", { name: "Re-sync fresh Leg Day" }));
 
   const dialog = screen.getByRole("alertdialog", { name: "Re-sync this workout?" });
   expect(dialog).toHaveAccessibleDescription(
@@ -369,8 +452,8 @@ test("skip is withheld while an operation is already open for the item", () => {
     }),
   );
 
-  expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Skip Leg Day" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Retry Leg Day" })).toBeInTheDocument();
 });
 
 test("reports a failed action via an error toast", async () => {
@@ -382,7 +465,7 @@ test("reports a failed action via an error toast", async () => {
     }),
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await userEvent.click(screen.getByRole("button", { name: "Retry Leg Day" }));
 
   await waitFor(() =>
     expect(toastError).toHaveBeenCalledWith(
@@ -401,7 +484,7 @@ test("in-flight items show their status and inspection but no mutation actions",
   );
 
   expect(screen.getByText("Waiting for Garmin")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "View workout" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "View workout Leg Day" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Retry Leg Day" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Skip Leg Day" })).not.toBeInTheDocument();
 });

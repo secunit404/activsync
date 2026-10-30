@@ -14,7 +14,7 @@ import logging
 import sqlite3
 from datetime import datetime, timedelta
 
-from activsync import db, hevy_db
+from activsync import db, hevy_db, hevy_match_schedule
 from activsync.garmin_client import ActivityGone, GarminClient
 from activsync.timeutil import parse_timestamp
 from activsync.hevy_apply import (
@@ -285,6 +285,10 @@ def process_workout(conn: sqlite3.Connection, garmin: GarminClient,
                     hevy: HevyClient, row: dict, cfg: dict,
                     now: datetime) -> None:
     hevy_id = row["hevy_id"]
+    if row["status"] == "awaiting_match" and hevy_match_schedule.is_active(
+        conn, hevy_id
+    ):
+        return
     token = hevy_db.acquire_lease(conn, hevy_id, now)
     if not token:
         return

@@ -33,6 +33,8 @@ const queueState: HevyQueueState = {
       matchedGarminTitle: null,
       matchedStravaActivityId: null,
       matchedStravaUrl: null,
+      matchScheduledAt: null,
+      matchPhase: null,
     },
     {
       hevyId: "hevy-pull-day",
@@ -48,6 +50,8 @@ const queueState: HevyQueueState = {
       matchedGarminTitle: null,
       matchedStravaActivityId: null,
       matchedStravaUrl: null,
+      matchScheduledAt: null,
+      matchPhase: null,
     },
   ],
   problems: [
@@ -65,6 +69,8 @@ const queueState: HevyQueueState = {
       matchedGarminTitle: null,
       matchedStravaActivityId: null,
       matchedStravaUrl: null,
+      matchScheduledAt: null,
+      matchPhase: null,
     },
   ],
   skipped: [
@@ -82,6 +88,8 @@ const queueState: HevyQueueState = {
       matchedGarminTitle: null,
       matchedStravaActivityId: null,
       matchedStravaUrl: null,
+      matchScheduledAt: null,
+      matchPhase: null,
     },
   ],
 };
@@ -191,7 +199,7 @@ test("backfill is inline on the hub, not a link to somewhere else", () => {
 test("presents skipped queue items inline with an unskip action, not hidden", () => {
   renderHevy();
   expect(screen.getByText("Mobility Flow")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Unskip" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Unskip Mobility Flow" })).toBeInTheDocument();
 });
 
 test("shows an empty state pointing at Settings when Hevy is not connected", () => {
