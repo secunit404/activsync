@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
 
+import { PUBLISH_UNDO_WINDOW_MS } from "@/hooks/use-publish-queue";
 import type { Activity, ActivitiesPage, AppState } from "@/lib/api";
 import { ActivitiesView } from "./activities";
 
@@ -352,7 +353,7 @@ test("selecting a filter clears the selection", async () => {
   expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
 });
 
-test("publishing the selection clears it and calls publishActivities with the selected ids", async () => {
+test("publishing the selection clears it, marks the rows publishing, and sends after the undo window", async () => {
   publishActivities.mockResolvedValue({
     message: "Published 1 activity to Strava",
     severity: "success",
@@ -360,15 +361,28 @@ test("publishing the selection clears it and calls publishActivities with the se
     failedCount: 0,
     blockedCount: 0,
   });
-  renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
-  await userEvent.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderAt("/", { ...activities, items: [oneActivity, anotherActivity] });
+    await user.click(screen.getAllByRole("checkbox", { name: /Morning run/ })[0]);
 
-  await userEvent.click(screen.getAllByRole("button", { name: /Publish 1/ })[0]);
+    await user.click(screen.getAllByRole("button", { name: /Publish 1/ })[0]);
 
-  expect(publishActivities).toHaveBeenCalledWith([12345]);
-  await waitFor(() =>
-    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument(),
-  );
+    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+    expect(publishActivities).not.toHaveBeenCalled();
+    const morningRow = within(screen.getByRole("table")).getByRole("row", { name: /Morning run/ });
+    expect(within(morningRow).getByText("PUBLISHING…")).toBeInTheDocument();
+    const pushDayRow = within(screen.getByRole("table")).getByRole("row", { name: /Push Day/ });
+    expect(within(pushDayRow).queryByText("PUBLISHING…")).not.toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(PUBLISH_UNDO_WINDOW_MS));
+
+    expect(publishActivities).toHaveBeenCalledWith([12345]);
+    await waitFor(() => expect(within(morningRow).queryByText("PUBLISHING…")).not.toBeInTheDocument());
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("excluding the selection calls excludeActivity for each selected id and clears the selection", async () => {

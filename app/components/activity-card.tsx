@@ -11,6 +11,7 @@ import { MetaList } from "@/components/meta-list";
 type ActivityCardProps = {
   activity: Activity;
   selected: boolean;
+  publishing?: boolean;
   onToggle: (id: number) => void;
 };
 
@@ -29,7 +30,12 @@ type ActivityCardProps = {
  * users, and the title is a real `<Link>` for keyboard/screen-reader access
  * — same division of labor as the table row.
  */
-export function ActivityCard({ activity, selected, onToggle }: ActivityCardProps) {
+export function ActivityCard({
+  activity,
+  selected,
+  publishing = false,
+  onToggle,
+}: ActivityCardProps) {
   const navigate = useNavigate();
   const href = `/${activity.garminActivityId}`;
   const source = activity.hevyBadge ? "via Hevy" : formatTypeLabel(activity.activityType);
@@ -58,7 +64,7 @@ export function ActivityCard({ activity, selected, onToggle }: ActivityCardProps
           >
             {activity.title}
           </Link>
-          <StatusPill status={activity.publishStatus} />
+          <StatusPill status={activity.publishStatus} publishing={publishing} />
         </div>
         <MetaList
           className="font-mono text-[11.5px] text-muted-foreground"

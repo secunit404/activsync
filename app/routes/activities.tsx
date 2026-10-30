@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { useActivityActions } from "@/hooks/use-activity-actions";
+import { usePublishQueue } from "@/hooks/use-publish-queue";
 import { useSelection } from "@/hooks/use-selection";
 import {
   ApiError,
@@ -165,6 +166,7 @@ export function ActivitiesView({
   const queryClient = useQueryClient();
   const selection = useSelection();
   const activityActions = useActivityActions();
+  const publishQueue = usePublishQueue();
   const dismissCatchUp = useMutation({
     mutationFn: dismissCatchUpReport,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.appState }),
@@ -198,14 +200,19 @@ export function ActivitiesView({
     selection.selected.has(activity.garminActivityId),
   );
   const selectedCount = selectedActivities.length;
+  const publishingIds = new Set(publishQueue.queued.keys());
 
   // Bulk actions fire on the subset the server would accept, not the whole
   // selection — mirrors `api_routes.py`'s per-activity status guards, so a
   // mixed selection can no longer produce a 409 the user reads as failure.
-  const excludableIds = selectedActivities
+  // A row already queued to publish is left out of both: it is decided.
+  const actionableActivities = selectedActivities.filter(
+    (activity) => !publishingIds.has(activity.garminActivityId),
+  );
+  const excludableIds = actionableActivities
     .filter((activity) => isExcludableStatus(activity.publishStatus))
     .map((activity) => activity.garminActivityId);
-  const publishableIds = selectedActivities
+  const publishableIds = actionableActivities
     .filter((activity) => isPublishableStatus(activity.publishStatus))
     .map((activity) => activity.garminActivityId);
 
@@ -218,10 +225,8 @@ export function ActivitiesView({
   }, [selectedCount, onTabBarHiddenChange]);
 
   const handlePublish = () => {
-    activityActions.mutate(
-      { type: "publish-many", activityIds: publishableIds },
-      { onSuccess: () => selection.clear() },
-    );
+    publishQueue.publishMany(publishableIds);
+    selection.clear();
   };
 
   const handleExclude = () => {
@@ -307,6 +312,7 @@ export function ActivitiesView({
           <ActivitiesTable
             activities={data.items}
             selected={selection.selected}
+            publishingIds={publishingIds}
             onToggle={selection.toggle}
             onToggleAll={toggleAll}
           />
@@ -316,6 +322,7 @@ export function ActivitiesView({
                 key={activity.garminActivityId}
                 activity={activity}
                 selected={selection.selected.has(activity.garminActivityId)}
+                publishing={publishingIds.has(activity.garminActivityId)}
                 onToggle={selection.toggle}
               />
             ))}

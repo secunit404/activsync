@@ -1,8 +1,9 @@
-import { ExternalLinkIcon } from "lucide-react";
+import { ExternalLinkIcon, Undo2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { PUBLISH_UNDO_WINDOW_MS, type PublishPhase } from "@/hooks/use-publish-queue";
 import { activityDetailMetrics, isPublishableStatus } from "@/lib/activity-metrics";
 import type { Activity } from "@/lib/api";
 
@@ -72,11 +73,14 @@ export type ActivityDetailViewFooterProps = {
   connectionsBroken: boolean;
   /** True while ANY activity action is in flight — blocks every button here. */
   busy: boolean;
+  /** Set while this activity's publish waits out its undo window or is in flight. */
+  publishPhase?: PublishPhase;
   isPublishing: boolean;
   isExcluding: boolean;
   isRestoring: boolean;
   onEdit: () => void;
   onPublish: () => void;
+  onUndoPublish: () => void;
   onExclude: () => void;
   onRestore: () => void;
 };
@@ -97,11 +101,13 @@ export function ActivityDetailViewFooter({
   activity,
   connectionsBroken,
   busy,
+  publishPhase,
   isPublishing,
   isExcluding,
   isRestoring,
   onEdit,
   onPublish,
+  onUndoPublish,
   onExclude,
   onRestore,
 }: ActivityDetailViewFooterProps) {
@@ -158,8 +164,22 @@ export function ActivityDetailViewFooter({
     return null;
   };
 
-  const publishButton = (className: string) =>
-    publishable ? (
+  const publishButton = (className: string) => {
+    if (!publishable) {
+      return null;
+    }
+    // Same element, relabelled: focus stays on it, so a keyboard user who
+    // just pressed Publish can press again to undo inside the dialog's focus
+    // trap, where the toast's own Undo is out of reach.
+    if (publishPhase === "waiting") {
+      return (
+        <Button variant="outline" className={className} onClick={onUndoPublish}>
+          <Undo2Icon data-icon="inline-start" aria-hidden="true" />
+          Undo publish
+        </Button>
+      );
+    }
+    return (
       <Button
         className={className}
         disabled={busy || connectionsBroken}
@@ -179,10 +199,16 @@ export function ActivityDetailViewFooter({
           "Publish to Strava"
         )}
       </Button>
-    ) : null;
+    );
+  };
 
   return (
     <>
+      <span role="status" className="sr-only">
+        {publishPhase === "waiting"
+          ? `Publishing to Strava in ${PUBLISH_UNDO_WINDOW_MS / 1000} seconds. Undo publish to cancel.`
+          : ""}
+      </span>
       <div className="flex flex-col gap-2.5 md:hidden">
         {publishButton("w-full")}
         <div className="flex gap-2.5">

@@ -201,6 +201,13 @@ export function ResponsiveOverlay({
               contentRef.current?.focus();
             })
           }
+          // A toast's own buttons (the publish Undo) sit outside the panel;
+          // pressing one must not count as a click-away that closes it.
+          onInteractOutside={(event) => {
+            if ((event.target as Element | null)?.closest?.("[data-sonner-toaster]")) {
+              event.preventDefault();
+            }
+          }}
           style={{ "--sheet-drag": `${dragY}px` } as React.CSSProperties}
           className={cn(
             "fixed z-50 flex flex-col overflow-hidden border-border bg-card text-card-foreground outline-none",
