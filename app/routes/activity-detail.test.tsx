@@ -150,7 +150,7 @@ test("renders the stat grid, description and Garmin link in view mode", () => {
   renderDetail(fixture);
   expect(screen.getByText("10.2 km")).toBeInTheDocument();
   expect(screen.getByText("Easy shakeout along the river loop.")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /Garmin/ })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "View on Garmin" })).toHaveAttribute(
     "href",
     fixture.garminUrl,
   );
