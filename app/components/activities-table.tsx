@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { StatusPill } from "@/components/status-pill";
 import { TypePill } from "@/components/type-pill";
 import { Checkbox } from "@/components/ui/checkbox";
+import { selectAllState } from "@/hooks/use-selection";
 import { activityEffort } from "@/lib/activity-metrics";
 import { rowReason } from "@/lib/activity-status";
 import type { Activity } from "@/lib/api";
@@ -31,14 +32,6 @@ export function ActivitiesTable({
   onToggle,
   onToggleAll,
 }: ActivitiesTableProps) {
-  // Counted against the rows on screen, not `selected.size`: an id can stay
-  // selected after a background refetch moves its row out of this list.
-  const selectedOnPage = activities.filter((activity) =>
-    selected.has(activity.garminActivityId),
-  ).length;
-  const allSelected = activities.length > 0 && selectedOnPage === activities.length;
-  const someSelected = selectedOnPage > 0 && !allSelected;
-
   return (
     <div
       data-testid="activities-table"
@@ -50,7 +43,10 @@ export function ActivitiesTable({
             <th scope="col" className="w-[38px] px-4 py-3 pointer-coarse:py-3.5">
               <Checkbox
                 aria-label="Select all activities"
-                checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                checked={selectAllState(
+                  activities.map((activity) => activity.garminActivityId),
+                  selected,
+                )}
                 onCheckedChange={onToggleAll}
               />
             </th>

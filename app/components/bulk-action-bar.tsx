@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,14 @@ type BulkActionBarProps = {
    * to Strava, so it stays enabled.
    */
   publishDisabled?: boolean;
+  /**
+   * The page's select-all state, for the phone dock's select-all checkbox.
+   * Phones show cards with no table header to hold one, so it lives here,
+   * only while a selection exists: tapping a card's checkbox starts one.
+   * Desktop and tablet keep theirs in the table header.
+   */
+  selectAll?: boolean | "indeterminate";
+  onToggleAll?: () => void;
 };
 
 const publishDisabledReason = "Reconnect Strava to resume publishing.";
@@ -69,6 +78,8 @@ export function BulkActionBar({
   onPublish,
   busy,
   publishDisabled = false,
+  selectAll,
+  onToggleAll,
 }: BulkActionBarProps) {
   // Where focus came from before it entered the bar, so it can go back there
   // when the bar unmounts under it (Clear, Escape, a finished action) rather
@@ -138,7 +149,16 @@ export function BulkActionBar({
       {/* Mobile: stacked rows — count/Clear above the two actions. */}
       <div className="flex flex-col gap-2 md:hidden">
         <div className="flex items-center justify-between gap-2">
-          <BulkCount count={count} />
+          <div className="flex min-w-0 items-center gap-3 pl-1">
+            {onToggleAll ? (
+              <Checkbox
+                aria-label="Select all activities"
+                checked={selectAll ?? false}
+                onCheckedChange={onToggleAll}
+              />
+            ) : null}
+            <BulkCount count={count} />
+          </div>
           <button
             type="button"
             onClick={onClear}

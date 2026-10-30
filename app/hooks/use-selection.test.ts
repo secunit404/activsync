@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { expect, test } from "vitest";
 
-import { useSelection } from "./use-selection";
+import { selectAllState, useSelection } from "./use-selection";
 
 test("toggle adds then removes", () => {
   const { result } = renderHook(() => useSelection());
@@ -50,4 +50,17 @@ test("clear empties the selection", () => {
   act(() => result.current.toggle(2));
   act(() => result.current.clear());
   expect(result.current.count).toBe(0);
+});
+
+test("selectAllState is false with nothing on the page selected", () => {
+  expect(selectAllState([1, 2], new Set([3]))).toBe(false);
+  expect(selectAllState([], new Set())).toBe(false);
+});
+
+test("selectAllState is indeterminate for a partial selection of the page", () => {
+  expect(selectAllState([1, 2], new Set([1]))).toBe("indeterminate");
+});
+
+test("selectAllState is true once every row on the page is selected", () => {
+  expect(selectAllState([1, 2], new Set([1, 2, 9]))).toBe(true);
 });

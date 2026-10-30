@@ -183,3 +183,27 @@ test("is a labelled region", () => {
     screen.getByTestId("bulk-action-bar"),
   );
 });
+
+test("has no select-all of its own unless given one", () => {
+  renderBar();
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+});
+
+test("the phone select-all reports a partial selection as mixed and toggles the page", async () => {
+  const onToggleAll = vi.fn();
+  renderBar({ selectAll: "indeterminate", onToggleAll });
+  const selectAll = screen.getByRole("checkbox", { name: "Select all activities" });
+  expect(selectAll).toHaveAttribute("aria-checked", "mixed");
+
+  await userEvent.click(selectAll);
+
+  expect(onToggleAll).toHaveBeenCalledOnce();
+});
+
+test("the phone select-all reads checked when the whole page is selected", () => {
+  renderBar({ selectAll: true, onToggleAll: vi.fn() });
+  expect(screen.getByRole("checkbox", { name: "Select all activities" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+});
