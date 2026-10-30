@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { AppBrand } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,9 +7,8 @@ import { cn } from "@/lib/utils";
  * finished treatment (centred, constrained, generous), while Activities and
  * Hevy rendered flush against the rail — two visual languages in one app.
  *
- * `SettingsShell` keeps its own `AppBrand` header and version footer: those
- * exist for the standalone setup wizard, which sits outside the rail layout.
- * For Activities and Hevy the rail already supplies both.
+ * The rail supplies the brand mark from `md:` up. Phones have no rail, so
+ * the header row carries the same mark there, at the heading's leading edge.
  */
 export function PageContainer({
   children,
@@ -44,10 +42,17 @@ export function PageHeader({
   return (
     <header className="relative flex flex-wrap items-end justify-between gap-4">
       <div className="grid min-w-0 gap-2">
-        {/* The same two-tone wordmark as the rail and the wizard — the
-            eyebrow used to paint it in one colour. */}
-        <AppBrand className="text-xs font-bold tracking-[0.14em] uppercase" />
-        <h1 className="text-4xl leading-none font-bold tracking-[-0.05em]">{title}</h1>
+        {/* min-h-11 matches the 44px phone controls that sit in the action
+            slot (the Activities sort toggle), so the mark, the heading and
+            that control share one centre line. */}
+        <div className="flex min-w-0 items-center gap-3 max-md:min-h-11">
+          <img
+            src="/favicon.ico"
+            alt="ActivSync"
+            className="size-8 shrink-0 rounded-[9px] object-cover md:hidden"
+          />
+          <h1 className="min-w-0 text-4xl leading-none font-bold tracking-[-0.05em]">{title}</h1>
+        </div>
         <p className="max-w-2xl text-muted-foreground">{description}</p>
       </div>
       {action}

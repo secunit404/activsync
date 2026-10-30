@@ -30,7 +30,7 @@ import { queryKeys } from "@/lib/query-keys";
 import type { Route } from "./+types/setup";
 
 export function meta(): Route.MetaDescriptors {
-  return [{ title: "Set up ActivSync" }];
+  return [{ title: "Setup - ActivSync" }];
 }
 
 export default function Setup() {

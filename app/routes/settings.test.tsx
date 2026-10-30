@@ -139,20 +139,16 @@ function renderSettings(state: SettingsState = connectedState) {
   return renderWithProviders(<SettingsView state={state} />);
 }
 
-// Settings renders inside the rail, which already shows the brand mark —
-// a second one in the page frame was a duplicate. The setup wizard keeps
-// its own AppBrand (setup-step-dots.tsx); it has never used this shell.
+// Settings renders inside the rail, which already shows the brand mark.
+// The page header carries no wordmark; only its phone logo mark, which the
+// rail's absence below md: calls for. The setup wizard keeps its own
+// AppBrand (setup-step-dots.tsx); it has never used this shell.
 test("renders no brand bar of its own, since the rail supplies one", () => {
   renderSettings();
-  // AppBrand splits its text across two spans, so match its aria-label —
-  // a text query for "ActivSync" would never match it and would pass here
-  // whether the brand bar were present or not. The page header's eyebrow is
-  // an AppBrand itself, so the assertion is "exactly one, and it is the
-  // eyebrow" rather than "none".
-  const brands = screen.getAllByLabelText("ActivSync");
-  expect(brands).toHaveLength(1);
-  expect(brands[0].closest("header")).not.toBeNull();
-  // The page heading and its eyebrow are unaffected.
+  expect(screen.queryByLabelText("ActivSync")).not.toBeInTheDocument();
+  const logos = screen.getAllByRole("img", { name: "ActivSync" });
+  expect(logos).toHaveLength(1);
+  expect(logos[0].closest("header")).not.toBeNull();
   expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 });
 
