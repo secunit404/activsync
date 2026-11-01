@@ -127,7 +127,7 @@ export default function HevyMappings() {
   }
 
   return (
-    <PageContainer className="grid gap-6 py-8 md:gap-7 md:py-10">
+    <PageContainer className="grid grid-cols-[minmax(0,1fr)] gap-6 py-8 md:gap-7 md:py-10">
       <PageHeader
         title="Exercise mapping"
         description="Every Hevy exercise ActivSync tracks: where its sets land in Garmin, and which exercise Strava shows."
