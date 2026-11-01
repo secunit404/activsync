@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/secunit404/activsync/compare/v3.1.0...v0.4.0) (2026-11-01)
+
+
+### Features
+
+* **hevy:** merging a Hevy workout into Garmin waits a few seconds with an undo ([#105](https://github.com/secunit404/activsync/issues/105)) ([e4b707a](https://github.com/secunit404/activsync/commit/e4b707a33e3ef5aa9851d3d1d22bea9c4290648d))
+
+
+### Bug Fixes
+
+* **activities:** publishing from the details no longer shows "Activity not found" ([#109](https://github.com/secunit404/activsync/issues/109)) ([ca814a9](https://github.com/secunit404/activsync/commit/ca814a96121448224c3dfb8d0d5d6179c6ecd8b4))
+* **settings:** signing out and removing single sign-on ask first ([#108](https://github.com/secunit404/activsync/issues/108)) ([a7d2d7d](https://github.com/secunit404/activsync/commit/a7d2d7dc82555e49deca85bc80683fd9b3cb1497))
+* **settings:** unsaved changes survive background refreshes ([#107](https://github.com/secunit404/activsync/issues/107)) ([33270fc](https://github.com/secunit404/activsync/commit/33270fc848484ef0c9495874bd15ca226e3bea3c))
+* **ui:** long activity titles no longer make pages wider than a phone screen ([#111](https://github.com/secunit404/activsync/issues/111)) ([d6356e8](https://github.com/secunit404/activsync/commit/d6356e8ade56c8eef696e94da3ecd9847c17d3a2))
+* **ui:** swiping inside a sheet on a phone no longer refreshes the page ([#110](https://github.com/secunit404/activsync/issues/110)) ([8f471bf](https://github.com/secunit404/activsync/commit/8f471bf9c04ead1b7f743551667ed501bd53ce3a))
+
 ## [3.1.0](https://github.com/secunit404/activsync/compare/v3.0.0...v3.1.0) (2026-10-30)
 
 
