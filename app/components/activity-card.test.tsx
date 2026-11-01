@@ -165,3 +165,12 @@ test("a publishing card hides its reason without removing it, so the card keeps 
   expect(reason).toHaveClass("invisible");
   expect(reason).toHaveAttribute("aria-hidden", "true");
 });
+
+// jsdom has no layout, so this pins the class that does the work: a grid's
+// implicit `auto` column grows to the title's full width on phones instead of
+// letting `truncate` cut it, widening the whole page.
+test("a long title truncates instead of widening the card", () => {
+  renderCard({ ...run, title: "Pass B – Lutande press, drag, axlar" });
+  const column = screen.getByRole("link", { name: /Pass B/ }).closest(".grid");
+  expect(column).toHaveClass("grid-cols-[minmax(0,1fr)]");
+});
