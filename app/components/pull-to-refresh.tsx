@@ -63,8 +63,14 @@ export function PullToRefresh() {
       // Only from a resting position at the very top, and never a second
       // gesture on top of a refresh already running. A multi-touch gesture
       // (pinch-zoom on a chart) is not a pull.
+      // An open dialog locks page scroll, so scrollY reads 0 and every drag
+      // inside a sheet would otherwise look like a pull and steal the sheet's
+      // own scrolling and swipe-to-dismiss.
       startY =
-        window.scrollY <= 0 && !busy && event.touches.length === 1
+        window.scrollY <= 0 &&
+        !busy &&
+        event.touches.length === 1 &&
+        !document.querySelector('[role="dialog"], [role="alertdialog"]')
           ? event.touches[0].clientY
           : null;
     };
