@@ -61,7 +61,7 @@ export function ActivityCard({
         onClick={(event) => event.stopPropagation()}
         onCheckedChange={() => onToggle(activity.garminActivityId)}
       />
-      <div className="grid min-w-0 flex-1 gap-1">
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-1">
         <div className="flex items-center justify-between gap-2">
           <Link
             to={href}

@@ -293,7 +293,7 @@ export function ActivitiesView({
   return (
     <PageContainer
       className={cn(
-        "grid gap-5 py-6 md:gap-7 md:py-10",
+        "grid grid-cols-[minmax(0,1fr)] gap-5 py-6 md:gap-7 md:py-10",
         // The bulk bar is fixed-bottom at every size (on mobile in the tab
         // bar's slot, which AppLayout already reserves 74px for); give the
         // page extra clearance below the list only while it's showing, so
@@ -381,7 +381,7 @@ export function ActivitiesView({
             onToggle={selection.toggle}
             onToggleAll={toggleAll}
           />
-          <div data-testid="activities-cards" className="grid gap-3 md:hidden">
+          <div data-testid="activities-cards" className="grid grid-cols-[minmax(0,1fr)] gap-3 md:hidden">
             {data.items.map((activity) => (
               <ActivityCard
                 key={activity.garminActivityId}

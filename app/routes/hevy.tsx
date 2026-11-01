@@ -158,7 +158,7 @@ export function HevyView({
   const { connected } = appState.hevy;
 
   return (
-    <PageContainer className="grid gap-6 py-8 md:gap-7 md:py-10">
+    <PageContainer className="grid grid-cols-[minmax(0,1fr)] gap-6 py-8 md:gap-7 md:py-10">
       {/* No connection pill here: Settings owns connection state, and a
           disconnected Hevy already takes over this page with the empty
           state below. */}
