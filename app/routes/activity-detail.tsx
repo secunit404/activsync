@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { data } from "react-router";
 import { useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -58,7 +58,16 @@ export default function ActivityDetail() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activities = useOutletContext<Activity[]>();
   const activityId = Number(id);
-  const activity = activities.find((item) => item.garminActivityId === activityId);
+  const listed = activities.find((item) => item.garminActivityId === activityId);
+  // A publish or exclude can drop the open activity out of a filtered list
+  // (the review queue). Keep showing the last copy while the overlay closes,
+  // rather than flashing "not found" for an activity that was just here.
+  const [lastSeen, setLastSeen] = useState(listed);
+  if (listed && listed !== lastSeen) {
+    setLastSeen(listed);
+  }
+  const leftList = !listed && lastSeen?.garminActivityId === activityId;
+  const activity = listed ?? (leftList ? lastSeen : undefined);
   const editing = searchParams.get("edit") === "1";
   const actions = useActivityActions();
   const publishQueue = usePublishQueue();
@@ -90,7 +99,7 @@ export default function ActivityDetail() {
   // the row that took its place.
   const listOrder = activities.map((item) => item.garminActivityId);
   const [returnOrder, setReturnOrder] = useState(listOrder);
-  if (activity && listOrder.join() !== returnOrder.join()) {
+  if (listed && listOrder.join() !== returnOrder.join()) {
     setReturnOrder(listOrder);
   }
   const returnFocus = (event: Event) => {
@@ -105,7 +114,12 @@ export default function ActivityDetail() {
   };
   // The list's filter, sort and page ride along in the search, so closing
   // returns to exactly the list the owner opened this from.
-  const close = () => navigate({ pathname: "..", search: withoutEdit().toString() });
+  const close = () => navigate({ pathname: "..", search: withoutEditSearch(searchParams) });
+  useEffect(() => {
+    if (leftList) {
+      navigate({ pathname: "..", search: withoutEditSearch(searchParams) }, { replace: true });
+    }
+  }, [leftList, navigate, searchParams]);
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       close();
@@ -252,4 +266,10 @@ export default function ActivityDetail() {
       )}
     </ResponsiveOverlay>
   );
+}
+
+function withoutEditSearch(searchParams: URLSearchParams) {
+  const next = new URLSearchParams(searchParams);
+  next.delete("edit");
+  return next.toString();
 }

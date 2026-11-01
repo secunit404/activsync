@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -272,6 +273,43 @@ test("an id not present in the current list shows a real not-found message, not 
   renderDetail(null, { activities: [] });
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   expect(screen.getByText(/isn't in the current list/i)).toBeInTheDocument();
+});
+
+test("an activity that drops out of the list closes the overlay instead of saying not found", async () => {
+  const next: Activity = { ...fixture, garminActivityId: 222, title: "Evening ride" };
+  let setActivities: (items: Activity[]) => void = () => {};
+  function ListHost() {
+    const [items, setItems] = useState<Activity[]>([fixture, next]);
+    setActivities = setItems;
+    return <Outlet context={items} />;
+  }
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/",
+        element: <ListHost />,
+        children: [
+          { index: true, element: <div>List</div> },
+          { path: ":id", element: <ActivityDetail /> },
+        ],
+      },
+    ],
+    { initialEntries: ["/12345?status=review"] },
+  );
+  const client = new QueryClient();
+  client.setQueryData(queryKeys.appState, appStateFixture);
+  render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole("dialog", { name: "Morning run" })).toBeInTheDocument();
+
+  act(() => setActivities([next]));
+
+  await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  expect(router.state.location.search).toBe("?status=review");
+  expect(screen.queryByText(/isn't in the current list/i)).not.toBeInTheDocument();
 });
 
 test("Save stays disabled until a field changes, and re-disables when reverted", async () => {
