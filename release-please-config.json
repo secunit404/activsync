@@ -3,6 +3,9 @@
   "packages": {
     ".": {
       "release-type": "python",
+      "release-as": "0.4.0",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
       "package-name": "activsync",
       "changelog-path": "CHANGELOG.md",
       "include-v-in-tag": true,
