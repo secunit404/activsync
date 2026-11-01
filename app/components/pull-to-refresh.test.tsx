@@ -145,3 +145,17 @@ test("claims the gesture while pulling", () => {
     expect(move.defaultPrevented).toBe(true);
   });
 });
+
+test("leaves drags alone while a dialog is open", () => {
+  const { invalidate } = renderPullToRefresh();
+  const dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  document.body.append(dialog);
+
+  pull(100, 300);
+  release();
+
+  expect(screen.getByTestId("pull-to-refresh")).not.toHaveAttribute("data-armed");
+  expect(invalidate).not.toHaveBeenCalled();
+  dialog.remove();
+});
