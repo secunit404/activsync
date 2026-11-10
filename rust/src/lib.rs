@@ -1,0 +1,175 @@
+//! Rust port of the ActivSync server, mock mode only so far: the activity
+//! dashboard, the settings page, the setup wizard and password and proxy
+//! sign-in. Single sign-on, Hevy sync and the real Garmin and Strava clients
+//! are still served by the Python app.
+
+pub mod auth_core;
+pub mod auth_guard;
+pub mod auth_routes;
+pub mod config;
+pub mod db;
+pub mod events;
+pub mod hevy_settings;
+pub mod mock;
+pub mod onboarding;
+pub mod routes;
+pub mod schedule;
+pub mod seed;
+pub mod settings_routes;
+pub mod timefmt;
+pub mod version;
+pub mod view;
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use axum::Router;
+use axum::http::{HeaderValue, header};
+use axum::routing::{get, post, put};
+use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
+
+use crate::auth_core::{AttemptLimiter, SetupCode};
+use crate::auth_guard::AuthConfig;
+use crate::db::Db;
+use crate::events::EventBus;
+use crate::schedule::PublishScheduler;
+
+/// Garmin credentials held in memory while Garmin waits for a verification
+/// code; they are only saved once the code is accepted.
+#[derive(Clone, Debug)]
+pub struct GarminCredentials {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: Db,
+    pub events: EventBus,
+    pub scheduler: PublishScheduler,
+    pub mock_mode: bool,
+    pub auth: AuthConfig,
+    pub setup_code: SetupCode,
+    pub limiter: AttemptLimiter,
+    pending_mfa: Arc<Mutex<Option<GarminCredentials>>>,
+}
+
+impl AppState {
+    /// Issues (and logs) a setup code when sign-in is on and nobody has
+    /// claimed the install yet.
+    pub fn new(db: Db, mock_mode: bool, clock: schedule::Clock, window_seconds: f64, auth: AuthConfig) -> Self {
+        let events = EventBus::new();
+        let scheduler = PublishScheduler::new(db.clone(), events.clone(), clock, window_seconds);
+        let setup_code = SetupCode::default();
+        if let Err(err) = setup_code.ensure(&db.lock(), auth.disabled) {
+            eprintln!("could not read the owner record: {err}");
+        }
+        Self {
+            db,
+            events,
+            scheduler,
+            mock_mode,
+            auth,
+            setup_code,
+            limiter: AttemptLimiter::default(),
+            pending_mfa: Arc::default(),
+        }
+    }
+
+    pub fn pending_mfa(&self) -> Option<GarminCredentials> {
+        self.pending_mfa.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    pub fn set_pending_mfa(&self, value: Option<GarminCredentials>) {
+        *self.pending_mfa.lock().unwrap_or_else(|p| p.into_inner()) = value;
+    }
+}
+
+fn settings_router() -> Router<AppState> {
+    use axum::routing::delete;
+    use settings_routes::*;
+    Router::new()
+        .route("/settings", get(settings_state))
+        .route("/settings/garmin/reconnect", post(reconnect_garmin))
+        .route("/settings/strava-credentials", put(save_strava_credentials))
+        .route("/settings/strava/authorize", post(strava_authorize))
+        .route("/settings/strava", delete(disconnect_strava))
+        .route("/settings/preferences", put(save_preferences))
+        .route("/settings/activity-types", put(save_activity_types))
+        .route("/settings/activity-types/refresh", post(refresh_activity_types))
+        .route("/settings/sync/{service}", post(manual_sync))
+        .route("/settings/hevy/credentials", post(save_hevy_credentials))
+        .route("/settings/hevy", put(save_hevy_settings).delete(disconnect_hevy))
+        .route("/settings/hevy/device-options", get(hevy_device_options))
+        .route("/setup/garmin", post(setup_garmin))
+        .route("/setup/hevy", post(setup_hevy))
+        .route("/setup/hevy/skip", post(skip_hevy))
+        .route("/setup/initial-sync", post(initial_sync))
+        .route("/garmin/mfa", post(complete_mfa).delete(cancel_mfa))
+        .route("/dev/onboarding-state", post(set_dev_onboarding_state))
+}
+
+fn auth_router() -> Router<AppState> {
+    use auth_routes::*;
+    Router::new()
+        .route("/auth/status", get(auth_status))
+        .route("/auth/claim", post(claim))
+        .route("/auth/login", post(login))
+        .route("/auth/logout", post(logout))
+        .route("/auth/sessions", get(list_sessions).delete(revoke_others))
+        .route("/auth/sessions/{public_id}", axum::routing::delete(revoke_one))
+        .route("/auth/password", put(change_password))
+        .route("/auth/settings", get(auth_settings))
+        .route("/dev/unclaim", post(dev_unclaim))
+}
+
+fn api_router() -> Router<AppState> {
+    use routes::*;
+    Router::new()
+        .merge(settings_router())
+        .merge(auth_router())
+        .route("/app", get(app_state))
+        .route("/auth/oidc", get(oidc_config))
+        .route("/catch-up-report", axum::routing::delete(dismiss_catch_up_report))
+        .route("/activities", get(activities_page))
+        .route("/activities/publish/schedule", post(schedule_publish_activities))
+        .route("/activities/publish/cancel", post(cancel_publish_activities))
+        .route("/activities/publish/batches/{batch_id}", get(publish_batch))
+        .route("/activities/{id}", put(edit_activity))
+        .route("/activities/{id}/exclude", post(exclude_activity))
+        .route("/activities/{id}/restore", post(restore_activity))
+        .route("/activities/{id}/publish/schedule", post(schedule_publish_activity))
+        .route("/activities/{id}/publish/cancel", post(cancel_publish_activity))
+        .fallback(not_found)
+}
+
+/// The full app: JSON API, live refresh stream, and, when `web_dir` holds a
+/// built frontend, its assets with `index.html` for every other path.
+pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
+    let index = web_dir.map(|d| d.join("index.html"));
+    state.auth.csp = Arc::new(auth_guard::content_security_policy(index.as_deref()));
+    let mut app = Router::new()
+        .nest("/api/v1", api_router())
+        .route("/api/events", get(routes::sse_events))
+        .route("/api/{*rest}", get(routes::not_found))
+        .route("/health", get(routes::health))
+        .route("/strava/callback", get(settings_routes::strava_callback));
+    if let Some(dir) = web_dir.filter(|d| d.join("index.html").is_file()) {
+        let index = ServeFile::new(dir.join("index.html"));
+        let spa = ServeDir::new(dir).fallback(index);
+        app = app.fallback_service(
+            tower::ServiceBuilder::new()
+                .layer(SetResponseHeaderLayer::if_not_present(
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("no-cache"),
+                ))
+                .service(spa),
+        );
+    }
+    app.layer(axum::middleware::from_fn_with_state(state.clone(), auth_guard::guard)).with_state(state)
+}
+
+pub fn default_web_dir() -> PathBuf {
+    PathBuf::from("build/client")
+}

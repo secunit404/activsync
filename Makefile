@@ -1,4 +1,4 @@
-.PHONY: install dev dev-api dev-web dev-fresh dev-real dev-real-check test test-python test-web
+.PHONY: install dev dev-api dev-web dev-fresh dev-real dev-real-check test test-python test-web dev-rust dev-rust-fresh dev-api-rust test-rust
 
 # Create the virtualenv and install the app with dev extras (editable).
 install:
@@ -50,3 +50,21 @@ test-web:
 	npm run typecheck
 	npm run lint
 	npm test
+
+# The Rust port of the server. Mock data only: it refuses to start without
+# ACTIVSYNC_DEV_MOCK_DATA=1 and keeps its own data/activsync-rust-dev.db.
+CARGO ?= $(shell command -v cargo 2>/dev/null || echo $(HOME)/.cargo/bin/cargo)
+
+dev-rust:
+	npx concurrently --kill-others --names api-rs,web --prefix-colors magenta,green "$(MAKE) dev-api-rust" "npm run dev:web"
+
+dev-api-rust:
+	ACTIVSYNC_DEV_MOCK_DATA=1 $(CARGO) run --manifest-path rust/Cargo.toml
+
+# Wipe the Rust dev database and start at the first step of the setup wizard.
+dev-rust-fresh:
+	rm -f data/activsync-rust-dev.db data/activsync-rust-dev.db-shm data/activsync-rust-dev.db-wal
+	ACTIVSYNC_DEV_FRESH=1 $(MAKE) dev-rust
+
+test-rust:
+	$(CARGO) test --manifest-path rust/Cargo.toml

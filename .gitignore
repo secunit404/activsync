@@ -17,6 +17,9 @@ coverage/
 npm-debug.log*
 src/activsync/web/
 
+# Rust
+rust/target/
+
 # Data & secrets — NEVER commit (real DB holds Garmin/Strava tokens)
 *.db
 *.db-shm
