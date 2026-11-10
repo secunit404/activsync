@@ -466,3 +466,88 @@ pub fn blocking_workout_for_activity(
     )
     .optional()
 }
+
+pub fn list_activities_with_status(conn: &Connection, status: &str) -> DbResult<Vec<ActivityRow>> {
+    let mut stmt = conn.prepare("SELECT * FROM activities WHERE publish_status = ?1 ORDER BY start_time DESC")?;
+    let rows = stmt.query_map([status], ActivityRow::from_row)?;
+    rows.collect()
+}
+
+/// `hold_reason` is kept only while the row stays held.
+#[allow(clippy::too_many_arguments)]
+pub fn update_activity_content(
+    conn: &Connection,
+    garmin_activity_id: i64,
+    title: &str,
+    description: &str,
+    activity_type: &str,
+    content_hash: &str,
+    publish_status: &str,
+    garmin_data: &str,
+) -> DbResult<()> {
+    conn.execute(
+        "UPDATE activities
+           SET title = ?1, description = ?2, activity_type = ?3, content_hash = ?4,
+               publish_status = ?5, garmin_data = ?6,
+               hold_reason = CASE WHEN ?5 = 'held' THEN hold_reason ELSE NULL END
+         WHERE garmin_activity_id = ?7",
+        params![title, description, activity_type, content_hash, publish_status, garmin_data, garmin_activity_id],
+    )?;
+    Ok(())
+}
+
+/// Garmin is the source of truth: a row it no longer returns is dropped,
+/// while any Strava copy is left alone. Should the activity reappear, the
+/// publish path re-links it by start time instead of uploading again.
+pub fn mark_removed(conn: &Connection, garmin_activity_id: i64) -> DbResult<()> {
+    conn.execute("DELETE FROM activities WHERE garmin_activity_id = ?1", [garmin_activity_id])?;
+    Ok(())
+}
+
+/// Scoped by window: a sync speaks only for the span it fetched.
+pub fn list_active_ids_since(conn: &Connection, window_start: &str) -> DbResult<std::collections::HashSet<i64>> {
+    let mut stmt = conn.prepare("SELECT garmin_activity_id FROM activities WHERE start_time >= ?1")?;
+    let ids = stmt.query_map([window_start], |row| row.get(0))?;
+    ids.collect()
+}
+
+/// The oldest activity still awaiting a decision: the real extent of the
+/// backlog, visible even when only Strava was down.
+pub fn oldest_unpublished_start_time(conn: &Connection) -> DbResult<Option<String>> {
+    let oldest: Option<String> = conn.query_row(
+        "SELECT MIN(start_time) FROM activities WHERE publish_status IN ('pending', 'held')",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(oldest.filter(|s| !s.is_empty()))
+}
+
+/// Activities waiting out their undo window or being sent by the publish
+/// scheduler; nothing else may publish them meanwhile.
+pub fn scheduled_publish_ids(conn: &Connection) -> DbResult<std::collections::HashSet<i64>> {
+    let mut stmt = conn.prepare("SELECT garmin_activity_id FROM publish_schedule WHERE state IN ('waiting', 'sending')")?;
+    let ids = stmt.query_map([], |row| row.get(0))?;
+    ids.collect()
+}
+
+/// Whether any Hevy workout is durably linked to the activity, whatever its
+/// status.
+pub fn has_linked_workout(conn: &Connection, garmin_activity_id: i64) -> DbResult<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM hevy_workouts WHERE source_garmin_activity_id = ?1 OR garmin_activity_id = ?1)",
+        [garmin_activity_id],
+        |row| row.get(0),
+    )
+}
+
+/// The Hevy workout whose content now lives on the activity, as
+/// (status, payload).
+pub fn applied_workout_for_activity(conn: &Connection, garmin_activity_id: i64) -> DbResult<Option<(String, String)>> {
+    conn.query_row(
+        "SELECT status, payload FROM hevy_workouts
+         WHERE garmin_activity_id = ?1 AND status IN ('merged', 'described', 'replaced', 'uploaded_passive')",
+        [garmin_activity_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+}

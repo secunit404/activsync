@@ -40,6 +40,15 @@ pub fn service_http() -> Http {
     wrap(&CLIENT)
 }
 
+/// For Garmin: the library waits 15 s for an API call and 30 s for a token
+/// refresh; one client serves both, so the longer.
+pub fn garmin_http() -> Http {
+    static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+        reqwest::Client::builder().timeout(Duration::from_secs(30)).build().expect("HTTP client builds")
+    });
+    wrap(&CLIENT)
+}
+
 /// For an identity provider: redirects are not followed, since a provider
 /// answering with one could otherwise point the server at any address.
 pub fn provider_http() -> Http {

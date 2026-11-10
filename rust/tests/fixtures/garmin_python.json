@@ -1,0 +1,399 @@
+{
+ "batch": [
+  {
+   "activityId": 101,
+   "activityName": "Morning Run",
+   "activityTrainingLoad": 120.5,
+   "activityType": {
+    "typeKey": "running"
+   },
+   "aerobicTrainingEffect": 3.4,
+   "anaerobicTrainingEffect": 1.1,
+   "averageHR": 151.0,
+   "averageRunningCadenceInStepsPerMinute": 172.3,
+   "avgPower": 280,
+   "calories": 712,
+   "description": null,
+   "distance": 10012.5,
+   "duration": 3011.2,
+   "elapsedDuration": 3100.0,
+   "elevationGain": 42.0,
+   "elevationLoss": 40.0,
+   "maxHR": 178.0,
+   "maxPower": 512,
+   "maxRunningCadenceInStepsPerMinute": 190.0,
+   "movingDuration": 2990,
+   "normPower": 291,
+   "startTimeGMT": "2026-11-10 12:00:00"
+  },
+  {
+   "activityId": "102",
+   "activityName": "",
+   "activityType": {},
+   "startTimeGMT": "2026-11-09 12:00:00",
+   "totalReps": 96,
+   "totalSets": 12,
+   "totalVolume": 4520.5
+  },
+  {
+   "activityId": 103,
+   "activityName": "Old",
+   "activityType": {
+    "typeKey": "cycling"
+   },
+   "startTimeGMT": "2026-11-01 12:00:00"
+  }
+ ],
+ "dumps": "{\"di_token\": \"a\", \"di_refresh_token\": \"b\", \"di_client_id\": null}",
+ "errors": [
+  {
+   "body": {
+    "message": "Invalid sub-category ARM_CURL for category CURL"
+   },
+   "message": "API Error 400 - Invalid sub-category ARM_CURL for category CURL",
+   "not_found": false,
+   "status": 400
+  },
+  {
+   "body": {
+    "detailedImportResult": {
+     "failures": [
+      {
+       "messages": [
+        {
+         "code": 202,
+         "content": "Duplicate Activity."
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "message": "API Error 409 - {'code': 202, 'content': 'Duplicate Activity.'}",
+   "not_found": false,
+   "status": 409
+  },
+  {
+   "body": {
+    "detailedImportResult": {
+     "failures": [
+      {
+       "messages": [
+        "Duplicate Activity."
+       ]
+      }
+     ]
+    }
+   },
+   "message": "API Error 409 - Duplicate Activity.",
+   "not_found": false,
+   "status": 409
+  },
+  {
+   "body": {
+    "content": "Not Found"
+   },
+   "message": "API Error 404 - Not Found",
+   "not_found": true,
+   "status": 404
+  },
+  {
+   "body": "<html>oops</html>",
+   "message": "API Error 500",
+   "not_found": false,
+   "status": 500
+  },
+  {
+   "body": {
+    "content": null,
+    "message": ""
+   },
+   "message": "API Error 403",
+   "not_found": false,
+   "status": 403
+  },
+  {
+   "body": {
+    "detailedImportResult": {
+     "failures": []
+    }
+   },
+   "message": "API Error 400",
+   "not_found": false,
+   "status": 400
+  }
+ ],
+ "profiles": [
+  {
+   "expected": {
+    "birth_year": 1988,
+    "sex": "male",
+    "vo2max": 52.3,
+    "weight_kg": 81.2
+   },
+   "metrics": [
+    {
+     "generic": {
+      "vo2MaxPreciseValue": 52.3,
+      "vo2MaxValue": 52
+     }
+    }
+   ],
+   "settings": {
+    "userData": {
+     "birthDate": "1988-03-14",
+     "gender": "MALE",
+     "weight": 81250.0
+    }
+   }
+  },
+  {
+   "expected": {
+    "birth_year": null,
+    "sex": null,
+    "vo2max": 47.0,
+    "weight_kg": 70.0
+   },
+   "metrics": {
+    "generic": {
+     "vo2MaxValue": 47
+    }
+   },
+   "settings": {
+    "userData": {
+     "birthDate": "",
+     "gender": null,
+     "weight": 70050
+    }
+   }
+  },
+  {
+   "expected": {
+    "birth_year": null,
+    "sex": "female",
+    "vo2max": 40.0,
+    "weight_kg": null
+   },
+   "metrics": [
+    {
+     "generic": null
+    },
+    {
+     "generic": {
+      "vo2MaxValue": 40
+     }
+    }
+   ],
+   "settings": {
+    "userData": {
+     "birthDate": "19xx",
+     "gender": "Female",
+     "weight": 0
+    }
+   }
+  },
+  {
+   "expected": {
+    "birth_year": null,
+    "sex": null,
+    "vo2max": null,
+    "weight_kg": null
+   },
+   "metrics": [],
+   "settings": {
+    "userData": null
+   }
+  }
+ ],
+ "raw_types": [
+  {
+   "typeKey": "running"
+  },
+  {
+   "typeKey": "all"
+  },
+  {
+   "typeKey": "strength_training"
+  },
+  {
+   "typeKey": "running"
+  },
+  {
+   "typeKey": "e_bike_mountain"
+  },
+  {
+   "typeKey": ""
+  },
+  {
+   "typeKey": "indoor_cardio"
+  },
+  {
+   "typeKey": "hiit"
+  },
+  {
+   "typeKey": "yoga"
+  }
+ ],
+ "records": [
+  {
+   "activity_type": "running",
+   "aerobic_te": 3.4,
+   "anaerobic_te": 1.1,
+   "avg_cadence": 172.3,
+   "avg_hr": 151.0,
+   "avg_power": 280,
+   "calories": 712,
+   "description": "",
+   "distance": 10012.5,
+   "duration": 3011.2,
+   "elapsed_duration": 3100.0,
+   "elevation_gain": 42.0,
+   "elevation_loss": 40.0,
+   "garmin_activity_id": 101,
+   "max_cadence": 190.0,
+   "max_hr": 178.0,
+   "max_power": 512,
+   "moving_duration": 2990,
+   "norm_power": 291,
+   "start_time": "2026-11-10 12:00:00",
+   "title": "Morning Run",
+   "total_reps": null,
+   "total_sets": null,
+   "total_volume": null,
+   "training_load": 120.5
+  },
+  {
+   "activity_type": "unknown",
+   "aerobic_te": null,
+   "anaerobic_te": null,
+   "avg_cadence": null,
+   "avg_hr": null,
+   "avg_power": null,
+   "calories": null,
+   "description": "",
+   "distance": null,
+   "duration": null,
+   "elapsed_duration": null,
+   "elevation_gain": null,
+   "elevation_loss": null,
+   "garmin_activity_id": 102,
+   "max_cadence": null,
+   "max_hr": null,
+   "max_power": null,
+   "moving_duration": null,
+   "norm_power": null,
+   "start_time": "2026-11-09 12:00:00",
+   "title": "",
+   "total_reps": 96,
+   "total_sets": 12,
+   "total_volume": 4520.5,
+   "training_load": null
+  }
+ ],
+ "types": [
+  {
+   "label": "E Bike Mountain",
+   "type_key": "e_bike_mountain"
+  },
+  {
+   "label": "Hiit",
+   "type_key": "hiit"
+  },
+  {
+   "label": "Indoor Cardio",
+   "type_key": "indoor_cardio"
+  },
+  {
+   "label": "Running",
+   "type_key": "running"
+  },
+  {
+   "label": "Strength Training",
+   "type_key": "strength_training"
+  },
+  {
+   "label": "Yoga",
+   "type_key": "yoga"
+  }
+ ],
+ "uploads": [
+  {
+   "response": {
+    "detailedImportResult": {
+     "failures": [],
+     "successes": [
+      {
+       "internalId": "'987654'"
+      }
+     ],
+     "uploadId": 555
+    }
+   },
+   "result": {
+    "ok": {
+     "activity_id": 987654,
+     "upload_id": 555
+    }
+   }
+  },
+  {
+   "response": {
+    "detailedImportResult": {
+     "failures": [],
+     "successes": [],
+     "uploadId": 556
+    }
+   },
+   "result": {
+    "ok": {
+     "activity_id": null,
+     "upload_id": 556
+    }
+   }
+  },
+  {
+   "response": {
+    "detailedImportResult": {
+     "failures": [
+      {
+       "internalId": null,
+       "messages": [
+        {
+         "content": "bad file"
+        }
+       ]
+      }
+     ],
+     "successes": [],
+     "uploadId": 557
+    }
+   },
+   "result": {
+    "rejected": "Garmin rejected upload: [{'internalId': None, 'messages': [{'content': 'bad file'}]}]"
+   }
+  },
+  {
+   "response": {
+    "detailedImportResult": {
+     "failures": [
+      {
+       "x": 1
+      }
+     ],
+     "successes": [
+      {
+       "internalId": 12
+      }
+     ],
+     "uploadId": 558
+    }
+   },
+   "result": {
+    "ok": {
+     "activity_id": 12,
+     "upload_id": 558
+    }
+   }
+  }
+ ]
+}
