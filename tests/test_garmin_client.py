@@ -9,13 +9,15 @@ from activsync.garmin_client import (
     ActivityRecord,
     GarminClient,
     GarminSessionExpired,
+    GarminUnavailable,
     MfaRequired,
     PendingLogin,
     begin_login,
     complete_login,
     get_client,
 )
-from garminconnect import GarminConnectAuthenticationError
+import requests
+from garminconnect import GarminConnectAuthenticationError, GarminConnectConnectionError
 
 
 def _garmin_activity(activity_id, type_key, name, description, start_time_gmt):
@@ -204,6 +206,44 @@ def test_get_client_requires_manual_reconnect_when_cached_session_expires(
 ):
     mock_client = MagicMock()
     mock_client.login.side_effect = GarminConnectAuthenticationError("no cached tokens")
+    mock_garmin_cls.return_value = mock_client
+
+    with pytest.raises(GarminSessionExpired, match="reconnect Garmin"):
+        get_client("/tmp/tokens")
+
+
+def _login_failure(cause):
+    """What garminconnect raises when the profile read at login fails."""
+    try:
+        raise GarminConnectAuthenticationError("Failed to retrieve social profile") from cause
+    except GarminConnectAuthenticationError as exc:
+        return exc
+
+
+@pytest.mark.parametrize("cause", [
+    requests.exceptions.ConnectionError("connection reset"),
+    requests.exceptions.ReadTimeout("read timed out"),
+    GarminConnectConnectionError("API Error 503"),
+    GarminConnectConnectionError("API Error 429"),
+])
+@patch("activsync.garmin_client.Garmin")
+def test_get_client_keeps_the_session_through_a_garmin_outage(mock_garmin_cls, cause):
+    """garminconnect words a dropped connection at login as an auth error;
+    the session must not be declared expired over an outage."""
+    mock_client = MagicMock()
+    mock_client.login.side_effect = _login_failure(cause)
+    mock_garmin_cls.return_value = mock_client
+
+    with pytest.raises(GarminUnavailable, match="retrying on the next poll"):
+        get_client("/tmp/tokens")
+
+
+@pytest.mark.parametrize("status", [401, 403])
+@patch("activsync.garmin_client.Garmin")
+def test_get_client_still_expires_a_rejected_session(mock_garmin_cls, status):
+    mock_client = MagicMock()
+    mock_client.login.side_effect = _login_failure(
+        GarminConnectConnectionError(f"API Error {status}"))
     mock_garmin_cls.return_value = mock_client
 
     with pytest.raises(GarminSessionExpired, match="reconnect Garmin"):

@@ -22,7 +22,7 @@ from activsync import (
     poll_activity,
     sync,
 )
-from activsync.garmin_client import GarminClient, GarminSessionExpired
+from activsync.garmin_client import GarminClient, GarminSessionExpired, GarminUnavailable
 from activsync.hevy_client import HevyAuthError, HevyClient
 from activsync.strava_client import StravaClient, StravaRateLimitError
 
@@ -76,6 +76,15 @@ class Poller:
             db.set_config_value(self._conn, "garmin_last_sync_ok", False)
             db.set_config_value(self._conn, "garmin_last_sync_error", str(exc))
             db.set_config_value(self._conn, "garmin_credentials_verified", False)
+            events.bus.publish("refresh")
+            logger.warning("%s", exc)
+            raise
+        except GarminUnavailable as exc:
+            # The session is kept: the Settings page shows the failed
+            # attempt and the next poll tries again.
+            db.set_config_value(self._conn, "garmin_last_sync_at", now.isoformat())
+            db.set_config_value(self._conn, "garmin_last_sync_ok", False)
+            db.set_config_value(self._conn, "garmin_last_sync_error", str(exc))
             events.bus.publish("refresh")
             logger.warning("%s", exc)
             raise

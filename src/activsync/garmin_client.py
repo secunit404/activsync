@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+import requests
 from garminconnect import (
     Garmin,
     GarminConnectAuthenticationError,
     GarminConnectNotFoundError,
+    GarminConnectTooManyRequestsError,
 )
 
 from activsync.rate_limit import RateLimiter
@@ -118,6 +121,40 @@ class GarminSessionExpired(RuntimeError):
     """Cached Garmin authentication is unavailable and needs user attention."""
 
 
+class GarminUnavailable(RuntimeError):
+    """Garmin could not be reached or answered with a server error. The saved
+    session may be fine, so the next poll simply tries again."""
+
+
+_TRANSIENT_STATUS_RE = re.compile(r"^API Error (429|5\d\d)\b")
+
+
+def is_transient_failure(exc: BaseException) -> bool:
+    """An outage rather than a rejection: a network error, a timeout, a 429 or
+    a 5xx anywhere in the exception chain.
+
+    garminconnect reports every failed profile read at login as an
+    authentication error, a dropped connection included, so only the cause
+    tells an outage from a rejected token. Anything not recognised as an
+    outage counts as a rejection, which keeps the old, safe behaviour.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (requests.exceptions.RequestException,
+                                GarminConnectTooManyRequestsError,
+                                ConnectionError, TimeoutError)):
+            return True
+        if _TRANSIENT_STATUS_RE.match(str(current)):
+            return True
+        status = getattr(getattr(current, "response", None), "status_code", None)
+        if status == 429 or (isinstance(status, int) and 500 <= status < 600):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def get_client(token_dir: str) -> Garmin:
     """Open a cached Garmin session without ever starting a credential login.
 
@@ -130,6 +167,10 @@ def get_client(token_dir: str) -> Garmin:
     try:
         client.login(tokenstore=token_dir)
     except GarminConnectAuthenticationError as exc:
+        if is_transient_failure(exc):
+            raise GarminUnavailable(
+                "Garmin could not be reached; retrying on the next poll."
+            ) from exc
         raise GarminSessionExpired(
             "Garmin session expired; reconnect Garmin to resume sync."
         ) from exc
