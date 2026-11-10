@@ -10,10 +10,10 @@ use serde_json::{Value, json};
 use crate::AppState;
 use crate::auth_core::{self, SESSION_ABSOLUTE_SECONDS};
 use crate::auth_guard::{AuthState, RequestContext, cookie};
-use crate::db;
+use crate::{db, oidc_config, oidc_logo};
 use crate::routes::ApiError;
 
-type ApiResult<T> = Result<Json<T>, ApiError>;
+pub(crate) type ApiResult<T> = Result<Json<T>, ApiError>;
 
 const MAX_FIELD: usize = 1024;
 
@@ -28,15 +28,25 @@ pub struct AuthStatus {
     login: Value,
 }
 
-/// Single sign-on is not ported yet, so the login page never offers it.
+/// The login page offers single sign-on once an account is linked to it.
 fn status_for(state: &AppState, auth: Option<&AuthState>) -> Result<AuthStatus, ApiError> {
+    let conn = state.db.lock();
+    let oidc = match oidc_config::load(&conn)?.filter(|c| c.linked.is_some()) {
+        Some(config) => json!({
+            "label": config.display_name,
+            "autoRedirect": config.auto_redirect,
+            "logoUrl": oidc_logo::current_url(&conn)?,
+        }),
+        None => Value::Null,
+    };
+    drop(conn);
     Ok(AuthStatus {
         authenticated: auth.is_some(),
         method: auth.map(|a| a.method.clone()),
         user: auth.and_then(|a| a.user.clone()),
         owner_claimed: auth_core::owner_claimed(&state.db.lock())?,
         auth_disabled: state.auth.disabled,
-        login: json!({ "oidc": null }),
+        login: json!({ "oidc": oidc }),
     })
 }
 
@@ -44,13 +54,13 @@ pub async fn auth_status(State(state): State<AppState>, Extension(ctx): Extensio
     Ok(Json(status_for(&state, ctx.auth.as_ref())?))
 }
 
-fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
+pub(crate) fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
     payload
         .map(|Json(value)| value)
         .map_err(|rejection| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, rejection.body_text()))
 }
 
-fn too_long(fields: &[&str]) -> Result<(), ApiError> {
+pub(crate) fn too_long(fields: &[&str]) -> Result<(), ApiError> {
     if fields.iter().any(|f| f.chars().count() > MAX_FIELD) {
         return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "That field is too long."));
     }
@@ -69,12 +79,12 @@ fn limit_client(state: &AppState, ctx: &RequestContext) -> Result<(), ApiError> 
     Ok(())
 }
 
-fn trusted_device(state: &AppState, headers: &HeaderMap, ctx: &RequestContext) -> Result<Option<String>, ApiError> {
+pub(crate) fn trusted_device(state: &AppState, headers: &HeaderMap, ctx: &RequestContext) -> Result<Option<String>, ApiError> {
     let device = cookie(headers, ctx.device_cookie()).map(str::to_string);
     Ok(device.filter(|d| auth_core::is_trusted(&state.db.lock(), Some(d)).unwrap_or(false)))
 }
 
-fn require_password(state: &AppState, password: &str, wrong_status: StatusCode, device: Option<&str>) -> Result<(), ApiError> {
+pub(crate) fn require_password(state: &AppState, password: &str, wrong_status: StatusCode, device: Option<&str>) -> Result<(), ApiError> {
     let check = auth_core::check_password(&state.db.lock(), password, state.scheduler.now(), device, state.auth.cost)?;
     if check.retry_after > 0 {
         let wait = check.retry_after;
@@ -86,17 +96,17 @@ fn require_password(state: &AppState, password: &str, wrong_status: StatusCode, 
     Ok(())
 }
 
-fn require_session(ctx: &RequestContext) -> Result<&AuthState, ApiError> {
+pub(crate) fn require_session(ctx: &RequestContext) -> Result<&AuthState, ApiError> {
     ctx.auth.as_ref().ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "Not signed in"))
 }
 
-fn set_cookie(name: &str, value: &str, max_age: i64, https: bool) -> HeaderValue {
+pub(crate) fn set_cookie(name: &str, value: &str, max_age: i64, https: bool) -> HeaderValue {
     let secure = if https { "; Secure" } else { "" };
     HeaderValue::from_str(&format!("{name}={value}; HttpOnly; Max-Age={max_age}; Path=/; SameSite=lax{secure}"))
         .expect("cookie is ASCII")
 }
 
-fn clear_cookie(name: &str, https: bool) -> HeaderValue {
+pub(crate) fn clear_cookie(name: &str, https: bool) -> HeaderValue {
     let secure = if https { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
         "{name}=\"\"; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Max-Age=0; Path=/; SameSite=lax{secure}"
@@ -106,7 +116,7 @@ fn clear_cookie(name: &str, https: bool) -> HeaderValue {
 
 /// Rotates on every sign-in: the session the browser arrived with is dropped
 /// and a fresh token issued. Every sign-in also trusts this browser.
-fn start_session(state: &AppState, headers: &HeaderMap, ctx: &RequestContext, method: &str) -> Result<Vec<HeaderValue>, ApiError> {
+pub(crate) fn start_session(state: &AppState, headers: &HeaderMap, ctx: &RequestContext, method: &str) -> Result<Vec<HeaderValue>, ApiError> {
     let conn = state.db.lock();
     if let Some(previous) = cookie(headers, ctx.session_cookie()).filter(|p| !p.is_empty()) {
         auth_core::revoke_session(&conn, &auth_core::hash_token(previous))?;
@@ -121,7 +131,7 @@ fn start_session(state: &AppState, headers: &HeaderMap, ctx: &RequestContext, me
     ])
 }
 
-fn with_cookies(body: impl IntoResponse, cookies: Vec<HeaderValue>) -> Response {
+pub(crate) fn with_cookies(body: impl IntoResponse, cookies: Vec<HeaderValue>) -> Response {
     let mut response = body.into_response();
     for value in cookies {
         response.headers_mut().append(header::SET_COOKIE, value);

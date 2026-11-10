@@ -1,7 +1,7 @@
 //! Rust port of the ActivSync server, mock mode only so far: the activity
 //! dashboard, the settings page, the setup wizard and password and proxy
-//! sign-in, and the Hevy workout queue, exercise mappings and history import.
-//! Single sign-on, Hevy polling and the real Garmin and Strava clients
+//! sign-in including single sign-on, and the Hevy workout queue, exercise
+//! mappings and history import. Hevy polling and the real Garmin and Strava clients
 //! are still served by the Python app.
 
 pub mod auth_core;
@@ -20,6 +20,10 @@ pub mod hevy_seed;
 pub mod hevy_settings;
 pub mod hevy_tools;
 pub mod mock;
+pub mod oidc_config;
+pub mod oidc_flow;
+pub mod oidc_logo;
+pub mod oidc_routes;
 pub mod onboarding;
 pub mod routes;
 pub mod schedule;
@@ -63,6 +67,8 @@ pub struct AppState {
     pub auth: AuthConfig,
     pub setup_code: SetupCode,
     pub limiter: AttemptLimiter,
+    pub oidc_http: oidc_flow::OidcHttp,
+    pub oidc_sessions: oidc_flow::OidcSessions,
     pending_mfa: Arc<Mutex<Option<GarminCredentials>>>,
 }
 
@@ -86,8 +92,15 @@ impl AppState {
             auth,
             setup_code,
             limiter: AttemptLimiter::default(),
+            oidc_http: oidc_flow::real_http(),
+            oidc_sessions: oidc_flow::OidcSessions::default(),
             pending_mfa: Arc::default(),
         }
+    }
+
+    /// Points single sign-on at a stand-in identity provider.
+    pub fn with_oidc_http(self, oidc_http: oidc_flow::OidcHttp) -> Self {
+        Self { oidc_http, ..self }
     }
 
     pub fn pending_mfa(&self) -> Option<GarminCredentials> {
@@ -146,6 +159,15 @@ fn auth_router() -> Router<AppState> {
         .route("/auth/password", put(change_password))
         .route("/auth/settings", get(auth_settings))
         .route("/dev/unclaim", post(dev_unclaim))
+        .route(
+            "/auth/oidc",
+            get(oidc_routes::oidc_state).put(oidc_routes::save_oidc).delete(oidc_routes::delete_oidc),
+        )
+        .route("/auth/oidc/link", post(oidc_routes::start_link))
+        .route(
+            "/auth/oidc/logo",
+            get(oidc_routes::logo).put(oidc_routes::upload_logo).delete(oidc_routes::delete_logo),
+        )
 }
 
 fn hevy_router() -> Router<AppState> {
@@ -169,7 +191,6 @@ fn api_router() -> Router<AppState> {
         .merge(auth_router())
         .merge(hevy_router())
         .route("/app", get(app_state))
-        .route("/auth/oidc", get(oidc_config))
         .route("/catch-up-report", axum::routing::delete(dismiss_catch_up_report))
         .route("/activities", get(activities_page))
         .route("/activities/publish/schedule", post(schedule_publish_activities))
@@ -193,7 +214,9 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
         .route("/api/events", get(routes::sse_events))
         .route("/api/{*rest}", get(routes::not_found))
         .route("/health", get(routes::health))
-        .route("/strava/callback", get(settings_routes::strava_callback));
+        .route("/strava/callback", get(settings_routes::strava_callback))
+        .route("/auth/oidc/login", get(oidc_routes::oidc_login))
+        .route("/auth/oidc/callback", get(oidc_routes::oidc_callback));
     if let Some(dir) = web_dir.filter(|d| d.join("index.html").is_file()) {
         let index = ServeFile::new(dir.join("index.html"));
         let spa = ServeDir::new(dir).fallback(index);

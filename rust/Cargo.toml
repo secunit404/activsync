@@ -22,15 +22,26 @@ rand = "0.9"
 base64 = "0.22"
 argon2 = "0.5"
 regex = "1"
+openidconnect = "4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 tempfile = "3"
+rsa = { version = "0.9", features = ["pem"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 # argon2 at its real cost takes seconds unoptimised; keep debug builds usable.
 [profile.dev.package.argon2]
 opt-level = 3
 
 [profile.dev.package.blake2]
+opt-level = 3
+
+# The OIDC tests generate an RSA signing key; unoptimised that takes minutes.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
+[profile.dev.package.rsa]
 opt-level = 3

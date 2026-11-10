@@ -169,26 +169,6 @@ pub async fn app_state(State(state): State<AppState>) -> ApiResult<AppStateRespo
     }))
 }
 
-/// Single sign-on is not ported yet; the Access section shows it unconfigured.
-pub async fn oidc_config(headers: axum::http::HeaderMap) -> Json<Value> {
-    let host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("127.0.0.1:8383");
-    Json(json!({
-        "configured": false,
-        "displayName": "",
-        "issuer": "",
-        "clientId": "",
-        "hasSecret": false,
-        "scopes": "openid profile email",
-        "autoRedirect": false,
-        "redirectUri": format!("http://{host}/auth/oidc/callback"),
-        "linkedLabel": null,
-        "logoUrl": null,
-    }))
-}
-
 pub async fn dismiss_catch_up_report(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
     db::set_config_value(&state.db.lock(), "catch_up_report", &Value::Null)?;
     state.events.publish("refresh");
