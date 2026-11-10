@@ -73,6 +73,27 @@ pub fn dev_workouts(now: DateTime<Utc>) -> Vec<Value> {
     ]
 }
 
+/// Everything the mock Hevy account holds: the queue's workouts plus three
+/// older ones nothing has imported yet, for the history import to find.
+/// One of those has no template id and a title no table knows.
+pub fn account_workouts(now: DateTime<Utc>) -> Vec<Value> {
+    let now = now.with_nanosecond(0).unwrap_or(now);
+    let old = |days: i64, minutes: i64| now - Duration::days(days) - Duration::minutes(minutes);
+    let mut workouts = dev_workouts(now);
+    for (id, title, start, exercise, template) in [
+        ("hw-dev-backfill-importable", "Old push day (Hevy)", old(4, 41), "Bench Press (Barbell)", Some("tpl-dev-bench")),
+        ("hw-dev-backfill-unmapped", "Old ring circuit (Hevy)", old(5, 17), "Bulgarian Ring Row", Some(CUSTOM_TEMPLATE_ID)),
+        ("hw-dev-backfill-unmappable", "Old mystery session (Hevy)", old(6, 23), "Mystery Movement", None),
+    ] {
+        let mut entry = workout(id, title, start, start + Duration::hours(1), exercise, template.unwrap_or_default());
+        if template.is_none() {
+            entry["exercises"][0]["exercise_template_id"] = Value::Null;
+        }
+        workouts.push(entry);
+    }
+    workouts
+}
+
 fn text<'a>(workout: &'a Value, key: &str) -> &'a str {
     workout[key].as_str().unwrap_or_default()
 }

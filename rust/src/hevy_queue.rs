@@ -7,7 +7,6 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::config::Config;
 use crate::hevy_db::{self, Workout};
 use crate::hevy_description::generate_description;
 use crate::hevy_match::{self, MatchError};
@@ -178,8 +177,14 @@ fn custom_metric(value: Option<&Value>) -> Option<Value> {
     }
 }
 
-fn workout_detail(workout: &Workout, cfg: &Config) -> Result<HevyWorkoutDetail, ApiError> {
-    let payload = workout.payload_json();
+/// The row a workout's queue entry or import preview row shows, with its
+/// description as it would be written.
+pub fn workout_detail(
+    payload: &Value,
+    row: (&str, &str, &str, &str),
+    template: Option<&str>,
+) -> Result<HevyWorkoutDetail, ApiError> {
+    let (hevy_id, title, start_time, end_time) = row;
     let empty = Vec::new();
     let exercises = payload.get("exercises").and_then(Value::as_array).unwrap_or(&empty);
     let exercises = exercises
@@ -209,19 +214,18 @@ fn workout_detail(workout: &Workout, cfg: &Config) -> Result<HevyWorkoutDetail, 
             }
         })
         .collect();
-    let template = cfg.get("hevy_description_template").and_then(Value::as_str);
-    let preview = generate_description(&payload, template).map_err(|err| {
+    let preview = generate_description(payload, template).map_err(|err| {
         eprintln!("Hevy description template is invalid: {err}");
         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
     })?;
     Ok(HevyWorkoutDetail {
-        hevy_id: workout.hevy_id.clone(),
-        title: Some(workout.title.clone())
+        hevy_id: hevy_id.to_string(),
+        title: Some(title.to_string())
             .filter(|t| !t.is_empty())
             .or_else(|| text(payload.get("title")))
-            .unwrap_or_else(|| workout.hevy_id.clone()),
-        start_time: text(payload.get("start_time")).unwrap_or_else(|| workout.start_time.clone()),
-        end_time: text(payload.get("end_time")).unwrap_or_else(|| workout.end_time.clone()),
+            .unwrap_or_else(|| hevy_id.to_string()),
+        start_time: text(payload.get("start_time")).unwrap_or_else(|| start_time.to_string()),
+        end_time: text(payload.get("end_time")).unwrap_or_else(|| end_time.to_string()),
         notes: text(payload.get("description")).or_else(|| text(payload.get("notes"))),
         exercises,
         description_preview: preview,
@@ -236,7 +240,9 @@ pub async fn workout(State(state): State<AppState>, Path(hevy_id): Path<String>)
     let conn = state.db.lock();
     let workout = require_workout(&conn, &hevy_id)?;
     let cfg = config::load_config(&conn, development(&state))?;
-    Ok(Json(workout_detail(&workout, &cfg)?))
+    let row = (workout.hevy_id.as_str(), workout.title.as_str(), workout.start_time.as_str(), workout.end_time.as_str());
+    let template = cfg.get("hevy_description_template").and_then(Value::as_str);
+    Ok(Json(workout_detail(&workout.payload_json(), row, template)?))
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq)]

@@ -1,7 +1,7 @@
 //! Rust port of the ActivSync server, mock mode only so far: the activity
 //! dashboard, the settings page, the setup wizard and password and proxy
-//! sign-in, and the Hevy workout queue. Single sign-on, Hevy exercise mappings,
-//! history import and the real Garmin and Strava clients
+//! sign-in, and the Hevy workout queue, exercise mappings and history import.
+//! Single sign-on, Hevy polling and the real Garmin and Strava clients
 //! are still served by the Python app.
 
 pub mod auth_core;
@@ -10,12 +10,15 @@ pub mod auth_routes;
 pub mod config;
 pub mod db;
 pub mod events;
+pub mod exercise_tables;
+pub mod hevy_backfill;
 pub mod hevy_db;
 pub mod hevy_description;
 pub mod hevy_match;
 pub mod hevy_queue;
 pub mod hevy_seed;
 pub mod hevy_settings;
+pub mod hevy_tools;
 pub mod mock;
 pub mod onboarding;
 pub mod routes;
@@ -112,6 +115,17 @@ fn settings_router() -> Router<AppState> {
         .route("/settings/hevy/credentials", post(save_hevy_credentials))
         .route("/settings/hevy", put(save_hevy_settings).delete(disconnect_hevy))
         .route("/settings/hevy/device-options", get(hevy_device_options))
+        .route("/settings/hevy/tools", get(hevy_tools::tools_state))
+        .route("/settings/hevy/backfill/preview", post(hevy_tools::preview_backfill))
+        .route("/settings/hevy/backfill/run", post(hevy_tools::run_backfill))
+        .route(
+            "/settings/hevy/mappings/{template_id}",
+            put(hevy_tools::save_mapping).delete(hevy_tools::delete_mapping),
+        )
+        .route(
+            "/settings/hevy/mappings/{template_id}/strava",
+            put(hevy_tools::save_strava_mapping).delete(hevy_tools::delete_strava_mapping),
+        )
         .route("/setup/garmin", post(setup_garmin))
         .route("/setup/hevy", post(setup_hevy))
         .route("/setup/hevy/skip", post(skip_hevy))

@@ -255,3 +255,87 @@ pub fn save_mapping(conn: &Connection, template_id: &str, category: i64, subcate
     )?;
     Ok(())
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TemplateRow {
+    pub id: String,
+    pub title: String,
+    pub primary_muscle_group: Option<String>,
+    pub is_custom: bool,
+}
+
+pub fn list_templates(conn: &Connection) -> DbResult<Vec<TemplateRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT exercise_template_id, title, primary_muscle_group, is_custom FROM exercise_templates ORDER BY title",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(TemplateRow {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            primary_muscle_group: row.get(2)?,
+            is_custom: row.get::<_, i64>(3)? != 0,
+        })
+    })?;
+    rows.collect()
+}
+
+pub fn template_exists(conn: &Connection, template_id: &str) -> DbResult<bool> {
+    let found: Option<i64> = conn
+        .query_row("SELECT 1 FROM exercise_templates WHERE exercise_template_id = ?1", [template_id], |r| r.get(0))
+        .optional()?;
+    Ok(found.is_some())
+}
+
+pub fn delete_mapping(conn: &Connection, template_id: &str) -> DbResult<()> {
+    conn.execute("DELETE FROM exercise_mappings WHERE exercise_template_id = ?1", [template_id])?;
+    Ok(())
+}
+
+pub fn save_strava_mapping(conn: &Connection, template_id: &str, exercise_type: &str) -> DbResult<()> {
+    let now = now_iso();
+    conn.execute(
+        "INSERT INTO strava_exercise_mappings (exercise_template_id, exercise_type, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?3)
+         ON CONFLICT(exercise_template_id) DO UPDATE SET
+           exercise_type = excluded.exercise_type, updated_at = excluded.updated_at",
+        params![template_id, exercise_type, now],
+    )?;
+    Ok(())
+}
+
+pub fn delete_strava_mapping(conn: &Connection, template_id: &str) -> DbResult<()> {
+    conn.execute("DELETE FROM strava_exercise_mappings WHERE exercise_template_id = ?1", [template_id])?;
+    Ok(())
+}
+
+/// Wakes the parked workouts that use one template, back to the state their
+/// applied strategy implies; returns their ids. Unrelated parked workouts are
+/// left alone, since their mappings have not changed.
+pub fn wake_needs_mapping(conn: &Connection, template_id: &str) -> DbResult<Vec<String>> {
+    let affected: Vec<String> = list_workouts(conn, "needs_mapping")?
+        .into_iter()
+        .filter(|row| {
+            row.payload_json()["exercises"].as_array().is_some_and(|exercises| {
+                exercises.iter().any(|e| e.get("exercise_template_id").and_then(Value::as_str) == Some(template_id))
+            })
+        })
+        .map(|row| row.hevy_id)
+        .collect();
+    let now = now_iso();
+    for hevy_id in &affected {
+        conn.execute(
+            "UPDATE hevy_workouts
+             SET status = CASE applied_strategy
+                     WHEN 'merge' THEN 'merged'
+                     WHEN 'describe' THEN 'described'
+                     WHEN 'replace' THEN 'replaced'
+                     WHEN 'passive' THEN 'uploaded_passive'
+                     ELSE 'waiting_watch'
+                 END,
+                 error = NULL, updated_at = ?1
+             WHERE hevy_id = ?2 AND status = 'needs_mapping'",
+            params![now, hevy_id],
+        )?;
+    }
+    Ok(affected)
+}
