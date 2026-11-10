@@ -1,0 +1,395 @@
+{
+ "extract": [
+  {
+   "cut": 0,
+   "name": "timed_hr",
+   "samples": [
+    {
+     "hr": 88,
+     "time": 0.0
+    },
+    {
+     "hr": 90,
+     "time": 0.0
+    },
+    {
+     "hr": 101,
+     "time": 30.0
+    },
+    {
+     "hr": 134,
+     "time": 1800.0
+    },
+    {
+     "hr": 120,
+     "time": 4343.0
+    }
+   ],
+   "start_ms": 1791560558000
+  },
+  {
+   "cut": 0,
+   "name": "plain_hr",
+   "samples": [
+    {
+     "hr": 110,
+     "time": 1055.5
+    },
+    {
+     "hr": 130,
+     "time": 2141.5
+    },
+    {
+     "hr": 125,
+     "time": 3226.5
+    },
+    {
+     "hr": 99,
+     "time": 4312.5
+    }
+   ],
+   "start_ms": 1791560588500
+  },
+  {
+   "cut": 300,
+   "name": "timed_hr",
+   "samples": [
+    {
+     "hr": 88,
+     "time": 0.0
+    },
+    {
+     "hr": 90,
+     "time": 0.0
+    },
+    {
+     "hr": 101,
+     "time": 30.0
+    }
+   ],
+   "start_ms": 1791560558000
+  },
+  {
+   "cut": 0,
+   "name": "timed_hr",
+   "samples": [
+    {
+     "hr": 88,
+     "time": 5.0
+    },
+    {
+     "hr": 90,
+     "time": 5.0
+    },
+    {
+     "hr": 101,
+     "time": 35.0
+    },
+    {
+     "hr": 134,
+     "time": 1805.0
+    },
+    {
+     "hr": 120,
+     "time": 4348.0
+    }
+   ],
+   "start_ms": 1791560553000
+  }
+ ],
+ "extract_garbage": [],
+ "merge": {
+  "merged": [
+   {
+    "hr": 100,
+    "time": 3.0
+   },
+   {
+    "hr": 110,
+    "time": 15.0
+   },
+   {
+    "hr": 85,
+    "time": 25.0
+   },
+   {
+    "hr": 120,
+    "time": 41.0
+   },
+   {
+    "hr": 90,
+    "time": 70.5
+   }
+  ],
+  "primary": [
+   {
+    "hr": 100,
+    "time": 3.0
+   },
+   {
+    "hr": 110,
+    "time": 15.0
+   },
+   {
+    "hr": 120,
+    "time": 41.0
+   }
+  ],
+  "primary_only": [
+   {
+    "hr": 100,
+    "time": 3.0
+   },
+   {
+    "hr": 110,
+    "time": 15.0
+   },
+   {
+    "hr": 120,
+    "time": 41.0
+   }
+  ],
+  "secondary": [
+   {
+    "hr": 80,
+    "time": 1.0
+   },
+   {
+    "hr": 85,
+    "time": 25.0
+   },
+   {
+    "hr": 86,
+    "time": 44.0
+   },
+   {
+    "hr": 90,
+    "time": 70.5
+   }
+  ],
+  "secondary_only": [
+   {
+    "hr": 80,
+    "time": 1.0
+   },
+   {
+    "hr": 85,
+    "time": 25.0
+   },
+   {
+    "hr": 86,
+    "time": 44.0
+   },
+   {
+    "hr": 90,
+    "time": 70.5
+   }
+  ]
+ },
+ "passive": {
+  "dates": [
+   "2026-10-09",
+   "2026-10-10"
+  ],
+  "days": {
+   "2026-10-09": {
+    "heartRateValues": [
+     [
+      1791588480250,
+      70
+     ],
+     [
+      1791588540250,
+      72
+     ],
+     [
+      1791588599250,
+      null
+     ],
+     [
+      1791588605250,
+      "88"
+     ],
+     [
+      "1791589200250",
+      101.7
+     ],
+     [
+      "bad",
+      90
+     ],
+     [
+      1791589500250
+     ],
+     7
+    ]
+   },
+   "2026-10-10": {
+    "heartRateValues": [
+     [
+      1791592830000,
+      95
+     ],
+     [
+      1791592861000,
+      99
+     ]
+    ]
+   }
+  },
+  "end": "2026-10-10T00:40:00+00:00",
+  "samples": [
+   {
+    "hr": 72,
+    "time": 0.0
+   },
+   {
+    "hr": 88,
+    "time": 5.0
+   },
+   {
+    "hr": 101,
+    "time": 600.0
+   },
+   {
+    "hr": 95,
+    "time": 4229.75
+   }
+  ],
+  "start": "2026-10-09T23:30:00.250000+00:00"
+ },
+ "profiles": [
+  {
+   "cache": null,
+   "fetch_calls": 1,
+   "fetched": {
+    "birth_year": 1988,
+    "sex": "male",
+    "vo2max": null,
+    "weight_kg": 81.2
+   },
+   "name": "fresh_fetch",
+   "profile": {
+    "birth_year": 1988,
+    "sex": "male",
+    "vo2max": 45.0,
+    "weight_kg": 81.2
+   },
+   "settings": null,
+   "stored": {
+    "birth_year": 1988,
+    "fetched_at": "2026-11-10T12:00:00+00:00",
+    "sex": "male",
+    "weight_kg": 81.2
+   }
+  },
+  {
+   "cache": {
+    "fetched_at": "2026-11-08T12:00:00+00:00",
+    "vo2max": 50.0,
+    "weight_kg": 70.0
+   },
+   "fetch_calls": 1,
+   "fetched": {
+    "birth_year": null,
+    "sex": null,
+    "vo2max": null,
+    "weight_kg": 71.5
+   },
+   "name": "merge_half",
+   "profile": {
+    "birth_year": 1995,
+    "sex": "female",
+    "vo2max": 50.0,
+    "weight_kg": 71.5
+   },
+   "settings": {
+    "profile_override": {
+     "birth_year": "1995",
+     "sex": "female"
+    }
+   },
+   "stored": {
+    "fetched_at": "2026-11-10T12:00:00+00:00",
+    "vo2max": 50.0,
+    "weight_kg": 71.5
+   }
+  },
+  {
+   "cache": {
+    "fetched_at": "2026-11-08T12:00:00+00:00",
+    "vo2max": 50.0,
+    "weight_kg": 70.0
+   },
+   "fetch_calls": 1,
+   "fetched": {
+    "birth_year": null,
+    "sex": null,
+    "vo2max": null,
+    "weight_kg": null
+   },
+   "name": "outage_keeps_cache",
+   "profile": {
+    "birth_year": 1990,
+    "sex": "male",
+    "vo2max": 50.0,
+    "weight_kg": 70.0
+   },
+   "settings": null,
+   "stored": {
+    "fetched_at": "2026-11-08T12:00:00+00:00",
+    "vo2max": 50.0,
+    "weight_kg": 70.0
+   }
+  },
+  {
+   "cache": null,
+   "fetch_calls": 1,
+   "fetched": {
+    "birth_year": null,
+    "sex": null,
+    "vo2max": null,
+    "weight_kg": null
+   },
+   "name": "outage_defaults",
+   "profile": {
+    "birth_year": 1990,
+    "sex": "male",
+    "vo2max": 48.5,
+    "weight_kg": 80.0
+   },
+   "settings": {
+    "profile_override": {
+     "vo2max": "48.5",
+     "weight_kg": null
+    }
+   },
+   "stored": null
+  },
+  {
+   "cache": {
+    "fetched_at": "2026-11-10T09:00:00+00:00",
+    "weight_kg": 66.0
+   },
+   "fetch_calls": 0,
+   "fetched": {
+    "birth_year": null,
+    "sex": null,
+    "vo2max": null,
+    "weight_kg": 99.0
+   },
+   "name": "cache_recent",
+   "profile": {
+    "birth_year": 1990,
+    "sex": "male",
+    "vo2max": 45.0,
+    "weight_kg": 66.0
+   },
+   "settings": null,
+   "stored": {
+    "fetched_at": "2026-11-10T09:00:00+00:00",
+    "weight_kg": 66.0
+   }
+  }
+ ]
+}

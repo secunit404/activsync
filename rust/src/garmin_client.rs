@@ -44,6 +44,9 @@ const UPLOAD_FORMATS: [&str; 3] = ["FIT", "GPX", "TCX"];
 pub enum GarminError {
     /// The saved session is missing or Garmin no longer accepts it.
     SessionExpired,
+    /// Opening the session failed on an outage; the session may be fine and
+    /// the next poll tries again.
+    Unavailable,
     /// A definitive 404 on an activity call.
     ActivityGone(i64),
     /// A 404 anywhere else.
@@ -64,6 +67,7 @@ impl std::fmt::Display for GarminError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::SessionExpired => f.write_str("Garmin session expired; reconnect Garmin to resume sync."),
+            Self::Unavailable => f.write_str("Garmin could not be reached; retrying on the next poll."),
             Self::ActivityGone(id) => write!(f, "activity {id} not found"),
             Self::NotFound(msg) | Self::UploadRejected(msg) | Self::SubcategoryRejected(msg) | Self::Api(msg) => {
                 f.write_str(msg)
@@ -76,6 +80,18 @@ impl std::fmt::Display for GarminError {
 }
 
 impl std::error::Error for GarminError {}
+
+impl GarminError {
+    /// An outage rather than a rejection: a network failure, a 429 or a 5xx.
+    /// Only a rejection may pause Garmin until the user reconnects.
+    pub fn is_transient(&self) -> bool {
+        match self {
+            Self::Network(_) | Self::Unavailable => true,
+            Self::Api(message) => message.starts_with("API Error 429") || message.starts_with("API Error 5"),
+            _ => false,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ActivityRecord {
@@ -498,6 +514,12 @@ impl GarminClient {
         }
     }
 
+    /// The account's display name, which `open` reads from the profile;
+    /// for a client built from tokens directly.
+    pub fn with_display_name(self, name: &str) -> Self {
+        Self { display_name: Some(name.to_string()), ..self }
+    }
+
     /// No pause after calls or between profile retries, for tests.
     pub fn without_waits(self) -> Self {
         Self { pause: Duration::ZERO, ..self }
@@ -556,7 +578,7 @@ impl GarminClient {
                         break;
                     }
                 }
-                Err(_) if attempt == 2 => return Err(GarminError::SessionExpired),
+                Err(err) if attempt == 2 => return Err(Self::open_failure(&err)),
                 Err(_) => {}
             }
             if attempt < 2 {
@@ -571,11 +593,17 @@ impl GarminClient {
             match self.get_json(USER_SETTINGS_PATH, &[]).await {
                 Ok(settings) if settings.get("userData").is_some() => return Ok(()),
                 Ok(_) => {}
-                Err(_) if attempt == 2 => return Err(GarminError::SessionExpired),
+                Err(err) if attempt == 2 => return Err(Self::open_failure(&err)),
                 Err(_) => self.rest().await,
             }
         }
         Err(GarminError::SessionExpired)
+    }
+
+    /// The Python library words every failed profile read at sign-in as an
+    /// auth error; here an outage stays an outage.
+    fn open_failure(err: &GarminError) -> GarminError {
+        if err.is_transient() { GarminError::Unavailable } else { GarminError::SessionExpired }
     }
 
     async fn refresh_di_token(&self) -> Result<(), GarminError> {

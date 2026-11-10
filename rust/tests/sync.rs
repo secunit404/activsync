@@ -177,15 +177,24 @@ async fn the_garmin_sync_writes_the_same_rows_as_python() {
 async fn a_failed_garmin_fetch_is_recorded_for_the_settings_page() {
     let db = Db::open_in_memory().unwrap();
     add(&db, 1, "running", now() - Duration::hours(1), "pending", "{}");
+    db::set_config_value(&db.lock(), "garmin_credentials_verified", &json!(true)).unwrap();
     let (garmin, _) = fake_garmin(|_, _| Ok((500, b"{}".to_vec())));
     assert!(sync::sync_garmin(&db, &garmin, &config(&db), now(), None, None).await.is_err());
     let value = |key: &str| db::get_config_value(&db.lock(), key).unwrap();
     assert_eq!(value("garmin_last_sync_ok"), Some(json!(false)));
     assert_eq!(value("garmin_last_sync_error"), Some(json!("API Error 500")));
-    assert_eq!(value("garmin_credentials_verified"), Some(json!(false)));
+    assert_eq!(value("garmin_credentials_verified"), Some(json!(true)), "an outage is retried, not a disconnect");
     assert_eq!(value("garmin_last_sync_at"), Some(json!("2026-11-10T12:00:00+00:00")));
     assert_eq!(value("garmin_last_sync_ok_at"), None);
     assert_eq!(rows(&db).len(), 1, "nothing is removed on a failed fetch");
+
+    let (garmin, _) = fake_garmin(|_, _| Err("connection reset"));
+    assert!(sync::sync_garmin(&db, &garmin, &config(&db), now(), None, None).await.is_err());
+    assert_eq!(value("garmin_credentials_verified"), Some(json!(true)));
+
+    let (garmin, _) = fake_garmin(|key, _| if key.starts_with("POST") { Ok((400, b"{}".to_vec())) } else { Ok((401, b"{}".to_vec())) });
+    assert!(sync::sync_garmin(&db, &garmin, &config(&db), now(), None, None).await.is_err());
+    assert_eq!(value("garmin_credentials_verified"), Some(json!(false)), "a rejected token pauses Garmin");
 }
 
 /// Strava: one known activity starting at `twin_start`, uploads resolving to

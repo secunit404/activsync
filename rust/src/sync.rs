@@ -309,7 +309,9 @@ fn strength_document(db: &Db, garmin_activity_id: i64, fit: &[u8]) -> SyncResult
     }
 }
 
-fn record_sync_outcome(db: &Db, now: DateTime<Utc>, error: Option<&str>) -> SyncResult<()> {
+/// Only a rejection clears `garmin_credentials_verified`, which pauses the
+/// Garmin leg until a reconnect; an outage is retried on the next poll.
+pub fn record_sync_outcome(db: &Db, now: DateTime<Utc>, error: Option<&GarminError>) -> SyncResult<()> {
     let conn = db.lock();
     let at = json!(db::iso(now));
     db::set_config_value(&conn, "garmin_last_sync_at", &at)?;
@@ -317,8 +319,10 @@ fn record_sync_outcome(db: &Db, now: DateTime<Utc>, error: Option<&str>) -> Sync
         db::set_config_value(&conn, "garmin_last_sync_ok_at", &at)?;
     }
     db::set_config_value(&conn, "garmin_last_sync_ok", &json!(error.is_none()))?;
-    db::set_config_value(&conn, "garmin_last_sync_error", &json!(error))?;
-    db::set_config_value(&conn, "garmin_credentials_verified", &json!(error.is_none()))?;
+    db::set_config_value(&conn, "garmin_last_sync_error", &json!(error.map(ToString::to_string)))?;
+    if !error.is_some_and(GarminError::is_transient) {
+        db::set_config_value(&conn, "garmin_credentials_verified", &json!(error.is_none()))?;
+    }
     Ok(())
 }
 
@@ -341,7 +345,7 @@ pub async fn sync_garmin(
     let fetched = match garmin.fetch_recent_activities(lookback).await {
         Ok(fetched) => fetched,
         Err(err) => {
-            record_sync_outcome(db, now, Some(&err.to_string()))?;
+            record_sync_outcome(db, now, Some(&err))?;
             eprintln!("garmin fetch failed: {err}");
             return Err(err.into());
         }

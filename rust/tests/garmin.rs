@@ -134,6 +134,27 @@ async fn a_missing_or_rejected_session_needs_a_reconnect() {
 }
 
 #[tokio::test]
+async fn an_outage_while_opening_the_session_is_not_an_expiry() {
+    let (_dir, path) = store();
+    let token_dir = path.to_str().unwrap();
+    save_tokens(token_dir, &fresh_tokens()).unwrap();
+    let open = |http| GarminClient::open_with(http, clock(), token_dir, Duration::ZERO);
+
+    let (http, _) = garmin(|_, _| Err("connection reset"));
+    assert_eq!(open(http).await.err(), Some(GarminError::Unavailable));
+    let (http, _) = garmin(|_, _| Ok((503, b"{}".to_vec())));
+    assert_eq!(open(http).await.err(), Some(GarminError::Unavailable));
+    let (http, _) = garmin(|key, _| match key {
+        "GET /userprofile-service/socialProfile" => ok(json!({"displayName": "r"})),
+        _ => Ok((429, b"{}".to_vec())),
+    });
+    assert_eq!(open(http).await.err(), Some(GarminError::Unavailable));
+    let (http, _) = garmin(|key, _| if key.starts_with("POST") { Ok((400, b"{}".to_vec())) } else { Ok((403, b"{}".to_vec())) });
+    assert_eq!(open(http).await.err(), Some(GarminError::SessionExpired));
+    assert_eq!(GarminError::Unavailable.to_string(), "Garmin could not be reached; retrying on the next poll.");
+}
+
+#[tokio::test]
 async fn a_token_near_expiry_is_refreshed_and_saved_owner_only() {
     use std::os::unix::fs::PermissionsExt;
     let (_dir, path) = store();
