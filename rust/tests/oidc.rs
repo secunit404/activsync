@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use activsync::auth_guard::AuthConfig;
 use activsync::db::Db;
-use activsync::oidc_flow::{HttpError, OidcHttp};
+use activsync::net::HttpError;
+use activsync::oidc_flow::OidcHttp;
 use activsync::{AppState, build_app, schedule, seed};
 use axum::Router;
 use axum::body::Body;

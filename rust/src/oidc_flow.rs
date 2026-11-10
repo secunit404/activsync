@@ -3,58 +3,31 @@
 //! an opaque cookie, standing in for the Python app's signed session cookie.
 
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::{Arc, LazyLock, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use openidconnect::core::{
     CoreAuthenticationFlow, CoreClient, CoreJsonWebKeySet, CoreJwsSigningAlgorithm,
     CoreProviderMetadata, CoreUserInfoClaims,
 };
 use openidconnect::{
-    AsyncHttpClient, AuthorizationCode, OAuth2TokenResponse, ClientId, ClientSecret, CsrfToken, HttpRequest, HttpResponse, Nonce,
+    AsyncHttpClient, AuthorizationCode, OAuth2TokenResponse, ClientId, ClientSecret, CsrfToken, HttpRequest, Nonce,
     PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RequestTokenError, Scope, TokenResponse, http,
 };
 use serde::de::DeserializeOwned;
 
 use crate::auth_core::random_token;
+use crate::net::{self, Http, HttpError, HttpFuture};
 use crate::oidc_config::OidcConfig;
 
 const FLOW_SECONDS: f64 = 600.0;
 pub const LINK_GRANT_SECONDS: f64 = 300.0;
 
-#[derive(Debug)]
-pub struct HttpError(pub String);
-
-impl std::fmt::Display for HttpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for HttpError {}
-
-pub type HttpFuture = Pin<Box<dyn Future<Output = Result<HttpResponse, HttpError>> + Send>>;
-
 /// Every call to the identity provider goes through this, so tests can stand
 /// in for the provider.
-pub type OidcHttp = Arc<dyn Fn(HttpRequest) -> HttpFuture + Send + Sync>;
+pub type OidcHttp = Http;
 
-/// Redirects are not followed: a provider answering with one would otherwise
-/// let it point the server at any address.
 pub fn real_http() -> OidcHttp {
-    static CLIENT: LazyLock<openidconnect::reqwest::Client> = LazyLock::new(|| {
-        openidconnect::reqwest::Client::builder()
-            .redirect(openidconnect::reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(10))
-            .build()
-            .expect("HTTP client builds")
-    });
-    Arc::new(|request| {
-        let client = CLIENT.clone();
-        Box::pin(async move { client.call(request).await.map_err(|e| HttpError(e.to_string())) })
-    })
+    net::provider_http()
 }
 
 /// A named client rather than a closure: a closure here makes the handler's
