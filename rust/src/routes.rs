@@ -40,11 +40,11 @@ impl ApiError {
         Self { header: Some((name, value)), ..self }
     }
 
-    fn conflict(detail: impl Into<String>) -> Self {
+    pub(crate) fn conflict(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::CONFLICT, detail)
     }
 
-    fn invalid(detail: impl Into<String>) -> Self {
+    pub(crate) fn invalid(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
     }
 }
@@ -74,9 +74,9 @@ impl From<JsonRejection> for ApiError {
     }
 }
 
-type ApiResult<T> = Result<Json<T>, ApiError>;
+pub(crate) type ApiResult<T> = Result<Json<T>, ApiError>;
 
-fn development(state: &AppState) -> bool {
+pub(crate) fn development(state: &AppState) -> bool {
     state.mock_mode
 }
 

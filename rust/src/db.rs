@@ -141,6 +141,15 @@ CREATE TABLE IF NOT EXISTS merge_backups (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS hevy_match_schedule (
+    hevy_id TEXT PRIMARY KEY,
+    strategy TEXT NOT NULL,
+    deadline REAL NOT NULL,
+    state TEXT NOT NULL,
+    message TEXT,
+    finished_at REAL
+);
+
 CREATE TABLE IF NOT EXISTS hevy_events_seen (
     event_type TEXT NOT NULL,
     workout_id TEXT NOT NULL,

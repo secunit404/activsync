@@ -17,6 +17,32 @@ pub fn parse_garmin(start_time: &str) -> Option<DateTime<Utc>> {
         .map(|naive| naive.and_utc())
 }
 
+/// Python's `timeutil.parse_timestamp`: ISO-8601 with or without `Z`, a bare
+/// date, or Garmin's space-separated form; a naive value reads as UTC.
+pub fn parse_timestamp(value: &str) -> Option<DateTime<Utc>> {
+    let cleaned = value.trim().replace('Z', "+00:00");
+    if cleaned.is_empty() {
+        return None;
+    }
+    if let Ok(aware) = DateTime::parse_from_rfc3339(&cleaned) {
+        return Some(aware.with_timezone(&Utc));
+    }
+    for format in ["%Y-%m-%dT%H:%M:%S%.f%:z", "%Y-%m-%d %H:%M:%S%.f%:z", "%Y-%m-%dT%H:%M%:z"] {
+        if let Ok(aware) = DateTime::parse_from_str(&cleaned, format) {
+            return Some(aware.with_timezone(&Utc));
+        }
+    }
+    for format in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"] {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(&cleaned, format) {
+            return Some(naive.and_utc());
+        }
+    }
+    chrono::NaiveDate::parse_from_str(&cleaned, "%Y-%m-%d")
+        .ok()
+        .and_then(|date| date.and_hms_opt(0, 0, 0))
+        .map(|naive| naive.and_utc())
+}
+
 pub fn to_local(start_time: &str, tz: Tz) -> Option<DateTime<Tz>> {
     parse_garmin(start_time).map(|utc| utc.with_timezone(&tz))
 }

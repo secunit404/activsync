@@ -1,13 +1,13 @@
 use chrono::{DateTime, Datelike, Timelike, Utc};
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use serde_json::{Value, json};
 
-use crate::{config, mock};
+use crate::{config, hevy_seed, mock};
 use crate::db::{self, DbResult, NewActivity};
 
 /// Bumped whenever the generated rows change, so an older dev database is
 /// rebuilt instead of mixing two generations of sample data.
-pub const SEED_VERSION: i64 = 2;
+pub const SEED_VERSION: i64 = 3;
 const SEED_VERSION_KEY: &str = "rust_dev_seed_version";
 
 struct Sample {
@@ -46,8 +46,6 @@ const SAMPLES: [Sample; 13] = [
     sample("backcountry_skiing_snowboarding_ws", "Backcountry day", "Skinned up, rode down.", 5 * 3600 + 20 * 60, Some(9_400), "published"),
 ];
 
-const MERGED_HEVY_ACTIVITY_ID: i64 = 990001;
-
 /// Fills a mock database with a year of sample activities. When `onboarded`,
 /// it is also past the setup wizard with both services reading as connected;
 /// otherwise the wizard starts at its first step.
@@ -65,8 +63,16 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
     let now = now.with_nanosecond(0).unwrap_or(now);
     let tx = conn.transaction()?;
     tx.execute("DELETE FROM activities", [])?;
-    tx.execute("DELETE FROM hevy_workouts", [])?;
-    tx.execute("DELETE FROM publish_schedule", [])?;
+    for table in [
+        "hevy_workouts",
+        "hevy_operations",
+        "hevy_match_schedule",
+        "exercise_templates",
+        "exercise_mappings",
+        "publish_schedule",
+    ] {
+        tx.execute(&format!("DELETE FROM {table}"), [])?;
+    }
 
     for offset in 0..12_i32 {
         let month_index = now.month() as i32 - offset;
@@ -117,7 +123,7 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
             )?;
         }
     }
-    seed_hevy_badge(&tx, now)?;
+    hevy_seed::seed(&tx, now)?;
 
     let mut settings = config::defaults();
     settings.insert("hevy_match_mode".into(), json!("review"));
@@ -139,41 +145,4 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
     db::set_config_value(&tx, SEED_VERSION_KEY, &json!(SEED_VERSION))?;
     tx.commit()?;
     Ok(true)
-}
-
-/// One watch activity enriched by a merged Hevy workout, so the list shows
-/// the Hevy badge.
-fn seed_hevy_badge(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
-    let start = now - chrono::Duration::days(1);
-    let start_text = start.format("%Y-%m-%d %H:%M:%S").to_string();
-    db::insert_activity(
-        conn,
-        &NewActivity {
-            garmin_activity_id: MERGED_HEVY_ACTIVITY_ID,
-            activity_type: "strength_training",
-            title: "Gym session (watch)",
-            description: "",
-            start_time: &start_text,
-            content_hash: &format!("dev-{MERGED_HEVY_ACTIVITY_ID}"),
-            publish_status: "pending",
-            garmin_data: &json!({"duration": 3600, "avg_hr": 128, "calories": 380,
-                                 "total_sets": 15, "total_reps": 75}).to_string(),
-            hold_reason: None,
-        },
-        now,
-    )?;
-    let iso_now = db::iso(now);
-    conn.execute(
-        "INSERT INTO hevy_workouts
-           (hevy_id, title, start_time, end_time, source_updated_at, status, applied_strategy,
-            source_garmin_activity_id, garmin_activity_id, created_at, updated_at)
-         VALUES ('dev-hevy-merged', 'Gym session', ?1, ?2, ?3, 'merged', 'merge', ?4, ?4, ?3, ?3)",
-        params![
-            db::iso(start),
-            db::iso(start + chrono::Duration::hours(1)),
-            iso_now,
-            MERGED_HEVY_ACTIVITY_ID
-        ],
-    )?;
-    Ok(())
 }

@@ -1,6 +1,7 @@
 //! Rust port of the ActivSync server, mock mode only so far: the activity
 //! dashboard, the settings page, the setup wizard and password and proxy
-//! sign-in. Single sign-on, Hevy sync and the real Garmin and Strava clients
+//! sign-in, and the Hevy workout queue. Single sign-on, Hevy exercise mappings,
+//! history import and the real Garmin and Strava clients
 //! are still served by the Python app.
 
 pub mod auth_core;
@@ -9,6 +10,11 @@ pub mod auth_routes;
 pub mod config;
 pub mod db;
 pub mod events;
+pub mod hevy_db;
+pub mod hevy_description;
+pub mod hevy_match;
+pub mod hevy_queue;
+pub mod hevy_seed;
 pub mod hevy_settings;
 pub mod mock;
 pub mod onboarding;
@@ -33,6 +39,7 @@ use crate::auth_core::{AttemptLimiter, SetupCode};
 use crate::auth_guard::AuthConfig;
 use crate::db::Db;
 use crate::events::EventBus;
+use crate::hevy_match::HevyMatchScheduler;
 use crate::schedule::PublishScheduler;
 
 /// Garmin credentials held in memory while Garmin waits for a verification
@@ -48,6 +55,7 @@ pub struct AppState {
     pub db: Db,
     pub events: EventBus,
     pub scheduler: PublishScheduler,
+    pub match_scheduler: HevyMatchScheduler,
     pub mock_mode: bool,
     pub auth: AuthConfig,
     pub setup_code: SetupCode,
@@ -60,7 +68,8 @@ impl AppState {
     /// claimed the install yet.
     pub fn new(db: Db, mock_mode: bool, clock: schedule::Clock, window_seconds: f64, auth: AuthConfig) -> Self {
         let events = EventBus::new();
-        let scheduler = PublishScheduler::new(db.clone(), events.clone(), clock, window_seconds);
+        let scheduler = PublishScheduler::new(db.clone(), events.clone(), clock.clone(), window_seconds);
+        let match_scheduler = HevyMatchScheduler::new(db.clone(), events.clone(), clock, window_seconds);
         let setup_code = SetupCode::default();
         if let Err(err) = setup_code.ensure(&db.lock(), auth.disabled) {
             eprintln!("could not read the owner record: {err}");
@@ -69,6 +78,7 @@ impl AppState {
             db,
             events,
             scheduler,
+            match_scheduler,
             mock_mode,
             auth,
             setup_code,
@@ -124,11 +134,26 @@ fn auth_router() -> Router<AppState> {
         .route("/dev/unclaim", post(dev_unclaim))
 }
 
+fn hevy_router() -> Router<AppState> {
+    use hevy_queue::*;
+    Router::new()
+        .route("/hevy/queue", get(queue_state))
+        .route("/hevy/{hevy_id}", get(workout))
+        .route("/hevy/{hevy_id}/match", post(choose_match))
+        .route("/hevy/{hevy_id}/match/cancel", post(cancel_match))
+        .route("/hevy/{hevy_id}/match/status", get(match_status))
+        .route("/hevy/{hevy_id}/retry", post(retry))
+        .route("/hevy/{hevy_id}/skip", post(skip))
+        .route("/hevy/{hevy_id}/unskip", post(unskip))
+        .route("/hevy/{hevy_id}/resync-fresh", post(resync_fresh))
+}
+
 fn api_router() -> Router<AppState> {
     use routes::*;
     Router::new()
         .merge(settings_router())
         .merge(auth_router())
+        .merge(hevy_router())
         .route("/app", get(app_state))
         .route("/auth/oidc", get(oidc_config))
         .route("/catch-up-report", axum::routing::delete(dismiss_catch_up_report))

@@ -64,6 +64,7 @@ async fn main() {
 
     let state = AppState::new(db, true, schedule::system_clock(), schedule::UNDO_WINDOW_SECONDS, auth);
     let scheduler = state.scheduler.clone().spawn();
+    let match_scheduler = state.match_scheduler.clone().spawn();
     let app = build_app(state, Some(&web_dir));
 
     let addr = SocketAddr::new(host, port);
@@ -78,4 +79,5 @@ async fn main() {
         .await
         .unwrap_or_else(|e| fail(&format!("server stopped: {e}")));
     scheduler.abort();
+    match_scheduler.abort();
 }

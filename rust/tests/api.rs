@@ -72,12 +72,16 @@ async fn get(app: &Router, uri: &str) -> Value {
     body
 }
 
+/// The seeded Hevy scenarios own these activities, and one of them blocks
+/// publishing until its match is chosen.
+const HEVY_DEMO_IDS: i64 = 910_000;
+
 fn first_with_status(page: &Value, status: &str) -> i64 {
     page["items"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|item| item["publishStatus"] == status)
+        .find(|item| item["publishStatus"] == status && item["garminActivityId"].as_i64() < Some(HEVY_DEMO_IDS))
         .unwrap_or_else(|| panic!("no {status} activity"))["garminActivityId"]
         .as_i64()
         .unwrap()
@@ -179,9 +183,9 @@ async fn seeded_list_counts_and_paginates() {
         .iter()
         .map(|k| counts[k].as_i64().unwrap())
         .sum();
-    assert_eq!(total, 37);
+    assert_eq!(total, 39);
     assert_eq!(page["pagination"], json!({
-        "page": 1, "pageSize": 20, "pageCount": 2, "totalCount": 37, "firstItem": 1, "lastItem": 20
+        "page": 1, "pageSize": 20, "pageCount": 2, "totalCount": 39, "firstItem": 1, "lastItem": 20
     }));
     assert_eq!(page["sort"], "newest");
     assert_eq!(page["status"], Value::Null);
@@ -192,7 +196,7 @@ async fn seeded_list_counts_and_paginates() {
     let last = get(&h.app, "/api/v1/activities?page=9&pageSize=10").await;
     assert_eq!(last["pagination"]["page"], 4);
     assert_eq!(last["pagination"]["firstItem"], 31);
-    assert_eq!(last["pagination"]["lastItem"], 37);
+    assert_eq!(last["pagination"]["lastItem"], 39);
 }
 
 #[tokio::test]
@@ -386,7 +390,7 @@ async fn bulk_publish_reports_hevy_block_and_skips() {
     let h = harness();
     let pending = get(&h.app, "/api/v1/activities?status=pending&pageSize=100").await;
     let ids: Vec<i64> = pending["items"].as_array().unwrap().iter()
-        .filter(|i| i["hevyBadge"].is_null())
+        .filter(|i| i["garminActivityId"].as_i64() < Some(HEVY_DEMO_IDS))
         .take(3)
         .map(|i| i["garminActivityId"].as_i64().unwrap())
         .collect();
@@ -426,15 +430,16 @@ async fn publish_needs_both_services_connected() {
 async fn hevy_merge_shows_badge() {
     let h = harness();
     let page = get(&h.app, "/api/v1/activities?pageSize=100").await;
-    let badged: Vec<&Value> = page["items"].as_array().unwrap().iter().filter(|i| !i["hevyBadge"].is_null()).collect();
-    assert_eq!(badged.len(), 1);
-    assert_eq!(badged[0]["hevyBadge"], "merge");
+    let badges: Vec<(i64, &str)> = page["items"].as_array().unwrap().iter()
+        .filter_map(|i| Some((i["garminActivityId"].as_i64()?, i["hevyBadge"].as_str()?)))
+        .collect();
+    assert_eq!(badges, [(910001, "merge"), (910050, "passive")]);
 }
 
 #[tokio::test]
 async fn unknown_api_paths_are_404_json() {
     let h = harness();
-    let (status, body) = call(&h.app, Method::GET, "/api/v1/hevy/queue", None).await;
+    let (status, body) = call(&h.app, Method::GET, "/api/v1/nothing/here", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["detail"], "Not Found");
 }
