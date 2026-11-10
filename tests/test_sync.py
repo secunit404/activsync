@@ -324,6 +324,34 @@ def test_sync_garmin_records_failure_status_and_reraises(conn, cfg):
     assert db.get_config_value(conn, "garmin_last_sync_at") == NOW.isoformat()
 
 
+def test_sync_garmin_keeps_garmin_connected_through_an_outage(conn, cfg):
+    import requests
+
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    garmin = MagicMock()
+    garmin.fetch_recent_activities.side_effect = requests.exceptions.ConnectionError("reset")
+
+    with pytest.raises(requests.exceptions.ConnectionError):
+        sync.sync_garmin(conn, garmin, cfg, NOW)
+
+    assert db.get_config_value(conn, "garmin_credentials_verified") is True
+    assert db.get_config_value(conn, "garmin_last_sync_ok") is False
+    assert db.get_config_value(conn, "garmin_last_sync_error") == "reset"
+
+
+def test_sync_garmin_pauses_garmin_when_the_token_is_rejected(conn, cfg):
+    from garminconnect import GarminConnectConnectionError
+
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    garmin = MagicMock()
+    garmin.fetch_recent_activities.side_effect = GarminConnectConnectionError("API Error 401")
+
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_garmin(conn, garmin, cfg, NOW)
+
+    assert db.get_config_value(conn, "garmin_credentials_verified") is False
+
+
 def test_publish_pending_publishes_all_pending_activities(conn, cfg):
     db.insert_activity(conn, 201, "running", "Run A", "", "2026-07-09 09:00:00", "h1", "pending", NOW)
     db.insert_activity(conn, 202, "running", "Run B", "", "2026-07-09 09:30:00", "h2", "pending", NOW)

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from activsync import config, db, hevy_db, strava_strength, timeutil
-from activsync.garmin_client import ActivityRecord, GarminClient
+from activsync.garmin_client import ActivityRecord, GarminClient, is_transient_failure
 from activsync.strava_client import StravaClient, StravaUploadRejected, match_closest_activity
 from activsync.strava_exercise_mapper import StravaMappingMiss
 
@@ -276,7 +276,10 @@ def sync_garmin(
         db.set_config_value(conn, "garmin_last_sync_at", now.isoformat())
         db.set_config_value(conn, "garmin_last_sync_ok", False)
         db.set_config_value(conn, "garmin_last_sync_error", str(e))
-        db.set_config_value(conn, "garmin_credentials_verified", False)
+        # Only a rejection pauses the Garmin leg until a reconnect; an outage
+        # is retried on the next poll.
+        if not is_transient_failure(e):
+            db.set_config_value(conn, "garmin_credentials_verified", False)
         logger.exception("garmin fetch failed")
         raise
 

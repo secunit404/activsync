@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from activsync import auth_core, config, db, logging_setup
-from activsync.garmin_client import GarminSessionExpired
+from activsync.garmin_client import GarminSessionExpired, GarminUnavailable
 from activsync.poller import Poller
 from activsync.strava_client import StravaRateLimitError
 
@@ -221,6 +221,31 @@ def test_poller_pauses_all_garmin_work_when_cached_session_expires(conn):
     assert db.get_config_value(conn, "garmin_last_sync_at") == now.isoformat()
     assert db.get_config_value(conn, "garmin_last_sync_error") == (
         "Garmin session expired; reconnect Garmin to resume sync."
+    )
+
+
+def test_poller_keeps_polling_garmin_through_an_outage(conn):
+    db.set_config_value(conn, "initial_sync_done", True)
+    db.set_config_value(conn, "garmin_credentials_verified", True)
+    factory = MagicMock(
+        side_effect=GarminUnavailable("Garmin could not be reached; retrying on the next poll.")
+    )
+    poller = Poller(
+        conn,
+        garmin_factory=factory,
+        strava_factory=lambda: MagicMock(),
+        garmin_interval_seconds_override=0,
+    )
+    now = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)
+
+    poller._loop_once(now)
+    poller._loop_once(now + timedelta(minutes=1))
+
+    assert factory.call_count == 2
+    assert db.get_config_value(conn, "garmin_credentials_verified") is True
+    assert db.get_config_value(conn, "garmin_last_sync_ok") is False
+    assert db.get_config_value(conn, "garmin_last_sync_error") == (
+        "Garmin could not be reached; retrying on the next poll."
     )
 
 
