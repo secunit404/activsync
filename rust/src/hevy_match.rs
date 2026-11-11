@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, params};
 use tokio::sync::Notify;
 
@@ -22,6 +23,8 @@ pub const FAILED: &str = "failed";
 pub const SKIPPED: &str = "skipped";
 
 pub const FAILURE_MESSAGE: &str = "Could not apply that Hevy match. Check the server log for details.";
+pub const AUTH_MESSAGE: &str = "Hevy rejected the stored API key — reconnect Hevy.";
+pub const MAPPING_MESSAGE: &str = "Map the missing exercises before choosing Merge or Replace.";
 
 const RESULT_RETENTION_SECONDS: f64 = 3600.0;
 const MAX_SLEEP_SECONDS: f64 = 30.0;
@@ -165,6 +168,34 @@ pub fn get(conn: &Connection, hevy_id: &str) -> DbResult<Option<Decision>> {
     .optional()
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ApplyFailure {
+    /// Hevy rejected the stored API key.
+    HevyAuth,
+    Failed(String),
+}
+
+/// Applies one owner's choice once its undo window has passed; returns the
+/// workout's new status.
+pub trait MatchApplier: Send + Sync {
+    fn apply<'a>(&'a self, hevy_id: &'a str, strategy: &'a str) -> BoxFuture<'a, Result<String, ApplyFailure>>;
+}
+
+pub struct MockApplier {
+    pub db: Db,
+}
+
+impl MatchApplier for MockApplier {
+    fn apply<'a>(&'a self, hevy_id: &'a str, strategy: &'a str) -> BoxFuture<'a, Result<String, ApplyFailure>> {
+        let outcome = match mock_apply(&self.db.lock(), hevy_id, strategy) {
+            Ok(Some(status)) => Ok(status.to_string()),
+            Ok(None) => Err(ApplyFailure::Failed("no claimed watch activity".into())),
+            Err(err) => Err(ApplyFailure::Failed(err.to_string())),
+        };
+        Box::pin(async move { outcome })
+    }
+}
+
 /// Mock-mode stand-in for applying the choice to Garmin: records it on the
 /// workout and its claimed watch activity without any network call.
 pub fn mock_apply(conn: &Connection, hevy_id: &str, strategy: &str) -> DbResult<Option<&'static str>> {
@@ -204,11 +235,17 @@ pub struct HevyMatchScheduler {
     clock: Clock,
     pub window_seconds: f64,
     wake: Arc<Notify>,
+    applier: Arc<dyn MatchApplier>,
 }
 
 impl HevyMatchScheduler {
     pub fn new(db: Db, events: EventBus, clock: Clock, window_seconds: f64) -> Self {
-        Self { db, events, clock, window_seconds, wake: Arc::new(Notify::new()) }
+        let applier = Arc::new(MockApplier { db: db.clone() });
+        Self { db, events, clock, window_seconds, wake: Arc::new(Notify::new()), applier }
+    }
+
+    pub fn with_applier(self, applier: Arc<dyn MatchApplier>) -> Self {
+        Self { applier, ..self }
     }
 
     pub fn now(&self) -> f64 {
@@ -230,21 +267,42 @@ impl HevyMatchScheduler {
         Ok(cancelled)
     }
 
-    pub fn run_due(&self) -> DbResult<usize> {
+    pub async fn run_due(&self) -> DbResult<usize> {
         let claimed = claim_due(&self.db.lock(), self.now())?;
         if claimed.is_empty() {
             return Ok(0);
         }
         self.events.publish("refresh");
         for (hevy_id, strategy, _) in &claimed {
-            let conn = self.db.lock();
-            let (state, message) = run(&conn, hevy_id, strategy)?;
-            finish(&conn, hevy_id, state, message.as_deref(), self.now())?;
-            drop(conn);
+            let (state, message) = self.run(hevy_id, strategy).await?;
+            finish(&self.db.lock(), hevy_id, state, message.as_deref(), self.now())?;
             self.events.publish("refresh");
         }
         prune(&self.db.lock(), self.now())?;
         Ok(claimed.len())
+    }
+
+    /// A workout skipped or handled elsewhere during the window finishes as
+    /// skipped: the owner's later decision wins.
+    async fn run(&self, hevy_id: &str, strategy: &str) -> DbResult<(&'static str, Option<String>)> {
+        let Some(workout) = hevy_db::get_workout(&self.db.lock(), hevy_id)? else {
+            return Ok((SKIPPED, None));
+        };
+        if workout.status != "awaiting_match" {
+            return Ok((SKIPPED, None));
+        }
+        Ok(match self.applier.apply(hevy_id, strategy).await {
+            Ok(status) if status == "needs_mapping" => (FAILED, Some(MAPPING_MESSAGE.into())),
+            Ok(status) => (DONE, Some(format!("{} {}.", label(&status), workout.display_title()))),
+            Err(ApplyFailure::HevyAuth) => {
+                crate::db::set_config_value(&self.db.lock(), "hevy_auth_ok", &serde_json::json!(false))?;
+                (FAILED, Some(AUTH_MESSAGE.into()))
+            }
+            Err(ApplyFailure::Failed(err)) => {
+                eprintln!("Hevy match decision failed for {hevy_id}: {err}");
+                (FAILED, Some(FAILURE_MESSAGE.into()))
+            }
+        })
     }
 
     fn sleep_seconds(&self) -> DbResult<f64> {
@@ -262,7 +320,7 @@ impl HevyMatchScheduler {
                 }
             }
             loop {
-                let timeout = match self.run_due().and_then(|_| self.sleep_seconds()) {
+                let timeout = match self.run_due().await.and_then(|_| self.sleep_seconds()) {
                     Ok(seconds) => seconds,
                     Err(err) => {
                         eprintln!("Hevy match scheduler pass failed: {err}");
@@ -278,24 +336,3 @@ impl HevyMatchScheduler {
     }
 }
 
-/// A workout skipped or handled elsewhere during the window finishes as
-/// skipped: the owner's later decision wins.
-fn run(conn: &Connection, hevy_id: &str, strategy: &str) -> DbResult<(&'static str, Option<String>)> {
-    let Some(workout) = hevy_db::get_workout(conn, hevy_id)? else {
-        return Ok((SKIPPED, None));
-    };
-    if workout.status != "awaiting_match" {
-        return Ok((SKIPPED, None));
-    }
-    match mock_apply(conn, hevy_id, strategy) {
-        Ok(Some(status)) => Ok((DONE, Some(format!("{} {}.", label(status), workout.display_title())))),
-        Ok(None) => {
-            eprintln!("Hevy match decision failed for {hevy_id}: no claimed watch activity");
-            Ok((FAILED, Some(FAILURE_MESSAGE.into())))
-        }
-        Err(err) => {
-            eprintln!("Hevy match decision failed for {hevy_id}: {err}");
-            Ok((FAILED, Some(FAILURE_MESSAGE.into())))
-        }
-    }
-}

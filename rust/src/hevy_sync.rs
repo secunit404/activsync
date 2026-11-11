@@ -26,7 +26,10 @@ use crate::hevy_description::{generate_description, generate_title};
 use crate::hevy_match;
 use crate::hevy_profile;
 use crate::net::Http;
-use crate::poller::{HevyLeg, HevyLegError};
+use crate::events::EventBus;
+use crate::hevy_match::{ApplyFailure, MatchApplier};
+use crate::poller::{self, Clients, HevyLeg, HevyLegError};
+use crate::sync;
 use crate::strava_client::StravaClient;
 use crate::timefmt::parse_timestamp;
 
@@ -693,6 +696,52 @@ pub async fn run_hevy_leg(
     Ok(changed)
 }
 
+/// Hevy and the calorie profile for a tick, with the config snapshot.
+async fn hevy_context(db: &Db, garmin: &GarminClient, http: &Http, development: bool, now: DateTime<Utc>) -> Result<(HevyClient, Profile, Config), String> {
+    let key = db::get_config_value(&db.lock(), "hevy_api_key").map_err(|e| e.to_string())?;
+    let key = key.as_ref().and_then(Value::as_str).unwrap_or_default();
+    let hevy = HevyClient::new(http.clone(), key).map_err(String::from)?;
+    let profile = hevy_profile::get_profile(db, garmin, now).await;
+    let cfg = config::load_config(&db.lock(), development).map_err(|e| e.to_string())?;
+    Ok((hevy, profile, cfg))
+}
+
+/// Applies an owner's match choice to Garmin, then reads Garmin back so the
+/// dashboard shows the result.
+pub struct RealMatchApplier {
+    pub db: Db,
+    pub events: EventBus,
+    pub clients: std::sync::Arc<dyn Clients>,
+    pub hevy_http: Http,
+    pub development: bool,
+}
+
+impl RealMatchApplier {
+    async fn apply_now(&self, hevy_id: &str, strategy: &str) -> Result<String, ApplyFailure> {
+        let now = Utc::now();
+        let failed = |err: &dyn std::fmt::Display| ApplyFailure::Failed(err.to_string());
+        let garmin = poller::open_garmin(&self.db, &self.events, self.clients.as_ref(), now).await.map_err(|e| failed(&e))?;
+        let (hevy, profile, cfg) = hevy_context(&self.db, &garmin, &self.hevy_http, self.development, now).await.map_err(|e| failed(&e))?;
+        let apply = Apply { db: &self.db, garmin: &garmin, cfg: &cfg, profile: &profile };
+        let row = match apply_match_choice(&apply, &hevy, hevy_id, strategy, now).await {
+            Ok(row) => row.ok_or_else(|| ApplyFailure::Failed("the workout disappeared".into()))?,
+            Err(ChoiceError::Failed(StepError::HevyAuth)) => return Err(ApplyFailure::HevyAuth),
+            Err(err) => return Err(failed(&err)),
+        };
+        if matches!(row.status.as_str(), "merged" | "replaced" | "described") {
+            sync::sync_garmin(&self.db, &garmin, &cfg, now, None, None).await.map_err(|e| failed(&e))?;
+        }
+        self.events.publish("refresh");
+        Ok(row.status)
+    }
+}
+
+impl MatchApplier for RealMatchApplier {
+    fn apply<'a>(&'a self, hevy_id: &'a str, strategy: &'a str) -> BoxFuture<'a, Result<String, ApplyFailure>> {
+        Box::pin(self.apply_now(hevy_id, strategy))
+    }
+}
+
 /// The poller's Hevy leg against the real Hevy API. The profile and config
 /// are read fresh each tick, so settings changes apply on the next poll.
 pub struct RealHevyLeg {
@@ -702,11 +751,7 @@ pub struct RealHevyLeg {
 
 impl RealHevyLeg {
     async fn tick(&self, db: &Db, garmin: &GarminClient, strava: Option<&StravaClient>, now: DateTime<Utc>) -> Result<bool, HevyLegError> {
-        let key = db::get_config_value(&db.lock(), "hevy_api_key")?;
-        let key = key.as_ref().and_then(Value::as_str).unwrap_or_default();
-        let hevy = HevyClient::new(self.http.clone(), key).map_err(|e| HevyLegError::Failed(e.into()))?;
-        let profile: Profile = hevy_profile::get_profile(db, garmin, now).await;
-        let cfg = config::load_config(&db.lock(), self.development)?;
+        let (hevy, profile, cfg) = hevy_context(db, garmin, &self.http, self.development, now).await.map_err(HevyLegError::Failed)?;
         let apply = Apply { db, garmin, cfg: &cfg, profile: &profile };
         run_hevy_leg(&apply, &hevy, strava, now).await
     }

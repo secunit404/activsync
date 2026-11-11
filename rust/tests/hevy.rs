@@ -113,10 +113,10 @@ async fn match_waits_out_undo_window_then_applies() {
     let (status, detail) = refused(&h.app, "/api/v1/hevy/hw-dev-syncing/match", Some(json!({"strategy": "describe"}))).await;
     assert_eq!((status, detail.as_str()), (StatusCode::CONFLICT, "This workout is already being matched."));
 
-    assert_eq!(h.state.match_scheduler.run_due().unwrap(), 0, "not due yet");
+    assert_eq!(h.state.match_scheduler.run_due().await.unwrap(), 0, "not due yet");
     assert_eq!(ok(&h.app, Method::GET, "/api/v1/hevy/hw-dev-syncing/match/status", None).await["state"], "waiting");
     h.clock.advance(5.0);
-    assert_eq!(h.state.match_scheduler.run_due().unwrap(), 1);
+    assert_eq!(h.state.match_scheduler.run_due().await.unwrap(), 1);
     assert_eq!(
         ok(&h.app, Method::GET, "/api/v1/hevy/hw-dev-syncing/match/status", None).await,
         json!({"state": "done", "message": "Merged Leg day (Hevy)."})
@@ -139,7 +139,7 @@ async fn undo_inside_window_changes_nothing() {
     ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-syncing/match", Some(json!({"strategy": "describe"}))).await;
     assert_eq!(ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-syncing/match/cancel", None).await, json!({"cancelled": true}));
     h.clock.advance(10.0);
-    assert_eq!(h.state.match_scheduler.run_due().unwrap(), 0);
+    assert_eq!(h.state.match_scheduler.run_due().await.unwrap(), 0);
     assert_eq!(status_of(&h, hevy_seed::SYNCING_ID), "awaiting_match");
     let (status, body) = call(&h.app, Method::GET, "/api/v1/hevy/hw-dev-syncing/match/status", None).await;
     assert_eq!((status, body["detail"].as_str()), (StatusCode::NOT_FOUND, Some("No Hevy match decision for that workout.")));
@@ -151,7 +151,7 @@ async fn skipped_during_window_finishes_as_skipped() {
     ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-syncing/match", Some(json!({"strategy": "merge"}))).await;
     h.clock.advance(5.0);
     hevy_db::set_workout_status(&h.state.db.lock(), hevy_seed::SYNCING_ID, "skipped", None).unwrap();
-    assert_eq!(h.state.match_scheduler.run_due().unwrap(), 1);
+    assert_eq!(h.state.match_scheduler.run_due().await.unwrap(), 1);
     assert_eq!(
         ok(&h.app, Method::GET, "/api/v1/hevy/hw-dev-syncing/match/status", None).await,
         json!({"state": "skipped", "message": null})
@@ -204,7 +204,7 @@ async fn skip_cancels_a_waiting_match() {
     ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-syncing/match", Some(json!({"strategy": "merge"}))).await;
     ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-syncing/skip", None).await;
     h.clock.advance(5.0);
-    assert_eq!(h.state.match_scheduler.run_due().unwrap(), 0);
+    assert_eq!(h.state.match_scheduler.run_due().await.unwrap(), 0);
     assert_eq!(status_of(&h, hevy_seed::SYNCING_ID), "skipped");
 }
 

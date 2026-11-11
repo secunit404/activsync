@@ -211,21 +211,8 @@ impl Poller {
         db::get_config_value(&self.db.lock(), key).ok().flatten()
     }
 
-    /// An expired session pauses Garmin durably: the Settings page shows it
-    /// and the poller stops trying until the user reconnects. An outage is
-    /// shown as a failed attempt and retried.
     async fn garmin(&self, now: DateTime<Utc>) -> Result<GarminClient, PollError> {
-        match self.clients.garmin().await {
-            Ok(garmin) => Ok(garmin),
-            Err(err) => {
-                if matches!(err, GarminError::SessionExpired | GarminError::Unavailable) {
-                    sync::record_sync_outcome(&self.db, now, Some(&err))?;
-                    self.events.publish("refresh");
-                    eprintln!("{err}");
-                }
-                Err(PollError::Garmin(err))
-            }
-        }
+        open_garmin(&self.db, &self.events, self.clients.as_ref(), now).await
     }
 
     pub async fn run_garmin_once(&self, now: DateTime<Utc>) -> Result<GarminSyncStats, PollError> {
@@ -435,6 +422,23 @@ impl Poller {
 
 /// The real clients: Garmin from the token directory, Strava from the
 /// stored tokens and the app's client credentials.
+/// A signed-in Garmin client. An expired session pauses Garmin durably: the
+/// Settings page shows it and the poller stops trying until the user
+/// reconnects. An outage is shown as a failed attempt and retried.
+pub async fn open_garmin(db: &Db, events: &EventBus, clients: &dyn Clients, now: DateTime<Utc>) -> Result<GarminClient, PollError> {
+    match clients.garmin().await {
+        Ok(garmin) => Ok(garmin),
+        Err(err) => {
+            if matches!(err, GarminError::SessionExpired | GarminError::Unavailable) {
+                sync::record_sync_outcome(db, now, Some(&err))?;
+                events.publish("refresh");
+                eprintln!("{err}");
+            }
+            Err(PollError::Garmin(err))
+        }
+    }
+}
+
 pub struct RealClients {
     pub db: Db,
     pub clock: Clock,
