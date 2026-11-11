@@ -7,7 +7,7 @@ use activsync::auth_guard::AuthConfig;
 use activsync::garmin_login::SignIn;
 use activsync::hevy_sync::{RealHevyLeg, RealMatchApplier};
 use activsync::poller::{self, Clients, Poller, RealClients};
-use activsync::{AppState, auth_core, build_app, db::Db, default_web_dir, net, schedule, seed, update_check};
+use activsync::{AppState, auth_core, config, log_info, logging, timefmt, build_app, db::Db, default_web_dir, net, schedule, seed, update_check};
 use openidconnect::http;
 
 const DEV_PASSWORD: &str = "activsync-dev-password";
@@ -20,6 +20,17 @@ fn env_value(name: &str) -> Option<String> {
 
 fn env_enabled(name: &str) -> bool {
     env_value(name).is_some_and(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+}
+
+/// The in-app display timezone, else `TZ`, else Stockholm, as the Python app
+/// picks it for its logs.
+fn log_timezone(db: &Db, development: bool) -> String {
+    let stored = config::load_config(&db.lock(), development).ok().map(|cfg| cfg.display_timezone());
+    [stored, std::env::var("TZ").ok()]
+        .into_iter()
+        .flatten()
+        .find(|tz| timefmt::is_valid_timezone(tz))
+        .unwrap_or_else(|| "Europe/Stockholm".into())
 }
 
 /// An install from before the rename keeps its database name until a new one
@@ -73,6 +84,7 @@ async fn main() {
     let web_dir = std::env::var("ACTIVSYNC_WEB_DIR").map(PathBuf::from).unwrap_or_else(|_| default_web_dir());
 
     let db = Db::open(&db_path).unwrap_or_else(|e| fail(&format!("could not open {}: {e}", db_path.display())));
+    logging::configure(&env_value("ACTIVSYNC_LOG_LEVEL").unwrap_or_else(|| "INFO".into()), &log_timezone(&db, mock || manual_only));
     if mock {
         seed_mock(&db, &auth, host);
     }
@@ -95,7 +107,7 @@ async fn main() {
         (false, true) => "real accounts, Garmin and Strava polling off",
         (false, false) => "real accounts",
     };
-    println!("ActivSync (Rust, {mode}) listening on http://{addr} using {}", db_path.display());
+    log_info!("main", "ActivSync (Rust, {mode}) listening on http://{addr} using {}", db_path.display());
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
@@ -127,7 +139,7 @@ fn seed_mock(db: &Db, auth: &AuthConfig, host: IpAddr) {
     if onboarded && !auth.disabled && !claimed && host.is_loopback() {
         let hash = auth_core::hash_password(DEV_PASSWORD, auth.cost).unwrap_or_else(|e| fail(&e));
         auth_core::set_password_hash(&conn, &hash, now).unwrap_or_else(|e| fail(&e.to_string()));
-        println!("Dev sign-in password: {DEV_PASSWORD}");
+        log_info!("main", "Dev sign-in password: {DEV_PASSWORD}");
     }
 }
 

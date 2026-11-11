@@ -244,17 +244,17 @@ impl SignIn {
                     return Ok(Login::Connected);
                 }
                 Ok(Attempt::Session(_)) => {
-                    eprintln!("Garmin {route} sign-in got a token the API rejected; trying the next route");
+                    crate::log_warn!("garmin_login", "Garmin {route} sign-in got a token the API rejected; trying the next route");
                     last = Some(format!("{route}: token rejected by API tier"));
                 }
                 Err(Failure::Auth(message)) => return Err(GarminError::Invalid(message)),
                 Err(Failure::RateLimited(message)) => {
-                    eprintln!("Garmin {route} sign-in returned 429: {message}");
+                    crate::log_warn!("garmin_login", "Garmin {route} sign-in returned 429: {message}");
                     rate_limited += 1;
                     last = Some(message);
                 }
                 Err(Failure::Connection(message)) => {
-                    eprintln!("Garmin {route} sign-in failed: {message}");
+                    crate::log_warn!("garmin_login", "Garmin {route} sign-in failed: {message}");
                     last = Some(message);
                 }
             }

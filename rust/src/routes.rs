@@ -63,7 +63,7 @@ impl IntoResponse for ApiError {
 
 impl From<rusqlite::Error> for ApiError {
     fn from(err: rusqlite::Error) -> Self {
-        eprintln!("database error: {err}");
+        crate::log_error!("routes", "database error: {err}");
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
     }
 }

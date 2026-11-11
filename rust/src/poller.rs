@@ -314,11 +314,11 @@ impl Poller {
             }
             Err(PollError::Sync(SyncError::Strava(StravaError::RateLimited(retry_at)))) => {
                 self.strava_backoff_until = Some(retry_at);
-                eprintln!("strava rate limit reached; pausing strava sync until {}", retry_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                crate::log_warn!("poller", "strava rate limit reached; pausing strava sync until {}", crate::logging::format_time(retry_at));
                 false
             }
             Err(err) => {
-                eprintln!("{failure}: {err}");
+                crate::log_warn!("poller", "{failure}: {err}");
                 false
             }
         }
@@ -334,7 +334,7 @@ impl Poller {
         if due(self.last_session_prune, now, SESSION_PRUNE_SECONDS) {
             let now_epoch = now.timestamp_micros() as f64 / 1_000_000.0;
             if let Err(err) = crate::auth_core::prune_expired_sessions(&self.db.lock(), now_epoch) {
-                eprintln!("session prune failed: {err}");
+                crate::log_warn!("poller", "session prune failed: {err}");
             }
             self.last_session_prune = Some(now);
         }
@@ -361,9 +361,9 @@ impl Poller {
                 }
                 Err(HevyLegError::Auth) => {
                     db::set_config_value(&self.db.lock(), "hevy_auth_ok", &json!(false))?;
-                    eprintln!("hevy auth failed; pausing hevy sync until the key is updated");
+                    crate::log_warn!("poller", "hevy auth failed; pausing hevy sync until the key is updated");
                 }
-                Err(HevyLegError::Failed(err)) => eprintln!("hevy sync failed: {err}"),
+                Err(HevyLegError::Failed(err)) => crate::log_warn!("poller", "hevy sync failed: {err}"),
             }
             self.last_hevy_run = Some(now);
         }
@@ -387,7 +387,7 @@ impl Poller {
                         }
                     }
                 }
-                Err(err) => eprintln!("garmin sync failed: {err}"),
+                Err(err) => crate::log_warn!("poller", "garmin sync failed: {err}"),
             }
             self.last_garmin_run = Some(now);
         }
@@ -415,7 +415,7 @@ impl Poller {
             loop {
                 let now = DateTime::from_timestamp_micros((clock() * 1_000_000.0) as i64).unwrap_or_default();
                 if let Err(err) = self.loop_once(now).await {
-                    eprintln!("poll tick failed: {err}");
+                    crate::log_warn!("poller", "poll tick failed: {err}");
                 }
                 tokio::time::sleep(self.options.tick).await;
             }
@@ -435,7 +435,7 @@ pub async fn open_garmin(db: &Db, events: &EventBus, clients: &dyn Clients, now:
             if matches!(err, GarminError::SessionExpired | GarminError::Unavailable) {
                 sync::record_sync_outcome(db, now, Some(&err))?;
                 events.publish("refresh");
-                eprintln!("{err}");
+                crate::log_warn!("poller", "{err}");
             }
             Err(PollError::Garmin(err))
         }

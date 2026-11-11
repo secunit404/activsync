@@ -74,8 +74,8 @@ pub async fn get_profile(db: &Db, garmin: &GarminClient, now: DateTime<Utc>) -> 
     if fetched_at.is_none_or(|at| now - at >= Duration::hours(24)) {
         match refresh_cache(db, garmin, now).await {
             Ok(entry) => cache = entry,
-            Err(err) if cache.is_empty() => eprintln!("garmin profile fetch failed ({err}); using default profile"),
-            Err(err) => eprintln!("garmin profile fetch failed ({err}); using cached profile"),
+            Err(err) if cache.is_empty() => crate::log_warn!("hevy_profile", "garmin profile fetch failed ({err}); using default profile"),
+            Err(err) => crate::log_warn!("hevy_profile", "garmin profile fetch failed ({err}); using cached profile"),
         }
     }
     // Read after the slow fetch, so a settings save made meanwhile applies.

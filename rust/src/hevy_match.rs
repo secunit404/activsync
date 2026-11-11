@@ -299,7 +299,7 @@ impl HevyMatchScheduler {
                 (FAILED, Some(AUTH_MESSAGE.into()))
             }
             Err(ApplyFailure::Failed(err)) => {
-                eprintln!("Hevy match decision failed for {hevy_id}: {err}");
+                crate::log_warn!("hevy_match", "Hevy match decision failed for {hevy_id}: {err}");
                 (FAILED, Some(FAILURE_MESSAGE.into()))
             }
         })
@@ -316,14 +316,14 @@ impl HevyMatchScheduler {
         tokio::spawn(async move {
             if let Ok(recovered) = recover(&self.db.lock()) {
                 if recovered > 0 {
-                    eprintln!("resuming {recovered} Hevy match decision(s) interrupted by a restart");
+                    crate::log_info!("hevy_match", "resuming {recovered} Hevy match decision(s) interrupted by a restart");
                 }
             }
             loop {
                 let timeout = match self.run_due().await.and_then(|_| self.sleep_seconds()) {
                     Ok(seconds) => seconds,
                     Err(err) => {
-                        eprintln!("Hevy match scheduler pass failed: {err}");
+                        crate::log_warn!("hevy_match", "Hevy match scheduler pass failed: {err}");
                         1.0
                     }
                 };

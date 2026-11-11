@@ -130,7 +130,7 @@ impl HevyClient {
         }
         if let Some(remaining) = net::header(&response, "x-ratelimit-remaining").and_then(|v| v.parse::<i64>().ok()) {
             if remaining < 10 {
-                eprintln!("Hevy API rate limit low: {remaining} requests remaining");
+                crate::log_warn!("hevy_client", "Hevy API rate limit low: {remaining} requests remaining");
             }
         }
         serde_json::from_slice(response.body()).map_err(|e| HevyError::Malformed(e.to_string()))
@@ -154,7 +154,7 @@ impl HevyClient {
         if let Some(workout) = data.get("workout").filter(|w| w.is_object()) {
             return Ok(Some(workout.clone()));
         }
-        eprintln!("malformed workout response for {workout_id}");
+        crate::log_warn!("hevy_client", "malformed workout response for {workout_id}");
         Ok(None)
     }
 
@@ -163,7 +163,7 @@ impl HevyClient {
         let data = self.get("/workouts/count", &[]).await?;
         let count = data.get("workout_count").filter(|c| c.is_i64() || c.is_u64()).and_then(Value::as_i64);
         if count.is_none_or(|c| c < 0) {
-            eprintln!("unusable workout_count from Hevy");
+            crate::log_warn!("hevy_client", "unusable workout_count from Hevy");
             return Ok(None);
         }
         Ok(count)
@@ -189,7 +189,7 @@ impl HevyClient {
                 if valid_event(event) {
                     events.push(event.clone());
                 } else {
-                    eprintln!("skipping malformed hevy event");
+                    crate::log_warn!("hevy_client", "skipping malformed hevy event");
                 }
             }
             if !more_pages(&data, page) {

@@ -85,7 +85,7 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
     }
     let code = query.code.as_deref().unwrap_or_default();
     if query.error.is_some() || code.is_empty() {
-        eprintln!("strava authorization did not complete: error={:?}", query.error);
+        crate::log_warn!("strava_routes", "strava authorization did not complete: error={:?}", query.error);
         return fail(
             "Strava did not send an authorization back. Try again and check \
              the Authorization Callback Domain if the problem continues.",
@@ -104,7 +104,7 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
     match &state.clients {
         Some(clients) => {
             if let Err(err) = clients.strava().exchange_code(code, query.scope.as_deref()).await {
-                eprintln!("strava code exchange failed: {err}");
+                crate::log_warn!("strava_routes", "strava code exchange failed: {err}");
                 return fail(
                     "Could not complete the Strava connection. Check your client ID \
                      and client secret, then try again.",

@@ -184,7 +184,7 @@ impl StravaClient {
             tokens["scope"] = json!(scope);
         }
         db::set_config_value(&self.db.lock(), "strava_tokens", &tokens).map_err(|e| StravaError::Malformed(e.to_string()))?;
-        eprintln!("strava connected");
+        crate::log_info!("strava_client", "strava connected");
         Ok(())
     }
 
@@ -232,7 +232,7 @@ impl StravaClient {
             let _ = self.send(http::Method::POST, REVOKE_URL, &headers, body).await;
         }
         let _ = db::set_config_value(&self.db.lock(), "strava_tokens", &Value::Null);
-        eprintln!("strava disconnected");
+        crate::log_info!("strava_client", "strava disconnected");
     }
 
     pub async fn update_activity_metadata(&self, strava_activity_id: i64, name: &str, description: &str) -> Result<(), StravaError> {

@@ -133,7 +133,7 @@ fn apply_updated(conn: &Connection, event: &Value) -> rusqlite::Result<()> {
     )?;
     let after = hevy_db::get_workout(conn, &id)?;
     if before.is_none() && after.is_some() {
-        eprintln!("hevy workout {id} ({title}) received, ended {}", text(workout.get("end_time")));
+        crate::log_info!("hevy_sync", "hevy workout {id} ({title}) received, ended {}", text(workout.get("end_time")));
     }
     // A Hevy edit can remove the exercise that needed a mapping. The equality
     // wakes only the current revision and keeps a replay after a crash safe.
@@ -262,7 +262,7 @@ pub async fn apply_mapping_gate(db: &Db, row: &Workout, strategy: &str, hevy: &H
             Ok(template) => template,
             Err(HevyError::Auth) => return Err(StepError::HevyAuth),
             Err(err) => {
-                eprintln!("template fetch failed for {template_id}: {err}");
+                crate::log_warn!("hevy_sync", "template fetch failed for {template_id}: {err}");
                 None
             }
         };
@@ -337,7 +337,7 @@ fn log_transition(conn: &Connection, hevy_id: &str, before: &str) {
     let Ok(Some(after)) = hevy_db::get_workout(conn, hevy_id) else { return };
     if after.status != before {
         let reason = after.error.as_deref().map(|e| format!(" ({e})")).unwrap_or_default();
-        eprintln!("hevy workout {hevy_id} ({}): {before} -> {}{reason}", after.title, after.status);
+        crate::log_info!("hevy_sync", "hevy workout {hevy_id} ({}): {before} -> {}{reason}", after.title, after.status);
     }
 }
 
@@ -443,7 +443,7 @@ pub async fn process_workout(apply: &Apply<'_>, hevy: &HevyClient, row: &Workout
         Ok(()) => Ok(()),
         Err(StepError::HevyAuth) => Err(HevyLegError::Auth),
         Err(StepError::Apply(err)) => {
-            eprintln!("processing hevy workout {} failed: {err}", row.hevy_id);
+            crate::log_warn!("hevy_sync", "processing hevy workout {} failed: {err}", row.hevy_id);
             record_failure(&conn, &row.hevy_id, &err.to_string()).map_err(HevyLegError::from)
         }
     };
@@ -541,7 +541,7 @@ pub async fn apply_match_choice(
     let conn = db.lock();
     if let Err(ChoiceError::Failed(err)) = &outcome {
         if !matches!(err, StepError::HevyAuth) {
-            eprintln!("applying Hevy match choice for {hevy_id} failed: {err}");
+            crate::log_warn!("hevy_sync", "applying Hevy match choice for {hevy_id} failed: {err}");
             record_choice_failure(&conn, hevy_id, &err.to_string())?;
         }
     }
@@ -594,7 +594,7 @@ pub async fn reapply(apply: &Apply<'_>, hevy: &HevyClient, row: &Workout, now: D
             hevy_db::set_workout_status(&conn, &row.hevy_id, "needs_review", Some(error))?;
         }
         Err(err) => {
-            eprintln!("re-applying hevy workout {} failed: {err}", row.hevy_id);
+            crate::log_warn!("hevy_sync", "re-applying hevy workout {} failed: {err}", row.hevy_id);
             hevy_db::set_workout_status(&conn, &row.hevy_id, &row.status, Some(&err.to_string()))?;
         }
     }
@@ -650,7 +650,7 @@ pub async fn strava_catchup(db: &Db, strava: &StravaClient, cfg: &Config) -> Res
                 Err(err) => Err(err),
             };
             if let Err(err) = pushed {
-                eprintln!("strava catch-up failed for {}: {err}", row.hevy_id);
+                crate::log_warn!("hevy_sync", "strava catch-up failed for {}: {err}", row.hevy_id);
                 continue;
             }
             hevy_db::set_applied_strava(&db.lock(), &row.hevy_id, &garmin_applied)?;

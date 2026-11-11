@@ -334,7 +334,7 @@ async fn fetch_backfill(state: &AppState, since: &str) -> Result<(Vec<Value>, Op
         return Ok((hevy_backfill::workouts_since(account, since), Some(total)));
     };
     let fetch_failed = |err: &dyn std::fmt::Display| {
-        eprintln!("hevy backfill fetch failed: {err}");
+        crate::log_warn!("hevy_tools", "hevy backfill fetch failed: {err}");
         ApiError::new(StatusCode::BAD_GATEWAY, format!("Could not fetch workouts from Hevy: {err}"))
     };
     let client = client.map_err(|err| fetch_failed(&err))?;
@@ -372,7 +372,7 @@ fn start_workouts(state: &AppState, hevy_ids: Vec<String>) {
     tokio::spawn(async move {
         for hevy_id in hevy_ids {
             if let Err(err) = hevy_sync::process_now(&db, &events, clients.as_ref(), &http, development, &hevy_id).await {
-                eprintln!("starting Hevy workout {hevy_id} failed: {err}");
+                crate::log_warn!("hevy_tools", "starting Hevy workout {hevy_id} failed: {err}");
             }
         }
     });

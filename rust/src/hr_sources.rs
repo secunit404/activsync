@@ -70,7 +70,7 @@ pub async fn passive_hr_for_window(garmin: &GarminClient, start: DateTime<Utc>, 
         let daily = match garmin.get_daily_heart_rates(&date).await {
             Ok(daily) => daily,
             Err(err) => {
-                eprintln!("daily HR fetch failed for {date}: {err}");
+                crate::log_warn!("hr_sources", "daily HR fetch failed for {date}: {err}");
                 return Vec::new();
             }
         };

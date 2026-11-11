@@ -364,7 +364,7 @@ pub async fn oidc_callback(
     }
     let linked = config.and_then(|c| c.linked);
     if !linked.is_some_and(|l| l.iss == result.iss && l.sub == result.sub) {
-        eprintln!("OIDC sign-in by {} at {} refused; it is not the linked account", result.sub, result.iss);
+        crate::log_warn!("oidc_routes", "OIDC sign-in by {} at {} refused; it is not the linked account", result.sub, result.iss);
         return Ok(login_error("oidc_mismatch"));
     }
     let cookies = start_session(&state, &headers, &ctx, OIDC_METHOD)?;

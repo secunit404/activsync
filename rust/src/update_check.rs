@@ -70,7 +70,7 @@ async fn latest_tag(http: &Http) -> Result<String, String> {
 pub async fn refresh(http: &Http, cache: &UpdateCache, current: &str) {
     match latest_tag(http).await {
         Ok(latest) => cache.set(UpdateStatus { available: is_newer(&latest, current), latest }),
-        Err(err) => eprintln!("update check failed: {err}"),
+        Err(err) => crate::log_debug!("update_check", "update check failed: {err}"),
     }
 }
 

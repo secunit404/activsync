@@ -177,7 +177,7 @@ pub async fn begin(
     let client = match metadata(http, config).await.and_then(|m| client_for(m, config, redirect_uri)) {
         Ok(client) => client,
         Err(err) => {
-            eprintln!("could not start OIDC sign-in with {}: {err}", config.issuer);
+            crate::log_warn!("oidc_flow", "could not start OIDC sign-in with {}: {err}", config.issuer);
             return Err(fail("oidc_unavailable", intent));
         }
     };
@@ -239,57 +239,57 @@ pub async fn finish(
         return Err(fail("oidc_state", &intent));
     }
     if let Some(error) = callback.error {
-        eprintln!("OIDC sign-in with {} failed: {error}", config.issuer);
+        crate::log_warn!("oidc_flow", "OIDC sign-in with {} failed: {error}", config.issuer);
         return Err(fail("oidc_unavailable", &intent));
     }
     let Some(code) = callback.code else {
-        eprintln!("OIDC provider {} returned no code", config.issuer);
+        crate::log_warn!("oidc_flow", "OIDC provider {} returned no code", config.issuer);
         return Err(fail("oidc_unavailable", &intent));
     };
     let client = match metadata(http, config).await.and_then(|m| client_for(m, config, &flow.redirect_uri)) {
         Ok(client) => client,
         Err(err) => {
-            eprintln!("OIDC provider {} is unreachable: {err}", config.issuer);
+            crate::log_warn!("oidc_flow", "OIDC provider {} is unreachable: {err}", config.issuer);
             return Err(fail("oidc_unavailable", &intent));
         }
     };
     let caller = Caller(http);
     let exchange = client.exchange_code(AuthorizationCode::new(code.into())).map_err(|err| {
-        eprintln!("OIDC provider {} has no token endpoint: {err}", config.issuer);
+        crate::log_warn!("oidc_flow", "OIDC provider {} has no token endpoint: {err}", config.issuer);
         fail("oidc_unavailable", &intent)
     })?;
     let token = match exchange.set_pkce_verifier(PkceCodeVerifier::new(flow.verifier.clone())).request_async(&caller).await {
         Ok(token) => token,
         Err(RequestTokenError::ServerResponse(response)) => {
-            eprintln!("OIDC sign-in with {} failed: {response}", config.issuer);
+            crate::log_warn!("oidc_flow", "OIDC sign-in with {} failed: {response}", config.issuer);
             let denied = response.error().to_string() == "access_denied";
             return Err(fail(if denied { "oidc_denied" } else { "oidc_unavailable" }, &intent));
         }
         Err(err) => {
-            eprintln!("OIDC provider {} is unreachable: {err}", config.issuer);
+            crate::log_warn!("oidc_flow", "OIDC provider {} is unreachable: {err}", config.issuer);
             return Err(fail("oidc_unavailable", &intent));
         }
     };
     let Some(id_token) = token.id_token() else {
-        eprintln!("OIDC provider {} returned no ID token", config.issuer);
+        crate::log_warn!("oidc_flow", "OIDC provider {} returned no ID token", config.issuer);
         return Err(fail("oidc_unavailable", &intent));
     };
     let verifier = client.id_token_verifier().set_allowed_algs(ALLOWED_ALGS);
     let claims = match id_token.claims(&verifier, &Nonce::new(flow.nonce.clone())) {
         Ok(claims) => claims.clone(),
         Err(err) => {
-            eprintln!("rejected an OIDC ID token from {}: {err}", config.issuer);
+            crate::log_warn!("oidc_flow", "rejected an OIDC ID token from {}: {err}", config.issuer);
             return Err(fail("oidc_state", &intent));
         }
     };
     let iss = claims.issuer().as_str().to_string();
     let sub = claims.subject().as_str().to_string();
     if iss.is_empty() || sub.is_empty() {
-        eprintln!("OIDC provider {} returned no ID token", config.issuer);
+        crate::log_warn!("oidc_flow", "OIDC provider {} returned no ID token", config.issuer);
         return Err(fail("oidc_unavailable", &intent));
     }
     let info: Option<CoreUserInfoClaims> = match client.user_info(token.access_token().clone(), Some(claims.subject().clone())) {
-        Ok(request) => request.request_async(&caller).await.map_err(|e| eprintln!("OIDC userinfo lookup failed: {e}")).ok(),
+        Ok(request) => request.request_async(&caller).await.map_err(|e| crate::log_warn!("oidc_flow", "OIDC userinfo lookup failed: {e}")).ok(),
         Err(_) => None,
     };
     let from_info = info.as_ref().and_then(|i| {

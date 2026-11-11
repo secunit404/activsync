@@ -44,7 +44,7 @@ async fn finalize_garmin_connect(state: &AppState) -> Result<(), ApiError> {
         Err(err) => Err(err.to_string()),
     };
     if let Err(err) = fetched {
-        eprintln!("Garmin category prefetch after connect failed: {err}");
+        crate::log_warn!("garmin_routes", "Garmin category prefetch after connect failed: {err}");
     }
     Ok(())
 }

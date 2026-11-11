@@ -215,7 +215,7 @@ pub fn workout_detail(
         })
         .collect();
     let preview = generate_description(payload, None, None, template).map_err(|err| {
-        eprintln!("Hevy description template is invalid: {err}");
+        crate::log_warn!("hevy_queue", "Hevy description template is invalid: {err}");
         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
     })?;
     Ok(HevyWorkoutDetail {

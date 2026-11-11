@@ -461,10 +461,10 @@ fn authenticate(state: &AppState, headers: &HeaderMap, ctx: &RequestContext) -> 
                 if value == proxy.user {
                     return Ok(Authenticated::Yes(AuthState { user: Some(value.into()), ..AuthState::of("proxy") }));
                 }
-                eprintln!("proxy at {:?} asserted {}={value:?}, which is not the configured owner", ctx.peer, proxy.header);
+                crate::log_warn!("auth_guard", "proxy at {:?} asserted {}={value:?}, which is not the configured owner", ctx.peer, proxy.header);
                 return Ok(Authenticated::Rejected);
             }
-            eprintln!("ignored {} from untrusted peer {:?}; is something bypassing the proxy?", proxy.header, ctx.peer);
+            crate::log_warn!("auth_guard", "ignored {} from untrusted peer {:?}; is something bypassing the proxy?", proxy.header, ctx.peer);
         }
     }
     let Some(token) = cookie(headers, ctx.session_cookie()).filter(|t| !t.is_empty()) else {
@@ -589,7 +589,7 @@ async fn guarded(
             None => host_is_allowed(host, &state.auth.allowed_hosts),
         };
         if !accepted {
-            eprintln!("rejected a request for Host {:?}", host.unwrap_or_default().chars().take(255).collect::<String>());
+            crate::log_warn!("auth_guard", "rejected a request for Host {:?}", host.unwrap_or_default().chars().take(255).collect::<String>());
             let message = if public_origin.is_some() { PUBLIC_HOST_MESSAGE } else { UNKNOWN_HOST_MESSAGE };
             return (StatusCode::BAD_REQUEST, message).into_response();
         }
@@ -599,7 +599,7 @@ async fn guarded(
     let auth = match authenticate(&state, &headers, &ctx) {
         Ok(auth) => auth,
         Err(err) => {
-            eprintln!("database error while signing in: {err}");
+            crate::log_error!("auth_guard", "database error while signing in: {err}");
             return detail(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error");
         }
     };
@@ -626,7 +626,7 @@ async fn guarded(
             None => format!("{}://{}", if https { "https" } else { "http" }, host.unwrap_or_default()),
         };
         if let Some(problem) = csrf_problem(&headers, &expected) {
-            eprintln!("blocked {method} {path}: {problem}");
+            crate::log_warn!("auth_guard", "blocked {method} {path}: {problem}");
             return detail(StatusCode::FORBIDDEN, "This request was blocked as cross-site.");
         }
     }

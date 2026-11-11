@@ -239,7 +239,7 @@ async fn prefetch_templates(state: &AppState, hevy: &HevyClient) {
     loop {
         let (templates, more) = match hevy.get_exercise_templates_page(page).await {
             Ok(found) => found,
-            Err(err) => return eprintln!("Hevy template prefetch after connect failed: {err}"),
+            Err(err) => return crate::log_warn!("settings_routes", "Hevy template prefetch after connect failed: {err}"),
         };
         let conn = state.db.lock();
         for template in &templates {
@@ -247,7 +247,7 @@ async fn prefetch_templates(state: &AppState, hevy: &HevyClient) {
                 continue;
             };
             if let Err(err) = hevy_sync::store_template(&conn, template, id, "") {
-                return eprintln!("Hevy template prefetch after connect failed: {err}");
+                return crate::log_warn!("settings_routes", "Hevy template prefetch after connect failed: {err}");
             }
         }
         if !more {
@@ -347,6 +347,7 @@ pub async fn save_preferences(
         cfg.set("strava_poll_interval_minutes", json!(p.strava_poll_interval_minutes));
         cfg.set("lookback_days", json!(p.lookback_days));
     })?;
+    crate::logging::set_timezone(&p.display_timezone);
     state.events.publish("refresh");
     action(&state, &conn, "Preferences saved.", false)
 }

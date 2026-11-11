@@ -22,7 +22,7 @@ type ApiResult<T> = Result<Json<T>, ApiError>;
 /// An unexpected failure, as the Python app's unhandled errors: logged, and
 /// a bare 500 to the page.
 fn server_error(context: &str, err: impl std::fmt::Display) -> ApiError {
-    eprintln!("{context}: {err}");
+    crate::log_error!("sync_routes", "{context}: {err}");
     ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
 }
 
@@ -167,7 +167,7 @@ pub(crate) async fn run_catch_up(state: &AppState, last_sync_ok_at: Option<Optio
             });
             db::set_config_value(&state.db.lock(), "catch_up_report", &report.unwrap_or(Value::Null))?;
         }
-        Err(err) => eprintln!("catch-up sync after reconnect failed: {err}"),
+        Err(err) => crate::log_warn!("sync_routes", "catch-up sync after reconnect failed: {err}"),
     }
     state.events.publish("refresh");
     Ok(())

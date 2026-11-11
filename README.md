@@ -315,8 +315,7 @@ password and fake sign-ins as `make dev`. Without `ACTIVSYNC_DEV_MOCK_DATA=1` th
 server connects to the real accounts. It then reads the variables from
 [Configuration](#configuration), plus `ACTIVSYNC_HOST` (listen address,
 default `127.0.0.1`; the image sets `0.0.0.0`) and `PORT` (default `8383`; the
-image sets `8381`). `TZ` and `ACTIVSYNC_LOG_LEVEL` are not used yet: the Rust
-server writes its log lines to standard error without timestamps. The image uses
+image sets `8381`). Its log lines look like the Python app's. The image uses
 the same `/config` volume, UID and port as the Python image.
 
 Garmin sign-in tries Garmin's mobile sign-in first, then its two web sign-in

@@ -29,6 +29,7 @@ pub mod hevy_settings;
 pub mod hevy_sync;
 pub mod hevy_tools;
 pub mod hr_sources;
+pub mod logging;
 pub mod mock;
 pub mod net;
 pub mod oidc_config;
@@ -116,7 +117,7 @@ impl AppState {
         let match_scheduler = HevyMatchScheduler::new(db.clone(), events.clone(), clock, window_seconds);
         let setup_code = SetupCode::default();
         if let Err(err) = setup_code.ensure(&db.lock(), auth.disabled) {
-            eprintln!("could not read the owner record: {err}");
+            crate::log_error!("server", "could not read the owner record: {err}");
         }
         Self {
             db,
@@ -301,7 +302,9 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
                 .service(spa),
         );
     }
-    app.layer(axum::middleware::from_fn_with_state(state.clone(), auth_guard::guard)).with_state(state)
+    app.layer(axum::middleware::from_fn_with_state(state.clone(), auth_guard::guard))
+        .layer(axum::middleware::from_fn(logging::access_log))
+        .with_state(state)
 }
 
 pub fn default_web_dir() -> PathBuf {

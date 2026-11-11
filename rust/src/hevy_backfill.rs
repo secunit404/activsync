@@ -44,7 +44,7 @@ const PAGE_SIZE: i64 = 10;
 /// only bounds the scan and labels the preview, so an outage degrades.
 pub async fn account_workout_count(client: &HevyClient) -> Option<i64> {
     client.get_workout_count().await.unwrap_or_else(|err| {
-        eprintln!("hevy workout count unavailable: {err}");
+        crate::log_warn!("hevy_backfill", "hevy workout count unavailable: {err}");
         None
     })
 }
@@ -282,7 +282,7 @@ pub fn run_items(conn: &Connection, items: &[&Item]) -> DbResult<usize> {
             continue;
         }
         if !hevy_db::claim_source(conn, hevy_id, twin.garmin_activity_id)? {
-            eprintln!("backfill twin for {hevy_id} already claimed");
+            crate::log_warn!("hevy_backfill", "backfill twin for {hevy_id} already claimed");
             hevy_db::set_workout_status(conn, hevy_id, "needs_review", Some("backfill match was claimed by another workout"))?;
             continue;
         }

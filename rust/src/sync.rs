@@ -271,7 +271,7 @@ async fn publish_row(services: &Services<'_>, garmin_activity_id: i64, now: Date
         match services.strava.publish_strength(garmin_activity_id, &document, Some(&row.title), description).await {
             Ok(id) => strava_id = Some(id),
             Err(StravaError::Rejected(reason)) => {
-                eprintln!("strava upload {garmin_activity_id}: Strava rejected Hevy's sets, uploading the FIT instead: {reason}");
+                crate::log_warn!("sync", "strava upload {garmin_activity_id}: Strava rejected Hevy's sets, uploading the FIT instead: {reason}");
             }
             Err(err) => return Err(err.into()),
         }
@@ -303,7 +303,7 @@ fn strength_document(db: &Db, garmin_activity_id: i64, fit: &[u8]) -> SyncResult
     match built {
         Ok(document) => Ok(Some(document)),
         Err(reason) => {
-            eprintln!("strava upload {garmin_activity_id}: uploading the FIT instead of Hevy's sets: {reason}");
+            crate::log_warn!("sync", "strava upload {garmin_activity_id}: uploading the FIT instead of Hevy's sets: {reason}");
             Ok(None)
         }
     }
@@ -346,7 +346,7 @@ pub async fn sync_garmin(
         Ok(fetched) => fetched,
         Err(err) => {
             record_sync_outcome(db, now, Some(&err))?;
-            eprintln!("garmin fetch failed: {err}");
+            crate::log_warn!("sync", "garmin fetch failed: {err}");
             return Err(err.into());
         }
     };
@@ -410,7 +410,7 @@ pub async fn sync_garmin(
     }
     drop(conn);
     record_sync_outcome(db, now, None)?;
-    eprintln!("garmin sync: {} new, {} updated, {} removed", stats.new, stats.updated, stats.removed);
+    crate::log_info!("sync", "garmin sync: {} new, {} updated, {} removed", stats.new, stats.updated, stats.removed);
     Ok(stats)
 }
 
@@ -437,20 +437,20 @@ pub async fn publish_pending(services: &Services<'_>, now: DateTime<Utc>, select
                 Ok(()) => stats.published += 1,
                 Err(SyncError::Blocked(reason)) => {
                     if manual {
-                        eprintln!("publish blocked for activity {id}: {reason}");
+                        crate::log_warn!("sync", "publish blocked for activity {id}: {reason}");
                     }
                     stats.blocked += 1;
                     stats.blocked_reasons.push(reason);
                 }
                 Err(err) => {
-                    eprintln!("publish failed for activity {id}: {err}");
+                    crate::log_warn!("sync", "publish failed for activity {id}: {err}");
                     stats.failed += 1;
                 }
             }
         }
     }
     if stats.published > 0 || stats.failed > 0 || (manual && stats.blocked > 0) {
-        eprintln!("strava publish: {} published, {} failed, {} blocked", stats.published, stats.failed, stats.blocked);
+        crate::log_info!("sync", "strava publish: {} published, {} failed, {} blocked", stats.published, stats.failed, stats.blocked);
     }
     Ok(stats)
 }
@@ -502,10 +502,10 @@ pub async fn check_strava_status(
         }
     }
     if stats.flagged_missing > 0 {
-        eprintln!("strava status check: {} activities flagged missing", stats.flagged_missing);
+        crate::log_info!("sync", "strava status check: {} activities flagged missing", stats.flagged_missing);
     }
     if stats.linked_existing > 0 {
-        eprintln!("strava status check: {} activities linked to existing Strava entries", stats.linked_existing);
+        crate::log_info!("sync", "strava status check: {} activities linked to existing Strava entries", stats.linked_existing);
     }
     Ok(stats)
 }
@@ -613,12 +613,13 @@ pub async fn catch_up_sync(
     let garmin = if garmin_connected {
         sync_garmin(services.db, services.garmin, cfg, now, Some(lookback), Some(hold_before)).await?
     } else {
-        eprintln!("catch-up: garmin is not connected, skipping the garmin fetch");
+        crate::log_info!("sync", "catch-up: garmin is not connected, skipping the garmin fetch");
         GarminSyncStats::default()
     };
     let status_lookback = strava_status_lookback_days(&services.db.lock(), cfg, now)?;
     let status = check_strava_status(services.db, services.strava, cfg, now, Some(status_lookback)).await?;
-    eprintln!(
+    crate::log_info!(
+        "sync",
         "catch-up sync over {lookback} days (status {status_lookback} days): {} new ({} held as backlog), {} linked",
         garmin.new, garmin.held_backlog, status.linked_existing
     );

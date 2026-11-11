@@ -289,7 +289,7 @@ impl PublishScheduler {
             Some(clients) => match clients.garmin().await {
                 Ok(garmin) => Some((garmin, clients.strava())),
                 Err(err) => {
-                    eprintln!("scheduled publish could not reach Garmin or Strava: {err}");
+                    crate::log_warn!("schedule", "scheduled publish could not reach Garmin or Strava: {err}");
                     let message = format!("Could not publish activity: {err}");
                     for (id, _) in &claimed {
                         finish(&self.db.lock(), *id, FAILED, Some(&message), self.now())?;
@@ -323,13 +323,13 @@ impl PublishScheduler {
         let services = Services { db: &self.db, garmin, strava };
         Ok(match sync::publish_now(&services, id, Utc::now()).await {
             Ok(()) => {
-                eprintln!("published activity {id} to Strava");
+                crate::log_info!("schedule", "published activity {id} to Strava");
                 (PUBLISHED, None)
             }
             Err(SyncError::Blocked(reason)) => (BLOCKED, Some(format!("Activity was blocked by Hevy sync: {reason}."))),
             Err(SyncError::Strava(StravaError::Auth(message))) => (FAILED, Some(message)),
             Err(err) => {
-                eprintln!("scheduled publish failed for activity {id}: {err}");
+                crate::log_warn!("schedule", "scheduled publish failed for activity {id}: {err}");
                 (FAILED, Some(format!("Could not publish activity: {err}")))
             }
         })
@@ -346,14 +346,14 @@ impl PublishScheduler {
         tokio::spawn(async move {
             if let Ok(recovered) = recover(&self.db.lock()) {
                 if recovered > 0 {
-                    eprintln!("resuming {recovered} publish(es) interrupted by a restart");
+                    crate::log_info!("schedule", "resuming {recovered} publish(es) interrupted by a restart");
                 }
             }
             loop {
                 let timeout = match self.run_due().await.and_then(|_| self.sleep_seconds()) {
                     Ok(seconds) => seconds,
                     Err(err) => {
-                        eprintln!("publish scheduler pass failed: {err}");
+                        crate::log_warn!("schedule", "publish scheduler pass failed: {err}");
                         1.0
                     }
                 };

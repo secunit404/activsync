@@ -474,7 +474,7 @@ impl SetupCode {
 
     fn issue() -> String {
         let code = new_setup_code();
-        eprintln!("ActivSync is unclaimed. Open the app and enter setup code {code}");
+        crate::log_warn!("auth_core", "ActivSync is unclaimed. Open the app and enter setup code {code}");
         code
     }
 }

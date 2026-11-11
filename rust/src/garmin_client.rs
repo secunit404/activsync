@@ -656,7 +656,7 @@ impl GarminClient {
                     let _ = save_tokens(path, &self.tokens());
                 }
             }
-            Err(err) => eprintln!("garmin token refresh failed: {err}"),
+            Err(err) => crate::log_warn!("garmin_client", "garmin token refresh failed: {err}"),
         }
     }
 
@@ -799,7 +799,7 @@ impl GarminClient {
         if truthy(&failures) && activity_id.is_none() && !truthy(&successes) {
             return Err(GarminError::UploadRejected(format!("Garmin rejected upload: {}", py_repr(&failures))));
         }
-        eprintln!("fit upload: upload_id={upload_id:?} activity_id={activity_id:?}");
+        crate::log_info!("garmin_client", "fit upload: upload_id={upload_id:?} activity_id={activity_id:?}");
         Ok(UploadResult { upload_id, activity_id })
     }
 
@@ -825,7 +825,7 @@ impl GarminClient {
         let path = format!("{ACTIVITY_PATH}/{}", positive_id(activity_id)?);
         let request = Request { method: http::Method::DELETE, ..Request::get(&path) };
         self.paced(self.run(request).await.map(drop)).await?;
-        eprintln!("deleted garmin activity {activity_id}");
+        crate::log_info!("garmin_client", "deleted garmin activity {activity_id}");
         Ok(())
     }
 
@@ -848,7 +848,7 @@ impl GarminClient {
         let user_data = match self.paced(self.get_json(USER_SETTINGS_PATH, &[]).await).await {
             Ok(settings) => settings.get("userData").filter(|d| truthy(d)).cloned().unwrap_or(json!({})),
             Err(err) => {
-                eprintln!("user profile fetch failed: {err}");
+                crate::log_warn!("garmin_client", "user profile fetch failed: {err}");
                 json!({})
             }
         };
