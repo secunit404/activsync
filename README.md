@@ -306,6 +306,7 @@ image.
 make dev-rust        # React UI on :8382, Rust API on :8383, mock data
 make dev-rust-fresh  # the same, starting at the first-run wizard
 make dev-real-rust   # the Rust twin of `make dev-real`, with the same checks
+make dev-real-rust-fresh  # real accounts from a clean slate (see below)
 make test-rust       # the Rust test suite
 make docker-rust     # build the image `activsync-rust` from rust/Dockerfile
 ```
@@ -317,6 +318,14 @@ server connects to the real accounts. It then reads the variables from
 default `127.0.0.1`; the image sets `0.0.0.0`) and `PORT` (default `8383`; the
 image sets `8381`). Its log lines look like the Python app's. The image uses
 the same `/config` volume, UID and port as the Python image.
+
+`make dev-real-rust-fresh` starts at the setup wizard with a database and Garmin
+session of its own (`data/activsync-rust-real.db`, `data/.garminconnect-rust`),
+wiped each time, so you connect your accounts anew; the setup code is printed
+in the terminal. It never touches the `make dev-real` database. Strava accepts
+`localhost` as a callback domain, so your existing Strava API app works. Like
+`dev-real`, it only checks for an instance on this machine's port 8381: pause
+ActivSync wherever else it runs, or both will act on the same accounts.
 
 Garmin sign-in tries Garmin's mobile sign-in first, then its two web sign-in
 forms. Unlike the Python app, the Rust server does not imitate a web browser's

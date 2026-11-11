@@ -1,4 +1,4 @@
-.PHONY: install dev dev-api dev-web dev-fresh dev-real dev-real-check test test-python test-web dev-rust dev-rust-fresh dev-api-rust dev-real-rust dev-api-real-rust test-rust docker-rust
+.PHONY: install dev dev-api dev-web dev-fresh dev-real dev-real-check test test-python test-web dev-rust dev-rust-fresh dev-api-rust dev-real-rust dev-real-rust-fresh dev-api-real-rust dev-real-db-check dev-real-port-check test-rust docker-rust
 
 # Create the virtualenv and install the app with dev extras (editable).
 install:
@@ -33,8 +33,12 @@ REAL_DB_PATH ?= data/activsync.db
 dev-real: dev-real-check
 	REAL_DB_PATH="$(REAL_DB_PATH)" npm run dev:real
 
-dev-real-check:
+dev-real-check: dev-real-db-check dev-real-port-check
+
+dev-real-db-check:
 	@test -f "$(REAL_DB_PATH)" || (echo "Refusing to start: real database not found at $(REAL_DB_PATH)"; exit 1)
+
+dev-real-port-check:
 	@if curl -fsS --max-time 1 http://127.0.0.1:8381/health >/dev/null 2>&1; then \
 		echo "Refusing to start: ActivSync is already running on :8381. Stop it first to avoid two instances using your real accounts."; \
 		exit 1; \
@@ -68,11 +72,26 @@ dev-rust-fresh:
 
 # Real accounts, as `dev-real`: same database and checks, Garmin and Strava
 # polling off, Hevy matches held for review.
+GARMIN_TOKEN_DIR ?= data/.garminconnect
+
 dev-real-rust: dev-real-check
 	npx concurrently --kill-others --names api-rs-real,web --prefix-colors yellow,green "$(MAKE) dev-api-real-rust" "npm run dev:web"
 
-dev-api-real-rust: dev-real-check
-	ACTIVSYNC_DEV_MOCK_DATA=0 ACTIVSYNC_MANUAL_ONLY=1 ACTIVSYNC_DB_PATH="$(REAL_DB_PATH)" ACTIVSYNC_GARMIN_TOKEN_DIR=data/.garminconnect $(CARGO) run --manifest-path rust/Cargo.toml
+dev-api-real-rust: dev-real-port-check
+	ACTIVSYNC_DEV_MOCK_DATA=0 ACTIVSYNC_MANUAL_ONLY=1 ACTIVSYNC_DB_PATH="$(REAL_DB_PATH)" ACTIVSYNC_GARMIN_TOKEN_DIR="$(GARMIN_TOKEN_DIR)" $(CARGO) run --manifest-path rust/Cargo.toml
+
+# Real accounts from a clean slate: a database and Garmin session of its own,
+# wiped first, so the setup wizard connects your accounts anew. The database
+# behind `dev-real` is never touched.
+FRESH_DB_PATH ?= data/activsync-rust-real.db
+FRESH_TOKEN_DIR ?= data/.garminconnect-rust
+
+dev-real-rust-fresh: dev-real-port-check
+	@test "$(FRESH_DB_PATH)" != "$(REAL_DB_PATH)" || (echo "Refusing to wipe $(FRESH_DB_PATH): it is the dev-real database"; exit 1)
+	@test "$(FRESH_TOKEN_DIR)" != "$(GARMIN_TOKEN_DIR)" || (echo "Refusing to wipe $(FRESH_TOKEN_DIR): it is the dev-real Garmin session"; exit 1)
+	rm -rf "$(FRESH_DB_PATH)" "$(FRESH_DB_PATH)-shm" "$(FRESH_DB_PATH)-wal" "$(FRESH_TOKEN_DIR)"
+	npx concurrently --kill-others --names api-rs-real,web --prefix-colors yellow,green \
+		"$(MAKE) dev-api-real-rust REAL_DB_PATH=$(FRESH_DB_PATH) GARMIN_TOKEN_DIR=$(FRESH_TOKEN_DIR)" "npm run dev:web"
 
 docker-rust:
 	docker build -f rust/Dockerfile -t activsync-rust .
