@@ -10,10 +10,11 @@ use serde_json::Value;
 
 use crate::exercise_tables::{self as tables, TABLES, garmin_exercise_label, strava_exercise_label};
 use crate::hevy_backfill::{self, Item, workout_id};
+use crate::hevy_client::HevyError;
 use crate::hevy_queue::{HevyWorkoutDetail, workout_detail};
 use crate::routes::{ApiError, ApiResult, development};
 use crate::view::GARMIN_ACTIVITY_URL;
-use crate::{AppState, config, db, hevy_db, timefmt, view};
+use crate::{AppState, config, db, hevy_db, hevy_sync, timefmt, view};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -190,7 +191,7 @@ pub async fn save_mapping(
             return Err(not_found());
         }
         hevy_db::save_mapping(&conn, &template_id, request.category, request.subcategory)?;
-        hevy_db::wake_needs_mapping(&conn, &template_id)?.len()
+        start_woken(&state, &conn, &hevy_db::wake_needs_mapping(&conn, &template_id)?)?
     };
     state.events.publish("refresh");
     Ok(Json(ToolActionResult { message: format!("Exercise mapping saved.{}", resumed(woken)) }))
@@ -204,7 +205,7 @@ pub async fn delete_mapping(State(state): State<AppState>, Path(template_id): Pa
         };
         hevy_db::delete_mapping(&conn, &template_id)?;
         if mapping.has_standard_mapping {
-            let woken = hevy_db::wake_needs_mapping(&conn, &template_id)?.len();
+            let woken = start_woken(&state, &conn, &hevy_db::wake_needs_mapping(&conn, &template_id)?)?;
             format!("Standard mapping restored.{}", resumed(woken))
         } else {
             "Exercise mapping removed.".to_string()
@@ -314,25 +315,80 @@ fn backfill_item(item: &Item, template: Option<&str>) -> Result<BackfillItem, Ap
 struct Backfill {
     raw: Vec<Item>,
     items: Vec<BackfillItem>,
-    total: usize,
+    total: Option<i64>,
 }
 
-fn build_backfill(state: &AppState, conn: &Connection, since: &str) -> Result<Backfill, ApiError> {
-    if !db::truthy(db::get_config_value(conn, "hevy_api_key")?.as_ref()) {
+/// The workouts since the typed date, read from Hevy before the database is
+/// locked, with the account total when Hevy gave one.
+async fn fetch_backfill(state: &AppState, since: &str) -> Result<(Vec<Value>, Option<i64>), ApiError> {
+    let api_key = db::get_config_value(&state.db.lock(), "hevy_api_key")?;
+    let Some(api_key) = api_key.filter(|key| db::truthy(Some(key))) else {
         return Err(ApiError::conflict("Connect Hevy before using history tools."));
-    }
+    };
     let Some(since) = timefmt::parse_timestamp(since) else {
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "Enter the backfill start date as YYYY-MM-DD."));
     };
-    let now = DateTime::<Utc>::from_timestamp_micros((state.scheduler.now() * 1_000_000.0) as i64).unwrap_or_default();
-    let account = hevy_backfill::account(now);
-    let total = account.len();
+    let Some(client) = state.real_hevy(api_key.as_str().unwrap_or_default()) else {
+        let account = hevy_backfill::account(scheduler_now(state));
+        let total = account.len() as i64;
+        return Ok((hevy_backfill::workouts_since(account, since), Some(total)));
+    };
+    let fetch_failed = |err: &dyn std::fmt::Display| {
+        eprintln!("hevy backfill fetch failed: {err}");
+        ApiError::new(StatusCode::BAD_GATEWAY, format!("Could not fetch workouts from Hevy: {err}"))
+    };
+    let client = client.map_err(|err| fetch_failed(&err))?;
+    let total = hevy_backfill::account_workout_count(&client).await;
+    match hevy_backfill::fetch_since(&client, since, total).await {
+        Ok(workouts) => Ok((workouts, total)),
+        Err(HevyError::Auth) => Err(ApiError::new(StatusCode::UNAUTHORIZED, "Hevy rejected the stored API key — reconnect Hevy.")),
+        Err(err) => Err(fetch_failed(&err)),
+    }
+}
+
+fn scheduler_now(state: &AppState) -> DateTime<Utc> {
+    DateTime::<Utc>::from_timestamp_micros((state.scheduler.now() * 1_000_000.0) as i64).unwrap_or_default()
+}
+
+fn build_backfill(state: &AppState, conn: &Connection, workouts: Vec<Value>, total: Option<i64>) -> Result<Backfill, ApiError> {
     let cfg = config::load_config(conn, development(state))?;
-    let raw = hevy_backfill::preview_items(conn, hevy_backfill::workouts_since(account, since), &cfg, now)?;
+    let raw = hevy_backfill::preview_items(conn, workouts, &cfg, scheduler_now(state))?;
     let template = db::get_config_value(conn, "hevy_description_template")?;
     let template = template.as_ref().and_then(Value::as_str);
     let items = raw.iter().map(|item| backfill_item(item, template)).collect::<Result<_, _>>()?;
     Ok(Backfill { raw, items, total })
+}
+
+/// Hands workouts to the Hevy pipeline now rather than at the next Hevy
+/// poll; the pipeline still owns every safety gate. Real accounts only.
+fn start_workouts(state: &AppState, hevy_ids: Vec<String>) {
+    let (Some(clients), Some(http)) = (state.clients.clone(), state.hevy_http.clone()) else {
+        return;
+    };
+    if hevy_ids.is_empty() {
+        return;
+    }
+    let (db, events, development) = (state.db.clone(), state.events.clone(), development(state));
+    tokio::spawn(async move {
+        for hevy_id in hevy_ids {
+            if let Err(err) = hevy_sync::process_now(&db, &events, clients.as_ref(), &http, development, &hevy_id).await {
+                eprintln!("starting Hevy workout {hevy_id} failed: {err}");
+            }
+        }
+    });
+}
+
+/// Mapping saves resume parked workouts; those now waiting for their watch
+/// activity start straight away.
+fn start_woken(state: &AppState, conn: &Connection, woken: &[String]) -> rusqlite::Result<usize> {
+    let mut waiting = Vec::new();
+    for hevy_id in woken {
+        if hevy_db::get_workout(conn, hevy_id)?.is_some_and(|w| w.status == "waiting_watch") {
+            waiting.push(hevy_id.clone());
+        }
+    }
+    start_workouts(state, waiting);
+    Ok(woken.len())
 }
 
 pub async fn preview_backfill(
@@ -340,12 +396,16 @@ pub async fn preview_backfill(
     payload: Result<Json<BackfillRequest>, JsonRejection>,
 ) -> ApiResult<BackfillResult> {
     let request = payload?.0;
-    let backfill = build_backfill(&state, &state.db.lock(), &request.since)?;
+    let (workouts, total) = fetch_backfill(&state, &request.since).await?;
+    let backfill = build_backfill(&state, &state.db.lock(), workouts, total)?;
     let count = backfill.items.len();
     let message = if count == 0 {
         format!("No Hevy workouts found since {}.", request.since)
     } else {
-        let scale = if backfill.total > 0 { format!(", of {} on your Hevy account", backfill.total) } else { String::new() };
+        let scale = match backfill.total.filter(|total| *total != 0) {
+            Some(total) => format!(", of {total} on your Hevy account"),
+            None => String::new(),
+        };
         format!("{count} workout{} found{scale}. Nothing has been written yet.", plural(count))
     };
     Ok(Json(BackfillResult { message, since: request.since, ran: false, linked: 0, items: backfill.items }))
@@ -359,9 +419,10 @@ pub async fn run_backfill(
     payload: Result<Json<BackfillRequest>, JsonRejection>,
 ) -> ApiResult<BackfillResult> {
     let request = payload?.0;
+    let (workouts, total) = fetch_backfill(&state, &request.since).await?;
     let (backfill, selected, matched) = {
         let conn = state.db.lock();
-        let backfill = build_backfill(&state, &conn, &request.since)?;
+        let backfill = build_backfill(&state, &conn, workouts, total)?;
         let selected: Vec<&Item> = match &request.hevy_ids {
             None => backfill.raw.iter().collect(),
             Some(ids) => backfill
@@ -371,6 +432,12 @@ pub async fn run_backfill(
                 .collect(),
         };
         let matched = hevy_backfill::run_items(&conn, &selected)?;
+        let applying = selected
+            .iter()
+            .filter(|item| item.twin.is_some() && matches!(item.action.as_str(), "merge" | "replace" | "describe"))
+            .map(|item| workout_id(&item.workout).to_string())
+            .collect();
+        start_workouts(&state, applying);
         let selected = selected.len();
         (backfill, selected, matched)
     };

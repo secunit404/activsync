@@ -212,7 +212,7 @@ pub async fn ingest_events(db: &Db, hevy: &HevyClient, now: DateTime<Utc>) -> Re
 /// Hevy's exercise template in the table's shape. Hevy has named the
 /// equipment field two ways; the fallbacks cover a template the API would
 /// not return, known only by the id and title seen on the workout.
-fn store_template(conn: &Connection, template: &Value, template_id: &str, title: &str) -> rusqlite::Result<()> {
+pub(crate) fn store_template(conn: &Connection, template: &Value, template_id: &str, title: &str) -> rusqlite::Result<()> {
     let field = |key: &str| template.get(key).and_then(Value::as_str);
     let secondary: Vec<&str> =
         template.get("secondary_muscle_groups").and_then(Value::as_array).map(|v| v.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
@@ -740,6 +740,31 @@ impl MatchApplier for RealMatchApplier {
     fn apply<'a>(&'a self, hevy_id: &'a str, strategy: &'a str) -> BoxFuture<'a, Result<String, ApplyFailure>> {
         Box::pin(self.apply_now(hevy_id, strategy))
     }
+}
+
+/// Starts one workout now rather than at the next Hevy poll, as backfill and
+/// a saved mapping hand off; every safety gate of the poller still applies.
+/// Returns the workout's new status.
+pub async fn process_now(
+    db: &Db,
+    events: &EventBus,
+    clients: &dyn Clients,
+    hevy_http: &Http,
+    development: bool,
+    hevy_id: &str,
+) -> Result<String, String> {
+    let row = hevy_db::get_workout(&db.lock(), hevy_id).map_err(|e| e.to_string())?.ok_or(format!("unknown Hevy workout: {hevy_id}"))?;
+    let now = Utc::now();
+    let garmin = poller::open_garmin(db, events, clients, now).await.map_err(|e| e.to_string())?;
+    let (hevy, profile, cfg) = hevy_context(db, &garmin, hevy_http, development, now).await?;
+    let apply = Apply { db, garmin: &garmin, cfg: &cfg, profile: &profile };
+    process_workout(&apply, &hevy, &row, now).await.map_err(|e| format!("{e:?}"))?;
+    let status = hevy_db::get_workout(&db.lock(), hevy_id).map_err(|e| e.to_string())?.map(|w| w.status).unwrap_or_default();
+    if matches!(status.as_str(), "merged" | "replaced" | "described" | "uploaded_passive") {
+        sync::sync_garmin(db, &garmin, &cfg, now, None, None).await.map_err(|e| e.to_string())?;
+    }
+    events.publish("refresh");
+    Ok(status)
 }
 
 /// The poller's Hevy leg against the real Hevy API. The profile and config

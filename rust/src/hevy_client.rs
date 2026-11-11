@@ -207,13 +207,20 @@ impl HevyClient {
         }
     }
 
+    /// One page of exercise templates, and whether another follows.
+    pub async fn get_exercise_templates_page(&self, page: i64) -> Result<(Vec<Value>, bool), HevyError> {
+        let data = self.get("/exercise_templates", &[("page", &page.to_string()), ("pageSize", "100")]).await?;
+        let templates = data.get("exercise_templates").and_then(Value::as_array).cloned().unwrap_or_default();
+        Ok((templates, more_pages(&data, page)))
+    }
+
     pub async fn iter_all_exercise_templates(&self) -> Result<Vec<Value>, HevyError> {
         let mut templates = Vec::new();
         let mut page = 1;
         loop {
-            let data = self.get("/exercise_templates", &[("page", &page.to_string()), ("pageSize", "100")]).await?;
-            templates.extend(data.get("exercise_templates").and_then(Value::as_array).into_iter().flatten().cloned());
-            if !more_pages(&data, page) {
+            let (batch, more) = self.get_exercise_templates_page(page).await?;
+            templates.extend(batch);
+            if !more {
                 return Ok(templates);
             }
             page += 1;

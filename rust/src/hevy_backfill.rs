@@ -1,5 +1,5 @@
 //! The Hevy history import, as in the Python app's `hevy_backfill.py`,
-//! reading the mock Hevy account.
+//! reading the real Hevy account or the mock one.
 
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{Connection, OptionalExtension};
@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::db::{self, ActivityRow, DbResult};
+use crate::hevy_client::{HevyClient, HevyError};
 use crate::{exercise_tables, hevy_db, hevy_seed, timefmt};
 
 const OVERLAP_MIN: f64 = 0.70;
@@ -35,6 +36,46 @@ pub fn workout_id(workout: &Value) -> &str {
 /// pages; the boundary filter is the part that matters.
 pub fn workouts_since(account: Vec<Value>, since: DateTime<Utc>) -> Vec<Value> {
     account.into_iter().filter(|w| at(w, "start_time").is_some_and(|start| start >= since)).collect()
+}
+
+const PAGE_SIZE: i64 = 10;
+
+/// Total workouts on the Hevy account, or `None` if it cannot be read. It
+/// only bounds the scan and labels the preview, so an outage degrades.
+pub async fn account_workout_count(client: &HevyClient) -> Option<i64> {
+    client.get_workout_count().await.unwrap_or_else(|err| {
+        eprintln!("hevy workout count unavailable: {err}");
+        None
+    })
+}
+
+/// Pages through Hevy's newest-first workouts back to `since`. The account
+/// total bounds the scan when a page omits `page_count`, which would
+/// otherwise read as the last page and cut history short.
+pub async fn fetch_since(client: &HevyClient, since: DateTime<Utc>, total_count: Option<i64>) -> Result<Vec<Value>, HevyError> {
+    let max_pages = total_count.map(|total| (total.max(0) + PAGE_SIZE - 1) / PAGE_SIZE).map(|pages| pages.max(1));
+    let mut collected = Vec::new();
+    let mut page = 1;
+    loop {
+        let data = client.get_workouts_page(page, PAGE_SIZE).await?;
+        let workouts = data.get("workouts").and_then(Value::as_array).cloned().unwrap_or_default();
+        let mut older_seen = false;
+        for workout in &workouts {
+            match at(workout, "start_time") {
+                None => continue,
+                Some(start) if start < since => older_seen = true,
+                Some(_) => collected.push(workout.clone()),
+            }
+        }
+        if older_seen || workouts.is_empty() {
+            return Ok(collected);
+        }
+        let bound = data.get("page_count").filter(|c| c.is_i64() || c.is_u64()).and_then(Value::as_i64).or(max_pages);
+        if bound.is_none_or(|bound| page >= bound) {
+            return Ok(collected);
+        }
+        page += 1;
+    }
 }
 
 pub fn account(now: DateTime<Utc>) -> Vec<Value> {

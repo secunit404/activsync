@@ -87,6 +87,8 @@ pub struct AppState {
     pending_mfa: Arc<Mutex<Option<GarminCredentials>>>,
     /// The real Garmin and Strava; `None` serves the mock accounts.
     pub clients: Option<Arc<dyn poller::Clients>>,
+    /// How the real Hevy API is reached; `None` serves the mock account.
+    pub hevy_http: Option<net::Http>,
 }
 
 impl AppState {
@@ -113,7 +115,17 @@ impl AppState {
             oidc_sessions: oidc_flow::OidcSessions::default(),
             pending_mfa: Arc::default(),
             clients: None,
+            hevy_http: None,
         }
+    }
+
+    pub fn with_hevy_http(self, hevy_http: net::Http) -> Self {
+        Self { hevy_http: Some(hevy_http), ..self }
+    }
+
+    /// The real Hevy client for `api_key`, or `None` for the mock account.
+    pub fn real_hevy(&self, api_key: &str) -> Option<Result<hevy_client::HevyClient, &'static str>> {
+        self.hevy_http.as_ref().map(|http| hevy_client::HevyClient::new(http.clone(), api_key))
     }
 
     /// Serves real accounts: syncing and publishing go to Garmin and Strava.

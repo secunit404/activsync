@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::db;
+use crate::hevy_client::{HevyClient, HevyError};
 use crate::hevy_settings::{self, DeviceIdentity, HevySettingsState, ProfileOverride};
 use crate::mock::{self, GarminLogin};
-use crate::onboarding;
+use crate::{hevy_sync, onboarding};
 use crate::routes::{ApiError, UpdateState};
 use crate::view::{self, Connections};
 use crate::{AppState, GarminCredentials, config, timefmt, version};
@@ -342,21 +343,71 @@ pub struct HevyCredentialsRequest {
     api_key: String,
 }
 
-/// Any key validates against the mock Hevy account. The exercise-template
-/// prefetch waits for the Hevy port.
-fn connect_hevy(state: &AppState, conn: &Connection, api_key: &str, in_setup: bool) -> Result<(), ApiError> {
+/// Asks Hevy whether the key works before anything is saved. The mock
+/// account takes any key.
+async fn validate_hevy_key(state: &AppState, api_key: &str) -> Result<Option<HevyClient>, ApiError> {
+    let Some(client) = state.real_hevy(api_key) else {
+        return Ok(None);
+    };
+    let unreachable = |err: &dyn std::fmt::Display| {
+        ApiError::new(StatusCode::BAD_GATEWAY, format!("Could not reach Hevy to validate the key: {err}"))
+    };
+    let client = client.map_err(|err| unreachable(&err))?;
+    match client.get_user_info().await {
+        Ok(_) => Ok(Some(client)),
+        Err(HevyError::Auth) => {
+            Err(ApiError::new(StatusCode::UNAUTHORIZED, "Hevy rejected that API key — check it and try again."))
+        }
+        Err(err) => Err(unreachable(&err)),
+    }
+}
+
+/// Best effort: caching every exercise template now fills the mappings page
+/// before the first workout arrives.
+async fn prefetch_templates(state: &AppState, hevy: &HevyClient) {
+    let mut page = 1;
+    loop {
+        let (templates, more) = match hevy.get_exercise_templates_page(page).await {
+            Ok(found) => found,
+            Err(err) => return eprintln!("Hevy template prefetch after connect failed: {err}"),
+        };
+        let conn = state.db.lock();
+        for template in &templates {
+            let Some(id) = template.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()) else {
+                continue;
+            };
+            if let Err(err) = hevy_sync::store_template(&conn, template, id, "") {
+                return eprintln!("Hevy template prefetch after connect failed: {err}");
+            }
+        }
+        if !more {
+            return;
+        }
+        page += 1;
+    }
+}
+
+async fn connect_hevy(state: &AppState, api_key: &str, in_setup: bool) -> Result<(), ApiError> {
     let api_key = api_key.trim();
     if api_key.is_empty() {
         return Err(bad_request("Enter your Hevy API key."));
     }
-    db::set_config_value(conn, "hevy_api_key", &json!(api_key))?;
-    db::set_config_value(conn, "hevy_auth_ok", &json!(true))?;
-    if !db::truthy(db::get_config_value(conn, "hevy_events_cursor")?.as_ref()) {
-        db::set_config_value(conn, "hevy_events_cursor", &json!(db::iso(Utc::now())))?;
+    let hevy = validate_hevy_key(state, api_key).await?;
+    {
+        let conn = state.db.lock();
+        db::set_config_value(&conn, "hevy_api_key", &json!(api_key))?;
+        db::set_config_value(&conn, "hevy_auth_ok", &json!(true))?;
+        if !db::truthy(db::get_config_value(&conn, "hevy_events_cursor")?.as_ref()) {
+            db::set_config_value(&conn, "hevy_events_cursor", &json!(db::iso(Utc::now())))?;
+        }
+    }
+    if let Some(hevy) = hevy {
+        prefetch_templates(state, &hevy).await;
     }
     if in_setup {
-        db::set_config_value(conn, "setup_hevy_done", &json!(true))?;
-        config::edit(conn, state.mock_mode, |cfg| cfg.set("hevy_enabled", json!(true)))?;
+        let conn = state.db.lock();
+        db::set_config_value(&conn, "setup_hevy_done", &json!(true))?;
+        config::edit(&conn, state.mock_mode, |cfg| cfg.set("hevy_enabled", json!(true)))?;
     }
     Ok(())
 }
@@ -366,11 +417,10 @@ pub async fn setup_hevy(
     payload: Result<Json<HevyCredentialsRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
     let payload = body(payload)?;
-    let conn = state.db.lock();
-    require_not_onboarded(&conn)?;
-    connect_hevy(&state, &conn, &payload.api_key, true)?;
+    require_not_onboarded(&state.db.lock())?;
+    connect_hevy(&state, &payload.api_key, true).await?;
     state.events.publish("refresh");
-    action(&state, &conn, "Hevy connected.", false)
+    action(&state, &state.db.lock(), "Hevy connected.", false)
 }
 
 pub async fn skip_hevy(State(state): State<AppState>) -> ApiResult<ActionResult> {
@@ -386,10 +436,9 @@ pub async fn save_hevy_credentials(
     payload: Result<Json<HevyCredentialsRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
     let payload = body(payload)?;
-    let conn = state.db.lock();
-    connect_hevy(&state, &conn, &payload.api_key, false)?;
+    connect_hevy(&state, &payload.api_key, false).await?;
     state.events.publish("refresh");
-    action(&state, &conn, "Hevy connected.", false)
+    action(&state, &state.db.lock(), "Hevy connected.", false)
 }
 
 pub async fn disconnect_hevy(State(state): State<AppState>) -> ApiResult<ActionResult> {
