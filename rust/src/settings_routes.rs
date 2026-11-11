@@ -11,7 +11,7 @@ use crate::db;
 use crate::hevy_client::{HevyClient, HevyError};
 use crate::hevy_settings::{self, DeviceIdentity, HevySettingsState, ProfileOverride};
 use crate::{hevy_sync, onboarding};
-use crate::routes::{ApiError, UpdateState};
+use crate::routes::{ApiError, UpdateState, development};
 use crate::view::{self, Connections};
 use crate::{AppState, config, timefmt, version};
 
@@ -131,7 +131,7 @@ pub async fn settings_state(State(state): State<AppState>) -> ApiResult<Settings
     let conn = state.db.lock();
     let connections = view::connection_status(&conn, Utc::now())?;
     let step = onboarding::setup_step(&conn, &connections, state.auth.disabled)?;
-    let cfg = config::load_config(&conn, state.mock_mode)?;
+    let cfg = config::load_config(&conn, development(&state))?;
     let garmin = db::get_config_value(&conn, "garmin_credentials")?.unwrap_or(Value::Null);
     let strava = db::get_config_value(&conn, "strava_credentials")?.unwrap_or(Value::Null);
     let held = cfg.held_activity_types();
@@ -277,7 +277,7 @@ async fn connect_hevy(state: &AppState, api_key: &str, in_setup: bool) -> Result
     if in_setup {
         let conn = state.db.lock();
         db::set_config_value(&conn, "setup_hevy_done", &json!(true))?;
-        config::edit(&conn, state.mock_mode, |cfg| cfg.set("hevy_enabled", json!(true)))?;
+        config::edit(&conn, development(&state), |cfg| cfg.set("hevy_enabled", json!(true)))?;
     }
     Ok(())
 }
@@ -315,7 +315,7 @@ pub async fn disconnect_hevy(State(state): State<AppState>) -> ApiResult<ActionR
     let conn = state.db.lock();
     db::set_config_value(&conn, "hevy_api_key", &Value::Null)?;
     db::set_config_value(&conn, "hevy_auth_ok", &Value::Null)?;
-    config::edit(&conn, state.mock_mode, |cfg| cfg.set("hevy_enabled", json!(false)))?;
+    config::edit(&conn, development(&state), |cfg| cfg.set("hevy_enabled", json!(false)))?;
     state.events.publish("refresh");
     action(&state, &conn, "Hevy disconnected.", false)
 }
@@ -341,7 +341,7 @@ pub async fn save_preferences(
         return Err(bad_request(format!("Unknown timezone: {}", p.display_timezone)));
     }
     let conn = state.db.lock();
-    config::edit(&conn, state.mock_mode, |cfg| {
+    config::edit(&conn, development(&state), |cfg| {
         cfg.set("display_timezone", json!(p.display_timezone));
         cfg.set("garmin_poll_interval_minutes", json!(p.garmin_poll_interval_minutes));
         cfg.set("strava_poll_interval_minutes", json!(p.strava_poll_interval_minutes));
@@ -380,7 +380,7 @@ pub async fn save_activity_types(
         return Err(bad_request("Unknown activity category."));
     }
     let held: Vec<String> = known.into_iter().filter(|k| !payload.autosync_types.contains(k)).collect();
-    config::edit(&conn, state.mock_mode, |cfg| cfg.set("held_activity_types", json!(held)))?;
+    config::edit(&conn, development(&state), |cfg| cfg.set("held_activity_types", json!(held)))?;
     onboarding::reconcile_held_activities(&conn, &held)?;
     state.events.publish("refresh");
     action(&state, &conn, "Autosync categories saved.", false)
@@ -463,7 +463,7 @@ pub async fn save_hevy_settings(
         stored_profile.insert("sex".into(), json!(v));
     }
     let conn = state.db.lock();
-    config::edit(&conn, state.mock_mode, |cfg| {
+    config::edit(&conn, development(&state), |cfg| {
         cfg.set("hevy_enabled", json!(p.enabled));
         cfg.set("hevy_watch_strategy", json!(p.watch_strategy));
         cfg.set("hevy_match_mode", json!(p.match_mode));

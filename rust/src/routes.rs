@@ -77,7 +77,7 @@ impl From<JsonRejection> for ApiError {
 pub(crate) type ApiResult<T> = Result<Json<T>, ApiError>;
 
 pub(crate) fn development(state: &AppState) -> bool {
-    state.mock_mode
+    state.development
 }
 
 #[derive(Serialize)]

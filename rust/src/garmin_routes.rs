@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 
 use crate::garmin_login::Login;
 use crate::mock::{self, GarminLogin};
-use crate::routes::ApiError;
+use crate::routes::{ApiError, development};
 use crate::settings_routes::{ActionResult, action, bad_request, body, conflict, invalid, onboarded, require_not_onboarded, text};
 use crate::sync_routes::{fetch_categories, run_catch_up};
 use crate::{AppState, GarminCredentials, PendingMfa, config, db, onboarding, timefmt};
@@ -30,7 +30,7 @@ enum GarminOutcome {
 async fn finalize_garmin_connect(state: &AppState) -> Result<(), ApiError> {
     let now = Utc::now();
     let Some(clients) = state.clients.clone() else {
-        onboarding::finalize_garmin_connect(&state.db.lock(), state.mock_mode, now)?;
+        onboarding::finalize_garmin_connect(&state.db.lock(), development(state), now)?;
         return Ok(());
     };
     let first_run = {
@@ -127,7 +127,7 @@ pub async fn setup_garmin(
         let conn = state.db.lock();
         require_not_onboarded(&conn)?;
         let fields = garmin_login_fields(&conn, &payload.email, &payload.password)?;
-        config::edit(&conn, state.mock_mode, |cfg| {
+        config::edit(&conn, development(&state), |cfg| {
             cfg.set("lookback_days", json!(payload.lookback_days));
             if timefmt::is_valid_timezone(&payload.detected_timezone) {
                 cfg.set("display_timezone", json!(payload.detected_timezone));

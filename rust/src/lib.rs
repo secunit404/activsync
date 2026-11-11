@@ -88,6 +88,9 @@ pub struct AppState {
     pub scheduler: PublishScheduler,
     pub match_scheduler: HevyMatchScheduler,
     pub mock_mode: bool,
+    /// Mock data or `ACTIVSYNC_MANUAL_ONLY`: new installs default to reviewing
+    /// Hevy matches by hand.
+    pub development: bool,
     pub auth: AuthConfig,
     pub setup_code: SetupCode,
     pub limiter: AttemptLimiter,
@@ -119,6 +122,7 @@ impl AppState {
             scheduler,
             match_scheduler,
             mock_mode,
+            development: mock_mode,
             auth,
             setup_code,
             limiter: AttemptLimiter::default(),
@@ -133,6 +137,16 @@ impl AppState {
 
     pub fn with_garmin_sign_in(self, sign_in: garmin_login::SignIn) -> Self {
         Self { garmin_sign_in: Some(sign_in), ..self }
+    }
+
+    /// Applies the owner's Hevy match choices with `applier`.
+    pub fn with_match_applier(self, applier: Arc<dyn hevy_match::MatchApplier>) -> Self {
+        let match_scheduler = self.match_scheduler.clone().with_applier(applier);
+        Self { match_scheduler, ..self }
+    }
+
+    pub fn with_development(self, development: bool) -> Self {
+        Self { development, ..self }
     }
 
     pub fn with_hevy_http(self, hevy_http: net::Http) -> Self {

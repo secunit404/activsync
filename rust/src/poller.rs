@@ -66,6 +66,8 @@ pub struct Options {
     pub garmin_polling: bool,
     pub strava_polling: bool,
     pub hevy_polling: bool,
+    /// See `AppState::development`.
+    pub development: bool,
 }
 
 impl Default for Options {
@@ -78,6 +80,7 @@ impl Default for Options {
             garmin_polling: true,
             strava_polling: true,
             hevy_polling: true,
+            development: false,
         }
     }
 }
@@ -204,7 +207,7 @@ impl Poller {
     }
 
     fn config(&self) -> Result<Config, PollError> {
-        Ok(config::load_config(&self.db.lock(), false)?)
+        Ok(config::load_config(&self.db.lock(), self.options.development)?)
     }
 
     fn config_value(&self, key: &str) -> Option<Value> {
