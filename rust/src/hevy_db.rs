@@ -49,10 +49,60 @@ impl Workout {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Operation {
     pub id: i64,
+    pub kind: String,
     pub phase: String,
     pub next_step: Option<String>,
+    pub source_activity_id: Option<i64>,
     pub target_activity_id: Option<i64>,
     pub upload_id: Option<String>,
+    pub pre_upload_ids: Vec<i64>,
+    pub generated_calories: Option<f64>,
+    pub generated_avg_hr: Option<f64>,
+    pub attempt_count: i64,
+    pub delete_attempt_count: i64,
+    pub last_error: Option<String>,
+}
+
+impl Operation {
+    fn from_row(row: &Row<'_>) -> DbResult<Self> {
+        let pre_upload_ids: String = row.get("pre_upload_ids")?;
+        Ok(Self {
+            id: row.get("id")?,
+            kind: row.get("kind")?,
+            phase: row.get("phase")?,
+            next_step: row.get("next_step")?,
+            source_activity_id: row.get("source_activity_id")?,
+            target_activity_id: row.get("target_activity_id")?,
+            upload_id: row.get("upload_id")?,
+            pre_upload_ids: parse_ids(&pre_upload_ids),
+            generated_calories: row.get("generated_calories")?,
+            generated_avg_hr: row.get("generated_avg_hr")?,
+            attempt_count: row.get("attempt_count")?,
+            delete_attempt_count: row.get("delete_attempt_count")?,
+            last_error: row.get("last_error")?,
+        })
+    }
+}
+
+/// Python's `int()` over a stored id list: numbers, floats and numeric text
+/// count, anything else is dropped.
+fn parse_ids(raw: &str) -> Vec<i64> {
+    let parsed: Value = serde_json::from_str(raw).unwrap_or(Value::Null);
+    parsed.as_array().map(|ids| ids.iter().filter_map(id_of).collect()).unwrap_or_default()
+}
+
+pub fn id_of(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f.trunc() as i64)),
+        Value::String(s) => s.trim().parse().ok(),
+        Value::Bool(b) => Some(i64::from(*b)),
+        _ => None,
+    }
+}
+
+/// `json.dumps` of an id list, so a row reads the same to either app.
+fn ids_json(ids: &[i64]) -> String {
+    format!("[{}]", ids.iter().map(i64::to_string).collect::<Vec<_>>().join(", "))
 }
 
 fn now_iso() -> String {
@@ -185,20 +235,164 @@ pub fn release_lease(conn: &Connection, hevy_id: &str, token: &str) -> DbResult<
 
 pub fn get_open_operation(conn: &Connection, hevy_id: &str) -> DbResult<Option<Operation>> {
     conn.query_row(
-        "SELECT id, phase, next_step, target_activity_id, upload_id FROM hevy_operations
-         WHERE hevy_id = ?1 AND phase NOT IN ('done','failed')",
+        "SELECT * FROM hevy_operations WHERE hevy_id = ?1 AND phase NOT IN ('done','failed')",
         [hevy_id],
-        |row| {
-            Ok(Operation {
-                id: row.get(0)?,
-                phase: row.get(1)?,
-                next_step: row.get(2)?,
-                target_activity_id: row.get(3)?,
-                upload_id: row.get(4)?,
-            })
-        },
+        Operation::from_row,
     )
     .optional()
+}
+
+/// Opens a journal row; `None` when an open operation already holds this
+/// workout or this source activity (partial unique indexes).
+pub fn open_operation(
+    conn: &Connection,
+    hevy_id: &str,
+    kind: &str,
+    source_activity_id: Option<i64>,
+    pre_upload_ids: &[i64],
+) -> DbResult<Option<i64>> {
+    let now = now_iso();
+    let inserted = conn.execute(
+        "INSERT INTO hevy_operations
+           (hevy_id, kind, phase, source_activity_id, pre_upload_ids, created_at, updated_at)
+         VALUES (?1, ?2, 'preparing', ?3, ?4, ?5, ?5)",
+        params![hevy_id, kind, source_activity_id, ids_json(pre_upload_ids), now],
+    );
+    match inserted {
+        Ok(_) => Ok(Some(conn.last_insert_rowid())),
+        Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::ConstraintViolation => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// One journal column to change.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OpField {
+    Phase(&'static str),
+    NextStep(&'static str),
+    TargetActivityId(i64),
+    UploadId(Option<String>),
+    PreUploadIds(Vec<i64>),
+    GeneratedCalories(Option<f64>),
+    GeneratedAvgHr(Option<f64>),
+    AttemptCount(i64),
+    DeleteAttemptCount(i64),
+    LastError(String),
+}
+
+impl OpField {
+    fn column(&self) -> (&'static str, rusqlite::types::Value) {
+        use rusqlite::types::Value as Sql;
+        let text = |s: Option<String>| s.map_or(Sql::Null, Sql::Text);
+        let real = |f: Option<f64>| f.map_or(Sql::Null, Sql::Real);
+        match self {
+            Self::Phase(v) => ("phase", Sql::Text((*v).into())),
+            Self::NextStep(v) => ("next_step", Sql::Text((*v).into())),
+            Self::TargetActivityId(v) => ("target_activity_id", Sql::Integer(*v)),
+            Self::UploadId(v) => ("upload_id", text(v.clone())),
+            Self::PreUploadIds(v) => ("pre_upload_ids", Sql::Text(ids_json(v))),
+            Self::GeneratedCalories(v) => ("generated_calories", real(*v)),
+            Self::GeneratedAvgHr(v) => ("generated_avg_hr", real(*v)),
+            Self::AttemptCount(v) => ("attempt_count", Sql::Integer(*v)),
+            Self::DeleteAttemptCount(v) => ("delete_attempt_count", Sql::Integer(*v)),
+            Self::LastError(v) => ("last_error", Sql::Text(v.clone())),
+        }
+    }
+}
+
+pub fn update_operation(conn: &Connection, op_id: i64, fields: &[OpField]) -> DbResult<()> {
+    if fields.is_empty() {
+        return Ok(());
+    }
+    let (names, mut values): (Vec<_>, Vec<_>) = fields.iter().map(OpField::column).unzip();
+    let assignments: Vec<String> = names.iter().map(|name| format!("{name} = ?")).collect();
+    values.push(rusqlite::types::Value::Text(now_iso()));
+    values.push(rusqlite::types::Value::Integer(op_id));
+    conn.execute(
+        &format!("UPDATE hevy_operations SET {}, updated_at = ? WHERE id = ?", assignments.join(", ")),
+        rusqlite::params_from_iter(values),
+    )?;
+    Ok(())
+}
+
+/// Parks or fails an operation and its workout together: a closed journal
+/// behind a `syncing` row could open and submit a second upload.
+pub fn set_operation_outcome(
+    conn: &Connection,
+    op_id: i64,
+    hevy_id: &str,
+    phase: &str,
+    status: &str,
+    error: Option<&str>,
+) -> DbResult<()> {
+    debug_assert!(matches!(phase, "failed" | "needs_review"), "invalid operation outcome phase: {phase:?}");
+    let now = now_iso();
+    let tx = conn.unchecked_transaction()?;
+    let op = tx.execute(
+        "UPDATE hevy_operations SET phase = ?1, last_error = ?2, updated_at = ?3 WHERE id = ?4 AND hevy_id = ?5",
+        params![phase, error, now, op_id, hevy_id],
+    )?;
+    let workout = tx.execute(
+        "UPDATE hevy_workouts SET status = ?1, error = ?2, updated_at = ?3 WHERE hevy_id = ?4",
+        params![status, error, now, hevy_id],
+    )?;
+    if op != 1 || workout != 1 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    tx.commit()
+}
+
+/// The terminal transition in one transaction: close the operation, link
+/// the target, set the status and record the applied revision. Split, a
+/// closed journal could strand an unlinked replacement and a later tick
+/// would upload again.
+pub fn complete_operation(
+    conn: &Connection,
+    op_id: i64,
+    hevy_id: &str,
+    target_activity_id: i64,
+    strategy: &str,
+    status: &str,
+    applied_updated_at: Option<&str>,
+) -> DbResult<()> {
+    let now = now_iso();
+    let tx = conn.unchecked_transaction()?;
+    tx.execute("UPDATE hevy_operations SET phase = 'done', updated_at = ?1 WHERE id = ?2", params![now, op_id])?;
+    tx.execute(
+        "UPDATE hevy_workouts
+         SET garmin_activity_id = ?1, applied_strategy = COALESCE(applied_strategy, ?2),
+             status = ?3, error = NULL, garmin_applied_updated_at = ?4, updated_at = ?5
+         WHERE hevy_id = ?6",
+        params![target_activity_id, strategy, status, applied_updated_at, now, hevy_id],
+    )?;
+    tx.commit()
+}
+
+/// The first backup is the truth and is never overwritten, except that a
+/// missing FIT (a merge backs up none) is filled in by a later replace, or
+/// the rebuilt activity would lose its heart rate.
+pub fn save_backup(
+    conn: &Connection,
+    garmin_activity_id: i64,
+    hevy_id: &str,
+    original_sets: &Value,
+    original_fit: Option<&[u8]>,
+) -> DbResult<()> {
+    conn.execute(
+        "INSERT INTO merge_backups (garmin_activity_id, hevy_id, original_sets, original_fit, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(garmin_activity_id) DO UPDATE SET original_fit = excluded.original_fit
+         WHERE merge_backups.original_fit IS NULL AND excluded.original_fit IS NOT NULL",
+        params![garmin_activity_id, hevy_id, original_sets.to_string(), original_fit, now_iso()],
+    )?;
+    Ok(())
+}
+
+pub fn backup_fit(conn: &Connection, garmin_activity_id: i64) -> DbResult<Option<Vec<u8>>> {
+    let fit: Option<Option<Vec<u8>>> = conn
+        .query_row("SELECT original_fit FROM merge_backups WHERE garmin_activity_id = ?1", [garmin_activity_id], |r| r.get(0))
+        .optional()?;
+    Ok(fit.flatten())
 }
 
 /// Hands a journalled operation back to its resume point with fresh counters.

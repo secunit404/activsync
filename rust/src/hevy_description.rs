@@ -1,7 +1,11 @@
 use serde_json::{Map, Value};
 
-use crate::config::DEFAULT_TEMPLATE;
-use crate::hevy_settings::validate_description_template;
+use std::sync::LazyLock;
+
+use regex::Regex;
+
+use crate::config::{DEFAULT_TEMPLATE, DEFAULT_TITLE_TEMPLATE};
+use crate::hevy_settings::{validate_description_template, validate_title_template};
 use crate::timefmt::parse_timestamp;
 
 fn get<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
@@ -168,17 +172,52 @@ fn split_lines(text: &str) -> Vec<&str> {
     lines
 }
 
-/// The description preview: no calories or heart rate, since those come from
-/// the Garmin activity the workout is applied to.
-pub fn generate_description(workout: &Value, template: Option<&str>) -> Result<String, String> {
+static EMOJI: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("[\u{1F1E6}-\u{1FAFF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}]").expect("emoji pattern"));
+
+/// Python's `str.isspace()`, which also counts the ASCII separators.
+fn is_py_space(c: char) -> bool {
+    c.is_whitespace() || ('\x1c'..='\x1f').contains(&c)
+}
+
+/// The title without emoji presentation characters, ordinary text kept.
+pub fn clean_title(value: &Value) -> String {
+    let title = if truthy(Some(value)) { py_str(value) } else { String::new() };
+    let title = EMOJI.replace_all(&title, "").replace(['\u{fe0e}', '\u{fe0f}', '\u{200d}', '\u{20e3}'], "");
+    let words: Vec<&str> = title.split(is_py_space).filter(|w| !w.is_empty()).collect();
+    if words.is_empty() { "Workout".into() } else { words.join(" ") }
+}
+
+pub fn generate_title(workout: &Value, template: Option<&str>) -> Result<String, String> {
+    let chosen = template.filter(|t| !t.is_empty()).unwrap_or(DEFAULT_TITLE_TEMPLATE);
+    validate_title_template(chosen)?;
+    let title = workout.get("title").cloned().unwrap_or_else(|| Value::from("Workout"));
+    let mut values = Map::new();
+    values.insert("title".into(), Value::String(py_str(&title)));
+    values.insert("clean_title".into(), Value::String(clean_title(&title)));
+    let rendered = render(chosen, &values);
+    let trimmed = rendered.trim_matches(is_py_space);
+    Ok(if trimmed.is_empty() { "Workout".into() } else { trimmed.into() })
+}
+
+/// Calories and heart rate come from the Garmin activity the workout is
+/// applied to; the preview passes neither.
+pub fn generate_description(
+    workout: &Value,
+    calories: Option<i64>,
+    avg_hr: Option<i64>,
+    template: Option<&str>,
+) -> Result<String, String> {
     let chosen = template.filter(|t| !t.is_empty()).unwrap_or(DEFAULT_TEMPLATE);
     validate_description_template(chosen)?;
     let minutes = duration_minutes(workout);
     let mut values = Map::new();
     let duration = if minutes > 0 { format!("⏱️ {minutes} min") } else { String::new() };
+    let calories = calories.filter(|c| *c != 0).map(|c| format!("🔥 {c} kcal")).unwrap_or_default();
+    let avg_hr = avg_hr.filter(|hr| *hr != 0).map(|hr| format!("❤️ avg {hr} bpm")).unwrap_or_default();
     values.insert("duration".into(), Value::String(duration));
-    values.insert("calories".into(), Value::String(String::new()));
-    values.insert("avg_hr".into(), Value::String(String::new()));
+    values.insert("calories".into(), Value::String(calories));
+    values.insert("avg_hr".into(), Value::String(avg_hr));
     values.insert("exercises".into(), Value::String(exercise_summary(workout)));
     values.insert("marker".into(), Value::String("— synced by activsync".into()));
     let rendered = render(chosen, &values);
@@ -218,7 +257,7 @@ mod tests {
             ]
         });
         assert_eq!(
-            generate_description(&workout, None).unwrap(),
+            generate_description(&workout, None, None, None).unwrap(),
             "⏱️ 65 min\n\n• Bench Press (Barbell): 3 sets - 82.5kg × 8 - 1 warmup - 1 dropset - 1 failure - RPE 8, 9.5\n\
              • Row: 1 set - 2.0km - 7min\n• Plank: 1 set - 1min - metric 2\n• Unknown: 1 warmup set\n\n— synced by activsync"
         );
@@ -228,7 +267,7 @@ mod tests {
     fn custom_template_collapses_blank_lines() {
         let workout = json!({"start_time": "bad", "exercises": []});
         assert_eq!(
-            generate_description(&workout, Some("\n\n{{Gym}} {duration}\n{calories}\n\n\n{marker}  \n\n")).unwrap(),
+            generate_description(&workout, None, None, Some("\n\n{{Gym}} {duration}\n{calories}\n\n\n{marker}  \n\n")).unwrap(),
             "{Gym}\n\n— synced by activsync"
         );
     }

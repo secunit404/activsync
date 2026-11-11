@@ -8,12 +8,12 @@ use serde_json::{Value, json};
 
 use crate::fit_encode::{Encoder, FitValue, Mesg, mesg};
 
-const WORKING_SET_S: f64 = 40.0;
-const WARMUP_SET_S: f64 = 25.0;
-const REST_BETWEEN_SETS_S: f64 = 75.0;
-const REST_BETWEEN_EXERCISES_S: f64 = 120.0;
-const MIN_SCALE: f64 = 0.3;
-const MAX_SCALE: f64 = 2.0;
+pub const WORKING_SET_S: f64 = 40.0;
+pub const WARMUP_SET_S: f64 = 25.0;
+pub const REST_BETWEEN_SETS_S: f64 = 75.0;
+pub const REST_BETWEEN_EXERCISES_S: f64 = 120.0;
+pub const MIN_SCALE: f64 = 0.3;
+pub const MAX_SCALE: f64 = 2.0;
 /// Calorie fallback when there is no heart rate at all.
 const DEFAULT_HR_BPM: i64 = 90;
 pub const UNKNOWN_CATEGORY: i64 = 65534;

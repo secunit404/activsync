@@ -14,6 +14,7 @@ pub mod exercise_tables;
 pub mod fit_builder;
 pub mod fit_encode;
 pub mod garmin_client;
+pub mod hevy_apply;
 pub mod hevy_backfill;
 pub mod hevy_client;
 pub mod hevy_db;

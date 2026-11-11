@@ -1,0 +1,3906 @@
+{
+ "payloads": [
+  {
+   "duration": 1234.5678,
+   "name": "micro_start",
+   "payload": {
+    "exerciseSets": [
+     {
+      "duration": 50.0,
+      "exercises": [
+       {
+        "category": "BENCH_PRESS",
+        "name": "BARBELL_BENCH_PRESS",
+        "probability": null
+       }
+      ],
+      "messageIndex": 0,
+      "repetitionCount": 10,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T17:00:00.0",
+      "weight": 40000.0,
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 150.0,
+      "exercises": [],
+      "messageIndex": 1,
+      "setType": "REST",
+      "startTime": "2026-11-09T17:00:50.0",
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 80.0,
+      "exercises": [
+       {
+        "category": "BENCH_PRESS",
+        "name": "BARBELL_BENCH_PRESS",
+        "probability": null
+       }
+      ],
+      "messageIndex": 2,
+      "repetitionCount": 5,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T17:03:20.0",
+      "weight": 82500.0,
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 150.0,
+      "exercises": [],
+      "messageIndex": 3,
+      "setType": "REST",
+      "startTime": "2026-11-09T17:04:40.0",
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 80.0,
+      "exercises": [
+       {
+        "category": "BENCH_PRESS",
+        "name": "BARBELL_BENCH_PRESS",
+        "probability": null
+       }
+      ],
+      "messageIndex": 4,
+      "repetitionCount": 3,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T17:07:10.0",
+      "weight": 85250.0,
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 240.0,
+      "exercises": [],
+      "messageIndex": 5,
+      "setType": "REST",
+      "startTime": "2026-11-09T17:08:30.0",
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 66.6,
+      "exercises": [
+       {
+        "category": "BENCH_PRESS",
+        "name": null,
+        "probability": null
+       }
+      ],
+      "messageIndex": 6,
+      "repetitionCount": 1,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T17:12:30.0",
+      "weight": 0.0,
+      "wktStepIndex": 1
+     }
+    ]
+   },
+   "resolved": [
+    [
+     "Bench",
+     0,
+     1,
+     [
+      {
+       "reps": 10,
+       "type": "warmup",
+       "weight_kg": 40
+      },
+      {
+       "reps": 5.0,
+       "rpe": 8,
+       "type": "normal",
+       "weight_kg": 82.5
+      },
+      {
+       "reps": 3,
+       "type": "failure",
+       "weight_kg": 85.25
+      }
+     ]
+    ],
+    [
+     "Odd",
+     0,
+     9999,
+     [
+      {
+       "duration_seconds": 33.3,
+       "reps": 1.9,
+       "type": "normal"
+      }
+     ]
+    ]
+   ],
+   "start": "2026-11-09T17:00:00.123457+00:00"
+  },
+  {
+   "duration": 10.0,
+   "name": "garmin_start_clamped_low",
+   "payload": {
+    "exerciseSets": [
+     {
+      "duration": 18.45,
+      "exercises": [
+       {
+        "category": "PLANK",
+        "name": "PLANK",
+        "probability": null
+       }
+      ],
+      "messageIndex": 0,
+      "repetitionCount": 0,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T16:58:30.0",
+      "weight": 0.0,
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 36.0,
+      "exercises": [],
+      "messageIndex": 1,
+      "setType": "REST",
+      "startTime": "2026-11-09T16:58:48.0",
+      "wktStepIndex": 0
+     },
+     {
+      "duration": 12.0,
+      "exercises": [
+       {
+        "category": "SQUAT",
+        "name": "BARBELL_BACK_SQUAT",
+        "probability": null
+       }
+      ],
+      "messageIndex": 2,
+      "repetitionCount": 5,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T16:59:24.0",
+      "weight": 100000.0,
+      "wktStepIndex": 1
+     },
+     {
+      "duration": 22.5,
+      "exercises": [],
+      "messageIndex": 3,
+      "setType": "REST",
+      "startTime": "2026-11-09T16:59:36.0",
+      "wktStepIndex": 1
+     },
+     {
+      "duration": 12.0,
+      "exercises": [
+       {
+        "category": "SQUAT",
+        "name": "BARBELL_BACK_SQUAT",
+        "probability": null
+       }
+      ],
+      "messageIndex": 4,
+      "repetitionCount": 0,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T16:59:58.0",
+      "weight": 0.0,
+      "wktStepIndex": 1
+     }
+    ]
+   },
+   "resolved": [
+    [
+     "Plank",
+     19,
+     43,
+     [
+      {
+       "duration_seconds": 61.5,
+       "type": "normal"
+      }
+     ]
+    ],
+    [
+     "Squat",
+     28,
+     6,
+     [
+      {
+       "reps": 5,
+       "type": "normal",
+       "weight_kg": 100
+      },
+      {
+       "reps": null,
+       "type": "normal",
+       "weight_kg": null
+      }
+     ]
+    ]
+   ],
+   "start": "2026-11-09 16:58:30"
+  },
+  {
+   "duration": 99999.0,
+   "name": "clamped_high",
+   "payload": {
+    "exerciseSets": [
+     {
+      "duration": 80.0,
+      "exercises": [
+       {
+        "category": "DEADLIFT",
+        "name": "BARBELL_DEADLIFT",
+        "probability": null
+       }
+      ],
+      "messageIndex": 0,
+      "repetitionCount": 3,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T16:58:30.0",
+      "weight": 140000.0,
+      "wktStepIndex": 0
+     }
+    ]
+   },
+   "resolved": [
+    [
+     "Dead",
+     8,
+     0,
+     [
+      {
+       "reps": 3,
+       "type": "normal",
+       "weight_kg": 140
+      }
+     ]
+    ]
+   ],
+   "start": "2026-11-09T16:58:30Z"
+  },
+  {
+   "duration": 0.0,
+   "name": "zero_duration_scale",
+   "payload": {
+    "exerciseSets": [
+     {
+      "duration": 12.0,
+      "exercises": [
+       {
+        "category": "DEADLIFT",
+        "name": "BARBELL_DEADLIFT",
+        "probability": null
+       }
+      ],
+      "messageIndex": 0,
+      "repetitionCount": 0,
+      "setType": "ACTIVE",
+      "startTime": "2026-11-09T16:58:30.0",
+      "weight": 0.0,
+      "wktStepIndex": 0
+     }
+    ]
+   },
+   "resolved": [
+    [
+     "Dead",
+     8,
+     0,
+     [
+      {
+       "duration_seconds": -5,
+       "type": "normal",
+       "weight_kg": 0.0004
+      }
+     ]
+    ]
+   ],
+   "start": "2026-11-09T16:58:30Z"
+  },
+  {
+   "duration": 50.0,
+   "name": "empty",
+   "payload": {
+    "exerciseSets": []
+   },
+   "resolved": [],
+   "start": "2026-11-09T16:58:30Z"
+  },
+  {
+   "duration": 50.0,
+   "error": "unparseable activity start: 'yesterday'",
+   "name": "bad_start",
+   "resolved": [
+    [
+     "Dead",
+     8,
+     0,
+     [
+      {
+       "reps": 3,
+       "type": "normal",
+       "weight_kg": 140
+      }
+     ]
+    ]
+   ],
+   "start": "yesterday"
+  },
+  {
+   "duration": 50.0,
+   "error": "exercise 'Mystery' resolved to UNKNOWN",
+   "name": "unknown_category",
+   "resolved": [
+    [
+     "Mystery",
+     65534,
+     0,
+     [
+      {
+       "reps": 3,
+       "type": "normal",
+       "weight_kg": 140
+      }
+     ]
+    ]
+   ],
+   "start": "2026-11-09T17:00:00Z"
+  },
+  {
+   "duration": 50.0,
+   "error": "no category name for id 4242",
+   "name": "no_category_name",
+   "resolved": [
+    [
+     "Nope",
+     4242,
+     0,
+     [
+      {
+       "reps": 3,
+       "type": "normal",
+       "weight_kg": 140
+      }
+     ]
+    ]
+   ],
+   "start": "2026-11-09T17:00:00Z"
+  }
+ ],
+ "profile": {
+  "birth_year": 1988,
+  "sex": "male",
+  "vo2max": 47.0,
+  "weight_kg": 82.5
+ },
+ "scenarios": [
+  {
+   "action": "merge",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3600.0, \"calories\": 410.6, \"avg_hr\": 121}",
+     "start_time": "2026-11-09 16:58:30",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "get_exercise_sets",
+     101
+    ],
+    [
+     "put_exercise_sets",
+     101,
+     {
+      "activityId": 101,
+      "exerciseSets": [
+       {
+        "duration": 50.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 10,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T16:58:30.0",
+        "weight": 40000.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 1,
+        "setType": "REST",
+        "startTime": "2026-11-09T16:59:20.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 2,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:01:50.0",
+        "weight": 82500.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 3,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:03:10.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 4,
+        "repetitionCount": 3,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:05:40.0",
+        "weight": 85250.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 5,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:07:00.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "SQUAT",
+          "name": "BARBELL_BACK_SQUAT",
+          "probability": null
+         }
+        ],
+        "messageIndex": 6,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:11:00.0",
+        "weight": 100000.0,
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 7,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:12:20.0",
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "SQUAT",
+          "name": "BARBELL_BACK_SQUAT",
+          "probability": null
+         }
+        ],
+        "messageIndex": 8,
+        "repetitionCount": 0,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:14:50.0",
+        "weight": 0.0,
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 9,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:16:10.0",
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 123.0,
+        "exercises": [
+         {
+          "category": "PLANK",
+          "name": "PLANK",
+          "probability": null
+         }
+        ],
+        "messageIndex": 10,
+        "repetitionCount": 0,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:20:10.0",
+        "weight": 0.0,
+        "wktStepIndex": 2
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 11,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:22:13.0",
+        "wktStepIndex": 2
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": null,
+          "probability": null
+         }
+        ],
+        "messageIndex": 12,
+        "repetitionCount": 12,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:26:13.0",
+        "weight": 20000.0,
+        "wktStepIndex": 3
+       }
+      ]
+     }
+    ],
+    [
+     "set_title",
+     101,
+     "Push Day"
+    ],
+    [
+     "set_description",
+     101,
+     "⏱️ 62 min\n🔥 411 kcal\n❤️ avg 121 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n• Squat (Barbell): 2 sets - 100.0kg × 5\n• Plank: 1 set - 1min\n• Odd Lift: 1 set - 20.0kg × 12\n\n— synced by activsync"
+    ]
+   ],
+   "garmin": {
+    "sets": {
+     "activityId": 101,
+     "exerciseSets": [
+      {
+       "duration": 30.0,
+       "setType": "ACTIVE"
+      }
+     ]
+    }
+   },
+   "mappings": [
+    [
+     "T-ODD",
+     0,
+     9999
+    ]
+   ],
+   "name": "merge_ok",
+   "raised": null,
+   "source": 101,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 101,
+      "hevy_id": "w1",
+      "original_fit": null,
+      "original_sets": {
+       "activityId": 101,
+       "exerciseSets": [
+        {
+         "duration": 30.0,
+         "setType": "ACTIVE"
+        }
+       ]
+      }
+     }
+    ],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": "merge",
+     "error": null,
+     "garmin_activity_id": 101,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": 101,
+     "status": "merged"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": null,
+      "sets": [
+       {
+        "reps": 5,
+        "type": "normal",
+        "weight_kg": 100
+       },
+       {
+        "reps": null,
+        "type": "normal",
+        "weight_kg": null
+       }
+      ],
+      "title": "Squat (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     },
+     {
+      "exercise_template_id": "T-ODD",
+      "sets": [
+       {
+        "reps": 12,
+        "type": "normal",
+        "weight_kg": 20
+       }
+      ],
+      "title": "Odd Lift"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "merge",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 102,
+     "garmin_data": "{}",
+     "start_time": "2026-11-09 16:58:30",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "get_exercise_sets",
+     102
+    ],
+    [
+     "put_exercise_sets",
+     102,
+     {
+      "activityId": 102,
+      "exerciseSets": [
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "DEADLIFT",
+          "name": "BARBELL_DEADLIFT",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 3,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:00:00.0",
+        "weight": 140000.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 1,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:01:20.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 50.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 2,
+        "repetitionCount": 10,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:05:20.0",
+        "weight": 40000.0,
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 3,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:06:10.0",
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 4,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:08:40.0",
+        "weight": 82500.0,
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 5,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:10:00.0",
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 6,
+        "repetitionCount": 3,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:12:30.0",
+        "weight": 85250.0,
+        "wktStepIndex": 1
+       }
+      ]
+     }
+    ],
+    [
+     "set_title",
+     102,
+     "Push Day"
+    ]
+   ],
+   "garmin": {},
+   "name": "merge_window_fallback",
+   "raised": null,
+   "settings": {
+    "hevy_summary_on_structured": false
+   },
+   "source": 102,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 102,
+      "hevy_id": "w1",
+      "original_fit": null,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": "merge",
+     "error": null,
+     "garmin_activity_id": 102,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": 102,
+     "status": "merged"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-DEAD",
+      "sets": [
+       {
+        "reps": 3,
+        "type": "normal",
+        "weight_kg": 140
+       }
+      ],
+      "title": "Deadlift (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "merge",
+   "activities": [],
+   "calls": [
+    [
+     "get_exercise_sets",
+     103
+    ],
+    [
+     "put_exercise_sets",
+     103,
+     {
+      "activityId": 103,
+      "exerciseSets": [
+       {
+        "duration": 123.0,
+        "exercises": [
+         {
+          "category": "PLANK",
+          "name": "PLANK",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 0,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:00:00.0",
+        "weight": 0.0,
+        "wktStepIndex": 0
+       }
+      ]
+     }
+    ],
+    [
+     "set_title",
+     103,
+     "Push Day"
+    ],
+    [
+     "set_description",
+     103,
+     "• Plank: 1 set - 1min\n\n— synced by activsync"
+    ]
+   ],
+   "garmin": {},
+   "name": "merge_metrics_from_generated_none",
+   "raised": null,
+   "settings": {
+    "hevy_description_template": "{exercises}\n{calories}{avg_hr}\n{marker}"
+   },
+   "source": 103,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 103,
+      "hevy_id": "w1",
+      "original_fit": null,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": "merge",
+     "error": null,
+     "garmin_activity_id": 103,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": 103,
+     "status": "merged"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "merge",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "start_time": "2026-11-09 16:58:30",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "get_exercise_sets",
+     101
+    ],
+    [
+     "put_exercise_sets",
+     101,
+     {
+      "activityId": 101,
+      "exerciseSets": [
+       {
+        "duration": 50.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 10,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T16:58:30.0",
+        "weight": 40000.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 1,
+        "setType": "REST",
+        "startTime": "2026-11-09T16:59:20.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 2,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:01:50.0",
+        "weight": 82500.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 3,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:03:10.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 4,
+        "repetitionCount": 3,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:05:40.0",
+        "weight": 85250.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 5,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:07:00.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "DEADLIFT",
+          "name": "BARBELL_DEADLIFT",
+          "probability": null
+         }
+        ],
+        "messageIndex": 6,
+        "repetitionCount": 3,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:11:00.0",
+        "weight": 140000.0,
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 7,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:12:20.0",
+        "wktStepIndex": 1
+       },
+       {
+        "duration": 123.0,
+        "exercises": [
+         {
+          "category": "PLANK",
+          "name": "PLANK",
+          "probability": null
+         }
+        ],
+        "messageIndex": 8,
+        "repetitionCount": 0,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:16:20.0",
+        "weight": 0.0,
+        "wktStepIndex": 2
+       }
+      ]
+     }
+    ]
+   ],
+   "garmin": {
+    "put": "subcategory"
+   },
+   "name": "merge_subcategory",
+   "raised": null,
+   "source": 101,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 101,
+      "hevy_id": "w1",
+      "original_fit": null,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": null,
+     "error": "Garmin rejected an exercise pair; adjust one of: Bench Press (Barbell), Plank",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 101,
+     "status": "needs_mapping"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-DEAD",
+      "sets": [
+       {
+        "reps": 3,
+        "type": "normal",
+        "weight_kg": 140
+       }
+      ],
+      "title": "Deadlift (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "merge",
+   "activities": [],
+   "calls": [
+    [
+     "get_exercise_sets",
+     101
+    ],
+    [
+     "put_exercise_sets",
+     101,
+     {
+      "activityId": 101,
+      "exerciseSets": [
+       {
+        "duration": 50.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 10,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:00:00.0",
+        "weight": 40000.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 1,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:00:50.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 2,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:03:20.0",
+        "weight": 82500.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 150.0,
+        "exercises": [],
+        "messageIndex": 3,
+        "setType": "REST",
+        "startTime": "2026-11-09T17:04:40.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 4,
+        "repetitionCount": 3,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-09T17:07:10.0",
+        "weight": 85250.0,
+        "wktStepIndex": 0
+       }
+      ]
+     }
+    ]
+   ],
+   "garmin": {
+    "put": "gone"
+   },
+   "name": "merge_gone",
+   "raised": null,
+   "source": 101,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 101,
+      "hevy_id": "w1",
+      "original_fit": null,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": null,
+     "error": "watch activity deleted on Garmin",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 101,
+     "status": "needs_review"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "merge",
+   "activities": [],
+   "calls": [],
+   "garmin": {},
+   "name": "merge_unmapped",
+   "raised": "MappingMiss",
+   "source": 101,
+   "state": {
+    "backups": [],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": null,
+     "error": null,
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 101,
+     "status": "waiting_watch"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-NONE",
+      "sets": [
+       {
+        "reps": 8,
+        "type": "normal"
+       }
+      ],
+      "title": "Mystery Machine"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "describe",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3600.0, \"calories\": 0, \"avg_hr\": 133.5}",
+     "start_time": "2026-11-09 16:58:30",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "set_title",
+     101,
+     "Leg Day at the gym (  🏋️‍♂️ Leg  Day  🔥 )"
+    ],
+    [
+     "set_description",
+     101,
+     "⏱️ 62 min\n\n❤️ avg 134 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n• Squat (Barbell): 2 sets - 100.0kg × 5\n\n— synced by activsync"
+    ]
+   ],
+   "garmin": {},
+   "name": "describe_ok",
+   "raised": null,
+   "settings": {
+    "hevy_description_template": "",
+    "hevy_title_template": "{clean_title} at the gym ({title})"
+   },
+   "source": 101,
+   "state": {
+    "backups": [],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": "describe",
+     "error": null,
+     "garmin_activity_id": 101,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": 101,
+     "status": "described"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": null,
+      "sets": [
+       {
+        "reps": 5,
+        "type": "normal",
+        "weight_kg": 100
+       },
+       {
+        "reps": null,
+        "type": "normal",
+        "weight_kg": null
+       }
+      ],
+      "title": "Squat (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "  🏋️‍♂️ Leg  Day  🔥 ",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "describe",
+   "activities": [],
+   "calls": [
+    [
+     "set_title",
+     101,
+     "Push Day"
+    ]
+   ],
+   "garmin": {
+    "title": "gone"
+   },
+   "name": "describe_gone",
+   "raised": null,
+   "source": 101,
+   "state": {
+    "backups": [],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": null,
+     "error": "watch activity deleted on Garmin",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 101,
+     "status": "needs_review"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 4380.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-10-09 15:42:00",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ],
+    [
+     "near"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUvICAAAuRklUUfhAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAthFOQ2TLbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIWBwIAAAAAAQBCZW5jaCBQcmVzcyAoQmFyYmVsbCkAQwAACAEE/gKEAAKEAQKEAhAHAwEAHAAGAFNxdWF0IChCYXJiZWxsKQBEAAAIAQT+AoQAAoQBAoQCBgcEAgATACsAUGxhbmsARQAAFQAD/QSGAAEAAQEABW6/K0UAAEYAABQAAv0EhgMBAgZuvytFWAZuvytFWgaMvytFZUcAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChAegvytFbr8rRVDDAAABAAABAAAAAAAKAIACSAAA4QAG/gSGBgSGAASGBQECCgKECwKECDbAK0WgvytF8EkCAAABAAAAB4bAK0U2wCtFgDgBAAEAAAEAAgAAAAUAKAUIHMErRYbAK0XwSQIAAAMAAAAHbMErRRzBK0WAOAEAAQAAAQAEAAAAAwBUBQhcwitFbMErRYCpAwAABQAAAAeswitFXMIrRYA4AQABHAAGAAYAAQAFAEAGCELDK0WswitF8EkCAAAHAAEASQAA4QAI/gSGBgSGAASGBQECBwKECAKECgKECwKECZLDK0VCwytFgDgBAAEcAAYACAABAAiCxCtFksMrRYCpAwAACQABAAn9xCtFgsQrRXjgAQABEwArAAoAAgAGdsYrRYYGZdArRXgFZdArRQAESgAAEwAM/QSGAgSGBwSGCASGGQEAJwEA/gKEAAEAAQEADwECEAECCwKECmXQK0VuvytF2ERCANhEQgAKFAAACQFrhkUCSwAAEgAO/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEAEAECEQECCwKEGQKEGgKEC2XQK0VuvytF2ERCANhEQgAKFAAACQFrhkUCAAABAEwAACIABv0EhgAEhgEChAIBAAMBAAQBAAxl0CtF2ERCAAEAABoB6Eo="
+    ],
+    [
+     "set_title",
+     9001,
+     "Push Day"
+    ],
+    [
+     "set_description",
+     9001,
+     "⏱️ 72 min\n🔥 455 kcal\n❤️ avg 118 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n• Squat (Barbell): 2 sets - 100.0kg × 5\n• Plank: 1 set - 1min\n\n— synced by activsync"
+    ],
+    [
+     "delete_activity",
+     201
+    ]
+   ],
+   "garmin": {
+    "delete": [
+     "ok"
+    ],
+    "fit": "timed_hr",
+    "near": [
+     [
+      {
+       "activityId": 201,
+       "activityType": {
+        "typeKey": "strength_training"
+       },
+       "duration": 3725.0,
+       "startTimeGMT": "2026-11-09 16:59:10"
+      }
+     ]
+    ],
+    "sets": {
+     "exerciseSets": []
+    },
+    "upload": [
+     {
+      "ok": {
+       "activity_id": 9001,
+       "upload_id": 777
+      }
+     }
+    ]
+   },
+   "name": "replace_ok",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 0,
+     "serial": 55
+    }
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 795,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 4534,
+     "serial": 3412345678
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": 107.0,
+      "generated_calories": 581.0,
+      "kind": "replace",
+      "last_error": null,
+      "next_step": "finalize",
+      "phase": "done",
+      "pre_upload_ids": [
+       201
+      ],
+      "source_activity_id": 201,
+      "target_activity_id": 9001,
+      "upload_id": "777"
+     }
+    ],
+    "workout": {
+     "applied_strategy": "replace",
+     "error": null,
+     "garmin_activity_id": 9001,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": 201,
+     "status": "replaced"
+    }
+   },
+   "workout": {
+    "end_time": "2026-10-09T16:55:01Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": null,
+      "sets": [
+       {
+        "reps": 5,
+        "type": "normal",
+        "weight_kg": 100
+       },
+       {
+        "reps": null,
+        "type": "normal",
+        "weight_kg": null
+       }
+      ],
+      "title": "Squat (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-10-09T15:42:38Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ],
+    [
+     "near"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUp0BAAAuRklUJJBAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAlg8MAAAAbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAITBwIAAAgAAABEZWFkbGlmdCAoQmFyYmVsbCkAQwAAFQAD/QSGAAEAAQEAA26/K0UAAEQAABQAAv0EhgMBAgRuvytFX0UAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChAW+vytFbr8rRYA4AQABCAAAAAAAAAADAMAIBKzDK0VuBOrHK0WCBCfMK0V9BGXQK0VjA2XQK0UABEYAABMADP0EhgIEhgcEhggEhhkBACcBAP4ChAABAAEBAA8BAhABAgsChAZl0CtFbr8rRdhEQgDYREIAChQAAAkBcIJ+AkcAABIADv0EhgIEhgcEhggEhgUBAAYBAP4ChAABAAEBABABAhEBAgsChBkChBoChAdl0CtFbr8rRdhEQgDYREIAChQAAAkBcIJ+AgAAAQBIAAAiAAb9BIYABIYBAoQCAQADAQAEAQAIZdArRdhEQgABAAAaAajn"
+    ],
+    [
+     "set_title",
+     9001,
+     "Push Day"
+    ],
+    [
+     "delete_activity",
+     201
+    ]
+   ],
+   "garmin": {
+    "delete": [
+     "404"
+    ],
+    "fit": "plain_hr",
+    "near": [
+     []
+    ],
+    "upload": [
+     {
+      "ok": {
+       "activity_id": 9001,
+       "upload_id": 777
+      }
+     }
+    ]
+   },
+   "name": "replace_no_summary_keeps_identity",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "hevy_summary_on_structured": false
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 795,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": 112.0,
+      "generated_calories": 638.0,
+      "kind": "replace",
+      "last_error": null,
+      "next_step": "finalize",
+      "phase": "done",
+      "pre_upload_ids": [],
+      "source_activity_id": 201,
+      "target_activity_id": 9001,
+      "upload_id": "777"
+     }
+    ],
+    "workout": {
+     "applied_strategy": "replace",
+     "error": null,
+     "garmin_activity_id": 9001,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": 201,
+     "status": "replaced"
+    }
+   },
+   "workout": {
+    "end_time": "2026-10-09T16:55:01Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-DEAD",
+      "sets": [
+       {
+        "reps": 3,
+        "type": "normal",
+        "weight_kg": 140
+       }
+      ],
+      "title": "Deadlift (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-10-09T15:42:38Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 3725.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-11-09 16:59:10",
+     "strava_activity_id": 5555
+    }
+   ],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ]
+   ],
+   "garmin": {
+    "fit": "plain_hr",
+    "near": [
+     []
+    ]
+   },
+   "name": "replace_published",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    }
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 795,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": null,
+      "generated_calories": null,
+      "kind": "replace",
+      "last_error": "source activity already published to Strava",
+      "next_step": null,
+      "phase": "needs_review",
+      "pre_upload_ids": [],
+      "source_activity_id": 201,
+      "target_activity_id": null,
+      "upload_id": null
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": "source activity already published to Strava",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 201,
+     "status": "needs_review"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-DEAD",
+      "sets": [
+       {
+        "reps": 3,
+        "type": "normal",
+        "weight_kg": 140
+       }
+      ],
+      "title": "Deadlift (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 3725.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-11-09 16:59:10",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ],
+    [
+     "near"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUtYBAAAuRklUYRNAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAWBFjAAAAELBURUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIWBwIAAAAAAQBCZW5jaCBQcmVzcyAoQmFyYmVsbCkAQwAAFQAD/QSGAAEAAQEAAxCwVEUAAEQAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChARCsFRFELBURVDDAAABAAABAAAAAAAKAIACRQAA4QAG/gSGBgSGAASGBQECCgKECwKEBdiwVEVCsFRF8EkCAAABAAAABCixVEXYsFRFgDgBAAEAAAEAAgAAAAUAKAUFvrFURSixVEXwSQIAAAMAAAAEDrJURb6xVEWAOAEAAQAAAQAEAAAAAwBUBQO2vlRFAARGAAATAAr9BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQALAoQGtr5URRCwVEVwODkAcDg5AAoUAAAJAVkBRwAAEgAM/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEACwKEGQKEGgKEB7a+VEUQsFRFcDg5AHA4OQAKFAAACQFZAQAAAQBIAAAiAAb9BIYABIYBAoQCAQADAQAEAQAItr5URXA4OQABAAAaAWq2"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "set_title",
+     301,
+     "Push Day"
+    ],
+    [
+     "set_description",
+     301,
+     "⏱️ 62 min\n🔥 455 kcal\n❤️ avg 118 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n\n— synced by activsync"
+    ],
+    [
+     "delete_activity",
+     201
+    ]
+   ],
+   "garmin": {
+    "delete": [
+     "BOOM",
+     "ok"
+    ],
+    "fit": "no_hr",
+    "near": [
+     [
+      {
+       "activityId": 201,
+       "activityType": {
+        "typeKey": "strength_training"
+       },
+       "duration": 3725.0,
+       "startTimeGMT": "2026-11-09 16:59:10"
+      }
+     ],
+     [
+      {
+       "activityId": 201,
+       "activityType": {
+        "typeKey": "strength_training"
+       },
+       "duration": 3725.0,
+       "startTimeGMT": "2026-11-09 16:59:10"
+      },
+      {
+       "activityId": 300,
+       "activityType": {
+        "typeKey": "running"
+       },
+       "duration": 3700,
+       "startTimeGMT": "2026-11-09 17:01:00"
+      }
+     ],
+     [
+      {
+       "activityId": 201,
+       "activityType": {
+        "typeKey": "strength_training"
+       },
+       "duration": 3725.0,
+       "startTimeGMT": "2026-11-09 16:59:10"
+      },
+      {
+       "activityId": "301",
+       "activityType": {
+        "typeKey": "strength_training"
+       },
+       "duration": "3700.5",
+       "startTimeGMT": "2026-11-09 17:04:59"
+      },
+      {
+       "activityId": 302,
+       "activityType": {
+        "typeKey": "other"
+       },
+       "duration": 3700,
+       "startTimeGMT": "2026-11-09 17:20:00"
+      },
+      {
+       "activityId": 303,
+       "activityType": {
+        "typeKey": "other"
+       },
+       "duration": 400,
+       "startTimeGMT": "2026-11-09 17:00:00"
+      },
+      {
+       "activityId": null,
+       "activityType": {
+        "typeKey": "other"
+       },
+       "duration": 3700,
+       "startTimeGMT": "2026-11-09T17:00:00Z"
+      }
+     ]
+    ],
+    "upload": [
+     {
+      "error": true
+     }
+    ]
+   },
+   "name": "replace_unknown_then_resolved",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity_override": {
+     "manufacturer": 1,
+     "product": 4440,
+     "serial": 99
+    }
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 737,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 4534,
+     "serial": 3412345678
+    },
+    "operations": [
+     {
+      "attempt_count": 1,
+      "delete_attempt_count": 1,
+      "generated_avg_hr": null,
+      "generated_calories": 345.0,
+      "kind": "replace",
+      "last_error": "BOOM",
+      "next_step": "delete",
+      "phase": "finalizing",
+      "pre_upload_ids": [
+       201
+      ],
+      "source_activity_id": 201,
+      "target_activity_id": 301,
+      "upload_id": null
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": null,
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 201,
+     "status": "syncing"
+    }
+   },
+   "ticks": 3,
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 3725.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-11-09 16:59:10",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ],
+    [
+     "near"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUtYBAAAuRklUYRNAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAlg8MAAAAELBURUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIWBwIAAAAAAQBCZW5jaCBQcmVzcyAoQmFyYmVsbCkAQwAAFQAD/QSGAAEAAQEAAxCwVEUAAEQAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChARCsFRFELBURVDDAAABAAABAAAAAAAKAIACRQAA4QAG/gSGBgSGAASGBQECCgKECwKEBdiwVEVCsFRF8EkCAAABAAAABCixVEXYsFRFgDgBAAEAAAEAAgAAAAUAKAUFvrFURSixVEXwSQIAAAMAAAAEDrJURb6xVEWAOAEAAQAAAQAEAAAAAwBUBQO2vlRFAARGAAATAAr9BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQALAoQGtr5URRCwVEVwODkAcDg5AAoUAAAJAVkBRwAAEgAM/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEACwKEGQKEGgKEB7a+VEUQsFRFcDg5AHA4OQAKFAAACQFZAQAAAQBIAAAiAAb9BIYABIYBAoQCAQADAQAEAQAItr5URXA4OQABAAAaAb41"
+    ],
+    [
+     "near"
+    ]
+   ],
+   "garmin": {
+    "fit": "no_hr",
+    "near": [
+     [],
+     [
+      {
+       "activityId": 401,
+       "activityType": {
+        "typeKey": "other"
+       },
+       "duration": 3600,
+       "startTimeGMT": "2026-11-09 17:00:00"
+      },
+      {
+       "activityId": 400,
+       "activityType": {
+        "typeKey": "strength_training"
+       },
+       "duration": 3600.0,
+       "startTimeGMT": "2026-11-09T16:55:00Z"
+      }
+     ]
+    ],
+    "upload": [
+     {
+      "ok": {
+       "activity_id": null,
+       "upload_id": null
+      }
+     }
+    ]
+   },
+   "name": "replace_ambiguous",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    }
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 737,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": null,
+      "generated_calories": 345.0,
+      "kind": "replace",
+      "last_error": "ambiguous upload result: candidates [400, 401]",
+      "next_step": "resolve",
+      "phase": "needs_review",
+      "pre_upload_ids": [],
+      "source_activity_id": 201,
+      "target_activity_id": null,
+      "upload_id": null
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": "ambiguous upload result: candidates [400, 401]",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 201,
+     "status": "needs_review"
+    }
+   },
+   "ticks": 2,
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 3725.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-11-09 16:59:10",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ],
+    [
+     "near"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUtYBAAAuRklUYRNAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAlg8MAAAAELBURUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIWBwIAAAAAAQBCZW5jaCBQcmVzcyAoQmFyYmVsbCkAQwAAFQAD/QSGAAEAAQEAAxCwVEUAAEQAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChARCsFRFELBURVDDAAABAAABAAAAAAAKAIACRQAA4QAG/gSGBgSGAASGBQECCgKECwKEBdiwVEVCsFRF8EkCAAABAAAABCixVEXYsFRFgDgBAAEAAAEAAgAAAAUAKAUFvrFURSixVEXwSQIAAAMAAAAEDrJURb6xVEWAOAEAAQAAAQAEAAAAAwBUBQO2vlRFAARGAAATAAr9BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQALAoQGtr5URRCwVEVwODkAcDg5AAoUAAAJAVkBRwAAEgAM/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEACwKEGQKEGgKEB7a+VEUQsFRFcDg5AHA4OQAKFAAACQFZAQAAAQBIAAAiAAb9BIYABIYBAoQCAQADAQAEAQAItr5URXA4OQABAAAaAb41"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ],
+    [
+     "near"
+    ]
+   ],
+   "garmin": {
+    "fit": "no_hr",
+    "near": [
+     []
+    ],
+    "upload": [
+     {
+      "ok": {
+       "activity_id": 201,
+       "upload_id": "u-1"
+      }
+     }
+    ]
+   },
+   "name": "replace_unresolved",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    }
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 737,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "operations": [
+     {
+      "attempt_count": 14,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": null,
+      "generated_calories": 345.0,
+      "kind": "replace",
+      "last_error": "upload outcome unresolved after 15 checks",
+      "next_step": "resolve",
+      "phase": "needs_review",
+      "pre_upload_ids": [],
+      "source_activity_id": 201,
+      "target_activity_id": null,
+      "upload_id": "u-1"
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": "upload outcome unresolved after 15 checks",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 201,
+     "status": "needs_review"
+    }
+   },
+   "ticks": 16,
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 3725.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-11-09 16:59:10",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ],
+    [
+     "near"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUtYBAAAuRklUYRNAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAlg8MAAAAELBURUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIWBwIAAAAAAQBCZW5jaCBQcmVzcyAoQmFyYmVsbCkAQwAAFQAD/QSGAAEAAQEAAxCwVEUAAEQAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChARCsFRFELBURVDDAAABAAABAAAAAAAKAIACRQAA4QAG/gSGBgSGAASGBQECCgKECwKEBdiwVEVCsFRF8EkCAAABAAAABCixVEXYsFRFgDgBAAEAAAEAAgAAAAUAKAUFvrFURSixVEXwSQIAAAMAAAAEDrJURb6xVEWAOAEAAQAAAQAEAAAAAwBUBQO2vlRFAARGAAATAAr9BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQALAoQGtr5URRCwVEVwODkAcDg5AAoUAAAJAVkBRwAAEgAM/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEACwKEGQKEGgKEB7a+VEUQsFRFcDg5AHA4OQAKFAAACQFZAQAAAQBIAAAiAAb9BIYABIYBAoQCAQADAQAEAQAItr5URXA4OQABAAAaAb41"
+    ],
+    [
+     "set_title",
+     9001,
+     "Push Day"
+    ],
+    [
+     "set_description",
+     9001,
+     "⏱️ 62 min\n🔥 455 kcal\n❤️ avg 118 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n\n— synced by activsync"
+    ],
+    [
+     "delete_activity",
+     201
+    ],
+    [
+     "delete_activity",
+     201
+    ],
+    [
+     "delete_activity",
+     201
+    ]
+   ],
+   "garmin": {
+    "delete": [
+     "BOOM"
+    ],
+    "fit": "no_hr",
+    "near": [
+     []
+    ],
+    "upload": [
+     {
+      "ok": {
+       "activity_id": 9001,
+       "upload_id": 777
+      }
+     }
+    ]
+   },
+   "name": "replace_delete_fails",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    }
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 737,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 2,
+      "generated_avg_hr": null,
+      "generated_calories": 345.0,
+      "kind": "replace",
+      "last_error": "could not delete watch activity 201: BOOM",
+      "next_step": "delete",
+      "phase": "needs_review",
+      "pre_upload_ids": [],
+      "source_activity_id": 201,
+      "target_activity_id": 9001,
+      "upload_id": "777"
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": "could not delete watch activity 201: BOOM",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 201,
+     "status": "needs_review"
+    }
+   },
+   "ticks": 4,
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 3725.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-11-09 16:59:10",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "download_fit",
+     201
+    ],
+    [
+     "get_exercise_sets",
+     201
+    ],
+    [
+     "near"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUtYBAAAuRklUYRNAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAlg8MAAAAELBURUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIWBwIAAAAAAQBCZW5jaCBQcmVzcyAoQmFyYmVsbCkAQwAAFQAD/QSGAAEAAQEAAxCwVEUAAEQAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChARCsFRFELBURVDDAAABAAABAAAAAAAKAIACRQAA4QAG/gSGBgSGAASGBQECCgKECwKEBdiwVEVCsFRF8EkCAAABAAAABCixVEXYsFRFgDgBAAEAAAEAAgAAAAUAKAUFvrFURSixVEXwSQIAAAMAAAAEDrJURb6xVEWAOAEAAQAAAQAEAAAAAwBUBQO2vlRFAARGAAATAAr9BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQALAoQGtr5URRCwVEVwODkAcDg5AAoUAAAJAVkBRwAAEgAM/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEACwKEGQKEGgKEB7a+VEUQsFRFcDg5AHA4OQAKFAAACQFZAQAAAQBIAAAiAAb9BIYABIYBAoQCAQADAQAEAQAItr5URXA4OQABAAAaAb41"
+    ]
+   ],
+   "garmin": {
+    "fit": "no_hr",
+    "near": [
+     []
+    ],
+    "upload": [
+     {
+      "rejected": true
+     }
+    ]
+   },
+   "name": "replace_rejected",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    }
+   },
+   "source": 201,
+   "state": {
+    "backups": [
+     {
+      "garmin_activity_id": 201,
+      "hevy_id": "w1",
+      "original_fit": 737,
+      "original_sets": {
+       "exerciseSets": []
+      }
+     }
+    ],
+    "identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": null,
+      "generated_calories": 345.0,
+      "kind": "replace",
+      "last_error": "Garmin rejected upload: BOOM",
+      "next_step": null,
+      "phase": "failed",
+      "pre_upload_ids": [],
+      "source_activity_id": 201,
+      "target_activity_id": null,
+      "upload_id": null
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": "Garmin rejected upload: BOOM",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 201,
+     "status": "failed"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "replace",
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "garmin_activity_id": 201,
+     "garmin_data": "{\"duration\": 3725.0, \"calories\": 455.4, \"avg_hr\": 118.5}",
+     "start_time": "2026-11-09 16:59:10",
+     "strava_activity_id": null
+    }
+   ],
+   "blocker": true,
+   "calls": [],
+   "garmin": {},
+   "name": "replace_source_taken",
+   "raised": null,
+   "source": 201,
+   "state": {
+    "backups": [],
+    "identity": null,
+    "operations": [],
+    "workout": {
+     "applied_strategy": null,
+     "error": null,
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": 201,
+     "status": "syncing"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "passive",
+   "activities": [
+    {
+     "activity_type": "running",
+     "garmin_activity_id": 500,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "start_time": "2026-11-09 12:00:00",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [
+    [
+     "near"
+    ],
+    [
+     "daily",
+     "2026-11-09"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUhcDAAAuRklUj09AAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAlg8MAAAAELBURUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIWBwIAAAAAAQBCZW5jaCBQcmVzcyAoQmFyYmVsbCkAQwAACAEE/gKEAAKEAQKEAgYHAwEAEwArAFBsYW5rAEQAABUAA/0EhgABAAEBAAQQsFRFAABFAAAUAAL9BIYDAQIFELBURWVGAADhAAr+BIYGBIYABIYFAQIHAoQIAoQKAoQLAoQDAoQEAoQGQrBURRCwVEVQwwAAAQAAAQAAAAAACgCAAgVMsFRFaAXEsFRFa0cAAOEABv4EhgYEhgAEhgUBAgoChAsChAfYsFRFQrBURfBJAgAAAQAAAAYosVRF2LBURYA4AQABAAABAAIAAAAFACgFBTyxVEVuBbSxVEVxB76xVEUosVRF8EkCAAADAAAABg6yVEW+sVRFgDgBAAEAAAEABAAAAAMAVAUFLLJURV8FpLJURWIH/rJURQ6yVEWAqQMAAAUAAAAFHLNURWVIAADhAAj+BIYGBIYABIYFAQIHAoQIAoQKAoQLAoQIebNURf6yVEV44AEAARMAKwAGAAEABZSzVEVoBQy0VEVrBYS0VEVuBfy0VEVxBXS1VEVfBey1VEViBWS2VEVlBdy2VEVoBVS3VEVrBcy3VEVuBUS4VEVxBby4VEVfBTS5VEViBay5VEVlBSS6VEVoBZy6VEVrBRS7VEVuBYy7VEVxBQS8VEVfBXy8VEViBfS8VEVlBWy9VEVoBeS9VEVrBVy+VEVuBLa+VEUABEkAABMADP0EhgIEhgcEhggEhhkBACcBAP4ChAABAAEBAA8BAhABAgsChAm2vlRFELBURXA4OQBwODkAChQAAAkBaHHfAUoAABIADv0EhgIEhgcEhggEhgUBAAYBAP4ChAABAAEBABABAhEBAgsChBkChBoChAq2vlRFELBURXA4OQBwODkAChQAAAkBaHHfAQAAAQBLAAAiAAb9BIYABIYBAoQCAQADAQAEAQALtr5URXA4OQABAAAaAa94"
+    ],
+    [
+     "set_title",
+     9500,
+     "Push Day"
+    ],
+    [
+     "set_description",
+     9500,
+     "⏱️ 62 min\n🔥 479 kcal\n❤️ avg 104 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n• Plank: 1 set - 1min\n\n— synced by activsync"
+    ]
+   ],
+   "garmin": {
+    "daily": {
+     "2026-11-09": {
+      "heartRateValues": [
+       [
+        1794243300000,
+        95
+       ],
+       [
+        1794243420000,
+        98
+       ],
+       [
+        1794243540000,
+        101
+       ],
+       [
+        1794243660000,
+        104
+       ],
+       [
+        1794243780000,
+        107
+       ],
+       [
+        1794243900000,
+        110
+       ],
+       [
+        1794244020000,
+        113
+       ],
+       [
+        1794244140000,
+        95
+       ],
+       [
+        1794244260000,
+        98
+       ],
+       [
+        1794244380000,
+        101
+       ],
+       [
+        1794244500000,
+        104
+       ],
+       [
+        1794244620000,
+        107
+       ],
+       [
+        1794244740000,
+        110
+       ],
+       [
+        1794244860000,
+        113
+       ],
+       [
+        1794244980000,
+        95
+       ],
+       [
+        1794245100000,
+        98
+       ],
+       [
+        1794245220000,
+        101
+       ],
+       [
+        1794245340000,
+        104
+       ],
+       [
+        1794245460000,
+        107
+       ],
+       [
+        1794245580000,
+        110
+       ],
+       [
+        1794245700000,
+        113
+       ],
+       [
+        1794245820000,
+        95
+       ],
+       [
+        1794245940000,
+        98
+       ],
+       [
+        1794246060000,
+        101
+       ],
+       [
+        1794246180000,
+        104
+       ],
+       [
+        1794246300000,
+        107
+       ],
+       [
+        1794246420000,
+        110
+       ],
+       [
+        1794246540000,
+        113
+       ],
+       [
+        1794246660000,
+        95
+       ],
+       [
+        1794246780000,
+        98
+       ],
+       [
+        1794246900000,
+        101
+       ],
+       [
+        1794247020000,
+        104
+       ],
+       [
+        1794247140000,
+        107
+       ],
+       [
+        1794247260000,
+        110
+       ],
+       [
+        1794247380000,
+        113
+       ],
+       [
+        1794247500000,
+        95
+       ],
+       [
+        1794247620000,
+        98
+       ],
+       [
+        1794247740000,
+        101
+       ],
+       [
+        1794247860000,
+        104
+       ],
+       [
+        1794247980000,
+        107
+       ]
+      ]
+     }
+    },
+    "near": [
+     [
+      {
+       "activityId": 500,
+       "activityType": {
+        "typeKey": "running"
+       },
+       "duration": 3600.0,
+       "startTimeGMT": "2026-11-09 12:00:00"
+      }
+     ]
+    ],
+    "upload": [
+     {
+      "ok": {
+       "activity_id": 9500,
+       "upload_id": 5
+      }
+     }
+    ]
+   },
+   "name": "passive_ok",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    }
+   },
+   "source": null,
+   "state": {
+    "backups": [],
+    "identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": 104.0,
+      "generated_calories": 479.0,
+      "kind": "upload_passive",
+      "last_error": null,
+      "next_step": "finalize",
+      "phase": "done",
+      "pre_upload_ids": [
+       500
+      ],
+      "source_activity_id": null,
+      "target_activity_id": 9500,
+      "upload_id": "5"
+     }
+    ],
+    "workout": {
+     "applied_strategy": "passive",
+     "error": null,
+     "garmin_activity_id": 9500,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": null,
+     "status": "uploaded_passive"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "passive",
+   "activities": [],
+   "calls": [
+    [
+     "near"
+    ],
+    [
+     "daily",
+     "2026-11-09"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit",
+     "DiDYUmMBAAAuRklUqlhAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAAABbILYKELBURUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAITBwIAAAgAAABEZWFkbGlmdCAoQmFyYmVsbCkAQwAAFQAD/QSGAAEAAQEAAxCwVEUAAEQAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChARgsFRFELBURYA4AQABCAAAAAAAAAADAMAIA7a+VEUABEUAABMACv0EhgIEhgcEhggEhhkBACcBAP4ChAABAAEBAAsChAW2vlRFELBURXA4OQBwODkAChQAAAkBWQFGAAASAAz9BIYCBIYHBIYIBIYFAQAGAQD+AoQAAQABAQALAoQZAoQaAoQGtr5URRCwVEVwODkAcDg5AAoUAAAJAVkBAAABAEcAACIABv0EhgAEhgEChAIBAAMBAAQBAAe2vlRFcDg5AAEAABoBTrM="
+    ],
+    [
+     "set_title",
+     9500,
+     "Push Day"
+    ],
+    [
+     "set_description",
+     9500,
+     "⏱️ 62 min\n🔥 345 kcal\n\n• Deadlift (Barbell): 1 set - 140.0kg × 3\n\n— synced by activsync"
+    ]
+   ],
+   "garmin": {
+    "near": [
+     []
+    ],
+    "upload": [
+     {
+      "ok": {
+       "activity_id": 9500,
+       "upload_id": 5
+      }
+     }
+    ]
+   },
+   "name": "passive_fresh_identity",
+   "raised": null,
+   "source": null,
+   "state": {
+    "backups": [],
+    "identity": {
+     "manufacturer": 1,
+     "product": 0,
+     "serial": "random"
+    },
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": null,
+      "generated_calories": 345.0,
+      "kind": "upload_passive",
+      "last_error": null,
+      "next_step": "finalize",
+      "phase": "done",
+      "pre_upload_ids": [],
+      "source_activity_id": null,
+      "target_activity_id": 9500,
+      "upload_id": "5"
+     }
+    ],
+    "workout": {
+     "applied_strategy": "passive",
+     "error": null,
+     "garmin_activity_id": 9500,
+     "garmin_applied_updated_at": "2026-11-09T18:05:00Z",
+     "source_garmin_activity_id": null,
+     "status": "uploaded_passive"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-DEAD",
+      "sets": [
+       {
+        "reps": 3,
+        "type": "normal",
+        "weight_kg": 140
+       }
+      ],
+      "title": "Deadlift (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "passive",
+   "activities": [
+    {
+     "activity_type": "walking",
+     "garmin_activity_id": 600,
+     "garmin_data": "{\"duration\": 600.0}",
+     "start_time": "2026-11-09 17:30:00",
+     "strava_activity_id": null
+    },
+    {
+     "activity_type": "running",
+     "garmin_activity_id": 601,
+     "garmin_data": "{\"duration\": 3700.0}",
+     "start_time": "2026-11-09 16:00:00",
+     "strava_activity_id": null
+    }
+   ],
+   "calls": [],
+   "garmin": {},
+   "name": "passive_wrong_type",
+   "raised": null,
+   "source": null,
+   "state": {
+    "backups": [],
+    "identity": null,
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": null,
+      "generated_calories": null,
+      "kind": "upload_passive",
+      "last_error": "overlapping walking activity exists — passive upload would duplicate it",
+      "next_step": null,
+      "phase": "needs_review",
+      "pre_upload_ids": [],
+      "source_activity_id": null,
+      "target_activity_id": null,
+      "upload_id": null
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": "overlapping walking activity exists — passive upload would duplicate it",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": null,
+     "status": "needs_review"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "action": "passive",
+   "activities": [],
+   "calls": [
+    [
+     "near"
+    ]
+   ],
+   "garmin": {
+    "near": [
+     []
+    ]
+   },
+   "name": "passive_unmapped",
+   "raised": null,
+   "source": null,
+   "state": {
+    "backups": [],
+    "identity": null,
+    "operations": [
+     {
+      "attempt_count": 0,
+      "delete_attempt_count": 0,
+      "generated_avg_hr": null,
+      "generated_calories": null,
+      "kind": "upload_passive",
+      "last_error": "unmapped exercises: Mystery Machine",
+      "next_step": null,
+      "phase": "failed",
+      "pre_upload_ids": [],
+      "source_activity_id": null,
+      "target_activity_id": null,
+      "upload_id": null
+     }
+    ],
+    "workout": {
+     "applied_strategy": null,
+     "error": "unmapped exercises: Mystery Machine",
+     "garmin_activity_id": null,
+     "garmin_applied_updated_at": null,
+     "source_garmin_activity_id": null,
+     "status": "needs_mapping"
+    }
+   },
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-NONE",
+      "sets": [
+       {
+        "reps": 8,
+        "type": "normal"
+       }
+      ],
+      "title": "Mystery Machine"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  }
+ ],
+ "texts": [
+  {
+   "template": null,
+   "title": "Push Day",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "template": "{clean_title}!",
+   "title": "Leg Day!",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "  🏋️‍♂️ Leg  Day  🔥 ",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "template": "{title} / {clean_title}",
+   "title": "💪🔥 / Workout",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "💪🔥",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "template": null,
+   "title": "Workout",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "template": "  {clean_title}  ",
+   "title": "Workout",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "template": null,
+   "title": "Keycap 1 x",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": "T-PLANK",
+      "sets": [
+       {
+        "duration_seconds": 61.5,
+        "type": "normal"
+       }
+      ],
+      "title": "Plank"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Keycap 1️⃣ x",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "avg_hr": 128,
+   "calories": 412,
+   "description": "⏱️ 62 min\n🔥 412 kcal\n❤️ avg 128 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n• Squat (Barbell): 2 sets - 100.0kg × 5\n\n— synced by activsync",
+   "template": null,
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": null,
+      "sets": [
+       {
+        "reps": 5,
+        "type": "normal",
+        "weight_kg": 100
+       },
+       {
+        "reps": null,
+        "type": "normal",
+        "weight_kg": null
+       }
+      ],
+      "title": "Squat (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "avg_hr": null,
+   "calories": 0,
+   "description": "⏱️ 62 min\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n• Squat (Barbell): 2 sets - 100.0kg × 5\n\n— synced by activsync",
+   "template": null,
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": null,
+      "sets": [
+       {
+        "reps": 5,
+        "type": "normal",
+        "weight_kg": 100
+       },
+       {
+        "reps": null,
+        "type": "normal",
+        "weight_kg": null
+       }
+      ],
+      "title": "Squat (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "avg_hr": 99,
+   "calories": null,
+   "description": "❤️ avg 99 bpm\n\n• Bench Press (Barbell): 2 sets - 85.2kg × 5.0 - 1 warmup - 1 failure - RPE 8\n• Squat (Barbell): 2 sets - 100.0kg × 5",
+   "template": "{avg_hr}\n\n{calories}\n{exercises}",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": null,
+      "sets": [
+       {
+        "reps": 5,
+        "type": "normal",
+        "weight_kg": 100
+       },
+       {
+        "reps": null,
+        "type": "normal",
+        "weight_kg": null
+       }
+      ],
+      "title": "Squat (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  },
+  {
+   "avg_hr": 6,
+   "calories": 5,
+   "description": "— synced by activsync",
+   "template": "{marker}",
+   "workout": {
+    "end_time": "2026-11-09T18:02:30Z",
+    "exercises": [
+     {
+      "exercise_template_id": "T-BENCH",
+      "sets": [
+       {
+        "reps": 10,
+        "type": "warmup",
+        "weight_kg": 40
+       },
+       {
+        "reps": 5.0,
+        "rpe": 8,
+        "type": "normal",
+        "weight_kg": 82.5
+       },
+       {
+        "reps": 3,
+        "type": "failure",
+        "weight_kg": 85.25
+       }
+      ],
+      "title": "Bench Press (Barbell)"
+     },
+     {
+      "exercise_template_id": null,
+      "sets": [
+       {
+        "reps": 5,
+        "type": "normal",
+        "weight_kg": 100
+       },
+       {
+        "reps": null,
+        "type": "normal",
+        "weight_kg": null
+       }
+      ],
+      "title": "Squat (Barbell)"
+     }
+    ],
+    "id": "w1",
+    "start_time": "2026-11-09T17:00:00Z",
+    "title": "Push Day 💪",
+    "updated_at": "2026-11-09T18:05:00Z"
+   }
+  }
+ ]
+}
