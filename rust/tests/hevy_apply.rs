@@ -363,6 +363,8 @@ fn applying_runs_on_the_poller_threads() {
         source_garmin_activity_id: None,
         garmin_activity_id: None,
         error: None,
+        garmin_applied_updated_at: None,
+        strava_applied_updated_at: None,
     };
     assert_send(&apply.execute_merge(&row));
     assert_send(&apply.execute_describe(&row));

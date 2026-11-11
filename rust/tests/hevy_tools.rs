@@ -85,9 +85,9 @@ async fn mapping_screen_matches_python() {
             let template = Template {
                 id,
                 title,
-                primary_muscle_group: muscle,
+                primary_muscle_group: Some(muscle),
                 secondary_muscle_groups: &[],
-                equipment_category: "other",
+                equipment_category: Some("other"),
                 is_custom: true,
             };
             hevy_db::upsert_template(&conn, &template).unwrap();

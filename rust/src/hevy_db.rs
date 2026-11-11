@@ -18,7 +18,12 @@ pub struct Workout {
     pub source_garmin_activity_id: Option<i64>,
     pub garmin_activity_id: Option<i64>,
     pub error: Option<String>,
+    pub garmin_applied_updated_at: Option<String>,
+    pub strava_applied_updated_at: Option<String>,
 }
+
+/// The statuses of a workout that has landed on Garmin.
+pub const APPLIED_STATUSES: [&str; 4] = ["merged", "described", "replaced", "uploaded_passive"];
 
 impl Workout {
     fn from_row(row: &Row<'_>) -> DbResult<Self> {
@@ -34,6 +39,8 @@ impl Workout {
             source_garmin_activity_id: row.get("source_garmin_activity_id")?,
             garmin_activity_id: row.get("garmin_activity_id")?,
             error: row.get("error")?,
+            garmin_applied_updated_at: row.get("garmin_applied_updated_at")?,
+            strava_applied_updated_at: row.get("strava_applied_updated_at")?,
         })
     }
 
@@ -200,6 +207,39 @@ pub fn reset_links(conn: &Connection, hevy_id: &str) -> DbResult<()> {
              garmin_applied_updated_at = NULL, strava_applied_updated_at = NULL, updated_at = ?1
          WHERE hevy_id = ?2",
         params![now_iso(), hevy_id],
+    )?;
+    Ok(())
+}
+
+pub fn delete_workout(conn: &Connection, hevy_id: &str) -> DbResult<()> {
+    conn.execute("DELETE FROM hevy_workouts WHERE hevy_id = ?1", [hevy_id])?;
+    Ok(())
+}
+
+pub fn set_applied_strava(conn: &Connection, hevy_id: &str, updated_at: &str) -> DbResult<()> {
+    conn.execute(
+        "UPDATE hevy_workouts SET strava_applied_updated_at = ?1, updated_at = ?2 WHERE hevy_id = ?3",
+        params![updated_at, now_iso(), hevy_id],
+    )?;
+    Ok(())
+}
+
+pub fn event_seen(conn: &Connection, event_type: &str, workout_id: &str, timestamp: &str) -> DbResult<bool> {
+    let found: Option<i64> = conn
+        .query_row(
+            "SELECT 1 FROM hevy_events_seen WHERE event_type = ?1 AND workout_id = ?2 AND event_timestamp = ?3",
+            params![event_type, workout_id, timestamp],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(found.is_some())
+}
+
+/// The safety-lag overlap re-delivers events; the dedupe key absorbs them.
+pub fn record_event_seen(conn: &Connection, event_type: &str, workout_id: &str, timestamp: &str) -> DbResult<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO hevy_events_seen (event_type, workout_id, event_timestamp) VALUES (?1, ?2, ?3)",
+        params![event_type, workout_id, timestamp],
     )?;
     Ok(())
 }
@@ -408,9 +448,9 @@ pub fn resume_operation(conn: &Connection, id: i64, phase: &str) -> DbResult<()>
 pub struct Template<'a> {
     pub id: &'a str,
     pub title: &'a str,
-    pub primary_muscle_group: &'a str,
+    pub primary_muscle_group: Option<&'a str>,
     pub secondary_muscle_groups: &'a [&'a str],
-    pub equipment_category: &'a str,
+    pub equipment_category: Option<&'a str>,
     pub is_custom: bool,
 }
 
@@ -515,6 +555,16 @@ pub fn wake_needs_mapping(conn: &Connection, template_id: &str) -> DbResult<Vec<
         })
         .map(|row| row.hevy_id)
         .collect();
+    wake(conn, affected)
+}
+
+/// Wakes one parked workout, for a newer Hevy revision of it.
+pub fn wake_workout(conn: &Connection, hevy_id: &str) -> DbResult<Vec<String>> {
+    let parked = get_workout(conn, hevy_id)?.is_some_and(|row| row.status == "needs_mapping");
+    wake(conn, if parked { vec![hevy_id.to_string()] } else { Vec::new() })
+}
+
+fn wake(conn: &Connection, affected: Vec<String>) -> DbResult<Vec<String>> {
     let now = now_iso();
     for hevy_id in &affected {
         conn.execute(

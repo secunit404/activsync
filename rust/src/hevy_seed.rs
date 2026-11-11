@@ -138,9 +138,9 @@ pub fn seed(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
             &Template {
                 id,
                 title,
-                primary_muscle_group: muscle,
+                primary_muscle_group: Some(muscle),
                 secondary_muscle_groups: &[],
-                equipment_category: equipment,
+                equipment_category: Some(equipment),
                 is_custom: false,
             },
         )?;
@@ -150,9 +150,9 @@ pub fn seed(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
         &Template {
             id: OVERRIDDEN_TEMPLATE_ID,
             title: "Triceps Pushdown (Cable)",
-            primary_muscle_group: "triceps",
+            primary_muscle_group: Some("triceps"),
             secondary_muscle_groups: &[],
-            equipment_category: "cable",
+            equipment_category: Some("cable"),
             is_custom: false,
         },
     )?;
@@ -161,9 +161,9 @@ pub fn seed(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
         &Template {
             id: CUSTOM_TEMPLATE_ID,
             title: "Bulgarian Ring Row",
-            primary_muscle_group: "upper_back",
+            primary_muscle_group: Some("upper_back"),
             secondary_muscle_groups: &["biceps"],
-            equipment_category: "other",
+            equipment_category: Some("other"),
             is_custom: true,
         },
     )?;

@@ -84,7 +84,7 @@ pub fn resolve_exercises(conn: &Connection, workout: &Value) -> Result<Vec<Resol
 }
 
 /// Python's `timedelta(seconds=x)`, which rounds to the microsecond.
-fn seconds(value: f64) -> Duration {
+pub(crate) fn seconds(value: f64) -> Duration {
     Duration::microseconds((value * 1e6).round_ties_even() as i64)
 }
 
@@ -93,7 +93,7 @@ fn round3(value: f64) -> f64 {
     format!("{value:.3}").parse().unwrap_or(value)
 }
 
-fn number(value: Option<&Value>) -> Option<f64> {
+pub(crate) fn number(value: Option<&Value>) -> Option<f64> {
     value.and_then(Value::as_f64)
 }
 
@@ -177,13 +177,13 @@ pub fn build_exercise_sets_payload(resolved: &[ResolvedExercise], start: &str, d
 }
 
 /// The duration in an activity's `garmin_data`; 0 when absent or unreadable.
-fn activity_duration_seconds(activity: &db::ActivityRow) -> f64 {
+pub(crate) fn activity_duration_seconds(activity: &db::ActivityRow) -> f64 {
     let data: Value = serde_json::from_str(&activity.garmin_data).unwrap_or(Value::Null);
     float(data.get("duration")).unwrap_or(0.0)
 }
 
 /// Python's `float()` over a decoded value.
-fn float(value: Option<&Value>) -> Option<f64> {
+pub(crate) fn float(value: Option<&Value>) -> Option<f64> {
     match value? {
         Value::Number(n) => n.as_f64(),
         Value::String(s) => s.trim().parse().ok(),
@@ -192,16 +192,16 @@ fn float(value: Option<&Value>) -> Option<f64> {
     }
 }
 
-fn workout_window(row: &Workout) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
+pub(crate) fn workout_window(row: &Workout) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
     Some((parse_timestamp(&row.start_time)?, parse_timestamp(&row.end_time)?))
 }
 
-fn total_seconds(span: Duration) -> f64 {
+pub(crate) fn total_seconds(span: Duration) -> f64 {
     span.num_microseconds().map_or(span.num_seconds() as f64, |us| us as f64 / 1e6)
 }
 
 /// The linked activity's start and duration, else the workout's own window.
-fn activity_window(conn: &Connection, activity_id: i64, row: &Workout) -> Result<(String, f64), ApplyError> {
+pub(crate) fn activity_window(conn: &Connection, activity_id: i64, row: &Workout) -> Result<(String, f64), ApplyError> {
     if let Some(activity) = db::get_activity(conn, activity_id)? {
         let duration = activity_duration_seconds(&activity);
         if duration > 0.0 {
@@ -215,7 +215,7 @@ fn activity_window(conn: &Connection, activity_id: i64, row: &Workout) -> Result
 /// Garmin's recorded calories and heart rate (the target, then the watch
 /// original), then what the rebuilt FIT carries. A replace target is not in
 /// the local table until polling sees it, so the original is the source.
-fn activity_metrics(
+pub(crate) fn activity_metrics(
     conn: &Connection,
     row: &Workout,
     target: i64,
@@ -350,15 +350,15 @@ enum Prepared {
 }
 
 impl Apply<'_> {
-    fn summary_on_structured(&self) -> bool {
+    pub(crate) fn summary_on_structured(&self) -> bool {
         self.cfg.get("hevy_summary_on_structured").is_none_or(|v| db::truthy(Some(v)))
     }
 
-    fn template(&self, key: &str) -> Option<&str> {
+    pub(crate) fn template(&self, key: &str) -> Option<&str> {
         self.cfg.get(key).and_then(Value::as_str)
     }
 
-    async fn apply_metadata(
+    pub(crate) async fn apply_metadata(
         &self,
         activity_id: i64,
         row: &Workout,

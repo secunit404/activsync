@@ -24,6 +24,7 @@ pub mod hevy_profile;
 pub mod hevy_queue;
 pub mod hevy_seed;
 pub mod hevy_settings;
+pub mod hevy_sync;
 pub mod hevy_tools;
 pub mod hr_sources;
 pub mod mock;
