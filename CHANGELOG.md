@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/secunit404/activsync/compare/v0.4.0...v0.4.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **garmin:** a Garmin outage no longer pauses sync until you reconnect ([#114](https://github.com/secunit404/activsync/issues/114)) ([5c9163f](https://github.com/secunit404/activsync/commit/5c9163f5040523fc90c1ae6aaa703f49d4189b79))
+
 ## [0.4.0](https://github.com/secunit404/activsync/compare/v3.1.0...v0.4.0) (2026-11-01)
 
 
