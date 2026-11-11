@@ -1,4 +1,4 @@
-.PHONY: install dev dev-api dev-web dev-fresh dev-real dev-real-check test test-python test-web dev-rust dev-rust-fresh dev-api-rust test-rust
+.PHONY: install dev dev-api dev-web dev-fresh dev-real dev-real-check test test-python test-web dev-rust dev-rust-fresh dev-api-rust dev-real-rust dev-api-real-rust test-rust docker-rust
 
 # Create the virtualenv and install the app with dev extras (editable).
 install:
@@ -51,8 +51,8 @@ test-web:
 	npm run lint
 	npm test
 
-# The Rust port of the server. Mock data only: it refuses to start without
-# ACTIVSYNC_DEV_MOCK_DATA=1 and keeps its own data/activsync-rust-dev.db.
+# The Rust port of the server. `dev-rust` uses mock data and its own
+# data/activsync-rust-dev.db; `dev-real-rust` is the Rust twin of `dev-real`.
 CARGO ?= $(shell command -v cargo 2>/dev/null || echo $(HOME)/.cargo/bin/cargo)
 
 dev-rust:
@@ -65,6 +65,17 @@ dev-api-rust:
 dev-rust-fresh:
 	rm -f data/activsync-rust-dev.db data/activsync-rust-dev.db-shm data/activsync-rust-dev.db-wal
 	ACTIVSYNC_DEV_FRESH=1 $(MAKE) dev-rust
+
+# Real accounts, as `dev-real`: same database and checks, Garmin and Strava
+# polling off, Hevy matches held for review.
+dev-real-rust: dev-real-check
+	npx concurrently --kill-others --names api-rs-real,web --prefix-colors yellow,green "$(MAKE) dev-api-real-rust" "npm run dev:web"
+
+dev-api-real-rust: dev-real-check
+	ACTIVSYNC_DEV_MOCK_DATA=0 ACTIVSYNC_MANUAL_ONLY=1 ACTIVSYNC_DB_PATH="$(REAL_DB_PATH)" ACTIVSYNC_GARMIN_TOKEN_DIR=data/.garminconnect $(CARGO) run --manifest-path rust/Cargo.toml
+
+docker-rust:
+	docker build -f rust/Dockerfile -t activsync-rust .
 
 test-rust:
 	$(CARGO) test --manifest-path rust/Cargo.toml

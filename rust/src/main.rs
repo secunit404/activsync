@@ -7,14 +7,26 @@ use activsync::auth_guard::AuthConfig;
 use activsync::garmin_login::SignIn;
 use activsync::hevy_sync::{RealHevyLeg, RealMatchApplier};
 use activsync::poller::{self, Clients, Poller, RealClients};
-use activsync::{AppState, auth_core, build_app, db::Db, default_web_dir, net, schedule, seed};
+use activsync::{AppState, auth_core, build_app, db::Db, default_web_dir, net, schedule, seed, update_check};
+use openidconnect::http;
 
 const DEV_PASSWORD: &str = "activsync-dev-password";
 
+/// `name`, or the `G2S_` name it had before the rename to ActivSync.
+fn env_value(name: &str) -> Option<String> {
+    let legacy = name.strip_prefix("ACTIVSYNC_").map(|rest| format!("G2S_{rest}"));
+    [Some(name.to_string()), legacy].into_iter().flatten().find_map(|n| std::env::var(n).ok().filter(|v| !v.is_empty()))
+}
+
 fn env_enabled(name: &str) -> bool {
-    std::env::var(name)
-        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false)
+    env_value(name).is_some_and(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+}
+
+/// An install from before the rename keeps its database name until a new one
+/// exists.
+fn real_db_path() -> PathBuf {
+    let (preferred, legacy) = (PathBuf::from("/config/activsync.db"), PathBuf::from("/config/garmin2strava.db"));
+    if legacy.exists() && !preferred.exists() { legacy } else { preferred }
 }
 
 fn fail(message: &str) -> ! {
@@ -22,8 +34,29 @@ fn fail(message: &str) -> ! {
     std::process::exit(1);
 }
 
+/// `activsync health-check`: whether the server on `PORT` answers, for the
+/// container's HEALTHCHECK, which has no curl or Python to ask with.
+async fn health_check(port: u16) -> ! {
+    let url = format!("http://127.0.0.1:{port}/health");
+    let healthy = match net::request(http::Method::GET, &url, &[], Vec::new()) {
+        Ok(request) => {
+            let answer = tokio::time::timeout(Duration::from_secs(3), net::service_http()(request)).await;
+            matches!(answer, Ok(Ok(response)) if response.status().as_u16() == 200)
+        }
+        Err(_) => false,
+    };
+    std::process::exit(if healthy { 0 } else { 1 });
+}
+
 #[tokio::main]
 async fn main() {
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .map(|p| p.parse().unwrap_or_else(|_| fail("PORT must be a number")))
+        .unwrap_or(8383);
+    if std::env::args().nth(1).as_deref() == Some("health-check") {
+        health_check(port).await;
+    }
     let mock = env_enabled("ACTIVSYNC_DEV_MOCK_DATA");
     let manual_only = env_enabled("ACTIVSYNC_MANUAL_ONLY");
     let host: IpAddr = std::env::var("ACTIVSYNC_HOST")
@@ -34,13 +67,9 @@ async fn main() {
     if auth.disabled && !host.is_loopback() {
         fail("sign-in is off (ACTIVSYNC_AUTH_DISABLED), so the server only listens on 127.0.0.1");
     }
-    let port: u16 = std::env::var("PORT")
-        .ok()
-        .map(|p| p.parse().unwrap_or_else(|_| fail("PORT must be a number")))
-        .unwrap_or(8383);
-    let db_path = std::env::var("ACTIVSYNC_DB_PATH").map(PathBuf::from).unwrap_or_else(|_| {
-        PathBuf::from(if mock { "data/activsync-rust-dev.db" } else { "/config/activsync.db" })
-    });
+    let db_path = env_value("ACTIVSYNC_DB_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| if mock { PathBuf::from("data/activsync-rust-dev.db") } else { real_db_path() });
     let web_dir = std::env::var("ACTIVSYNC_WEB_DIR").map(PathBuf::from).unwrap_or_else(|_| default_web_dir());
 
     let db = Db::open(&db_path).unwrap_or_else(|e| fail(&format!("could not open {}: {e}", db_path.display())));
@@ -54,6 +83,7 @@ async fn main() {
     let (state, poller) = if mock { (state, None) } else { real_accounts(state, manual_only) };
     let scheduler = state.scheduler.clone().spawn();
     let match_scheduler = state.match_scheduler.clone().spawn();
+    let update_checker = if mock || manual_only { None } else { update_check::spawn(net::service_http(), state.update.clone()) };
     let app = build_app(state, Some(&web_dir));
 
     let addr = SocketAddr::new(host, port);
@@ -74,8 +104,8 @@ async fn main() {
         .unwrap_or_else(|e| fail(&format!("server stopped: {e}")));
     scheduler.abort();
     match_scheduler.abort();
-    if let Some(poller) = poller {
-        poller.abort();
+    for task in [poller, update_checker].into_iter().flatten() {
+        task.abort();
     }
 }
 
@@ -106,7 +136,7 @@ fn seed_mock(db: &Db, auth: &AuthConfig, host: IpAddr) {
 /// is polled and matches wait for review.
 fn real_accounts(state: AppState, manual_only: bool) -> (AppState, Option<tokio::task::JoinHandle<()>>) {
     let clock = schedule::system_clock();
-    let token_dir = std::env::var("ACTIVSYNC_GARMIN_TOKEN_DIR").unwrap_or_else(|_| "/config/.garminconnect".into());
+    let token_dir = env_value("ACTIVSYNC_GARMIN_TOKEN_DIR").unwrap_or_else(|| "/config/.garminconnect".into());
     let clients: Arc<dyn Clients> = Arc::new(RealClients {
         db: state.db.clone(),
         clock: clock.clone(),
