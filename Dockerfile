@@ -14,7 +14,7 @@ COPY app ./app
 COPY react-router.config.ts vite.config.ts tsconfig.json ./
 RUN npm run build
 
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 ARG VERSION=dev
 ARG REVISION=unknown
