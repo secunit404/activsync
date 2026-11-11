@@ -121,7 +121,7 @@
    ],
    "after": [
     {
-     "error": "Replace is unavailable because this activity is already on Strava. Choose Merge or Description only.",
+     "error": null,
      "garmin_activity_id": null,
      "lease_owner": null,
      "status": "awaiting_match"
@@ -151,10 +151,10 @@
    ],
    "after": [
     {
-     "error": "This workout is not waiting for a match decision.",
+     "error": null,
      "garmin_activity_id": null,
      "lease_owner": null,
-     "status": "failed"
+     "status": "merged"
     }
    ],
    "garmin_calls": [],

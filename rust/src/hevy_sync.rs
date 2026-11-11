@@ -480,31 +480,44 @@ impl From<rusqlite::Error> for ChoiceError {
     }
 }
 
-async fn choose(apply: &Apply<'_>, hevy: &HevyClient, hevy_id: &str, strategy: &str) -> Result<Option<Workout>, ChoiceError> {
-    let db = apply.db;
-    let row = {
-        let conn = db.lock();
-        let row = hevy_db::get_workout(&conn, hevy_id)?.ok_or(ChoiceError::Unknown)?;
-        let Some(source) = row.source_garmin_activity_id.filter(|id| *id != 0 && row.status == "awaiting_match") else {
-            return Err(ChoiceError::Invalid("This workout is not waiting for a match decision.".into()));
-        };
-        if hevy_db::get_open_operation(&conn, hevy_id)?.is_some() {
-            return Err(ChoiceError::Invalid("This workout already has an operation in progress.".into()));
-        }
-        if strategy == "replace" && db::get_activity(&conn, source)?.is_some_and(|a| a.is_published()) {
-            return Err(ChoiceError::Invalid(
-                "Replace is unavailable because this activity is already on Strava. Choose Merge or Description only.".into(),
-            ));
-        }
-        row
+fn validate_choice(conn: &Connection, hevy_id: &str, strategy: &str) -> Result<Workout, ChoiceError> {
+    let row = hevy_db::get_workout(conn, hevy_id)?.ok_or(ChoiceError::Unknown)?;
+    let Some(source) = row.source_garmin_activity_id.filter(|id| *id != 0 && row.status == "awaiting_match") else {
+        return Err(ChoiceError::Invalid("This workout is not waiting for a match decision.".into()));
     };
-    if apply_mapping_gate(db, &row, strategy, hevy).await? {
-        execute(apply, &row, strategy).await.map_err(StepError::from)?;
+    if hevy_db::get_open_operation(conn, hevy_id)?.is_some() {
+        return Err(ChoiceError::Invalid("This workout already has an operation in progress.".into()));
     }
-    Ok(hevy_db::get_workout(&db.lock(), hevy_id)?)
+    if strategy == "replace" && db::get_activity(conn, source)?.is_some_and(|a| a.is_published()) {
+        return Err(ChoiceError::Invalid(
+            "Replace is unavailable because this activity is already on Strava. Choose Merge or Description only.".into(),
+        ));
+    }
+    Ok(row)
 }
 
-/// Applies the owner's explicit choice to a claimed watch match.
+async fn choose(apply: &Apply<'_>, hevy: &HevyClient, row: &Workout, strategy: &str) -> Result<(), StepError> {
+    if apply_mapping_gate(apply.db, row, strategy, hevy).await? {
+        execute(apply, row, strategy).await?;
+    }
+    Ok(())
+}
+
+/// What a failed choice leaves on the workout: still awaiting the choice if
+/// nothing moved it, `syncing` with an open operation, else `failed`.
+fn record_choice_failure(conn: &Connection, hevy_id: &str, error: &str) -> rusqlite::Result<()> {
+    let awaiting = hevy_db::get_workout(conn, hevy_id)?.is_some_and(|row| row.status == "awaiting_match");
+    let status = match hevy_db::get_open_operation(conn, hevy_id)? {
+        _ if awaiting => "awaiting_match",
+        Some(_) => "syncing",
+        None => "failed",
+    };
+    hevy_db::set_workout_status(conn, hevy_id, status, Some(error))
+}
+
+/// Applies the owner's explicit choice to a claimed watch match. A refused
+/// choice changes nothing: a scheduled choice can run after the workout was
+/// applied, and recording the refusal would mark it failed.
 pub async fn apply_match_choice(
     apply: &Apply<'_>,
     hevy: &HevyClient,
@@ -517,24 +530,21 @@ pub async fn apply_match_choice(
     }
     let db = apply.db;
     let token = hevy_db::acquire_lease(&db.lock(), hevy_id, now)?.ok_or(ChoiceError::Busy)?;
-    let outcome = choose(apply, hevy, hevy_id, strategy).await;
+    let checked = validate_choice(&db.lock(), hevy_id, strategy);
+    let outcome = match checked {
+        Ok(row) => choose(apply, hevy, &row, strategy).await.map_err(ChoiceError::Failed),
+        Err(err) => Err(err),
+    };
     let conn = db.lock();
-    if let Err(err) = &outcome {
-        if !matches!(err, ChoiceError::Failed(StepError::HevyAuth)) {
+    if let Err(ChoiceError::Failed(err)) = &outcome {
+        if !matches!(err, StepError::HevyAuth) {
             eprintln!("applying Hevy match choice for {hevy_id} failed: {err}");
-            let row = hevy_db::get_workout(&conn, hevy_id)?;
-            let open = hevy_db::get_open_operation(&conn, hevy_id)?.is_some();
-            let status = match row {
-                Some(row) if row.status == "awaiting_match" => "awaiting_match",
-                _ if open => "syncing",
-                _ => "failed",
-            };
-            hevy_db::set_workout_status(&conn, hevy_id, status, Some(&err.to_string()))?;
+            record_choice_failure(&conn, hevy_id, &err.to_string())?;
         }
     }
     hevy_db::release_lease(&conn, hevy_id, &token)?;
     log_transition(&conn, hevy_id, "awaiting_match");
-    outcome
+    outcome.and_then(|()| Ok(hevy_db::get_workout(&conn, hevy_id)?))
 }
 
 async fn redo(apply: &Apply<'_>, hevy: &HevyClient, row: &Workout) -> Result<(), StepError> {
