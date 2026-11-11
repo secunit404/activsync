@@ -32,50 +32,105 @@ enum Sso {
     Mfa,
     WrongPassword,
     RateLimited,
+    Blocked,
 }
 
+#[derive(Clone, Copy)]
+enum Widget {
+    Ticket,
+    Mfa,
+    Locked,
+    RateLimited,
+    Blocked,
+}
+
+#[derive(Clone, Copy)]
 struct Garmin {
-    sso: Sso,
+    mobile: Sso,
+    widget: Widget,
+    portal: Sso,
     api_rejects_token: bool,
 }
+
+/// Only the mobile route answers; the backup routes are blocked.
+fn mobile(sso: Sso) -> Garmin {
+    Garmin { mobile: sso, widget: Widget::Blocked, portal: Sso::Blocked, api_rejects_token: false }
+}
+
+fn json_sso(sso: Sso, ticket: &str, response: &mut Option<openidconnect::http::response::Builder>) -> (u16, String) {
+    let reply = match sso {
+        Sso::Ticket => json!({"responseStatus": {"type": "SUCCESSFUL"}, "serviceTicketId": ticket}),
+        Sso::Mfa => {
+            let builder = response.take().unwrap();
+            *response = Some(builder.header(header::SET_COOKIE, "SESSION=abc; Path=/; Secure").header(header::SET_COOKIE, "GARMIN-SSO=1"));
+            json!({"responseStatus": {"type": "MFA_REQUIRED"}, "customerMfaInfo": {"mfaLastMethodUsed": "sms"}})
+        }
+        Sso::WrongPassword => json!({"responseStatus": {"type": "INVALID_USERNAME_PASSWORD"}}),
+        Sso::RateLimited => return (429, "{}".into()),
+        Sso::Blocked => return (403, "<html>Just a moment...</html>".into()),
+    };
+    (200, reply.to_string())
+}
+
+const WIDGET_MFA_PAGE: &str = r#"<html><head><title>GARMIN Authentication Application</title></head>
+<script>var customerGuid = "g-1"; var mfaMethod = "email"; var clientId = "GarminConnect"; var locale = "en";</script>
+<input type="hidden" name="_csrf" value="tok-2" /></html>"#;
 
 fn garmin_http(calls: &Calls, garmin: Garmin) -> Http {
     let log = calls.clone();
     Arc::new(move |request: HttpRequest| {
         let path = format!("{} {}", request.method(), request.uri().path());
+        let query = request.uri().query().unwrap_or_default().to_string();
         let cookie = request.headers().get(header::COOKIE).map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
         let body = String::from_utf8_lossy(request.body()).to_string();
         log.lock().unwrap().push((path.clone(), cookie, body.clone()));
-        let mut response = openidconnect::http::Response::builder();
+        let mut response = Some(openidconnect::http::Response::builder());
+        let json = |value: Value| (200, value.to_string());
+        let html = |text: &str| (200, text.to_string());
         let (status, reply) = match path.as_str() {
-            "POST /mobile/api/login" => match garmin.sso {
-                Sso::Ticket => (200, json!({"responseStatus": {"type": "SUCCESSFUL"}, "serviceTicketId": "ST-1"})),
-                Sso::Mfa => {
-                    response = response.header(header::SET_COOKIE, "SESSION=abc; Path=/; Secure").header(header::SET_COOKIE, "GARMIN-SSO=1");
-                    (200, json!({"responseStatus": {"type": "MFA_REQUIRED"}, "customerMfaInfo": {"mfaLastMethodUsed": "sms"}}))
+            "POST /mobile/api/login" => json_sso(garmin.mobile, "ST-1", &mut response),
+            "POST /portal/api/login" => json_sso(garmin.portal, "ST-P", &mut response),
+            "GET /portal/sso/en-US/sign-in" => html("<html>sign in</html>"),
+            "GET /sso/embed" => match garmin.widget {
+                Widget::RateLimited => (429, String::new()),
+                Widget::Blocked => (403, String::new()),
+                _ if query.contains("hop=2") => {
+                    response = response.map(|r| r.header(header::SET_COOKIE, "CF=2; Path=/"));
+                    html("<html>widget</html>")
                 }
-                Sso::WrongPassword => (200, json!({"responseStatus": {"type": "INVALID_USERNAME_PASSWORD"}})),
-                Sso::RateLimited => (429, json!({})),
+                _ => {
+                    response = response.map(|r| r.header(header::SET_COOKIE, "EMBED=1; Path=/").header(header::LOCATION, "/sso/embed?hop=2"));
+                    (302, String::new())
+                }
             },
+            "GET /sso/signin" => html(r#"<form><input type="hidden" name="_csrf" value="tok-1" /></form>"#),
+            "POST /sso/signin" => match garmin.widget {
+                Widget::Ticket => html(r#"<title>Success</title><a href="https://sso.garmin.com/sso/embed?ticket=ST-W">go</a>"#),
+                Widget::Mfa => html(WIDGET_MFA_PAGE),
+                Widget::Locked => html("<title>Account Locked</title>"),
+                Widget::RateLimited | Widget::Blocked => panic!("widget sign-in posted after a refused page"),
+            },
+            "POST /sso/verifyMFA/mfaCode" => json(json!({})),
+            "POST /sso/verifyMFA/loginEnterMfaCode" if body.contains("mfa-code=123456") => {
+                html(r#"<title>Success</title><a href="https://sso.garmin.com/sso/embed?ticket=ST-WM">go</a>"#)
+            }
+            "POST /sso/verifyMFA/loginEnterMfaCode" => html("<title>Invalid code</title>"),
             "POST /mobile/api/mfa/verifyCode" | "POST /portal/api/mfa/verifyCode" if body.contains("\"123456\"") => {
-                (200, json!({"responseStatus": {"type": "SUCCESSFUL"}, "serviceTicketId": "ST-2"}))
+                json(json!({"responseStatus": {"type": "SUCCESSFUL"}, "serviceTicketId": "ST-2"}))
             }
-            "POST /mobile/api/mfa/verifyCode" | "POST /portal/api/mfa/verifyCode" => {
-                (200, json!({"responseStatus": {"type": "INVALID_MFA_CODE"}}))
+            "POST /mobile/api/mfa/verifyCode" | "POST /portal/api/mfa/verifyCode" => json(json!({"responseStatus": {"type": "INVALID_MFA_CODE"}})),
+            "POST /di-oauth2-service/oauth/token" if body.contains("GARMIN_CONNECT_MOBILE_ANDROID_DI_2025Q2") => (400, "{}".into()),
+            "POST /di-oauth2-service/oauth/token" => {
+                json(json!({"access_token": jwt(json!({"exp": Utc::now().timestamp() + 86400, "client_id": "FROM_JWT"})), "refresh_token": "r"}))
             }
-            "POST /di-oauth2-service/oauth/token" if body.contains("GARMIN_CONNECT_MOBILE_ANDROID_DI_2025Q2") => (400, json!({})),
-            "POST /di-oauth2-service/oauth/token" => (
-                200,
-                json!({"access_token": jwt(json!({"exp": Utc::now().timestamp() + 86400, "client_id": "FROM_JWT"})), "refresh_token": "r"}),
-            ),
-            "GET /userprofile-service/socialProfile" if garmin.api_rejects_token => (401, json!({})),
-            "GET /userprofile-service/socialProfile" => (200, json!({"displayName": "runner"})),
-            "GET /userprofile-service/userprofile/user-settings" => (200, json!({"userData": {}})),
-            "GET /activity-service/activity/activityTypes" => (200, json!([{"typeKey": "running"}, {"typeKey": "all"}])),
-            p if p.starts_with("GET /activitylist-service/") => (200, json!([])),
+            "GET /userprofile-service/socialProfile" if garmin.api_rejects_token => (401, "{}".into()),
+            "GET /userprofile-service/socialProfile" => json(json!({"displayName": "runner"})),
+            "GET /userprofile-service/userprofile/user-settings" => json(json!({"userData": {}})),
+            "GET /activity-service/activity/activityTypes" => json(json!([{"typeKey": "running"}, {"typeKey": "all"}])),
+            p if p.starts_with("GET /activitylist-service/") => json(json!([])),
             other => panic!("unexpected Garmin call {other}"),
         };
-        let response = response.status(status).body(reply.to_string().into_bytes()).map_err(|e| HttpError(e.to_string()));
+        let response = response.unwrap().status(status).body(reply.into_bytes()).map_err(|e| HttpError(e.to_string()));
         Box::pin(async move { response })
     })
 }
@@ -148,7 +203,7 @@ fn setup_body() -> Value {
 
 #[tokio::test]
 async fn a_password_sign_in_keeps_the_session_and_holds_every_category() {
-    let h = harness(false, Garmin { sso: Sso::Ticket, api_rejects_token: false });
+    let h = harness(false, mobile(Sso::Ticket));
     let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!((body["message"].as_str(), body["mfaRequired"].as_bool()), (Some("Garmin connected."), Some(false)));
@@ -164,7 +219,7 @@ async fn a_password_sign_in_keeps_the_session_and_holds_every_category() {
 
 #[tokio::test]
 async fn a_wrong_password_saves_nothing() {
-    let h = harness(false, Garmin { sso: Sso::WrongPassword, api_rejects_token: false });
+    let h = harness(false, mobile(Sso::WrongPassword));
     let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_eq!(body["detail"], "Could not connect to Garmin: 401 Unauthorized (Invalid Username or Password)");
@@ -174,7 +229,7 @@ async fn a_wrong_password_saves_nothing() {
 
 #[tokio::test]
 async fn rate_limiting_and_a_refused_token_are_reported() {
-    let h = harness(false, Garmin { sso: Sso::RateLimited, api_rejects_token: false });
+    let h = harness(false, Garmin { mobile: Sso::RateLimited, widget: Widget::RateLimited, portal: Sso::RateLimited, api_rejects_token: false });
     let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_eq!(
@@ -182,19 +237,19 @@ async fn rate_limiting_and_a_refused_token_are_reported() {
         "Could not connect to Garmin: All login strategies rate limited (429). Try again later or check your IP/network."
     );
 
-    let h = harness(false, Garmin { sso: Sso::Ticket, api_rejects_token: true });
+    let h = harness(false, Garmin { mobile: Sso::Ticket, widget: Widget::Ticket, portal: Sso::Ticket, api_rejects_token: true });
     let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_eq!(
         body["detail"],
-        "Could not connect to Garmin: Login failed: All login strategies exhausted: mobile+requests: token rejected by API tier"
+        "Could not connect to Garmin: Login failed: All login strategies exhausted: portal: token rejected by API tier"
     );
     assert!(h.saved_session().is_none());
 }
 
 #[tokio::test]
 async fn a_verification_code_finishes_a_reconnect_and_a_wrong_one_can_be_retried() {
-    let h = harness(true, Garmin { sso: Sso::Mfa, api_rejects_token: false });
+    let h = harness(true, mobile(Sso::Mfa));
     let reconnect = json!({"email": "runner@example.com", "password": "secret"});
     let (status, body) = send(&h.app, Method::POST, "/api/v1/settings/garmin/reconnect", reconnect).await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -223,7 +278,7 @@ async fn a_verification_code_finishes_a_reconnect_and_a_wrong_one_can_be_retried
 
 #[tokio::test]
 async fn a_session_garmin_still_accepts_skips_the_password() {
-    let h = harness(true, Garmin { sso: Sso::WrongPassword, api_rejects_token: false });
+    let h = harness(true, mobile(Sso::WrongPassword));
     let tokens = Tokens { di_token: Some(jwt(json!({"exp": Utc::now().timestamp() + 86400}))), di_refresh_token: None, di_client_id: None };
     save_tokens(&h.token_dir, &tokens).unwrap();
     let reconnect = json!({"email": "runner@example.com", "password": "anything"});
@@ -232,4 +287,71 @@ async fn a_session_garmin_still_accepts_skips_the_password() {
     assert_eq!(body["message"], "Garmin reconnected and catch-up sync started.");
     assert!(h.calls_to("POST /mobile/api/login").is_empty());
     assert!(!h.calls_to("GET /activitylist-service/activities/search/activities").is_empty(), "catch-up ran");
+}
+
+fn exchange_bodies(h: &Harness) -> Vec<String> {
+    h.calls_to("POST /di-oauth2-service/oauth/token").into_iter().map(|(_, _, body)| body).collect()
+}
+
+#[tokio::test]
+async fn when_the_mobile_route_is_blocked_the_widget_signs_in() {
+    let h = harness(false, Garmin { widget: Widget::Ticket, ..mobile(Sso::Blocked) });
+    let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["message"], "Garmin connected.");
+    let post = h.calls_to("POST /sso/signin").pop().unwrap();
+    assert_eq!(post.1, "EMBED=1; CF=2", "cookies from both hops of the redirect");
+    assert!(post.2.contains("_csrf=tok-1") && post.2.contains("username=runner%40example.com"), "{}", post.2);
+    let exchange = exchange_bodies(&h).pop().unwrap();
+    assert!(exchange.contains("service_ticket=ST-W") && exchange.contains("service_url=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed"), "{exchange}");
+    assert!(h.saved_session().is_some());
+    assert!(h.calls_to("POST /portal/api/login").is_empty());
+}
+
+#[tokio::test]
+async fn a_locked_account_on_the_widget_ends_the_chain() {
+    let h = harness(false, Garmin { widget: Widget::Locked, portal: Sso::Ticket, ..mobile(Sso::Blocked) });
+    let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(body["detail"], "Could not connect to Garmin: Widget authentication failed: 'Account Locked'");
+    assert!(h.calls_to("POST /portal/api/login").is_empty());
+}
+
+#[tokio::test]
+async fn the_portal_is_the_last_resort_and_its_code_goes_to_the_portal_first() {
+    let h = harness(false, Garmin { portal: Sso::Mfa, ..mobile(Sso::Blocked) });
+    let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["mfaRequired"], true);
+    assert_eq!(h.calls_to("GET /portal/sso/en-US/sign-in").len(), 1);
+    let (status, body) = send(&h.app, Method::POST, "/api/v1/garmin/mfa", json!({"code": "123456"})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(h.calls_to("POST /portal/api/mfa/verifyCode").len(), 1);
+    assert!(h.calls_to("POST /mobile/api/mfa/verifyCode").is_empty());
+    let exchange = exchange_bodies(&h).pop().unwrap();
+    assert!(exchange.contains("service_url=https%3A%2F%2Fconnect.garmin.com%2Fapp"), "{exchange}");
+    assert!(h.saved_session().is_some());
+}
+
+#[tokio::test]
+async fn a_widget_code_is_requested_and_can_be_retried() {
+    let h = harness(true, Garmin { widget: Widget::Mfa, ..mobile(Sso::Blocked) });
+    let reconnect = json!({"email": "runner@example.com", "password": "secret"});
+    let (status, body) = send(&h.app, Method::POST, "/api/v1/settings/garmin/reconnect", reconnect).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["mfaRequired"], true);
+    let request = h.calls_to("POST /sso/verifyMFA/mfaCode").pop().expect("code requested");
+    assert!(request.2.contains("\"customerGuid\":\"g-1\""), "{}", request.2);
+
+    let (status, body) = send(&h.app, Method::POST, "/api/v1/garmin/mfa", json!({"code": "000000"})).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["detail"], "Widget MFA failed: Invalid code");
+
+    let (status, body) = send(&h.app, Method::POST, "/api/v1/garmin/mfa", json!({"code": "123456"})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let verify = h.calls_to("POST /sso/verifyMFA/loginEnterMfaCode").pop().unwrap();
+    assert!(verify.2.contains("_csrf=tok-2"), "{}", verify.2);
+    assert_eq!(verify.1, "EMBED=1; CF=2");
+    assert!(exchange_bodies(&h).pop().unwrap().contains("service_ticket=ST-WM"));
+    assert!(h.saved_session().is_some());
 }

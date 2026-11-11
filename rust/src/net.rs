@@ -49,6 +49,19 @@ pub fn garmin_http() -> Http {
     wrap(&CLIENT)
 }
 
+/// For Garmin's sign-in, which follows redirects itself to keep each hop's
+/// cookies.
+pub fn garmin_sign_in_http() -> Http {
+    static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("HTTP client builds")
+    });
+    wrap(&CLIENT)
+}
+
 /// For an identity provider: redirects are not followed, since a provider
 /// answering with one could otherwise point the server at any address.
 pub fn provider_http() -> Http {
