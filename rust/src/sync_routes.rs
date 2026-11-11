@@ -30,7 +30,7 @@ async fn open_garmin(clients: &dyn Clients) -> Result<GarminClient, String> {
     clients.garmin().await.map_err(|err| err.to_string())
 }
 
-async fn fetch_categories(state: &AppState, garmin: &GarminClient, hold_all: bool, now: DateTime<Utc>) -> Result<(), String> {
+pub(crate) async fn fetch_categories(state: &AppState, garmin: &GarminClient, hold_all: bool, now: DateTime<Utc>) -> Result<(), String> {
     let types = garmin.fetch_activity_types().await.map_err(|err| err.to_string())?;
     onboarding::save_garmin_categories(&state.db.lock(), development(state), types, hold_all, now).map_err(|err| err.to_string())
 }
@@ -148,6 +148,7 @@ pub(crate) async fn run_catch_up(state: &AppState, last_sync_ok_at: Option<Optio
     let now = Utc::now();
     let Some(clients) = state.clients.clone() else {
         onboarding::run_catch_up(&state.db.lock(), now)?;
+        state.events.publish("refresh");
         return Ok(());
     };
     let caught_up = async {

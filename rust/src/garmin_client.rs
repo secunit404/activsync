@@ -244,7 +244,7 @@ fn expires_soon(token: &str, now: f64) -> bool {
     exp.is_some_and(|exp| exp.is_finite() && now > exp - REFRESH_MARGIN_SECONDS)
 }
 
-fn client_id_of(token: &str) -> Option<String> {
+pub(crate) fn client_id_of(token: &str) -> Option<String> {
     let value = jwt_claims(token)?.get("client_id").cloned()?;
     match value {
         Value::String(s) if !s.is_empty() => Some(s),
@@ -253,7 +253,7 @@ fn client_id_of(token: &str) -> Option<String> {
     }
 }
 
-fn native_headers(extra: &[(&str, String)]) -> Vec<(String, String)> {
+pub(crate) fn native_headers(extra: &[(&str, String)]) -> Vec<(String, String)> {
     let mut headers: Vec<(String, String)> = [
         ("User-Agent", NATIVE_API_USER_AGENT),
         ("X-Garmin-User-Agent", NATIVE_X_GARMIN_USER_AGENT),
@@ -274,7 +274,7 @@ fn native_headers(extra: &[(&str, String)]) -> Vec<(String, String)> {
     headers
 }
 
-fn basic_auth(client_id: &str) -> String {
+pub(crate) fn basic_auth(client_id: &str) -> String {
     format!("Basic {}", base64::engine::general_purpose::STANDARD.encode(format!("{client_id}:")))
 }
 
@@ -542,6 +542,14 @@ impl GarminClient {
         if proactive {
             client.refresh_session().await;
         }
+        client.load_profile_and_settings().await?;
+        Ok(client)
+    }
+
+    /// A session fresh from a password sign-in; Garmin must accept the token
+    /// for the profile reads.
+    pub async fn signed_in(http: Http, clock: Clock, tokens: Tokens, pause: Duration) -> Result<Self, GarminError> {
+        let mut client = Self { pause, ..Self::new(http, clock, tokens, None) };
         client.load_profile_and_settings().await?;
         Ok(client)
     }

@@ -10,11 +10,10 @@ use serde_json::{Value, json};
 use crate::db;
 use crate::hevy_client::{HevyClient, HevyError};
 use crate::hevy_settings::{self, DeviceIdentity, HevySettingsState, ProfileOverride};
-use crate::mock::{self, GarminLogin};
 use crate::{hevy_sync, onboarding};
 use crate::routes::{ApiError, UpdateState};
 use crate::view::{self, Connections};
-use crate::{AppState, GarminCredentials, config, timefmt, version};
+use crate::{AppState, config, timefmt, version};
 
 type ApiResult<T> = Result<Json<T>, ApiError>;
 
@@ -29,7 +28,7 @@ const COMMON_TIMEZONES: &[&str] = &[
 
 const DEVICE_OPTIONS: &str = include_str!("../assets/device_options.json");
 
-fn bad_request(detail: impl Into<String>) -> ApiError {
+pub(crate) fn bad_request(detail: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::BAD_REQUEST, detail)
 }
 
@@ -41,7 +40,7 @@ pub(crate) fn invalid(detail: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
 }
 
-fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
+pub(crate) fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
     payload.map(|Json(value)| value).map_err(|rejection| invalid(rejection.body_text()))
 }
 
@@ -123,7 +122,7 @@ pub struct SettingsState {
     hevy: HevySettingsState,
 }
 
-fn text(value: &Value, key: &str) -> String {
+pub(crate) fn text(value: &Value, key: &str) -> String {
     value.get(key).and_then(Value::as_str).unwrap_or_default().to_string()
 }
 
@@ -170,135 +169,6 @@ pub async fn settings_state(State(state): State<AppState>) -> ApiResult<Settings
         hevy: hevy_settings::hevy_settings_state(&conn, &cfg)?,
         connections,
     }))
-}
-
-enum GarminOutcome {
-    Connected,
-    Mfa,
-}
-
-/// Starts a Garmin sign-in. A pending verification from an earlier attempt is
-/// dropped first, so a code can only ever finish the latest attempt.
-fn save_and_verify_garmin(state: &AppState, conn: &Connection, email: &str, password: &str) -> Result<GarminOutcome, ApiError> {
-    state.set_pending_mfa(None);
-    match mock::begin_garmin_login(email, password) {
-        GarminLogin::MfaRequired => {
-            state.set_pending_mfa(Some(GarminCredentials { email: email.into(), password: password.into() }));
-            Ok(GarminOutcome::Mfa)
-        }
-        GarminLogin::Connected => {
-            db::set_config_value(conn, "garmin_credentials", &json!({"email": email, "password": password}))?;
-            onboarding::finalize_garmin_connect(conn, state.mock_mode, Utc::now())?;
-            Ok(GarminOutcome::Connected)
-        }
-    }
-}
-
-fn garmin_login_fields(conn: &Connection, email: &str, password: &str) -> Result<(String, String), ApiError> {
-    let existing = db::get_config_value(conn, "garmin_credentials")?.unwrap_or(Value::Null);
-    let email = if email.is_empty() { text(&existing, "email") } else { email.to_string() };
-    let email = email.trim().to_string();
-    let password = if password.is_empty() { text(&existing, "password") } else { password.to_string() };
-    if email.is_empty() || password.is_empty() {
-        return Err(bad_request("Enter your Garmin email and password."));
-    }
-    Ok((email, password))
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GarminSetupRequest {
-    email: String,
-    #[serde(default)]
-    password: String,
-    #[serde(default = "default_lookback")]
-    lookback_days: i64,
-    #[serde(default)]
-    detected_timezone: String,
-}
-
-fn default_lookback() -> i64 {
-    7
-}
-
-pub async fn setup_garmin(
-    State(state): State<AppState>,
-    payload: Result<Json<GarminSetupRequest>, JsonRejection>,
-) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
-    if payload.lookback_days < 1 {
-        return Err(invalid("lookbackDays must be at least 1"));
-    }
-    let conn = state.db.lock();
-    require_not_onboarded(&conn)?;
-    let (email, password) = garmin_login_fields(&conn, &payload.email, &payload.password)?;
-    config::edit(&conn, state.mock_mode, |cfg| {
-        cfg.set("lookback_days", json!(payload.lookback_days));
-        if timefmt::is_valid_timezone(&payload.detected_timezone) {
-            cfg.set("display_timezone", json!(payload.detected_timezone));
-        }
-    })?;
-    if let GarminOutcome::Mfa = save_and_verify_garmin(&state, &conn, &email, &password)? {
-        return action(&state, &conn, "Garmin sent a verification code.", true);
-    }
-    state.events.publish("refresh");
-    action(&state, &conn, "Garmin connected.", false)
-}
-
-#[derive(Deserialize)]
-pub struct GarminReconnectRequest {
-    email: String,
-    #[serde(default)]
-    password: String,
-}
-
-pub async fn reconnect_garmin(
-    State(state): State<AppState>,
-    payload: Result<Json<GarminReconnectRequest>, JsonRejection>,
-) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
-    let conn = state.db.lock();
-    let (email, password) = garmin_login_fields(&conn, &payload.email, &payload.password)?;
-    if let GarminOutcome::Mfa = save_and_verify_garmin(&state, &conn, &email, &password)? {
-        return action(&state, &conn, "Garmin sent a verification code.", true);
-    }
-    onboarding::run_catch_up(&conn, Utc::now())?;
-    state.events.publish("refresh");
-    action(&state, &conn, "Garmin reconnected and catch-up sync started.", false)
-}
-
-#[derive(Deserialize)]
-pub struct MfaRequest {
-    code: String,
-}
-
-pub async fn complete_mfa(
-    State(state): State<AppState>,
-    payload: Result<Json<MfaRequest>, JsonRejection>,
-) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
-    let Some(credentials) = state.pending_mfa() else {
-        return Err(conflict("The Garmin verification session expired."));
-    };
-    mock::complete_garmin_login(&payload.code).map_err(|err| ApiError::new(StatusCode::UNAUTHORIZED, err))?;
-    state.set_pending_mfa(None);
-    let conn = state.db.lock();
-    db::set_config_value(
-        &conn,
-        "garmin_credentials",
-        &json!({"email": credentials.email, "password": credentials.password}),
-    )?;
-    onboarding::finalize_garmin_connect(&conn, state.mock_mode, Utc::now())?;
-    if onboarded(&conn)? {
-        onboarding::run_catch_up(&conn, Utc::now())?;
-    }
-    state.events.publish("refresh");
-    action(&state, &conn, "Garmin verified and connected.", false)
-}
-
-pub async fn cancel_mfa(State(state): State<AppState>) -> ApiResult<ActionResult> {
-    state.set_pending_mfa(None);
-    action(&state, &state.db.lock(), "Garmin verification cancelled.", false)
 }
 
 #[derive(Deserialize)]

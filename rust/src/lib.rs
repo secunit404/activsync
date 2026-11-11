@@ -14,6 +14,8 @@ pub mod exercise_tables;
 pub mod fit_builder;
 pub mod fit_encode;
 pub mod garmin_client;
+pub mod garmin_login;
+pub mod garmin_routes;
 pub mod hevy_apply;
 pub mod hevy_backfill;
 pub mod hevy_client;
@@ -72,6 +74,13 @@ pub struct GarminCredentials {
     pub password: String,
 }
 
+/// A Garmin sign-in waiting for its one-time code.
+#[derive(Clone, Debug)]
+pub struct PendingMfa {
+    pub credentials: GarminCredentials,
+    pub login: garmin_login::PendingLogin,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Db,
@@ -84,11 +93,13 @@ pub struct AppState {
     pub limiter: AttemptLimiter,
     pub oidc_http: oidc_flow::OidcHttp,
     pub oidc_sessions: oidc_flow::OidcSessions,
-    pending_mfa: Arc<Mutex<Option<GarminCredentials>>>,
+    pending_mfa: Arc<Mutex<Option<PendingMfa>>>,
     /// The real Garmin and Strava; `None` serves the mock accounts.
     pub clients: Option<Arc<dyn poller::Clients>>,
     /// How the real Hevy API is reached; `None` serves the mock account.
     pub hevy_http: Option<net::Http>,
+    /// Signs in to the real Garmin; `None` serves the mock account.
+    pub garmin_sign_in: Option<garmin_login::SignIn>,
 }
 
 impl AppState {
@@ -116,7 +127,12 @@ impl AppState {
             pending_mfa: Arc::default(),
             clients: None,
             hevy_http: None,
+            garmin_sign_in: None,
         }
+    }
+
+    pub fn with_garmin_sign_in(self, sign_in: garmin_login::SignIn) -> Self {
+        Self { garmin_sign_in: Some(sign_in), ..self }
     }
 
     pub fn with_hevy_http(self, hevy_http: net::Http) -> Self {
@@ -139,17 +155,18 @@ impl AppState {
         Self { oidc_http, ..self }
     }
 
-    pub fn pending_mfa(&self) -> Option<GarminCredentials> {
+    pub fn pending_mfa(&self) -> Option<PendingMfa> {
         self.pending_mfa.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    pub fn set_pending_mfa(&self, value: Option<GarminCredentials>) {
+    pub fn set_pending_mfa(&self, value: Option<PendingMfa>) {
         *self.pending_mfa.lock().unwrap_or_else(|p| p.into_inner()) = value;
     }
 }
 
 fn settings_router() -> Router<AppState> {
     use axum::routing::delete;
+    use garmin_routes::{cancel_mfa, complete_mfa, reconnect_garmin, setup_garmin};
     use settings_routes::*;
     use strava_routes::strava_authorize;
     use sync_routes::{initial_sync, manual_sync, refresh_activity_types};
