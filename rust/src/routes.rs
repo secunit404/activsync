@@ -5,7 +5,7 @@ use std::time::Duration;
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
@@ -686,6 +686,10 @@ pub async fn publish_batch(State(state): State<AppState>, Path(batch_id): Path<S
         (None, None)
     };
     Ok(Json(PublishBatch { batch_id, state: batch_state, remaining_ms, result, error }))
+}
+
+pub fn icon(png: &'static [u8]) -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/png")], png)
 }
 
 pub async fn health() -> Json<Value> {

@@ -17,8 +17,10 @@ RUN npm run build
 FROM rust:1-slim-trixie AS server
 WORKDIR /src
 COPY rust ./rust
-# version.rs reads the release number release-please writes here.
+# version.rs reads the release number release-please writes here, and the
+# server builds in the icons the Python app serves.
 COPY src/activsync/__init__.py ./src/activsync/__init__.py
+COPY src/activsync/static ./src/activsync/static
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/rust/target \
     cargo build --release --locked --manifest-path rust/Cargo.toml \

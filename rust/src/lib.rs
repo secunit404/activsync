@@ -279,6 +279,10 @@ fn api_router() -> Router<AppState> {
 
 /// The full app: JSON API, live refresh stream, and, when `web_dir` holds a
 /// built frontend, its assets with `index.html` for every other path.
+/// The browser-tab and home-screen icons, the files the Python app serves.
+const FAVICON: &[u8] = include_bytes!("../../src/activsync/static/favicon.png");
+const APPLE_TOUCH_ICON: &[u8] = include_bytes!("../../src/activsync/static/apple-touch-icon.png");
+
 pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
     let index = web_dir.map(|d| d.join("index.html"));
     state.auth.csp = Arc::new(auth_guard::content_security_policy(index.as_deref()));
@@ -287,6 +291,8 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
         .route("/api/events", get(routes::sse_events))
         .route("/api/{*rest}", get(routes::not_found))
         .route("/health", get(routes::health))
+        .route("/favicon.ico", get(|| async { routes::icon(FAVICON) }))
+        .route("/apple-touch-icon.png", get(|| async { routes::icon(APPLE_TOUCH_ICON) }))
         .route("/strava/callback", get(strava_routes::strava_callback))
         .route("/auth/oidc/login", get(oidc_routes::oidc_login))
         .route("/auth/oidc/callback", get(oidc_routes::oidc_callback));
