@@ -1,6 +1,6 @@
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Redirect;
 use base64::Engine;
@@ -35,11 +35,11 @@ fn bad_request(detail: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::BAD_REQUEST, detail)
 }
 
-fn conflict(detail: impl Into<String>) -> ApiError {
+pub(crate) fn conflict(detail: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::CONFLICT, detail)
 }
 
-fn invalid(detail: impl Into<String>) -> ApiError {
+pub(crate) fn invalid(detail: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
 }
 
@@ -51,7 +51,7 @@ fn onboarded(conn: &Connection) -> Result<bool, ApiError> {
     Ok(db::truthy(db::get_config_value(conn, "initial_sync_done")?.as_ref()))
 }
 
-fn require_not_onboarded(conn: &Connection) -> Result<(), ApiError> {
+pub(crate) fn require_not_onboarded(conn: &Connection) -> Result<(), ApiError> {
     if onboarded(conn)? {
         return Err(conflict("Setup is already complete."));
     }
@@ -66,7 +66,7 @@ pub struct ActionResult {
     mfa_required: bool,
 }
 
-fn action(state: &AppState, conn: &Connection, message: &str, mfa_required: bool) -> ApiResult<ActionResult> {
+pub(crate) fn action(state: &AppState, conn: &Connection, message: &str, mfa_required: bool) -> ApiResult<ActionResult> {
     let connections = view::connection_status(conn, Utc::now())?;
     Ok(Json(ActionResult {
         message: message.into(),
@@ -501,23 +501,6 @@ pub async fn disconnect_hevy(State(state): State<AppState>) -> ApiResult<ActionR
     action(&state, &conn, "Hevy disconnected.", false)
 }
 
-pub async fn initial_sync(State(state): State<AppState>) -> ApiResult<ActionResult> {
-    let conn = state.db.lock();
-    require_not_onboarded(&conn)?;
-    let connections = view::connection_status(&conn, Utc::now())?;
-    if !connections.garmin.connected || !connections.strava.connected {
-        return Err(conflict("Connect Garmin and Strava before syncing."));
-    }
-    let has_types = matches!(db::get_config_value(&conn, "garmin_activity_types")?, Some(Value::Array(a)) if !a.is_empty());
-    if !has_types {
-        onboarding::store_garmin_categories(&conn, state.mock_mode, true, Utc::now())?;
-    }
-    onboarding::record_garmin_sync(&conn, Utc::now())?;
-    db::set_config_value(&conn, "initial_sync_done", &json!(true))?;
-    state.events.publish("refresh");
-    action(&state, &conn, "Setup complete. Your activities are ready.", false)
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreferencesRequest {
@@ -549,7 +532,7 @@ pub async fn save_preferences(
     action(&state, &conn, "Preferences saved.", false)
 }
 
-fn require_garmin(conn: &Connection, detail: &str) -> Result<(), ApiError> {
+pub(crate) fn require_garmin(conn: &Connection, detail: &str) -> Result<(), ApiError> {
     if view::connection_status(conn, Utc::now())?.garmin.connected {
         Ok(())
     } else {
@@ -582,37 +565,6 @@ pub async fn save_activity_types(
     onboarding::reconcile_held_activities(&conn, &held)?;
     state.events.publish("refresh");
     action(&state, &conn, "Autosync categories saved.", false)
-}
-
-pub async fn refresh_activity_types(State(state): State<AppState>) -> ApiResult<ActionResult> {
-    let conn = state.db.lock();
-    require_garmin(&conn, "Connect to Garmin before refreshing activity categories.")?;
-    onboarding::store_garmin_categories(&conn, state.mock_mode, false, Utc::now())?;
-    state.events.publish("refresh");
-    action(&state, &conn, "Garmin activity categories refreshed.", false)
-}
-
-pub async fn manual_sync(State(state): State<AppState>, Path(service): Path<String>) -> ApiResult<ActionResult> {
-    let conn = state.db.lock();
-    let connections = view::connection_status(&conn, Utc::now())?;
-    let message = match service.as_str() {
-        "garmin" => {
-            if !connections.garmin.connected {
-                return Err(conflict("Garmin is disconnected — reconnect it to sync."));
-            }
-            onboarding::record_garmin_sync(&conn, Utc::now())?;
-            "Garmin synced."
-        }
-        "strava" => {
-            if !connections.strava.connected {
-                return Err(conflict("Strava is disconnected — reconnect it to sync."));
-            }
-            "Strava synced."
-        }
-        _ => return Err(invalid("service must be garmin or strava")),
-    };
-    state.events.publish("refresh");
-    action(&state, &conn, message, false)
 }
 
 #[derive(Deserialize)]

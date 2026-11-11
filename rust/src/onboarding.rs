@@ -29,9 +29,14 @@ pub fn setup_step(conn: &Connection, connections: &Connections, auth_disabled: b
     Ok(Some("syncing"))
 }
 
-/// Store Garmin's activity types, optionally holding every type for review.
+/// Store the mock account's activity types, optionally holding every type
+/// for review.
 pub fn store_garmin_categories(conn: &Connection, development: bool, hold_all: bool, now: DateTime<Utc>) -> DbResult<()> {
-    let types = mock::garmin_activity_types();
+    save_garmin_categories(conn, development, mock::garmin_activity_types(), hold_all, now)
+}
+
+/// Store Garmin's activity types, optionally holding every type for review.
+pub fn save_garmin_categories(conn: &Connection, development: bool, types: Vec<Value>, hold_all: bool, now: DateTime<Utc>) -> DbResult<()> {
     db::set_config_value(conn, "garmin_activity_types", &Value::Array(types.clone()))?;
     db::set_config_value(conn, "garmin_activity_types_fetched_at", &json!(db::iso(now)))?;
     if hold_all {

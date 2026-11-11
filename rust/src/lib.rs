@@ -42,6 +42,7 @@ pub mod settings_routes;
 pub mod strava_client;
 pub mod strava_strength;
 pub mod sync;
+pub mod sync_routes;
 pub mod timefmt;
 pub mod version;
 pub mod view;
@@ -83,6 +84,8 @@ pub struct AppState {
     pub oidc_http: oidc_flow::OidcHttp,
     pub oidc_sessions: oidc_flow::OidcSessions,
     pending_mfa: Arc<Mutex<Option<GarminCredentials>>>,
+    /// The real Garmin and Strava; `None` serves the mock accounts.
+    pub clients: Option<Arc<dyn poller::Clients>>,
 }
 
 impl AppState {
@@ -108,7 +111,14 @@ impl AppState {
             oidc_http: oidc_flow::real_http(),
             oidc_sessions: oidc_flow::OidcSessions::default(),
             pending_mfa: Arc::default(),
+            clients: None,
         }
+    }
+
+    /// Serves real accounts: syncing and publishing go to Garmin and Strava.
+    pub fn with_clients(self, clients: Arc<dyn poller::Clients>) -> Self {
+        let scheduler = self.scheduler.clone().with_clients(clients.clone());
+        Self { clients: Some(clients), scheduler, ..self }
     }
 
     /// Points single sign-on at a stand-in identity provider.
@@ -128,6 +138,7 @@ impl AppState {
 fn settings_router() -> Router<AppState> {
     use axum::routing::delete;
     use settings_routes::*;
+    use sync_routes::{initial_sync, manual_sync, refresh_activity_types};
     Router::new()
         .route("/settings", get(settings_state))
         .route("/settings/garmin/reconnect", post(reconnect_garmin))
