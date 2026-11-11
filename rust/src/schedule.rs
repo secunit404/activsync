@@ -13,6 +13,10 @@ use tokio::sync::Notify;
 
 use crate::db::{self, ActivityRow, Db, DbResult};
 use crate::events::EventBus;
+use crate::garmin_client::GarminClient;
+use crate::poller::Clients;
+use crate::strava_client::{StravaClient, StravaError};
+use crate::sync::{self, Services, SyncError};
 
 pub const UNDO_WINDOW_SECONDS: f64 = 5.0;
 pub const PUBLISHABLE_STATUSES: [&str; 3] = ["held", "pending", "missing"];
@@ -241,11 +245,17 @@ pub struct PublishScheduler {
     clock: Clock,
     pub window_seconds: f64,
     wake: Arc<Notify>,
+    /// The real Garmin and Strava; without them publishing is simulated.
+    clients: Option<Arc<dyn Clients>>,
 }
 
 impl PublishScheduler {
     pub fn new(db: Db, events: EventBus, clock: Clock, window_seconds: f64) -> Self {
-        Self { db, events, clock, window_seconds, wake: Arc::new(Notify::new()) }
+        Self { db, events, clock, window_seconds, wake: Arc::new(Notify::new()), clients: None }
+    }
+
+    pub fn with_clients(self, clients: Arc<dyn Clients>) -> Self {
+        Self { clients: Some(clients), ..self }
     }
 
     pub fn now(&self) -> f64 {
@@ -268,21 +278,61 @@ impl PublishScheduler {
     }
 
     /// Sends every publish whose deadline has passed. Returns how many.
-    pub fn run_due(&self) -> DbResult<usize> {
+    pub async fn run_due(&self) -> DbResult<usize> {
         let claimed = claim_due(&self.db.lock(), self.now())?;
         if claimed.is_empty() {
             return Ok(0);
         }
         self.events.publish("refresh");
+        let clients = match &self.clients {
+            None => None,
+            Some(clients) => match clients.garmin().await {
+                Ok(garmin) => Some((garmin, clients.strava())),
+                Err(err) => {
+                    eprintln!("scheduled publish could not reach Garmin or Strava: {err}");
+                    let message = format!("Could not publish activity: {err}");
+                    for (id, _) in &claimed {
+                        finish(&self.db.lock(), *id, FAILED, Some(&message), self.now())?;
+                    }
+                    self.events.publish("refresh");
+                    return Ok(claimed.len());
+                }
+            },
+        };
         for (id, _) in &claimed {
-            let conn = self.db.lock();
-            let (state, message) = mock_send(&conn, *id)?;
-            finish(&conn, *id, state, message.as_deref(), self.now())?;
-            drop(conn);
+            let (state, message) = match &clients {
+                Some((garmin, strava)) => self.send(*id, garmin, strava).await?,
+                None => mock_send(&self.db.lock(), *id)?,
+            };
+            finish(&self.db.lock(), *id, state, message.as_deref(), self.now())?;
             self.events.publish("refresh");
         }
         prune(&self.db.lock(), self.now())?;
         Ok(claimed.len())
+    }
+
+    /// The owner's later decision wins: an activity excluded from another
+    /// device, or removed on Garmin, during the window is skipped.
+    async fn send(&self, id: i64, garmin: &GarminClient, strava: &StravaClient) -> DbResult<(&'static str, Option<String>)> {
+        let activity = db::get_activity(&self.db.lock(), id)?;
+        match activity {
+            Some(activity) if activity.is_published() => return Ok((PUBLISHED, None)),
+            Some(activity) if PUBLISHABLE_STATUSES.contains(&activity.publish_status.as_str()) => {}
+            _ => return Ok((SKIPPED, None)),
+        }
+        let services = Services { db: &self.db, garmin, strava };
+        Ok(match sync::publish_now(&services, id, Utc::now()).await {
+            Ok(()) => {
+                eprintln!("published activity {id} to Strava");
+                (PUBLISHED, None)
+            }
+            Err(SyncError::Blocked(reason)) => (BLOCKED, Some(format!("Activity was blocked by Hevy sync: {reason}."))),
+            Err(SyncError::Strava(StravaError::Auth(message))) => (FAILED, Some(message)),
+            Err(err) => {
+                eprintln!("scheduled publish failed for activity {id}: {err}");
+                (FAILED, Some(format!("Could not publish activity: {err}")))
+            }
+        })
     }
 
     fn sleep_seconds(&self) -> DbResult<f64> {
@@ -300,7 +350,7 @@ impl PublishScheduler {
                 }
             }
             loop {
-                let timeout = match self.run_due().and_then(|_| self.sleep_seconds()) {
+                let timeout = match self.run_due().await.and_then(|_| self.sleep_seconds()) {
                     Ok(seconds) => seconds,
                     Err(err) => {
                         eprintln!("publish scheduler pass failed: {err}");

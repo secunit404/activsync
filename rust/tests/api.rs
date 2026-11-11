@@ -342,11 +342,11 @@ async fn publish_waits_out_undo_window_then_sends() {
     let (status, _) = call(&h.app, Method::POST, &format!("/api/v1/activities/{id}/publish/schedule"), None).await;
     assert_eq!(status, StatusCode::CONFLICT);
 
-    assert_eq!(h.state.scheduler.run_due().unwrap(), 0, "not due yet");
+    assert_eq!(h.state.scheduler.run_due().await.unwrap(), 0, "not due yet");
     assert_eq!(get(&h.app, &format!("/api/v1/activities/publish/batches/{batch}")).await["state"], "waiting");
 
     h.clock.advance(5.0);
-    assert_eq!(h.state.scheduler.run_due().unwrap(), 1);
+    assert_eq!(h.state.scheduler.run_due().await.unwrap(), 1);
     let done = get(&h.app, &format!("/api/v1/activities/publish/batches/{batch}")).await;
     assert_eq!(done["state"], "done");
     let row = db::get_activity(&h.state.db.lock(), id).unwrap().unwrap();
@@ -373,7 +373,7 @@ async fn undo_inside_window_sends_nothing() {
     assert_eq!(body["message"], "Nothing was sent to Strava.");
 
     h.clock.advance(10.0);
-    assert_eq!(h.state.scheduler.run_due().unwrap(), 0);
+    assert_eq!(h.state.scheduler.run_due().await.unwrap(), 0);
     for id in &ids {
         assert_eq!(db::get_activity(&h.state.db.lock(), *id).unwrap().unwrap().publish_status, "pending");
     }
@@ -407,7 +407,7 @@ async fn bulk_publish_reports_hevy_block_and_skips() {
     db::set_publish_status(&h.state.db.lock(), ids[1], "excluded", None).unwrap();
 
     h.clock.advance(6.0);
-    assert_eq!(h.state.scheduler.run_due().unwrap(), 3);
+    assert_eq!(h.state.scheduler.run_due().await.unwrap(), 3);
     let done = get(&h.app, &format!("/api/v1/activities/publish/batches/{batch}")).await;
     assert_eq!(done["result"], json!({
         "message": "Published 1; 1 blocked by Hevy sync; 1 no longer publishable",
