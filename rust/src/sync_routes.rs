@@ -14,7 +14,7 @@ use crate::poller::Clients;
 use crate::routes::{ApiError, development};
 use crate::settings_routes::{ActionResult, action, conflict, invalid, require_garmin, require_not_onboarded};
 use crate::strava_client::StravaError;
-use crate::sync::{self, SyncError};
+use crate::sync::{self, Services, SyncError};
 use crate::{AppState, config, db, onboarding, view};
 
 type ApiResult<T> = Result<Json<T>, ApiError>;
@@ -139,4 +139,35 @@ pub async fn manual_sync(State(state): State<AppState>, Path(service): Path<Stri
     };
     state.events.publish("refresh");
     action(&state, &state.db.lock(), message, false)
+}
+
+/// Reconnect catch-up, best effort: the outage window is synced and the
+/// dashboard summarises what turned up, or the summary is cleared when
+/// nothing did. `last_sync_ok_at` is `None` to read the stored value.
+pub(crate) async fn run_catch_up(state: &AppState, last_sync_ok_at: Option<Option<String>>) -> Result<(), ApiError> {
+    let now = Utc::now();
+    let Some(clients) = state.clients.clone() else {
+        onboarding::run_catch_up(&state.db.lock(), now)?;
+        return Ok(());
+    };
+    let caught_up = async {
+        let garmin = open_garmin(clients.as_ref()).await?;
+        let strava = clients.strava();
+        let cfg = config::load_config(&state.db.lock(), development(state)).map_err(|e| e.to_string())?;
+        let services = Services { db: &state.db, garmin: &garmin, strava: &strava };
+        sync::catch_up_sync(&services, &cfg, now, last_sync_ok_at).await.map_err(|e| e.to_string())
+    };
+    match caught_up.await {
+        Ok(stats) => {
+            let found = stats.garmin.new > 0 || stats.status.linked_existing > 0;
+            let report = found.then(|| {
+                json!({"new": stats.garmin.new, "held": stats.garmin.held_backlog,
+                       "linked": stats.status.linked_existing, "days": stats.lookback_days})
+            });
+            db::set_config_value(&state.db.lock(), "catch_up_report", &report.unwrap_or(Value::Null))?;
+        }
+        Err(err) => eprintln!("catch-up sync after reconnect failed: {err}"),
+    }
+    state.events.publish("refresh");
+    Ok(())
 }

@@ -26,7 +26,7 @@ fn oidc_cookie(ctx: &RequestContext) -> &'static str {
 
 /// Where the provider sends the browser back: the public URL when one is
 /// set, else the origin this request arrived on.
-fn origin(state: &AppState, headers: &HeaderMap, ctx: &RequestContext) -> String {
+pub(crate) fn origin(state: &AppState, headers: &HeaderMap, ctx: &RequestContext) -> String {
     if let Some(public) = &state.auth.public_url {
         return public.clone();
     }

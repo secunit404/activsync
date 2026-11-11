@@ -1,11 +1,8 @@
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::Redirect;
-use base64::Engine;
+use axum::extract::State;
+use axum::http::{StatusCode, header};
 use chrono::Utc;
-use rand::RngCore;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -47,7 +44,7 @@ fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
     payload.map(|Json(value)| value).map_err(|rejection| invalid(rejection.body_text()))
 }
 
-fn onboarded(conn: &Connection) -> Result<bool, ApiError> {
+pub(crate) fn onboarded(conn: &Connection) -> Result<bool, ApiError> {
     Ok(db::truthy(db::get_config_value(conn, "initial_sync_done")?.as_ref()))
 }
 
@@ -330,103 +327,6 @@ pub async fn save_strava_credentials(
     onboarding::persist_strava_credentials(&conn, client_id, &client_secret)?;
     state.events.publish("refresh");
     action(&state, &conn, "Strava credentials saved. Continue to authorization.", false)
-}
-
-fn strava_callback_url(headers: &HeaderMap) -> String {
-    let host = headers
-        .get(header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("127.0.0.1:8383");
-    format!("http://{host}/strava/callback")
-}
-
-fn new_state_token() -> String {
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
-}
-
-pub async fn strava_authorize(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
-    let conn = state.db.lock();
-    let credentials = db::get_config_value(&conn, "strava_credentials")?.unwrap_or(Value::Null);
-    if !db::truthy(credentials.get("client_id")) || !db::truthy(credentials.get("client_secret")) {
-        return Err(conflict("Save your Strava client ID and client secret before connecting."));
-    }
-    let token = new_state_token();
-    db::set_config_value(&conn, "strava_oauth_state", &json!(token))?;
-    Ok(Json(json!({ "url": mock::strava_authorize_url(&strava_callback_url(&headers), &token) })))
-}
-
-#[derive(Deserialize)]
-pub struct StravaCallback {
-    code: Option<String>,
-    state: Option<String>,
-    error: Option<String>,
-    scope: Option<String>,
-}
-
-fn constant_time_eq(a: &str, b: &str) -> bool {
-    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
-pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<StravaCallback>) -> Result<Redirect, ApiError> {
-    let conn = state.db.lock();
-    let expected = db::get_config_value(&conn, "strava_oauth_state")?.and_then(|v| v.as_str().map(str::to_string));
-    db::set_config_value(&conn, "strava_oauth_state", &Value::Null)?;
-    let landing = if onboarded(&conn)? { "/settings" } else { "/setup" };
-    let fail = |message: &str| {
-        let query = format!("stravaError={}", urlencode(message));
-        Ok(Redirect::to(&format!("{landing}?{query}")))
-    };
-    if query.error.as_deref() == Some("access_denied") {
-        return fail(
-            "The Strava authorization was declined, so nothing was connected. \
-             Press Connect and choose Authorize on Strava's page to continue.",
-        );
-    }
-    if query.error.is_some() || query.code.as_deref().unwrap_or_default().is_empty() {
-        return fail(
-            "Strava did not send an authorization back. Try again and check \
-             the Authorization Callback Domain if the problem continues.",
-        );
-    }
-    let state_matches = match (&expected, &query.state) {
-        (Some(expected), Some(got)) if !expected.is_empty() && !got.is_empty() => constant_time_eq(expected, got),
-        _ => false,
-    };
-    if !state_matches {
-        return fail(
-            "That Strava response did not match the connection request, so it \
-             was ignored. Start the connection again.",
-        );
-    }
-    db::set_config_value(&conn, "strava_tokens", &mock::strava_tokens(query.scope.as_deref(), Utc::now().timestamp()))?;
-    if !view::scope_is_sufficient(query.scope.as_deref()) {
-        return fail(
-            "Strava didn't grant upload access. Press Connect with Strava \
-             again and leave both permissions ticked.",
-        );
-    }
-    let connections = view::connection_status(&conn, Utc::now())?;
-    if onboarding::setup_step(&conn, &connections, state.auth.disabled)?.is_some() {
-        state.events.publish("refresh");
-        return Ok(Redirect::to("/setup"));
-    }
-    onboarding::run_catch_up(&conn, Utc::now())?;
-    state.events.publish("refresh");
-    Ok(Redirect::to("/settings"))
-}
-
-/// `urllib.parse.urlencode`'s quoting: spaces become `+`.
-fn urlencode(value: &str) -> String {
-    value
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
-            b' ' => "+".into(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 pub async fn disconnect_strava(State(state): State<AppState>) -> ApiResult<ActionResult> {

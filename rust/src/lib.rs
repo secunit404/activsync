@@ -40,6 +40,7 @@ pub mod schedule;
 pub mod seed;
 pub mod settings_routes;
 pub mod strava_client;
+pub mod strava_routes;
 pub mod strava_strength;
 pub mod sync;
 pub mod sync_routes;
@@ -138,6 +139,7 @@ impl AppState {
 fn settings_router() -> Router<AppState> {
     use axum::routing::delete;
     use settings_routes::*;
+    use strava_routes::strava_authorize;
     use sync_routes::{initial_sync, manual_sync, refresh_activity_types};
     Router::new()
         .route("/settings", get(settings_state))
@@ -238,7 +240,7 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
         .route("/api/events", get(routes::sse_events))
         .route("/api/{*rest}", get(routes::not_found))
         .route("/health", get(routes::health))
-        .route("/strava/callback", get(settings_routes::strava_callback))
+        .route("/strava/callback", get(strava_routes::strava_callback))
         .route("/auth/oidc/login", get(oidc_routes::oidc_login))
         .route("/auth/oidc/callback", get(oidc_routes::oidc_callback));
     if let Some(dir) = web_dir.filter(|d| d.join("index.html").is_file()) {

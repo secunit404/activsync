@@ -445,8 +445,6 @@ pub struct RealClients {
     pub garmin_http: Http,
     pub strava_http: Http,
     pub garmin_token_dir: String,
-    pub strava_client_id: String,
-    pub strava_client_secret: String,
 }
 
 impl Clients for RealClients {
@@ -454,13 +452,11 @@ impl Clients for RealClients {
         Box::pin(GarminClient::open(self.garmin_http.clone(), self.clock.clone(), &self.garmin_token_dir))
     }
 
+    /// The app credentials are read each time, so saving new ones applies
+    /// without a restart.
     fn strava(&self) -> StravaClient {
-        StravaClient::new(
-            self.strava_http.clone(),
-            self.db.clone(),
-            self.clock.clone(),
-            &self.strava_client_id,
-            &self.strava_client_secret,
-        )
+        let credentials = db::get_config_value(&self.db.lock(), "strava_credentials").ok().flatten().unwrap_or(Value::Null);
+        let field = |key: &str| credentials.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
+        StravaClient::new(self.strava_http.clone(), self.db.clone(), self.clock.clone(), &field("client_id"), &field("client_secret"))
     }
 }
