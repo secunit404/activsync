@@ -143,7 +143,7 @@ pub async fn settings_state(State(state): State<AppState>) -> ApiResult<Settings
     Ok(Json(SettingsState {
         release: display == *version::VERSION,
         version: display,
-        update: UpdateState::none(),
+        update: UpdateState::of(&state),
         development: state.mock_mode,
         setup: SetupProgress { complete: step.is_none(), step, mfa_required },
         credentials: CredentialState {

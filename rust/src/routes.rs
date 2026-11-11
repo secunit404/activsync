@@ -17,13 +17,13 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::db::{self, ActivityRow};
 use crate::schedule::{self, ScheduleError};
+use crate::update_check::REPO_URL;
 use crate::view::{self, ActivityDetail, Connections};
 use crate::{AppState, config, onboarding, timefmt, version};
 
 const PUBLISH_STATUSES: [&str; 5] = ["pending", "held", "published", "missing", "excluded"];
 const REVIEW_STATUSES: [&str; 2] = ["held", "missing"];
 const PAGE_SIZES: [i64; 4] = [10, 20, 50, 100];
-const REPO_URL: &str = "https://github.com/secunit404/activsync";
 
 pub struct ApiError {
     status: StatusCode,
@@ -105,11 +105,13 @@ pub struct UpdateState {
 }
 
 impl UpdateState {
-    /// Mock mode never asks GitHub for releases.
-    pub fn none() -> Self {
+    /// What GitHub last said; nothing until a check has answered, and never
+    /// with mock data, which does not check.
+    pub fn of(state: &AppState) -> Self {
+        let status = state.update.get();
         Self {
-            latest: None,
-            available: false,
+            available: status.as_ref().is_some_and(|s| s.available),
+            latest: status.map(|s| s.latest),
             repo_url: REPO_URL.into(),
             release_url: format!("{REPO_URL}/releases/latest"),
         }
@@ -160,7 +162,7 @@ pub async fn app_state(State(state): State<AppState>) -> ApiResult<AppStateRespo
             status: hevy_status,
         },
         catch_up_report,
-        update: UpdateState::none(),
+        update: UpdateState::of(&state),
         review_count: db::count_activities(&conn, &REVIEW_STATUSES)?,
         poll_intervals: PollIntervals {
             garmin_minutes: cfg.int("garmin_poll_interval_minutes"),

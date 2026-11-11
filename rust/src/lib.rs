@@ -47,6 +47,7 @@ pub mod strava_strength;
 pub mod sync;
 pub mod sync_routes;
 pub mod timefmt;
+pub mod update_check;
 pub mod version;
 pub mod view;
 
@@ -103,6 +104,7 @@ pub struct AppState {
     pub hevy_http: Option<net::Http>,
     /// Signs in to the real Garmin; `None` serves the mock account.
     pub garmin_sign_in: Option<garmin_login::SignIn>,
+    pub update: update_check::UpdateCache,
 }
 
 impl AppState {
@@ -132,6 +134,7 @@ impl AppState {
             clients: None,
             hevy_http: None,
             garmin_sign_in: None,
+            update: update_check::UpdateCache::default(),
         }
     }
 
