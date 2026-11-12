@@ -16,7 +16,7 @@ use crate::hevy_client::HevyError;
 use crate::hevy_queue::{HevyWorkoutDetail, workout_detail};
 use crate::routes::{ApiError, ApiResult, development};
 use crate::view::GARMIN_ACTIVITY_URL;
-use crate::{AppState, config, db, hevy_db, hevy_sync, timefmt, view};
+use crate::{AppState, config, db, hevy_db, hevy_seed, hevy_sync, timefmt, view};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,7 +45,7 @@ pub struct ExerciseMapping {
 /// Every known template with where it lands in Garmin and Strava, asking the
 /// same resolvers the sync path uses so the screen cannot disagree with what
 /// gets written. Unmapped first, then custom exercises, then by title.
-pub fn mappings_view(conn: &Connection) -> rusqlite::Result<Vec<ExerciseMapping>> {
+fn mappings_view(conn: &Connection) -> rusqlite::Result<Vec<ExerciseMapping>> {
     let mut rows = Vec::new();
     for template in hevy_db::list_templates(conn)? {
         let id = Some(template.id.as_str());
@@ -372,7 +372,6 @@ fn backfill_item(item: &Item, template: Option<&str>) -> Result<BackfillItem, Ap
 struct Backfill {
     raw: Vec<Item>,
     items: Vec<BackfillItem>,
-    total: Option<i64>,
 }
 
 /// The workouts since the typed date, read from Hevy before the database is
@@ -394,7 +393,7 @@ async fn fetch_backfill(
         ));
     };
     let Some(client) = state.real_hevy(api_key.as_str().unwrap_or_default()) else {
-        let account = hevy_backfill::account(scheduler_now(state));
+        let account = hevy_seed::account_workouts(scheduler_now(state));
         let total = account.len() as i64;
         return Ok((hevy_backfill::workouts_since(account, since), Some(total)));
     };
@@ -426,7 +425,6 @@ fn build_backfill(
     state: &AppState,
     conn: &Connection,
     workouts: Vec<Value>,
-    total: Option<i64>,
 ) -> Result<Backfill, ApiError> {
     let cfg = config::load_config(conn, development(state))?;
     let raw = hevy_backfill::preview_items(conn, workouts, &cfg, scheduler_now(state))?;
@@ -436,7 +434,7 @@ fn build_backfill(
         .iter()
         .map(|item| backfill_item(item, template))
         .collect::<Result<_, _>>()?;
-    Ok(Backfill { raw, items, total })
+    Ok(Backfill { raw, items })
 }
 
 /// Hands workouts to the Hevy pipeline now rather than at the next Hevy
@@ -483,12 +481,12 @@ pub async fn preview_backfill(
 ) -> ApiResult<BackfillResult> {
     let request = payload?.0;
     let (workouts, total) = fetch_backfill(&state, &request.since).await?;
-    let backfill = build_backfill(&state, &state.db.lock(), workouts, total)?;
+    let backfill = build_backfill(&state, &state.db.lock(), workouts)?;
     let count = backfill.items.len();
     let message = if count == 0 {
         format!("No Hevy workouts found since {}.", request.since)
     } else {
-        let scale = match backfill.total.filter(|total| *total != 0) {
+        let scale = match total.filter(|total| *total != 0) {
             Some(total) => format!(", of {total} on your Hevy account"),
             None => String::new(),
         };
@@ -514,10 +512,10 @@ pub async fn run_backfill(
     payload: Result<Json<BackfillRequest>, JsonRejection>,
 ) -> ApiResult<BackfillResult> {
     let request = payload?.0;
-    let (workouts, total) = fetch_backfill(&state, &request.since).await?;
+    let (workouts, _) = fetch_backfill(&state, &request.since).await?;
     let (backfill, selected, matched) = {
         let conn = state.db.lock();
-        let backfill = build_backfill(&state, &conn, workouts, total)?;
+        let backfill = build_backfill(&state, &conn, workouts)?;
         let selected: Vec<&Item> = match &request.hevy_ids {
             None => backfill.raw.iter().collect(),
             Some(ids) => backfill

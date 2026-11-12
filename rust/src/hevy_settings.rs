@@ -1,12 +1,14 @@
 use rusqlite::Connection;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::config::Config;
 use crate::db::{self, DbResult};
+use crate::garmin_errors::py_str;
+use crate::hevy_profile::{self, object};
 use crate::view;
 
-const PROFILE_CACHE_KEY: &str = "garmin_user_profile";
 pub const PROFILE_OVERRIDE_KEY: &str = "profile_override";
 const TITLE_FIELDS: &[&str] = &["title", "clean_title"];
 const DESCRIPTION_FIELDS: &[&str] = &["duration", "calories", "avg_hr", "exercises", "marker"];
@@ -60,22 +62,11 @@ pub struct HevySettingsState {
     profile_from_garmin: bool,
 }
 
-fn object(value: Option<Value>) -> Map<String, Value> {
-    match value {
-        Some(Value::Object(map)) => map,
-        _ => Map::new(),
-    }
-}
-
 fn identity_display(detected: &Map<String, Value>) -> String {
     if detected.is_empty() {
         return "not yet detected — set automatically from your watch".into();
     }
-    let part = |key: &str| match detected.get(key) {
-        None | Some(Value::Null) => "None".to_string(),
-        Some(Value::String(s)) => s.clone(),
-        Some(other) => other.to_string(),
-    };
+    let part = |key: &str| detected.get(key).map_or_else(|| "None".into(), py_str);
     let numbers = format!(
         "{}/{}/{}",
         part("manufacturer"),
@@ -89,6 +80,14 @@ fn identity_display(detected: &Map<String, Value>) -> String {
     }
 }
 
+/// A stored object setting, or the default when it is missing or unreadable.
+fn setting<T: DeserializeOwned + Default>(settings: &Map<String, Value>, key: &str) -> T {
+    settings
+        .get(key)
+        .and_then(|value| T::deserialize(value).ok())
+        .unwrap_or_default()
+}
+
 /// The settings page's Hevy card. The detected device identity and the hand
 /// override are kept apart, so a save with a blank override keeps detection.
 pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySettingsState> {
@@ -96,27 +95,31 @@ pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySett
     let api_key_saved = db::truthy(db::get_config_value(conn, "hevy_api_key")?.as_ref());
     let (connected, status) = view::hevy_connection(conn)?;
 
-    let cache = object(db::get_config_value(conn, PROFILE_CACHE_KEY)?);
+    let cache = object(db::get_config_value(conn, hevy_profile::CACHE_KEY)?);
     let cached = |key: &str| cache.get(key).filter(|v| !v.is_null());
     let profile_from_garmin = ["weight_kg", "birth_year", "vo2max", "sex"]
         .iter()
         .any(|k| cached(k).is_some());
     let baseline = ProfileBaseline {
-        weight_kg: cached("weight_kg").and_then(Value::as_f64).unwrap_or(80.0),
-        birth_year: cached("birth_year").and_then(Value::as_i64).unwrap_or(1990),
-        vo2max: cached("vo2max").and_then(Value::as_f64).unwrap_or(45.0),
+        weight_kg: cached("weight_kg")
+            .and_then(Value::as_f64)
+            .unwrap_or(hevy_profile::DEFAULT_WEIGHT_KG),
+        birth_year: cached("birth_year")
+            .and_then(Value::as_i64)
+            .unwrap_or(hevy_profile::DEFAULT_BIRTH_YEAR),
+        vo2max: cached("vo2max")
+            .and_then(Value::as_f64)
+            .unwrap_or(hevy_profile::DEFAULT_VO2MAX),
         sex: cached("sex")
             .and_then(Value::as_str)
-            .unwrap_or("male")
+            .unwrap_or(hevy_profile::DEFAULT_SEX)
             .to_string(),
     };
-    let parse = |key: &str| {
-        settings
-            .get(key)
-            .cloned()
-            .filter(|v| !v.is_null())
-            .unwrap_or(json!({}))
-    };
+    let empty = Map::new();
+    let detected = settings
+        .get("hevy_device_identity")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
 
     Ok(HevySettingsState {
         connected,
@@ -130,10 +133,9 @@ pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySett
         summary_on_structured: db::truthy(cfg.get("hevy_summary_on_structured")),
         grace_minutes: cfg.int("hevy_grace_minutes"),
         poll_interval_minutes: cfg.int("hevy_poll_interval_minutes"),
-        identity: serde_json::from_value(parse("hevy_device_identity_override"))
-            .unwrap_or_default(),
-        identity_display: identity_display(&object(settings.get("hevy_device_identity").cloned())),
-        profile_override: serde_json::from_value(parse(PROFILE_OVERRIDE_KEY)).unwrap_or_default(),
+        identity: setting(&settings, "hevy_device_identity_override"),
+        identity_display: identity_display(detected),
+        profile_override: setting(&settings, PROFILE_OVERRIDE_KEY),
         profile_baseline: baseline,
         profile_from_garmin,
     })

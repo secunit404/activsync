@@ -1,6 +1,5 @@
-//! Exercise lookups for Hevy workouts, as in the Python app's `hevy_mapper`
-//! and `strava_exercise_mapper`, over tables exported from it by
-//! `assets/export_exercise_tables.py`.
+//! Exercise lookups for Hevy workouts, over the tables
+//! `assets/export_exercise_tables.py` exports from the Python app.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::LazyLock;
@@ -274,7 +273,7 @@ pub fn suggest_mapping(title: &str, primary_muscle_group: Option<&str>) -> Optio
     muscle_group_fallback(primary_muscle_group.unwrap_or_default()).map(|category| (category, 0))
 }
 
-pub fn user_strava_exercise(conn: &Connection, template_id: &str) -> DbResult<Option<String>> {
+fn user_strava_exercise(conn: &Connection, template_id: &str) -> DbResult<Option<String>> {
     conn.query_row(
         "SELECT exercise_type FROM strava_exercise_mappings WHERE exercise_template_id = ?1",
         [template_id],

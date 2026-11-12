@@ -1,8 +1,8 @@
-//! Hevy API v1 client, as the Python app's `hevy_client.py`: retries only
-//! when Hevy signals 429 or 5xx, a distinct error for a rejected key, and the
-//! events cursor that drives incremental sync. Responses are checked
-//! defensively, since Hevy warns the event shapes may change. A failure reads
-//! as `requests` words it, since that text is stored on the workout.
+//! Hevy API v1 client: retries only when Hevy signals 429 or 5xx, a distinct
+//! error for a rejected key, and the events cursor that drives incremental
+//! sync. Responses are checked defensively, since Hevy warns the event shapes
+//! may change. A failure reads as Python's `requests` words it, since that
+//! text is stored on the workout.
 
 use std::time::Duration;
 
@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::net::{self, Http};
 
-pub const DEFAULT_BASE_URL: &str = "https://api.hevyapp.com/v1";
+const DEFAULT_BASE_URL: &str = "https://api.hevyapp.com/v1";
 const RETRY_STATUSES: [u16; 5] = [429, 500, 502, 503, 504];
 const MAX_RETRIES: u32 = 5;
 const MAX_BACKOFF_SECONDS: f64 = 120.0;
@@ -306,12 +306,7 @@ impl HevyClient {
         .await
     }
 
-    pub async fn get_events(
-        &self,
-        since: &str,
-        page: i64,
-        page_size: i64,
-    ) -> Result<Value, HevyError> {
+    async fn get_events(&self, since: &str, page: i64, page_size: i64) -> Result<Value, HevyError> {
         let (page, size) = (page.to_string(), page_size.to_string());
         self.get(
             "/workouts/events",
@@ -361,7 +356,7 @@ impl HevyClient {
     }
 
     /// One page of exercise templates, and whether another follows.
-    pub async fn get_exercise_templates_page(
+    async fn get_exercise_templates_page(
         &self,
         page: i64,
     ) -> Result<(Vec<Value>, bool), HevyError> {

@@ -1,12 +1,15 @@
-//! Strength-training FIT files from Hevy workouts, as the Python app's
-//! `fit_builder.py` (from hevy2garmin, MIT): exercises arrive resolved, the
-//! profile and device identity are injected, and calories use sex-correct
-//! Keytel constants. The bytes match the Python build exactly.
+//! Strength-training FIT files from Hevy workouts (after hevy2garmin, MIT):
+//! exercises arrive resolved, the profile and device identity are injected,
+//! and calories use sex-correct Keytel constants. The bytes must match the
+//! Python build exactly.
 
 use chrono::{DateTime, Datelike, Utc};
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 
+use crate::exercise_tables::UNKNOWN_CATEGORY;
 use crate::fit_encode::{Encoder, FitValue, Mesg, mesg};
+use crate::garmin_errors::py_repr;
 
 pub const WORKING_SET_S: f64 = 40.0;
 pub const WARMUP_SET_S: f64 = 25.0;
@@ -16,7 +19,6 @@ pub const MIN_SCALE: f64 = 0.3;
 pub const MAX_SCALE: f64 = 2.0;
 /// Calorie fallback when there is no heart rate at all.
 const DEFAULT_HR_BPM: i64 = 90;
-pub const UNKNOWN_CATEGORY: i64 = 65534;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceIdentity {
@@ -48,7 +50,7 @@ pub fn new_fallback_identity() -> DeviceIdentity {
 /// Watch files come through Garmin's download endpoint, sometimes truncated,
 /// so whatever was read before a fault is kept rather than nothing, as the
 /// Python SDK's decoder does.
-pub fn decode_fit(fit: &[u8]) -> Vec<fitparser::FitDataRecord> {
+pub(crate) fn decode_fit(fit: &[u8]) -> Vec<fitparser::FitDataRecord> {
     use fitparser::de::{DecodeOption, FitObject, FitStreamProcessor};
     let mut processor = FitStreamProcessor::new();
     for option in [
@@ -144,7 +146,7 @@ pub struct ResolvedExercise {
     pub sets: Vec<Value>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct BuildSummary {
     pub exercises: usize,
     pub total_sets: usize,
@@ -155,7 +157,7 @@ pub struct BuildSummary {
 }
 
 /// Keytel et al. 2005 energy expenditure.
-pub fn keytel_kcal_per_min(hr: i64, profile: &Profile, age: i64) -> f64 {
+fn keytel_kcal_per_min(hr: i64, profile: &Profile, age: i64) -> f64 {
     let (hr, age) = (hr as f64, age as f64);
     if profile.sex == "female" {
         (-59.3954 + 0.45 * hr + 0.380 * profile.vo2max + 0.103 * profile.weight_kg + 0.274 * age)
@@ -175,10 +177,10 @@ fn calc_calories(hr_bpm: &[i64], duration_s: f64, workout_year: i64, profile: &P
         hr_bpm
     };
     let interval_min = (duration_s / samples.len() as f64) / 60.0;
-    let mut total = 0.0;
-    for hr in samples {
-        total += keytel_kcal_per_min(*hr, profile, age).max(0.0) * interval_min;
-    }
+    let total: f64 = samples
+        .iter()
+        .map(|hr| keytel_kcal_per_min(*hr, profile, age).max(0.0) * interval_min)
+        .sum();
     total.round_ties_even() as i64
 }
 
@@ -194,12 +196,9 @@ fn parse_time(raw: Option<&Value>) -> Option<DateTime<Utc>> {
     }
 }
 
-fn py_repr(value: Option<&Value>) -> String {
-    match value {
-        None | Some(Value::Null) => "None".into(),
-        Some(Value::String(s)) => format!("'{s}'"),
-        Some(other) => other.to_string(),
-    }
+/// Python's `repr(workout.get(key))`.
+fn repr_of(workout: &Value, key: &str) -> String {
+    workout.get(key).map_or_else(|| "None".into(), py_repr)
 }
 
 fn number(value: Option<&Value>) -> Option<f64> {
@@ -221,13 +220,14 @@ struct SetInfo<'a> {
     end_offset: f64,
 }
 
+/// Records sort before sets stamped at the same moment.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Kind {
     Record,
     Set,
 }
 
 struct Entry {
-    ts: i64,
     kind: Kind,
     timestamp: i64,
     start_time: Option<i64>,
@@ -245,14 +245,11 @@ impl Entry {
             fields.push(("duration", Some(FitValue::Float(duration))));
         }
         fields.extend(self.fields.iter().cloned());
-        mesg(
-            if matches!(self.kind, Kind::Record) {
-                "record"
-            } else {
-                "set"
-            },
-            fields,
-        )
+        let name = match self.kind {
+            Kind::Record => "record",
+            Kind::Set => "set",
+        };
+        mesg(name, fields)
     }
 }
 
@@ -265,11 +262,9 @@ pub fn build_fit(
     profile: &Profile,
     identity: DeviceIdentity,
 ) -> Result<(Vec<u8>, BuildSummary), String> {
-    let mut hr_timed: Option<Vec<(f64, i64)>> = None;
-    let mut hr_bpm: Vec<i64> = Vec::new();
-    if let Some(first) = hr_samples.first() {
-        if first.is_object() {
-            let timed: Vec<(f64, i64)> = hr_samples
+    let mut hr_timed: Option<Vec<(f64, i64)>> =
+        hr_samples.first().is_some_and(Value::is_object).then(|| {
+            hr_samples
                 .iter()
                 .filter(|s| s.get("hr").is_some_and(|hr| !hr.is_null()))
                 .map(|s| {
@@ -278,16 +273,8 @@ pub fn build_fit(
                         number(s.get("hr")).unwrap_or(0.0) as i64,
                     )
                 })
-                .collect();
-            hr_bpm = timed.iter().map(|(_, bpm)| *bpm).collect();
-            hr_timed = Some(timed);
-        } else {
-            hr_bpm = hr_samples
-                .iter()
-                .map(|x| number(Some(x)).unwrap_or(0.0) as i64)
-                .collect();
-        }
-    }
+                .collect()
+        });
 
     let title = workout.get("title").and_then(Value::as_str).unwrap_or("?");
     let (start, end) = match (
@@ -298,8 +285,8 @@ pub fn build_fit(
         _ => {
             return Err(format!(
                 "Workout '{title}' missing valid start/end time (start={}, end={})",
-                py_repr(workout.get("start_time")),
-                py_repr(workout.get("end_time"))
+                repr_of(workout, "start_time"),
+                repr_of(workout, "end_time")
             ));
         }
     };
@@ -307,18 +294,27 @@ pub fn build_fit(
     if duration_s <= 0.0 {
         return Err(format!(
             "Workout '{title}' has non-positive duration ({} → {})",
-            py_repr(workout.get("start_time")),
-            py_repr(workout.get("end_time"))
+            repr_of(workout, "start_time"),
+            repr_of(workout, "end_time")
         ));
     }
-    if let Some(timed) = hr_timed.as_mut() {
-        // Buffered samples that cannot land in the activity must not move
-        // calories or the averages either.
-        timed.retain(|(offset, _)| *offset <= duration_s);
-        hr_bpm = timed.iter().map(|(_, bpm)| *bpm).collect();
-    }
+    let hr_bpm: Vec<i64> = match hr_timed.as_mut() {
+        Some(timed) => {
+            // Buffered samples that cannot land in the activity must not move
+            // calories or the averages either.
+            timed.retain(|(offset, _)| *offset <= duration_s);
+            timed.iter().map(|(_, bpm)| *bpm).collect()
+        }
+        None => hr_samples
+            .iter()
+            .map(|x| x.as_f64().unwrap_or(0.0) as i64)
+            .collect(),
+    };
     if let Some(unknown) = resolved.iter().find(|e| e.category == UNKNOWN_CATEGORY) {
-        return Err(format!("exercise '{}' resolved to UNKNOWN", unknown.title));
+        return Err(format!(
+            "exercise {} resolved to UNKNOWN",
+            py_repr(&Value::from(unknown.title.as_str()))
+        ));
     }
     let start_ms =
         (start.timestamp_micros() as f64 / 1_000_000.0 * 1000.0).round_ties_even() as i64;
@@ -420,7 +416,6 @@ pub fn build_fit(
     )?;
 
     let record = |ms: i64, field: &'static str, value: FitValue| Entry {
-        ts: ms,
         kind: Kind::Record,
         timestamp: ms,
         start_time: None,
@@ -461,14 +456,13 @@ pub fn build_fit(
             .set
             .get("reps")
             .filter(|r| !r.is_null())
-            .map(|r| FitValue::Int(number(Some(r)).unwrap_or(0.0) as i64));
+            .map(|r| FitValue::Int(r.as_f64().unwrap_or(0.0) as i64));
         let weight = info
             .set
             .get("weight_kg")
             .filter(|w| !w.is_null())
-            .map(|w| FitValue::Float(number(Some(w)).unwrap_or(0.0).max(0.0)));
+            .map(|w| FitValue::Float(w.as_f64().unwrap_or(0.0).max(0.0)));
         let active = Entry {
-            ts: set_end,
             kind: Kind::Set,
             timestamp: set_end,
             start_time: Some(set_start),
@@ -500,7 +494,6 @@ pub fn build_fit(
             let rest_scaled = info.rest_dur * scale;
             let rest_end = set_end + (rest_scaled * 1000.0).round_ties_even() as i64;
             timeline.push(Entry {
-                ts: rest_end,
                 kind: Kind::Set,
                 timestamp: rest_end,
                 start_time: Some(set_end),
@@ -520,8 +513,8 @@ pub fn build_fit(
     // are clamped to the end and late records dropped.
     let mut clipped = Vec::new();
     for mut entry in timeline {
-        if matches!(entry.kind, Kind::Record) {
-            if entry.ts <= end_ms {
+        if entry.kind == Kind::Record {
+            if entry.timestamp <= end_ms {
                 clipped.push(entry);
             }
             continue;
@@ -530,14 +523,13 @@ pub fn build_fit(
         if set_start >= end_ms {
             continue;
         }
-        if entry.ts > end_ms {
+        if entry.timestamp > end_ms {
             entry.timestamp = end_ms;
             entry.duration = Some((end_ms - set_start) as f64 / 1000.0);
-            entry.ts = end_ms;
         }
         clipped.push(entry);
     }
-    clipped.sort_by_key(|e| (e.ts, if matches!(e.kind, Kind::Record) { 0 } else { 1 }));
+    clipped.sort_by_key(|e| (e.timestamp, e.kind));
     for entry in &clipped {
         write(&mut encoder, entry.mesg())?;
     }
@@ -615,13 +607,4 @@ pub fn build_fit(
         duration_s,
     };
     Ok((encoder.close(), summary))
-}
-
-impl BuildSummary {
-    pub fn to_json(&self) -> Value {
-        json!({
-            "exercises": self.exercises, "total_sets": self.total_sets, "hr_samples": self.hr_samples,
-            "calories": self.calories, "avg_hr": self.avg_hr, "duration_s": self.duration_s,
-        })
-    }
 }

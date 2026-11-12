@@ -1,8 +1,8 @@
-//! Strava's JSON strength upload for a Hevy-linked activity, as the Python
-//! app's `strava_strength.py`. Strava reads a FIT's sets through its own
-//! partial table of Garmin exercise ids, so machine variants come out wrong
-//! or "Unknown"; the JSON names each set's Strava exercise directly. Sets come
-//! from Hevy; time, heart rate and calories from the watch's recording.
+//! Strava's JSON strength upload for a Hevy-linked activity. Strava reads a
+//! FIT's sets through its own partial table of Garmin exercise ids, so machine
+//! variants come out wrong or "Unknown"; the JSON names each set's Strava
+//! exercise directly. Sets come from Hevy; time, heart rate and calories from
+//! the watch's recording.
 
 use chrono::{DateTime, Offset, TimeZone, Utc};
 use fitparser::profile::MesgNum;
@@ -10,7 +10,8 @@ use fitparser::{FitDataRecord, Value as Fit};
 use rusqlite::Connection;
 use serde_json::{Map, Value, json};
 
-const FIT_EPOCH_S: i64 = 631_065_600;
+use crate::fit_encode::FIT_EPOCH_S;
+use crate::garmin_errors::py_repr;
 
 /// fitparser turns a `local_date_time` into an instant by counting from the
 /// FIT epoch read in the server's own time zone; this undoes that, giving
@@ -41,14 +42,6 @@ fn py_round(value: f64) -> i64 {
     value.round_ties_even() as i64
 }
 
-fn py_quote(text: &str) -> String {
-    if text.contains('\'') && !text.contains('"') {
-        format!("\"{text}\"")
-    } else {
-        format!("'{}'", text.replace('\'', "\\'"))
-    }
-}
-
 /// The upload document for a Hevy workout recorded as `fit`. The error is
 /// the reason to upload the FIT instead: an exercise with no Strava
 /// exercise, no sets, or no usable time window.
@@ -76,7 +69,7 @@ pub fn build_strength_upload(
             let template = template_id.map_or_else(|| "None".to_string(), str::to_string);
             return Err(format!(
                 "no Strava exercise for {} (template {template})",
-                py_quote(title)
+                py_repr(&Value::from(title))
             ));
         };
         for set in exercise

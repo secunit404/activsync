@@ -75,7 +75,11 @@ fn the_fit_file_is_byte_for_byte_the_python_build() {
                     bytes.len(),
                     python.len()
                 );
-                assert_eq!(summary.to_json(), expected["summary"], "{name}");
+                assert_eq!(
+                    serde_json::to_value(&summary).unwrap(),
+                    expected["summary"],
+                    "{name}"
+                );
                 let found = identity_from_fit(&bytes).unwrap();
                 assert_eq!(
                     json!([found.manufacturer, found.product, found.serial]),

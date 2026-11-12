@@ -1,6 +1,5 @@
-//! Heart rate for generated FITs, as the Python app's `hr_sources.py` (from
-//! hevy2garmin, MIT): the watch FIT's records, Garmin's daily wrist HR sliced
-//! to the workout, and the merge. Best-effort throughout: HR must never break
+//! Heart rate for generated FITs (after hevy2garmin, MIT): the watch FIT's
+//! records, Garmin's daily wrist HR sliced to the workout, and the merge. Best-effort throughout: HR must never break
 //! a sync, so a failure gives no samples and the upload goes ahead without.
 //! Samples are `{"time": seconds_from_start, "hr": bpm}`, sorted by time.
 

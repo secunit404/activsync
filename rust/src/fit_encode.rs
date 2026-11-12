@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
-const FIT_EPOCH_S: i64 = 631_065_600;
+pub(crate) const FIT_EPOCH_S: i64 = 631_065_600;
 const HEADER_SIZE: usize = 14;
 const MAX_FIELD_SIZE: usize = 255;
 const CRC_TABLE: [u16; 16] = [
@@ -45,7 +45,7 @@ struct Message {
 #[serde(rename_all = "camelCase")]
 struct Profile {
     version: u16,
-    base_types: HashMap<String, BaseType>,
+    base_types: HashMap<u8, BaseType>,
     numeric_types: Vec<String>,
     messages: HashMap<String, Message>,
     types: HashMap<String, HashMap<String, String>>,
@@ -85,14 +85,13 @@ pub fn mesg(name: &'static str, fields: Vec<(&'static str, Option<FitValue>)>) -
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(PartialEq)]
 struct FieldDef {
     num: u8,
     size: usize,
     base_type: u8,
 }
 
-#[derive(Clone)]
 struct Definition {
     global: u16,
     fields: Vec<FieldDef>,
@@ -109,10 +108,6 @@ impl Definition {
                 .iter()
                 .all(|lhs| other.fields.iter().any(|rhs| lhs == rhs))
     }
-}
-
-fn py_round(value: f64) -> f64 {
-    value.round_ties_even()
 }
 
 fn crc(bytes: &[u8]) -> u16 {
@@ -174,11 +169,12 @@ impl Encoder {
                         Raw::Int(raw)
                     })
                 }
-                FitValue::Int(v) if scaled => {
-                    Self::scaled((*v as f64 + field.offset) * field.scale, float_type)
-                }
+                FitValue::Int(v) if scaled => Ok(Self::scaled(
+                    (*v as f64 + field.offset) * field.scale,
+                    float_type,
+                )),
                 FitValue::Float(v) if scaled => {
-                    Self::scaled((v + field.offset) * field.scale, float_type)
+                    Ok(Self::scaled((v + field.offset) * field.scale, float_type))
                 }
                 FitValue::Int(v) => Ok(Raw::Int(*v)),
                 FitValue::Float(v) => Ok(Raw::Float(*v)),
@@ -211,11 +207,11 @@ impl Encoder {
         }
     }
 
-    fn scaled(value: f64, float_type: bool) -> Result<Raw, String> {
-        Ok(if float_type {
-            Raw::Float(value)
+    fn scaled(value: f64, float_type: bool) -> Raw {
+        Raw::Float(if float_type {
+            value
         } else {
-            Raw::Float(py_round(value))
+            value.round_ties_even()
         })
     }
 
@@ -265,7 +261,7 @@ impl Encoder {
             let field = definition.fields.get(*name).ok_or_else(|| {
                 format!("FIT message {:?} has no field(s) [{name:?}]", message.name)
             })?;
-            let base = &profile.base_types[&field.base_type.to_string()];
+            let base = &profile.base_types[&field.base_type];
             let values: Vec<&FitValue> = match value {
                 FitValue::List(items) => items.iter().collect(),
                 single => vec![single],
@@ -308,32 +304,30 @@ impl Encoder {
             fields: defs,
         };
 
-        let local = match self
+        let reused = self
             .slots
             .iter()
-            .position(|slot| slot.as_ref().is_some_and(|d| d.equals(&new)))
-        {
+            .position(|slot| slot.as_ref().is_some_and(|d| d.equals(&new)));
+        let local = match reused {
             Some(index) => index,
             None => {
                 let index = self.next_local & 0x0F;
                 self.next_local += 1;
+                self.out.extend_from_slice(&[0x40 | index as u8, 0, 0]);
+                self.out.extend_from_slice(&new.global.to_le_bytes());
+                self.out.push(new.fields.len() as u8);
+                for def in &new.fields {
+                    let base = &profile.base_types[&def.base_type];
+                    self.out.extend_from_slice(&[
+                        def.num,
+                        def.size as u8,
+                        def.base_type | base.endian_flag,
+                    ]);
+                }
+                self.slots[index] = Some(new);
                 index
             }
         };
-        if !self.slots[local].as_ref().is_some_and(|d| d.equals(&new)) {
-            self.out.extend_from_slice(&[0x40 | local as u8, 0, 0]);
-            self.out.extend_from_slice(&new.global.to_le_bytes());
-            self.out.push(new.fields.len() as u8);
-            for def in &new.fields {
-                let base = &profile.base_types[&def.base_type.to_string()];
-                self.out.extend_from_slice(&[
-                    def.num,
-                    def.size as u8,
-                    def.base_type | base.endian_flag,
-                ]);
-            }
-            self.slots[local] = Some(new);
-        }
         self.out.push(local as u8);
         for (raws, base) in fields {
             for raw in &raws {

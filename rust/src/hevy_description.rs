@@ -1,10 +1,11 @@
-use serde_json::{Map, Value};
-
 use std::sync::LazyLock;
 
 use regex::Regex;
+use serde_json::Value;
 
 use crate::config::{DEFAULT_TEMPLATE, DEFAULT_TITLE_TEMPLATE};
+use crate::db::truthy;
+use crate::garmin_errors::py_str;
 use crate::hevy_settings::{validate_description_template, validate_title_template};
 use crate::timefmt::parse_timestamp;
 
@@ -12,30 +13,8 @@ fn get<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
     item.get(key).filter(|v| !v.is_null())
 }
 
-fn truthy(value: Option<&Value>) -> bool {
-    crate::db::truthy(value)
-}
-
 fn number(value: Option<&Value>) -> f64 {
     value.and_then(Value::as_f64).unwrap_or(0.0)
-}
-
-/// Python's `str()` of a JSON value.
-fn py_str(value: &Value) -> String {
-    match value {
-        Value::Null => "None".into(),
-        Value::Bool(b) => if *b { "True" } else { "False" }.into(),
-        Value::String(s) => s.clone(),
-        Value::Number(n) if n.is_f64() => {
-            let f = n.as_f64().unwrap_or_default();
-            if f.fract() == 0.0 && f.abs() < 1e16 {
-                format!("{f:.1}")
-            } else {
-                f.to_string()
-            }
-        }
-        other => other.to_string(),
-    }
 }
 
 /// Python `==`, where `8` and `8.0` are the same value.
@@ -52,11 +31,11 @@ fn sets_label(n: usize) -> &'static str {
 
 fn exercise_summary(workout: &Value) -> String {
     let empty = Vec::new();
-    let exercises = get(workout, "exercises")
-        .and_then(Value::as_array)
-        .unwrap_or(&empty);
     let mut lines = Vec::new();
-    for exercise in exercises {
+    for exercise in get(workout, "exercises")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty)
+    {
         let name = match exercise.get("title") {
             Some(title) if truthy(Some(title)) => py_str(title),
             _ => exercise
@@ -141,7 +120,7 @@ fn exercise_summary(workout: &Value) -> String {
                 }
             }
             if !values.is_empty() {
-                let joined: Vec<String> = values.iter().map(|v| py_str(v)).collect();
+                let joined: Vec<String> = values.into_iter().map(py_str).collect();
                 details.push(format!("{label} {}", joined.join(", ")));
             }
         }
@@ -164,7 +143,7 @@ fn duration_minutes(workout: &Value) -> i64 {
 }
 
 /// `str.format_map` for a template that already passed validation.
-fn render(template: &str, values: &Map<String, Value>) -> String {
+fn render(template: &str, values: &[(&str, &str)]) -> String {
     let mut out = String::new();
     let mut rest = template;
     while let Some(pos) = rest.find(['{', '}']) {
@@ -174,7 +153,8 @@ fn render(template: &str, values: &Map<String, Value>) -> String {
             out.push_str(&tail[..1]);
             rest = &tail[2..];
         } else if let Some(close) = tail.find('}').filter(|_| tail.starts_with('{')) {
-            if let Some(value) = values.get(&tail[1..close]).and_then(Value::as_str) {
+            let name = &tail[1..close];
+            if let Some((_, value)) = values.iter().find(|(key, _)| *key == name) {
                 out.push_str(value);
             }
             rest = &tail[close + 1..];
@@ -253,14 +233,15 @@ pub fn generate_title(workout: &Value, template: Option<&str>) -> Result<String,
         .filter(|t| !t.is_empty())
         .unwrap_or(DEFAULT_TITLE_TEMPLATE);
     validate_title_template(chosen)?;
-    let title = workout
-        .get("title")
-        .cloned()
-        .unwrap_or_else(|| Value::from("Workout"));
-    let mut values = Map::new();
-    values.insert("title".into(), Value::String(py_str(&title)));
-    values.insert("clean_title".into(), Value::String(clean_title(&title)));
-    let rendered = render(chosen, &values);
+    let fallback = Value::from("Workout");
+    let title = workout.get("title").unwrap_or(&fallback);
+    let rendered = render(
+        chosen,
+        &[
+            ("title", &py_str(title)),
+            ("clean_title", &clean_title(title)),
+        ],
+    );
     let trimmed = rendered.trim_matches(is_py_space);
     Ok(if trimmed.is_empty() {
         "Workout".into()
@@ -282,7 +263,6 @@ pub fn generate_description(
         .unwrap_or(DEFAULT_TEMPLATE);
     validate_description_template(chosen)?;
     let minutes = duration_minutes(workout);
-    let mut values = Map::new();
     let duration = if minutes > 0 {
         format!("⏱️ {minutes} min")
     } else {
@@ -296,15 +276,16 @@ pub fn generate_description(
         .filter(|hr| *hr != 0)
         .map(|hr| format!("❤️ avg {hr} bpm"))
         .unwrap_or_default();
-    values.insert("duration".into(), Value::String(duration));
-    values.insert("calories".into(), Value::String(calories));
-    values.insert("avg_hr".into(), Value::String(avg_hr));
-    values.insert("exercises".into(), Value::String(exercise_summary(workout)));
-    values.insert(
-        "marker".into(),
-        Value::String("— synced by activsync".into()),
+    let rendered = render(
+        chosen,
+        &[
+            ("duration", &duration),
+            ("calories", &calories),
+            ("avg_hr", &avg_hr),
+            ("exercises", &exercise_summary(workout)),
+            ("marker", "— synced by activsync"),
+        ],
     );
-    let rendered = render(chosen, &values);
     let mut cleaned: Vec<&str> = Vec::new();
     for raw in split_lines(&rendered) {
         let line = raw.trim_end();

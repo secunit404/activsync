@@ -1,6 +1,5 @@
-//! The athlete profile for FIT calorie estimates, as the Python app's
-//! `hevy_profile.py`: Garmin's values cached a day in `garmin_user_profile`,
-//! the owner's `profile_override` winning field by field, defaults last.
+//! The athlete profile for FIT calorie estimates: Garmin's values cached a
+//! day, the owner's override winning field by field, defaults last.
 
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{Map, Value, json};
@@ -8,21 +7,17 @@ use serde_json::{Map, Value, json};
 use crate::db::{self, Db};
 use crate::fit_builder::Profile;
 use crate::garmin_client::GarminClient;
+use crate::garmin_errors::py_str;
+use crate::hevy_settings::PROFILE_OVERRIDE_KEY;
 
 pub const CACHE_KEY: &str = "garmin_user_profile";
-pub const OVERRIDE_KEY: &str = "profile_override";
 const KEYS: [&str; 4] = ["weight_kg", "birth_year", "vo2max", "sex"];
+pub(crate) const DEFAULT_WEIGHT_KG: f64 = 80.0;
+pub(crate) const DEFAULT_BIRTH_YEAR: i64 = 1990;
+pub(crate) const DEFAULT_VO2MAX: f64 = 45.0;
+pub(crate) const DEFAULT_SEX: &str = "male";
 
-pub fn defaults() -> Map<String, Value> {
-    let Value::Object(map) =
-        json!({"weight_kg": 80.0, "birth_year": 1990, "vo2max": 45.0, "sex": "male"})
-    else {
-        unreachable!()
-    };
-    map
-}
-
-fn object(value: Option<Value>) -> Map<String, Value> {
+pub(crate) fn object(value: Option<Value>) -> Map<String, Value> {
     match value {
         Some(Value::Object(map)) => map,
         _ => Map::new(),
@@ -109,27 +104,22 @@ pub async fn get_profile(db: &Db, garmin: &GarminClient, now: DateTime<Utc>) -> 
     // Read after the slow fetch, so a settings save made meanwhile applies.
     let settings = object(db::get_config_value(&db.lock(), "settings").ok().flatten());
     let overrides = settings
-        .get(OVERRIDE_KEY)
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let mut merged = defaults();
-    for source in [&cache, &overrides] {
-        for key in KEYS {
-            if let Some(value) = source.get(key).filter(|v| !v.is_null()) {
-                merged.insert(key.into(), value.clone());
-            }
-        }
-    }
-    let fallback = defaults();
+        .get(PROFILE_OVERRIDE_KEY)
+        .and_then(Value::as_object);
+    let pick = |key: &str| {
+        [overrides, Some(&cache)]
+            .into_iter()
+            .flatten()
+            .find_map(|source| source.get(key).filter(|v| !v.is_null()))
+    };
     Profile {
-        weight_kg: float(&merged["weight_kg"])
-            .unwrap_or_else(|| fallback["weight_kg"].as_f64().unwrap_or(80.0)),
-        birth_year: int(&merged["birth_year"]).unwrap_or(1990),
-        vo2max: float(&merged["vo2max"])
-            .unwrap_or_else(|| fallback["vo2max"].as_f64().unwrap_or(45.0)),
-        sex: merged["sex"]
-            .as_str()
-            .map_or_else(|| merged["sex"].to_string(), str::to_string),
+        weight_kg: pick("weight_kg")
+            .and_then(float)
+            .unwrap_or(DEFAULT_WEIGHT_KG),
+        birth_year: pick("birth_year")
+            .and_then(int)
+            .unwrap_or(DEFAULT_BIRTH_YEAR),
+        vo2max: pick("vo2max").and_then(float).unwrap_or(DEFAULT_VO2MAX),
+        sex: pick("sex").map_or_else(|| DEFAULT_SEX.into(), py_str),
     }
 }

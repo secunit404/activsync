@@ -1,5 +1,5 @@
-//! The Hevy demo scenarios from the Python app's `dev_seed._seed_hevy`,
-//! seeded in their end states because nothing polls Hevy in mock mode.
+//! The Hevy demo scenarios, seeded in their end states because nothing polls
+//! Hevy in mock mode.
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use rusqlite::Connection;
@@ -10,15 +10,15 @@ use crate::hevy_db::{self, Template};
 
 pub const MERGED_ID: &str = "hw-dev-merged";
 pub const UNMAPPED_ID: &str = "hw-dev-unmapped";
-pub const PASSIVE_ID: &str = "hw-dev-passive";
+const PASSIVE_ID: &str = "hw-dev-passive";
 pub const MIDNIGHT_ID: &str = "hw-dev-midnight";
 pub const SYNCING_ID: &str = "hw-dev-syncing";
 pub const CUSTOM_TEMPLATE_ID: &str = "tpl-dev-custom";
 pub const OVERRIDDEN_TEMPLATE_ID: &str = "tpl-dev-pushdown";
 
-pub const MERGED_ACTIVITY_ID: i64 = 910001;
+const MERGED_ACTIVITY_ID: i64 = 910001;
 pub const SYNCING_ACTIVITY_ID: i64 = 910002;
-pub const PASSIVE_ACTIVITY_ID: i64 = 910050;
+const PASSIVE_ACTIVITY_ID: i64 = 910050;
 
 const RESOLVING_TEMPLATES: [(&str, &str, &str, &str); 9] = [
     ("tpl-dev-bench", "Bench Press (Barbell)", "chest", "barbell"),
@@ -78,7 +78,7 @@ fn workout(
 }
 
 /// The workouts the queue shows, timestamped relative to `now`.
-pub fn dev_workouts(now: DateTime<Utc>) -> Vec<Value> {
+fn dev_workouts(now: DateTime<Utc>) -> Vec<Value> {
     let now = now.with_nanosecond(0).unwrap_or(now);
     let midnight = (now - Duration::days(1))
         .with_hour(23)
