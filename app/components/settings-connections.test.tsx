@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import type { SettingsState } from "@/lib/api";
 import { ConnectionsSettings } from "./settings-connections";
@@ -82,6 +82,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 function renderConnections(state: SettingsState = baseState) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -123,58 +127,32 @@ test("Save new key enables once a key is typed", async () => {
   expect(within(dialog).getByRole("button", { name: "Save new key" })).toBeEnabled();
 });
 
-test("the Strava dialog reconnects through the official button, linked straight to Strava", async () => {
+function stubAssign() {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
+  return assign;
+}
+
+test("the Strava dialog reconnects through the official button alone", async () => {
+  const assign = stubAssign();
   startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
   renderConnections();
   const dialog = await openDialog("strava");
 
-  expect(
-    await within(dialog).findByRole("link", { name: "Connect with Strava" }),
-  ).toHaveAttribute("href", STRAVA_AUTHORIZE);
-  expect(startStravaConnect).toHaveBeenCalledTimes(1);
-  expect(within(dialog).getByRole("button", { name: "Save credentials" })).toBeDisabled();
+  expect(within(dialog).queryByRole("button", { name: "Save credentials" })).toBeNull();
   expect(within(dialog).getByRole("button", { name: "Disconnect" })).toBeVisible();
+  expect(startStravaConnect).not.toHaveBeenCalled();
+
+  await userEvent.click(within(dialog).getByRole("button", { name: "Connect with Strava" }));
+
+  await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(STRAVA_AUTHORIZE));
+  expect(saveStravaCredentials).not.toHaveBeenCalled();
 });
 
-// Connecting authorizes against the saved credentials, so unsaved edits
-// must be saved before the button links anywhere.
-test("editing the Strava credentials disables Connect until they are saved", async () => {
-  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+test("edited Strava credentials are saved trimmed before Strava opens", async () => {
+  const assign = stubAssign();
   saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
-  renderConnections();
-  const dialog = await openDialog("strava");
-  await within(dialog).findByRole("link", { name: "Connect with Strava" });
-
-  await userEvent.type(within(dialog).getByLabelText("Strava client secret"), "new-secret");
-
-  expect(within(dialog).queryByRole("link", { name: "Connect with Strava" })).toBeNull();
-  expect(within(dialog).getByRole("img", { name: "Connect with Strava" })).toBeVisible();
-  await userEvent.click(within(dialog).getByRole("button", { name: "Save credentials" }));
-  expect(saveStravaCredentials).toHaveBeenCalledWith(
-    { clientId: "1234", clientSecret: "new-secret" },
-    expect.anything(),
-  );
-  expect(screen.getByRole("dialog")).toBeVisible();
-});
-
-test("a trailing space left in the saved Strava client ID keeps Connect linked and Save disabled", async () => {
   startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
-  renderConnections();
-  const dialog = await openDialog("strava");
-  await within(dialog).findByRole("link", { name: "Connect with Strava" });
-
-  await userEvent.type(within(dialog).getByLabelText("Strava client ID"), " ");
-
-  expect(within(dialog).getByLabelText("Strava client ID")).toHaveValue("1234 ");
-  expect(within(dialog).getByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
-    "href",
-    STRAVA_AUTHORIZE,
-  );
-  expect(within(dialog).getByRole("button", { name: "Save credentials" })).toBeDisabled();
-});
-
-test("Strava credentials are saved trimmed, matching what the server stores", async () => {
-  saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
   renderConnections();
   const dialog = await openDialog("strava");
 
@@ -182,12 +160,40 @@ test("Strava credentials are saved trimmed, matching what the server stores", as
   await userEvent.clear(clientId);
   await userEvent.type(clientId, "  5678 ");
   await userEvent.type(within(dialog).getByLabelText("Strava client secret"), " new-secret ");
-  await userEvent.click(within(dialog).getByRole("button", { name: "Save credentials" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "Connect with Strava" }));
 
-  expect(saveStravaCredentials).toHaveBeenCalledWith(
-    { clientId: "5678", clientSecret: "new-secret" },
-    expect.anything(),
+  await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(STRAVA_AUTHORIZE));
+  expect(saveStravaCredentials).toHaveBeenCalledWith({ clientId: "5678", clientSecret: "new-secret" });
+  expect(saveStravaCredentials.mock.invocationCallOrder[0]).toBeLessThan(
+    startStravaConnect.mock.invocationCallOrder[0],
   );
+});
+
+test("a trailing space left in the saved Strava client ID is not a change to save", async () => {
+  const assign = stubAssign();
+  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  renderConnections();
+  const dialog = await openDialog("strava");
+
+  await userEvent.type(within(dialog).getByLabelText("Strava client ID"), " ");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Connect with Strava" }));
+
+  await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(STRAVA_AUTHORIZE));
+  expect(saveStravaCredentials).not.toHaveBeenCalled();
+});
+
+test("a failed save keeps the Strava dialog open with the error", async () => {
+  const assign = stubAssign();
+  saveStravaCredentials.mockRejectedValue(new Error("Strava client ID must be a number."));
+  renderConnections();
+  const dialog = await openDialog("strava");
+
+  await userEvent.type(within(dialog).getByLabelText("Strava client ID"), "x");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Connect with Strava" }));
+
+  expect(await within(dialog).findByText("Strava client ID must be a number.")).toBeVisible();
+  expect(startStravaConnect).not.toHaveBeenCalled();
+  expect(assign).not.toHaveBeenCalled();
 });
 
 test("a disconnected Strava without saved credentials offers Cancel and a disabled Connect", async () => {
@@ -205,9 +211,7 @@ test("a disconnected Strava without saved credentials offers Cancel and a disabl
   });
   const dialog = await openDialog("strava");
 
-  expect(within(dialog).getByRole("img", { name: "Connect with Strava" })).toBeVisible();
-  expect(within(dialog).queryByRole("link", { name: "Connect with Strava" })).toBeNull();
-  expect(startStravaConnect).not.toHaveBeenCalled();
+  expect(within(dialog).getByRole("button", { name: "Connect with Strava" })).toBeDisabled();
   expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeVisible();
   expect(within(dialog).queryByRole("button", { name: "Disconnect" })).toBeNull();
 });

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import type { SettingsState } from "@/lib/api";
 import { SetupView } from "./setup";
@@ -46,6 +46,10 @@ const actionResult = { message: "ok", setupStep: null, mfaRequired: false };
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 const baseState: SettingsState = {
@@ -221,80 +225,86 @@ test("renders the Strava step", () => {
 const STRAVA_AUTHORIZE =
   "https://www.strava.com/oauth/authorize?client_id=1234&state=issued";
 
-test("the Strava step keeps Connect with Strava disabled until credentials are saved", async () => {
+const savedStrava = {
+  ...baseState,
+  setup: { ...baseState.setup, step: "strava" as const },
+  credentials: {
+    ...baseState.credentials,
+    stravaClientId: "1234",
+    stravaClientSecretSaved: true,
+  },
+};
+
+function stubAssign() {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
+  return assign;
+}
+
+test("the Strava step keeps Connect with Strava disabled until a client ID and secret are entered", async () => {
   renderSetup({ ...baseState, setup: { ...baseState.setup, step: "strava" } });
+  const connect = screen.getByRole("button", { name: "Connect with Strava" });
 
-  expect(screen.getByRole("img", { name: "Connect with Strava" })).toBeVisible();
-  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
-  expect(startStravaConnect).not.toHaveBeenCalled();
-
-  saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
+  expect(connect).toBeDisabled();
   await userEvent.type(screen.getByLabelText("Strava client ID"), "1234");
+  expect(connect).toBeDisabled();
   await userEvent.type(screen.getByLabelText("Strava client secret"), "secret");
-  await userEvent.click(screen.getByRole("button", { name: "Save credentials" }));
-  expect(saveStravaCredentials).toHaveBeenCalledWith(
-    { clientId: "1234", clientSecret: "secret" },
-    expect.anything(),
-  );
+  expect(connect).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "Save credentials" })).toBeNull();
 });
 
-test("the Strava step links Connect with Strava straight to Strava once saved", async () => {
-  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
-  renderSetup({
-    ...baseState,
-    setup: { ...baseState.setup, step: "strava" },
-    credentials: {
-      ...baseState.credentials,
-      stravaClientId: "1234",
-      stravaClientSecretSaved: true,
-    },
-  });
-
-  expect(await screen.findByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
-    "href",
-    STRAVA_AUTHORIZE,
-  );
-  expect(startStravaConnect).toHaveBeenCalledTimes(1);
-
-  await userEvent.type(screen.getByLabelText("Strava client ID"), "5");
-  expect(screen.queryByRole("link", { name: "Connect with Strava" })).toBeNull();
-  expect(startStravaConnect).toHaveBeenCalledTimes(1);
-});
-
-test("a trailing space left in the saved client ID keeps Connect with Strava linked", async () => {
-  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
-  renderSetup({
-    ...baseState,
-    setup: { ...baseState.setup, step: "strava" },
-    credentials: {
-      ...baseState.credentials,
-      stravaClientId: "1234",
-      stravaClientSecretSaved: true,
-    },
-  });
-  await screen.findByRole("link", { name: "Connect with Strava" });
-
-  await userEvent.type(screen.getByLabelText("Strava client ID"), " ");
-
-  expect(screen.getByLabelText("Strava client ID")).toHaveValue("1234 ");
-  expect(screen.getByRole("link", { name: "Connect with Strava" })).toHaveAttribute(
-    "href",
-    STRAVA_AUTHORIZE,
-  );
-});
-
-test("the Strava step saves the client ID and secret trimmed", async () => {
+test("Connect with Strava saves the credentials trimmed, then opens Strava", async () => {
+  const assign = stubAssign();
   saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
+  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
   renderSetup({ ...baseState, setup: { ...baseState.setup, step: "strava" } });
 
   await userEvent.type(screen.getByLabelText("Strava client ID"), "  1234 ");
   await userEvent.type(screen.getByLabelText("Strava client secret"), " secret ");
-  await userEvent.click(screen.getByRole("button", { name: "Save credentials" }));
+  await userEvent.click(screen.getByRole("button", { name: "Connect with Strava" }));
 
-  expect(saveStravaCredentials).toHaveBeenCalledWith(
-    { clientId: "1234", clientSecret: "secret" },
-    expect.anything(),
+  await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(STRAVA_AUTHORIZE));
+  expect(saveStravaCredentials).toHaveBeenCalledWith({ clientId: "1234", clientSecret: "secret" });
+  expect(saveStravaCredentials.mock.invocationCallOrder[0]).toBeLessThan(
+    startStravaConnect.mock.invocationCallOrder[0],
   );
+});
+
+test("Connect with Strava does not save credentials that are already saved", async () => {
+  const assign = stubAssign();
+  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  renderSetup(savedStrava);
+
+  await userEvent.type(screen.getByLabelText("Strava client ID"), " ");
+  await userEvent.click(screen.getByRole("button", { name: "Connect with Strava" }));
+
+  await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(STRAVA_AUTHORIZE));
+  expect(saveStravaCredentials).not.toHaveBeenCalled();
+});
+
+test("Connect with Strava saves an edited client ID before opening Strava", async () => {
+  const assign = stubAssign();
+  saveStravaCredentials.mockResolvedValue({ message: "Strava credentials saved." });
+  startStravaConnect.mockResolvedValue({ url: STRAVA_AUTHORIZE });
+  renderSetup(savedStrava);
+
+  await userEvent.type(screen.getByLabelText("Strava client ID"), "5");
+  await userEvent.click(screen.getByRole("button", { name: "Connect with Strava" }));
+
+  await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(STRAVA_AUTHORIZE));
+  expect(saveStravaCredentials).toHaveBeenCalledWith({ clientId: "12345", clientSecret: "" });
+});
+
+test("a failed Strava handoff shows the error and stays on the step", async () => {
+  const assign = stubAssign();
+  startStravaConnect.mockRejectedValue(new Error("Strava is not configured."));
+  renderSetup(savedStrava);
+
+  await userEvent.click(screen.getByRole("button", { name: "Connect with Strava" }));
+
+  expect(await screen.findByText("Strava is not configured.")).toHaveAttribute("role", "alert");
+  expect(assign).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Connect with Strava" })).toBeEnabled();
 });
 
 test("renders the Hevy step with a skip option", async () => {
