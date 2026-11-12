@@ -15,6 +15,11 @@ COPY react-router.config.ts vite.config.ts tsconfig.json ./
 RUN npm run build
 
 FROM rust:1-slim-trixie AS server
+# The Garmin sign-in's browser-like TLS builds BoringSSL from source, and
+# generates its Rust bindings with libclang.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cmake g++ git libclang-dev make \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY rust ./rust
 # version.rs reads the release number release-please writes here, and the

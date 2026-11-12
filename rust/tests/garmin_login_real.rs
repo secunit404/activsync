@@ -5,7 +5,7 @@ use activsync::auth_guard::AuthConfig;
 use activsync::db::{self, Db};
 use activsync::garmin_client::{Tokens, save_tokens};
 use activsync::garmin_login::SignIn;
-use activsync::net::{Http, HttpError};
+use activsync::net::{Browser, Http, HttpError};
 use activsync::poller::RealClients;
 use activsync::{AppState, build_app, schedule};
 use axum::Router;
@@ -18,8 +18,9 @@ use openidconnect::HttpRequest;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-/// What the stand-in Garmin saw: path, Cookie header and body of each call.
-type Calls = Arc<Mutex<Vec<(String, String, String)>>>;
+/// What the stand-in Garmin saw: path, Cookie header, body and the browser
+/// each call was made to look like.
+type Calls = Arc<Mutex<Vec<(String, String, String, Option<Browser>)>>>;
 
 fn jwt(claims: Value) -> String {
     let b64 = |v: Value| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(v.to_string());
@@ -33,11 +34,15 @@ enum Sso {
     WrongPassword,
     RateLimited,
     Blocked,
+    /// Rate-limits the first browser the route tries, then asks for a code.
+    MfaAfterRateLimit,
 }
 
 #[derive(Clone, Copy)]
 enum Widget {
     Ticket,
+    /// The password post answers with a redirect to the page holding the ticket.
+    RedirectedTicket,
     Mfa,
     Locked,
     RateLimited,
@@ -57,7 +62,12 @@ fn mobile(sso: Sso) -> Garmin {
     Garmin { mobile: sso, widget: Widget::Blocked, portal: Sso::Blocked, api_rejects_token: false }
 }
 
-fn json_sso(sso: Sso, ticket: &str, response: &mut Option<openidconnect::http::response::Builder>) -> (u16, String) {
+fn json_sso(sso: Sso, ticket: &str, browser: Option<Browser>, response: &mut Option<openidconnect::http::response::Builder>) -> (u16, String) {
+    let sso = match sso {
+        Sso::MfaAfterRateLimit if browser == Some(Browser::SafariIos) => Sso::RateLimited,
+        Sso::MfaAfterRateLimit => Sso::Mfa,
+        other => other,
+    };
     let reply = match sso {
         Sso::Ticket => json!({"responseStatus": {"type": "SUCCESSFUL"}, "serviceTicketId": ticket}),
         Sso::Mfa => {
@@ -68,6 +78,7 @@ fn json_sso(sso: Sso, ticket: &str, response: &mut Option<openidconnect::http::r
         Sso::WrongPassword => json!({"responseStatus": {"type": "INVALID_USERNAME_PASSWORD"}}),
         Sso::RateLimited => return (429, "{}".into()),
         Sso::Blocked => return (403, "<html>Just a moment...</html>".into()),
+        Sso::MfaAfterRateLimit => unreachable!(),
     };
     (200, reply.to_string())
 }
@@ -83,13 +94,17 @@ fn garmin_http(calls: &Calls, garmin: Garmin) -> Http {
         let query = request.uri().query().unwrap_or_default().to_string();
         let cookie = request.headers().get(header::COOKIE).map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
         let body = String::from_utf8_lossy(request.body()).to_string();
-        log.lock().unwrap().push((path.clone(), cookie, body.clone()));
+        let browser = request.extensions().get::<Browser>().copied();
+        log.lock().unwrap().push((path.clone(), cookie, body.clone(), browser));
+        if path.contains(" /portal/") || path.contains(" /mobile/") {
+            assert!(!request.headers().contains_key(header::USER_AGENT), "the User-Agent is left to the browser the request presents as");
+        }
         let mut response = Some(openidconnect::http::Response::builder());
         let json = |value: Value| (200, value.to_string());
         let html = |text: &str| (200, text.to_string());
         let (status, reply) = match path.as_str() {
-            "POST /mobile/api/login" => json_sso(garmin.mobile, "ST-1", &mut response),
-            "POST /portal/api/login" => json_sso(garmin.portal, "ST-P", &mut response),
+            "POST /mobile/api/login" => json_sso(garmin.mobile, "ST-1", browser, &mut response),
+            "POST /portal/api/login" => json_sso(garmin.portal, "ST-P", browser, &mut response),
             "GET /portal/sso/en-US/sign-in" => html("<html>sign in</html>"),
             "GET /sso/embed" => match garmin.widget {
                 Widget::RateLimited => (429, String::new()),
@@ -103,17 +118,24 @@ fn garmin_http(calls: &Calls, garmin: Garmin) -> Http {
                     (302, String::new())
                 }
             },
+            "GET /sso/signin" if query.contains("done=1") => html(r#"<title>Success</title><a href="https://sso.garmin.com/sso/embed?ticket=ST-R">go</a>"#),
             "GET /sso/signin" => html(r#"<form><input type="hidden" name="_csrf" value="tok-1" /></form>"#),
             "POST /sso/signin" => match garmin.widget {
                 Widget::Ticket => html(r#"<title>Success</title><a href="https://sso.garmin.com/sso/embed?ticket=ST-W">go</a>"#),
+                Widget::RedirectedTicket => {
+                    response = response.map(|r| r.header(header::SET_COOKIE, "SSO=3; Path=/").header(header::LOCATION, "/sso/signin?done=1"));
+                    (302, String::new())
+                }
                 Widget::Mfa => html(WIDGET_MFA_PAGE),
                 Widget::Locked => html("<title>Account Locked</title>"),
                 Widget::RateLimited | Widget::Blocked => panic!("widget sign-in posted after a refused page"),
             },
             "POST /sso/verifyMFA/mfaCode" => json(json!({})),
             "POST /sso/verifyMFA/loginEnterMfaCode" if body.contains("mfa-code=123456") => {
-                html(r#"<title>Success</title><a href="https://sso.garmin.com/sso/embed?ticket=ST-WM">go</a>"#)
+                response = response.map(|r| r.header(header::LOCATION, "/sso/verifyMFA/done"));
+                (303, String::new())
             }
+            "GET /sso/verifyMFA/done" => html(r#"<title>Success</title><a href="https://sso.garmin.com/sso/embed?ticket=ST-WM">go</a>"#),
             "POST /sso/verifyMFA/loginEnterMfaCode" => html("<title>Invalid code</title>"),
             "POST /mobile/api/mfa/verifyCode" | "POST /portal/api/mfa/verifyCode" if body.contains("\"123456\"") => {
                 json(json!({"responseStatus": {"type": "SUCCESSFUL"}, "serviceTicketId": "ST-2"}))
@@ -185,8 +207,12 @@ impl Harness {
         db::get_config_value(&self.db.lock(), key).unwrap()
     }
 
-    fn calls_to(&self, path: &str) -> Vec<(String, String, String)> {
-        self.calls.lock().unwrap().iter().filter(|(p, _, _)| p == path).cloned().collect()
+    fn calls_to(&self, path: &str) -> Vec<(String, String, String, Option<Browser>)> {
+        self.calls.lock().unwrap().iter().filter(|(p, ..)| p == path).cloned().collect()
+    }
+
+    fn browsers_for(&self, path: &str) -> Vec<Option<Browser>> {
+        self.calls_to(path).into_iter().map(|(.., browser)| browser).collect()
     }
 
     fn saved_session(&self) -> Option<Value> {
@@ -290,7 +316,7 @@ async fn a_session_garmin_still_accepts_skips_the_password() {
 }
 
 fn exchange_bodies(h: &Harness) -> Vec<String> {
-    h.calls_to("POST /di-oauth2-service/oauth/token").into_iter().map(|(_, _, body)| body).collect()
+    h.calls_to("POST /di-oauth2-service/oauth/token").into_iter().map(|(_, _, body, _)| body).collect()
 }
 
 #[tokio::test]
@@ -306,6 +332,18 @@ async fn when_the_mobile_route_is_blocked_the_widget_signs_in() {
     assert!(exchange.contains("service_ticket=ST-W") && exchange.contains("service_url=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed"), "{exchange}");
     assert!(h.saved_session().is_some());
     assert!(h.calls_to("POST /portal/api/login").is_empty());
+}
+
+#[tokio::test]
+async fn the_widget_follows_the_redirect_after_the_password_post() {
+    let h = harness(false, Garmin { widget: Widget::RedirectedTicket, ..mobile(Sso::Blocked) });
+    let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let landing = h.calls_to("GET /sso/signin").pop().unwrap();
+    assert_eq!(landing.1, "EMBED=1; CF=2; SSO=3", "the redirect's cookie goes along");
+    assert_eq!(landing.2, "", "the form is not sent again after a 302");
+    assert!(exchange_bodies(&h).pop().unwrap().contains("service_ticket=ST-R"));
+    assert!(h.saved_session().is_some());
 }
 
 #[tokio::test]
@@ -354,4 +392,31 @@ async fn a_widget_code_is_requested_and_can_be_retried() {
     assert_eq!(verify.1, "EMBED=1; CF=2");
     assert!(exchange_bodies(&h).pop().unwrap().contains("service_ticket=ST-WM"));
     assert!(h.saved_session().is_some());
+}
+
+#[tokio::test]
+async fn each_route_tries_the_library_browsers_in_turn() {
+    let h = harness(false, Garmin { mobile: Sso::RateLimited, widget: Widget::RateLimited, portal: Sso::RateLimited, api_rejects_token: false });
+    let (status, _) = send(&h.app, Method::POST, SETUP, setup_body()).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    let mobile = [Browser::SafariIos, Browser::Safari, Browser::Chrome120].map(Some);
+    assert_eq!(h.browsers_for("POST /mobile/api/login"), mobile);
+    assert_eq!(h.browsers_for("GET /sso/embed"), [Some(Browser::Chrome)]);
+    let portal = [Browser::Safari, Browser::SafariIos, Browser::Chrome120, Browser::Edge101, Browser::Chrome].map(Some);
+    assert_eq!(h.browsers_for("GET /portal/sso/en-US/sign-in"), portal);
+    assert_eq!(h.browsers_for("POST /portal/api/login"), portal);
+}
+
+#[tokio::test]
+async fn the_code_goes_in_as_the_browser_that_was_asked_for_it() {
+    let h = harness(false, mobile(Sso::MfaAfterRateLimit));
+    let (status, body) = send(&h.app, Method::POST, SETUP, setup_body()).await;
+    assert_eq!((status, body["mfaRequired"].as_bool()), (StatusCode::OK, Some(true)), "{body}");
+    assert_eq!(h.browsers_for("POST /mobile/api/login"), [Some(Browser::SafariIos), Some(Browser::Safari)]);
+
+    let (status, body) = send(&h.app, Method::POST, "/api/v1/garmin/mfa", json!({"code": "123456"})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(h.browsers_for("POST /mobile/api/mfa/verifyCode"), [Some(Browser::Safari)]);
+    assert_eq!(h.browsers_for("POST /di-oauth2-service/oauth/token"), [Some(Browser::Chrome); 2], "the ticket exchange looks like Chrome");
+    assert_eq!(h.browsers_for("GET /userprofile-service/socialProfile")[0], None, "the API check goes out plain");
 }

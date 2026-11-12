@@ -27,6 +27,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 zip = { version = "9.5.0", default-features = false, features = ["deflate"] }
 percent-encoding = "2.3.2"
 fitparser = "0.12.0"
+# Pinned: both are release candidates, which may break between versions.
+wreq = { version = "=6.0.0-rc.31", features = ["gzip", "brotli", "deflate", "zstd"] }
+wreq-util = { version = "=3.0.0-rc.14", features = ["emulation-compression"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

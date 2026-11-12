@@ -111,17 +111,73 @@ pub fn garmin_http() -> Http {
     wrap(&CLIENT)
 }
 
+/// The browser a Garmin sign-in request presents itself as, in TLS and
+/// HTTP/2 and in the headers the request leaves unset. Named after the
+/// `curl_cffi` profiles the Python library impersonates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Browser {
+    SafariIos,
+    Safari,
+    Chrome120,
+    Edge101,
+    Chrome,
+}
+
+impl Browser {
+    fn profile(self) -> wreq_util::Profile {
+        match self {
+            Self::SafariIos => wreq_util::Profile::SafariIos26,
+            Self::Safari => wreq_util::Profile::Safari26,
+            Self::Chrome120 => wreq_util::Profile::Chrome120,
+            Self::Edge101 => wreq_util::Profile::Edge101,
+            Self::Chrome => wreq_util::Profile::Chrome131,
+        }
+    }
+}
+
 /// For Garmin's sign-in, which follows redirects itself to keep each hop's
-/// cookies.
+/// cookies. A request carrying a `Browser` extension goes out looking like
+/// that browser; any other goes out as the other clients' requests do.
 pub fn garmin_sign_in_http() -> Http {
-    static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    static PLAIN: LazyLock<reqwest::Client> = LazyLock::new(|| {
         reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(30))
             .build()
             .expect("HTTP client builds")
     });
-    wrap(&CLIENT)
+    static BROWSER: LazyLock<wreq::Client> = LazyLock::new(|| {
+        wreq::Client::builder()
+            .redirect(wreq::redirect::Policy::none())
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("HTTP client builds")
+    });
+    let plain = wrap(&PLAIN);
+    Arc::new(move |request| match request.extensions().get::<Browser>().copied() {
+        Some(browser) => Box::pin(as_browser(&BROWSER, browser, request)),
+        None => plain(request),
+    })
+}
+
+/// The request's own headers replace the profile's of the same name, so a
+/// route's User-Agent or Accept is sent once, as the route set it.
+async fn as_browser(client: &wreq::Client, browser: Browser, request: HttpRequest) -> Result<HttpResponse, HttpError> {
+    let (parts, body) = request.into_parts();
+    let response = client
+        .request(parts.method, parts.uri.to_string())
+        .emulation(browser.profile())
+        .headers(parts.headers)
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| HttpError(e.to_string()))?;
+    let mut builder = http::Response::builder().status(response.status()).version(response.version());
+    for (name, value) in response.headers() {
+        builder = builder.header(name, value);
+    }
+    let bytes = response.bytes().await.map_err(|e| HttpError(e.to_string()))?;
+    builder.body(bytes.to_vec()).map_err(|e| HttpError(e.to_string()))
 }
 
 /// For an identity provider: redirects are not followed, since a provider
