@@ -427,16 +427,19 @@ pub fn reserve_check(conn: &Connection, now: f64, device_id: Option<&str>) -> Db
 }
 
 /// Last half of a check, under the database lock: a success clears the
-/// failures this attempt was counted as and stores a refreshed hash.
-pub fn settle_check(conn: &Connection, device_id: Option<&str>, reserved: &Reserved, verdict: &Verdict) -> DbResult<()> {
-    if !verdict.verified {
-        return Ok(());
+/// failures this attempt was counted as and stores a refreshed hash. Returns
+/// whether the attempt stands: a password changed while it was being checked
+/// voids a match against the old one.
+pub fn settle_check(conn: &Connection, device_id: Option<&str>, reserved: &Reserved, verdict: &Verdict) -> DbResult<bool> {
+    if !verdict.verified || stored_hash(conn)? != verdict.stored {
+        return Ok(false);
     }
     store_rehash(conn, verdict)?;
     match device_id {
-        Some(id) if reserved.on_device => reset_device(conn, id),
-        _ => reset_throttle(conn),
+        Some(id) if reserved.on_device => reset_device(conn, id)?,
+        _ => reset_throttle(conn)?,
     }
+    Ok(true)
 }
 
 pub fn check_password(
@@ -451,8 +454,8 @@ pub fn check_password(
         Err(wait) => return Ok(PasswordCheck { verified: false, retry_after: wait }),
     };
     let verdict = verify_stored(reserved.stored.as_deref(), password, cost);
-    settle_check(conn, device_id, &reserved, &verdict)?;
-    Ok(PasswordCheck { verified: verdict.verified, retry_after: 0 })
+    let verified = settle_check(conn, device_id, &reserved, &verdict)?;
+    Ok(PasswordCheck { verified, retry_after: 0 })
 }
 
 /// Per-client sliding window in front of the account throttle, so one address

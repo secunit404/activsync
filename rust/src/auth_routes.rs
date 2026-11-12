@@ -99,8 +99,7 @@ pub(crate) async fn require_password(
     let verdict = tokio::task::spawn_blocking(move || auth_core::verify_stored(stored.as_deref(), &candidate, cost))
         .await
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-    auth_core::settle_check(&state.db.lock(), device, &reserved, &verdict)?;
-    if !verdict.verified {
+    if !auth_core::settle_check(&state.db.lock(), device, &reserved, &verdict)? {
         return Err(ApiError::new(wrong_status, "Wrong password."));
     }
     Ok(())

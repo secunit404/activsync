@@ -468,3 +468,18 @@ async fn password_checks_leave_the_database_free() {
     assert_eq!(login.status, StatusCode::OK);
     assert!(finished_first, "other requests were served while the password was being verified");
 }
+
+#[test]
+fn a_password_changed_during_a_check_voids_a_match_against_the_old_one() {
+    let db = Db::open_in_memory().unwrap();
+    let conn = db.lock();
+    let cost = HashCost::cheapest();
+    auth_core::set_password_hash(&conn, &auth_core::hash_password("old password here", cost).unwrap(), 0.0).unwrap();
+    let reserved = auth_core::reserve_check(&conn, 1.0, None).unwrap().unwrap();
+    let verdict = auth_core::verify_stored(reserved.stored.as_deref(), "old password here", cost);
+    assert!(verdict.verified);
+    let replaced = auth_core::hash_password("new password here", cost).unwrap();
+    auth_core::set_password_hash(&conn, &replaced, 2.0).unwrap();
+    assert!(!auth_core::settle_check(&conn, None, &reserved, &verdict).unwrap());
+    assert!(auth_core::verify_password(&conn, "new password here", cost).unwrap());
+}
