@@ -45,6 +45,8 @@ docs/
 .superpowers/
 AGENTS.md
 CLAUDE.md
+PRODUCT.md
+.impeccable/
 .github/copilot-instructions.md
 .stitch/
 .agents/
