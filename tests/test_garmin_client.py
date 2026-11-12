@@ -208,7 +208,7 @@ def test_get_client_requires_manual_reconnect_when_cached_session_expires(
     mock_client.login.side_effect = GarminConnectAuthenticationError("no cached tokens")
     mock_garmin_cls.return_value = mock_client
 
-    with pytest.raises(GarminSessionExpired, match="reconnect Garmin"):
+    with pytest.raises(GarminSessionExpired, match="Reconnect Garmin"):
         get_client("/tmp/tokens")
 
 
@@ -234,7 +234,7 @@ def test_get_client_keeps_the_session_through_a_garmin_outage(mock_garmin_cls, c
     mock_client.login.side_effect = _login_failure(cause)
     mock_garmin_cls.return_value = mock_client
 
-    with pytest.raises(GarminUnavailable, match="retrying on the next poll"):
+    with pytest.raises(GarminUnavailable, match="tries again at the next check"):
         get_client("/tmp/tokens")
 
 
@@ -246,7 +246,7 @@ def test_get_client_still_expires_a_rejected_session(mock_garmin_cls, status):
         GarminConnectConnectionError(f"API Error {status}"))
     mock_garmin_cls.return_value = mock_client
 
-    with pytest.raises(GarminSessionExpired, match="reconnect Garmin"):
+    with pytest.raises(GarminSessionExpired, match="Reconnect Garmin"):
         get_client("/tmp/tokens")
 
 

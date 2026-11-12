@@ -29,8 +29,9 @@ export function StravaStep({ state }: { state: SettingsState }) {
           Authorize Strava
         </h2>
         <p className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
-          Enter your Strava API application credentials, then connect to
-          let ActivSync publish to your Strava account.
+          Enter the client ID and client secret of your Strava API
+          application, then connect your Strava account so ActivSync can
+          publish to it.
         </p>
       </div>
       <form
@@ -74,10 +75,10 @@ export function StravaStep({ state }: { state: SettingsState }) {
           </Field>
         </FieldGroup>
         <Alert>
-          <AlertTitle>Authorization callback</AlertTitle>
+          <AlertTitle>Authorization Callback Domain</AlertTitle>
           <AlertDescription>
-            Your Strava API application’s callback domain must match the
-            address you use to open ActivSync.
+            In your Strava API application, set the Authorization Callback
+            Domain to the host name you use to open ActivSync.
           </AlertDescription>
         </Alert>
         <StravaConnectButton
@@ -86,13 +87,13 @@ export function StravaStep({ state }: { state: SettingsState }) {
           error={connect.error?.message}
         />
         <p className="text-sm text-muted-foreground">
-          Need the keys? See{" "}
+          To create an API application, follow{" "}
           <a
             href="https://developers.strava.com/docs/getting-started/"
             target="_blank"
             rel="noreferrer"
           >
-            Strava’s setup guide
+            Strava’s getting started guide
           </a>
           .
         </p>

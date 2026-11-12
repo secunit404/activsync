@@ -35,7 +35,7 @@ const STRATEGIES: Array<{
     value: "replace",
     label: "Replace",
     description:
-      "Overwrites the Garmin activity's exercise data with the Hevy workout. Best when Hevy is your source of truth for lifts.",
+      "Replaces the exercise data on the Garmin activity with the Hevy workout. Use it when Hevy is your main record of lifts.",
   },
   {
     value: "merge",
@@ -45,9 +45,9 @@ const STRATEGIES: Array<{
   },
   {
     value: "describe",
-    label: "Describe",
+    label: "Description only",
     description:
-      "Leaves Garmin untouched and just appends a text summary of the Hevy workout to the description.",
+      "Leaves the Garmin exercise data unchanged and adds a text summary of the Hevy workout to the description.",
   },
 ];
 
@@ -60,7 +60,7 @@ const MATCH_MODES: Array<{
     value: "review",
     label: "Review each match",
     description:
-      "Pauses when a Hevy workout matches Garmin so you choose Merge, Replace, or Description only.",
+      "Holds each Hevy workout that matches a Garmin activity until you choose Merge, Replace, or Description only.",
   },
   {
     value: "automatic",
@@ -128,8 +128,8 @@ export function HevySettings({
     >
       {!state.hevy.connected ? (
         <p className="rounded-lg border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
-          Connect Hevy from Connections above to configure watch strategy and
-          sync behavior.
+          Connect Hevy under Connections to set match handling and sync
+          options.
         </p>
       ) : (
         <div className="grid gap-6">
@@ -410,8 +410,8 @@ export function HevySettings({
                 A Hevy workout becomes a FIT file that ActivSync uploads to
                 Garmin. These fields fill in the two things Hevy does not
                 provide: which device the file claims to come from, and the
-                body data used to estimate calories. Leave everything blank —
-                ActivSync fills both in on its own. Only change them if Garmin
+                body data used to estimate calories. Leave everything blank and
+                ActivSync fills in both automatically. Change them only if Garmin
                 rejects the upload or the estimated calories look wrong.
               </p>
               <div className="grid gap-2">
@@ -421,8 +421,8 @@ export function HevySettings({
                   from a Garmin device. ActivSync copies the identity from the
                   first watch activity it replaces, and uses a generic Garmin
                   identity until then. Currently{" "}
-                  {state.hevy.identityDisplay}. Overriding needs all three
-                  values; leave all blank to keep automatic detection.
+                  {state.hevy.identityDisplay}. To override it, enter all
+                  three values. Leave all three blank to keep automatic detection.
                 </p>
                 <FieldGroup className="grid gap-4 sm:grid-cols-3">
                   <Field>
@@ -492,7 +492,7 @@ export function HevySettings({
                   {state.hevy.profileFromGarmin
                     ? "The values shown greyed out come from your Garmin profile and refresh daily."
                     : "Your Garmin profile has not been read yet, so the greyed-out app defaults apply."}{" "}
-                  Fill a field in only to override that one value.
+                  Fill in a field only to override that value.
                 </p>
                 <FieldGroup className="grid gap-4 sm:grid-cols-2">
                   <OptionalNumber

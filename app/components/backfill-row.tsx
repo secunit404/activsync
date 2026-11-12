@@ -71,7 +71,7 @@ function describeRow(item: BackfillItem, kind: BackfillRowKind): string {
   // an exercise failed to resolve but reported no template id to link to
   // (Hevy sent none). There is nowhere for "Map →" to go, so the copy says
   // so instead of implying a fix is one click away.
-  return `${date} → an exercise needs mapping, but has no linkable template`;
+  return `${date} → an exercise needs mapping, but Hevy reports no template for it`;
 }
 
 export function BackfillRow({
@@ -202,7 +202,7 @@ export function BackfillRow({
             size="sm"
             className="shrink-0"
             disabled
-            title="This exercise has no linkable template — it can't be fixed from here."
+            title="Hevy reports no template for this exercise, so it cannot be mapped here."
           >
             Map →
           </Button>

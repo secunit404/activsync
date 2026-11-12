@@ -193,11 +193,11 @@ def create_router(
         if check.retry_after:
             raise HTTPException(
                 status_code=429,
-                detail=f"Too many wrong passwords. Try again in {check.retry_after} seconds.",
+                detail=f"Too many incorrect passwords. Try again in {check.retry_after} seconds.",
                 headers={"Retry-After": str(check.retry_after)},
             )
         if not check.verified:
-            raise HTTPException(status_code=wrong_status, detail="Wrong password.")
+            raise HTTPException(status_code=wrong_status, detail="Incorrect password.")
 
     def require_session(request: Request) -> AuthState:
         auth = _current_auth(request)
@@ -220,7 +220,7 @@ def create_router(
         if not setup_code.check(payload.setup_code):
             raise HTTPException(
                 status_code=403,
-                detail="That setup code is not right. Check the server log for the current one.",
+                detail="That setup code is incorrect. Check the server log for the current code.",
             )
         password_hash = auth_core.hash_password(payload.password)
         if not auth_core.claim_owner(conn, password_hash, time.time()):
@@ -246,7 +246,7 @@ def create_router(
         if auth.token_hash is None:
             raise HTTPException(
                 status_code=409,
-                detail="You are signed in through your proxy; sign out there.",
+                detail="You are signed in through your reverse proxy. Sign out there.",
             )
         auth_core.revoke_session(conn, auth.token_hash)
         clear_session_cookie(request, response)
@@ -277,7 +277,8 @@ def create_router(
         auth = require_session(request)
         revoked = auth_core.revoke_all(conn, keep_token_hash=auth.token_hash)
         auth_devices.clear_trusted_devices(conn, keep_device_id=trusted_device(request))
-        return AuthActionResult(message=f"Signed out {revoked} other session(s).")
+        noun = "session" if revoked == 1 else "sessions"
+        return AuthActionResult(message=f"Signed out {revoked} other {noun}.")
 
     @router.put("/auth/password", response_model=AuthActionResult)
     def change_password(payload: PasswordChangeRequest, request: Request) -> AuthActionResult:

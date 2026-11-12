@@ -17,22 +17,22 @@ export function statusDescription(
 ): string {
   switch (view) {
     case "review":
-      return "Held or removed from Strava. These wait for you.";
+      return "Held for review, or removed from Strava after publishing.";
     case "pending":
       if (stravaBroken) {
         return "Publishes to Strava once Strava is reconnected.";
       }
       return intervals
-        ? `Publishes to Strava on its own, usually ${withinMinutes(intervals.stravaMinutes)}.`
-        : "Publishes to Strava on its own at the next check.";
+        ? `Publishes to Strava automatically, usually ${withinMinutes(intervals.stravaMinutes)}.`
+        : "Publishes to Strava automatically at the next check.";
     case "held":
-      return "Waits for you. Nothing reaches Strava until you publish.";
+      return "Held for your review. Nothing reaches Strava until you publish.";
     case "missing":
       return "Removed from Strava after publishing. Republish or exclude.";
     case "published":
       return "On Strava, uploaded by ActivSync or already there.";
     case "excluded":
-      return "Kept off Strava for good, unless you restore it.";
+      return "Kept off Strava until you restore it.";
     case "all":
       return "Every activity synced from Garmin.";
   }

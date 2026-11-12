@@ -140,8 +140,8 @@ export function HevyBackfillCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 py-5">
         <p className="text-sm text-muted-foreground">
-          Scan Hevy workouts since a date and match them to Garmin. Preview
-          first — nothing is written until you run it.
+          Find Hevy workouts since a date and match them to Garmin activities.
+          Preview first: nothing is imported until you confirm.
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -230,7 +230,7 @@ export function HevyBackfillCard({
           <p className="text-sm text-muted-foreground">
             {preview.isPending
               ? "Scanning Hevy for workouts…"
-              : "Choose a start date and preview to see what would import."}
+              : "Choose a start date, then select Preview to see which workouts can be imported."}
           </p>
         )}
       </CardContent>
@@ -239,7 +239,7 @@ export function HevyBackfillCard({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Import these workouts?"
-        description={`Import ${selection.count} historical Hevy workout${selection.count === 1 ? "" : "s"}? Matches go to your review queue; the rest are queued to sync in.`}
+        description={`Import ${selection.count} historical Hevy workout${selection.count === 1 ? "" : "s"}? Matched workouts go to the sync queue for review. The rest are queued for upload to Garmin.`}
         confirmLabel="Import"
         pendingLabel="Importing…"
         pending={run.isPending}

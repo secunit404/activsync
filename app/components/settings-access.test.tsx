@@ -92,7 +92,7 @@ beforeEach(() => {
   api.getOidcConfig.mockResolvedValue(oidc);
   api.changePassword.mockResolvedValue({ message: "Password changed." });
   api.revokeSession.mockResolvedValue(undefined);
-  api.revokeOtherSessions.mockResolvedValue({ message: "Signed out 1 other session(s)." });
+  api.revokeOtherSessions.mockResolvedValue({ message: "Signed out 1 other session." });
   api.saveOidcConfig.mockResolvedValue({ message: "Saved." });
 });
 
@@ -476,7 +476,7 @@ test("a wrong password stays on the page instead of leaving for the provider", a
   const assign = vi.fn();
   vi.stubGlobal("location", { ...window.location, assign });
   api.getOidcConfig.mockResolvedValue(configured);
-  api.startOidcLink.mockRejectedValue(new ApiError("Wrong password.", 400));
+  api.startOidcLink.mockRejectedValue(new ApiError("Incorrect password.", 400));
   renderAccess();
 
   await userEvent.click(await screen.findByRole("button", { name: "Link account" }));

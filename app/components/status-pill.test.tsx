@@ -18,7 +18,7 @@ test("the pill explains its status on hover, but not while publishing", () => {
   const { rerender } = render(<StatusPill status="held" />);
   expect(screen.getByText("HELD").parentElement).toHaveAttribute(
     "title",
-    "Waits for you. Nothing reaches Strava until you publish.",
+    "Held for your review. Nothing reaches Strava until you publish.",
   );
   rerender(<StatusPill status="held" publishing />);
   expect(screen.getByText("PUBLISHING…").parentElement).not.toHaveAttribute("title");

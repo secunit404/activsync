@@ -101,7 +101,7 @@ function SessionRow({ session }: { session: AuthSession }) {
             open={confirming}
             onOpenChange={setConfirming}
             title="Sign out this browser?"
-            description={`${device ?? `The ${methodLabel} session from ${session.ip || "an unknown address"}`} will be signed out. It will need to sign in again to get back in.`}
+            description={`${device ?? `The ${methodLabel} session from ${session.ip || "an unknown address"}`} will be signed out and must sign in again.`}
             confirmLabel="Sign out"
             pendingLabel="Signing out…"
             pending={revoke.isPending}

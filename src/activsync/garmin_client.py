@@ -169,10 +169,10 @@ def get_client(token_dir: str) -> Garmin:
     except GarminConnectAuthenticationError as exc:
         if is_transient_failure(exc):
             raise GarminUnavailable(
-                "Garmin could not be reached; retrying on the next poll."
+                "Garmin could not be reached. ActivSync tries again at the next check."
             ) from exc
         raise GarminSessionExpired(
-            "Garmin session expired; reconnect Garmin to resume sync."
+            "Garmin session expired. Reconnect Garmin to resume syncing."
         ) from exc
     return client
 

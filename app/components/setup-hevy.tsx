@@ -24,8 +24,8 @@ export function HevyStep({ pending, onConnect, onSkip }: HevyStepProps) {
           Connect Hevy (optional)
         </h2>
         <p className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
-          Sync Hevy strength workouts onto Garmin and onward to Strava. Hevy
-          Pro is required.
+          Send your Hevy strength workouts to Garmin Connect and on to
+          Strava. The Hevy API requires a Hevy Pro subscription.
         </p>
       </div>
       <form
@@ -46,7 +46,8 @@ export function HevyStep({ pending, onConnect, onSkip }: HevyStepProps) {
             required
           />
           <FieldDescription>
-            Disable any standalone hevy2garmin instance before enabling this.
+            If you run hevy2garmin separately, stop it before you connect
+            Hevy here.
           </FieldDescription>
         </Field>
         <div className="flex flex-col gap-2.5 sm:flex-row">

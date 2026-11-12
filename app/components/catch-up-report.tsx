@@ -24,8 +24,19 @@ export function CatchUpReport({ report, onDismiss }: CatchUpReportProps) {
     return null;
   }
 
-  const activityNoun = report.new === 1 ? "activity" : "activities";
-  const dayNoun = report.days === 1 ? "day" : "days";
+  const summary = [
+    `Found ${report.new} ${report.new === 1 ? "activity" : "activities"} from ${
+      report.days === 1 ? "the last day" : `the last ${report.days} days`
+    }.`,
+    report.linked
+      ? `${report.linked} ${report.linked === 1 ? "was" : "were"} already on Strava.`
+      : null,
+    report.held
+      ? `${report.held} ${report.held === 1 ? "is" : "are"} held for your review.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="hidden items-start gap-3 rounded-xl border border-border bg-card p-4 md:flex">
@@ -38,8 +49,7 @@ export function CatchUpReport({ report, onDismiss }: CatchUpReportProps) {
       <div className="grid flex-1 gap-0.5">
         <p className="text-sm font-bold">Reconnect catch-up complete</p>
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          Found {report.new} {activityNoun} over the last {report.days} {dayNoun} —{" "}
-          {report.linked} already existed on Strava and {report.held} are held for review.
+          {summary}
         </p>
       </div>
       <Button variant="outline" className="h-9 shrink-0" onClick={onDismiss}>

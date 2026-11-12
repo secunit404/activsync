@@ -60,7 +60,7 @@ test("a locked row with no linkable template shows the same control, disabled", 
   expect(button).toBeDisabled();
   expect(button).toHaveAttribute(
     "title",
-    "This exercise has no linkable template — it can't be fixed from here.",
+    "Hevy reports no template for this exercise, so it cannot be mapped here.",
   );
 });
 

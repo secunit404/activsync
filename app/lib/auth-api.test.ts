@@ -63,11 +63,11 @@ test("a wrong password rejects with the server's message", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ detail: "Wrong password." }), { status: 400 }),
+      new Response(JSON.stringify({ detail: "Incorrect password." }), { status: 400 }),
     ),
   );
 
-  await expect(startOidcLink("nope")).rejects.toEqual(new ApiError("Wrong password.", 400));
+  await expect(startOidcLink("nope")).rejects.toEqual(new ApiError("Incorrect password.", 400));
 });
 
 test("the login URL always asks for a sign-in, never a link", () => {

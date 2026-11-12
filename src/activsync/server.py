@@ -304,14 +304,15 @@ def create_app(
 
         if error == "access_denied":
             return strava_error(
-                "The Strava authorization was declined, so nothing was connected. "
-                "Press Connect and choose Authorize on Strava's page to continue."
+                "Strava authorization was declined, so nothing was connected. "
+                "Press Connect with Strava and choose Authorize on Strava's page."
             )
         if error or not code:
             logger.warning("strava authorization did not complete: error=%s", error)
             return strava_error(
-                "Strava did not send an authorization back. Try again and check "
-                "the Authorization Callback Domain if the problem continues."
+                "Strava did not return an authorization. Try again. If the problem "
+                "continues, check the Authorization Callback Domain of your Strava "
+                "API application."
             )
         if (
             not expected_state

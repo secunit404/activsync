@@ -198,7 +198,7 @@ def create_router(
         api_key = db.get_config_value(conn, "hevy_api_key")
         if not api_key:
             raise HTTPException(
-                status_code=409, detail="Connect Hevy before using history tools."
+                status_code=409, detail="Connect Hevy before backfilling workouts."
             )
         return api_key
 
@@ -234,7 +234,7 @@ def create_router(
         except HevyAuthError as exc:
             raise HTTPException(
                 status_code=401,
-                detail="Hevy rejected the stored API key — reconnect Hevy.",
+                detail="Hevy rejected the saved API key. Reconnect Hevy in Settings.",
             ) from exc
         except Exception as exc:
             logger.warning("hevy backfill fetch failed: %s", exc)
@@ -462,7 +462,7 @@ def create_router(
             scale = f", of {total_count} on your Hevy account" if total_count else ""
             message = (
                 f"{count} workout{'s' if count != 1 else ''} found{scale}. "
-                "Nothing has been written yet."
+                "Nothing has been imported yet."
             )
         return BackfillResult(
             message=message,
@@ -496,8 +496,8 @@ def create_router(
         return BackfillResult(
             message=(
                 f"Backfill complete: {count} workout"
-                f"{'s' if count != 1 else ''} ingested, {matched} matched "
-                "with existing Garmin activities."
+                f"{'s' if count != 1 else ''} imported, {matched} matched "
+                "to existing Garmin activities."
             ),
             since=payload.since,
             ran=True,

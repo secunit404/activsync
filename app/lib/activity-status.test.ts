@@ -15,12 +15,12 @@ test("statuses that need nothing from the owner have no waiting reason", () => {
 });
 
 test("pending names the Strava check interval when it is known", () => {
-  expect(statusDescription("pending")).toBe("Publishes to Strava on its own at the next check.");
+  expect(statusDescription("pending")).toBe("Publishes to Strava automatically at the next check.");
   expect(statusDescription("pending", { garminMinutes: 20, stravaMinutes: 1 })).toBe(
-    "Publishes to Strava on its own, usually within a minute.",
+    "Publishes to Strava automatically, usually within a minute.",
   );
   expect(statusDescription("pending", { garminMinutes: 20, stravaMinutes: 10 })).toBe(
-    "Publishes to Strava on its own, usually within 10 min.",
+    "Publishes to Strava automatically, usually within 10 min.",
   );
 });
 
@@ -39,7 +39,7 @@ test("the detail line prefers the hold reason over the generic held description"
     "Older activity found after a reconnect",
   );
   expect(activityExplanation({ publishStatus: "excluded", holdReason: null })).toBe(
-    "Kept off Strava for good, unless you restore it.",
+    "Kept off Strava until you restore it.",
   );
 });
 

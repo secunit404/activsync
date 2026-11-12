@@ -154,7 +154,7 @@ def test_wrong_password_is_one_generic_message(app, conn):
     response = _login(_anonymous(app), "nope")
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Wrong password."}
+    assert response.json() == {"detail": "Incorrect password."}
 
 
 def test_login_before_claim_is_refused(app):
@@ -242,6 +242,19 @@ def test_revoke_one_and_revoke_all_others(app, conn):
     assert other.get("/api/v1/app").status_code == 401
     assert third.get("/api/v1/app").status_code == 401
     assert len(auth_core.list_sessions(conn)) == 1
+
+
+def test_signing_out_others_counts_sessions_in_words(app, conn):
+    client = owner_client(app)
+    owner_client(app)
+    owner_client(app)
+    assert client.delete("/api/v1/auth/sessions").json()["message"] == (
+        "Signed out 2 other sessions."
+    )
+    owner_client(app)
+    assert client.delete("/api/v1/auth/sessions").json()["message"] == (
+        "Signed out 1 other session."
+    )
 
 
 def test_password_change_verifies_current_and_revokes_other_sessions(app, conn):

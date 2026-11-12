@@ -32,20 +32,20 @@ const CONFIRM_COPY: Record<
 > = {
   skip: {
     title: "Skip this workout?",
-    describe: (title) => `Skip ${title}?`,
+    describe: (title) => `${title} will not be synced. You can unskip it later.`,
     confirmLabel: "Skip",
     pendingLabel: "Skipping…",
   },
   "resync-fresh": {
     title: "Re-sync this workout?",
-    describe: (title) => `Re-sync ${title} as a fresh Garmin upload?`,
+    describe: (title) => `Upload ${title} to Garmin again as a new activity?`,
     confirmLabel: "Re-sync fresh",
     pendingLabel: "Queuing…",
   },
   replace: {
     title: "Replace this Garmin workout?",
     describe: (title) =>
-      `Replace the matched Garmin workout with ${title}? The original is preserved in ActivSync's recovery journal.`,
+      `Replace the matched Garmin workout with ${title}? ActivSync keeps a copy of the original in its recovery journal.`,
     confirmLabel: "Replace Garmin workout",
     pendingLabel: "Replacing…",
   },

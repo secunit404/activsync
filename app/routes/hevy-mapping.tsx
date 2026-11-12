@@ -139,7 +139,7 @@ export default function HevyMapping() {
         <p className="text-sm text-muted-foreground">
           {tools.error instanceof Error
             ? tools.error.message
-            : "Something went wrong loading the Garmin taxonomy. Close this and try again."}
+            : "The Garmin exercise list could not be loaded. Close this panel and try again."}
         </p>
       </ResponsiveOverlay>
     );
@@ -155,8 +155,8 @@ export default function HevyMapping() {
     return (
       <ResponsiveOverlay open onOpenChange={handleOpenChange} title="Exercise not found" mobile="sheet">
         <p className="text-sm text-muted-foreground">
-          This exercise isn&apos;t in the current mapping list — it may already be mapped, or the
-          list has changed. Close this and check the Hevy hub.
+          This exercise is not in the current mapping list. It may already be mapped, or the
+          list has changed. Close this panel and check the Hevy page.
         </p>
       </ResponsiveOverlay>
     );
@@ -361,14 +361,14 @@ function ExerciseMappingForm({
           <div className="rounded-lg border border-warning/30 bg-warning/[0.06] p-3.5 text-sm">
             <p className="font-semibold text-warning">Suggested mapping (not active yet)</p>
             <p className="mt-1 leading-relaxed text-muted-foreground">
-              ActivSync preselected a best guess from the closest exercise name or muscle group.
-              Review it and press Save mapping before structured sets can sync.
+              ActivSync preselected the closest match by exercise name or muscle group. Review
+              it and select Save mapping so structured sets can sync.
             </p>
           </div>
         ) : null}
         <DestinationSection
           title="Garmin"
-          description="Where this exercise's sets land on your Garmin activity."
+          description="Where the sets of this exercise appear on your Garmin activity."
           status={
             mapping.unmapped
               ? { label: "Not mapped", tone: "warning" }
@@ -455,8 +455,8 @@ function ExerciseMappingForm({
             </NativeSelect>
             {mapping.stravaSource === "garmin" && stravaExercise === mapping.stravaExerciseType ? (
               <FieldDescription>
-                No standard Strava exercise, so this follows the Garmin exercise above. Pick one
-                to override.
+                There is no standard Strava exercise, so this follows the Garmin exercise above.
+                Choose one to override it.
               </FieldDescription>
             ) : null}
           </Field>

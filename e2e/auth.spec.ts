@@ -30,7 +30,7 @@ test("a wrong password is refused with one generic message", async ({ page }) =>
   await page.getByLabel("Password", { exact: true }).fill("not the dev password at all");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("alert")).toHaveText("Wrong password.");
+  await expect(page.getByRole("alert")).toHaveText("Incorrect password.");
   await expect(page).toHaveURL(/\/login$/);
 });
 
@@ -59,7 +59,7 @@ test("an unclaimed install walks the claim step", async ({ browser, page }) => {
     await page.getByLabel("Repeat password").fill(DEV_PASSWORD);
     await page.getByRole("button", { name: "Claim ActivSync" }).click();
 
-    await expect(page.getByRole("heading", { name: "You’re all set" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Setup complete" })).toBeVisible();
   } finally {
     const status = await owner.request.get("/api/v1/auth/status");
     if (!((await status.json()) as { ownerClaimed: boolean }).ownerClaimed) {

@@ -360,7 +360,7 @@ test("skip opens a confirmation dialog with the real copy, and does nothing when
   await userEvent.click(screen.getByRole("button", { name: "Skip Leg Day" }));
 
   const dialog = screen.getByRole("alertdialog", { name: "Skip this workout?" });
-  expect(dialog).toHaveAccessibleDescription("Skip Leg Day?");
+  expect(dialog).toHaveAccessibleDescription("Leg Day will not be synced. You can unskip it later.");
 
   await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -422,7 +422,7 @@ test("resync-fresh is only offered when the item is resyncable, and asks for con
 
   const dialog = screen.getByRole("alertdialog", { name: "Re-sync this workout?" });
   expect(dialog).toHaveAccessibleDescription(
-    "Re-sync Leg Day as a fresh Garmin upload?",
+    "Upload Leg Day to Garmin again as a new activity?",
   );
 
   await userEvent.click(within(dialog).getByRole("button", { name: "Re-sync fresh" }));

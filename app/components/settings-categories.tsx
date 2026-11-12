@@ -81,7 +81,7 @@ export function CategorySettings({
     <SettingsSection
       id="autosync"
       title="Auto-sync by type"
-      description="On types publish to Strava automatically. Off types wait for manual review."
+      description="Types that are on publish to Strava automatically. Types that are off are held for your review."
       contentClassName="grid gap-4"
     >
       {/* `items-end`, not `items-center`: the search input sits under its own
@@ -104,7 +104,9 @@ export function CategorySettings({
             />
             {query ? (
               <span className="absolute right-3 flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-mono">{searched.length} matches</span>
+                <span className="font-mono">
+                  {searched.length} {searched.length === 1 ? "type" : "types"}
+                </span>
                 <button
                   type="button"
                   className="underline-offset-2 hover:text-foreground hover:underline"
@@ -172,7 +174,7 @@ export function CategorySettings({
           <p className="p-4 text-sm text-muted-foreground">
             {query
               ? "No activity types match “" + query + "”."
-              : "Categories aren’t loaded yet. Connect Garmin, then refresh them."}
+              : "Activity types aren’t loaded yet. Connect Garmin, then refresh types."}
           </p>
         )}
       </div>
@@ -181,7 +183,7 @@ export function CategorySettings({
         <span className="font-mono text-xs text-muted-foreground">
           {state.activityTypes.length
             ? "Scroll for all " + totalCount + " types"
-            : "Categories aren’t loaded yet. Connect Garmin, then refresh them."}
+            : "Activity types aren’t loaded yet. Connect Garmin, then refresh types."}
         </span>
         <div className="flex gap-3.5 text-xs font-medium">
           <button
@@ -190,7 +192,7 @@ export function CategorySettings({
             disabled={!searched.length}
             onClick={() => setMany(searched, true)}
           >
-            Enable all matches
+            {query ? `Turn on ${searched.length} matching` : "Turn all on"}
           </button>
           <button
             type="button"
@@ -198,7 +200,7 @@ export function CategorySettings({
             disabled={!searched.length}
             onClick={() => setMany(searched, false)}
           >
-            Disable all matches
+            {query ? `Turn off ${searched.length} matching` : "Turn all off"}
           </button>
         </div>
       </div>

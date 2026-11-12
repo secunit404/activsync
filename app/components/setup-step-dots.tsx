@@ -6,10 +6,10 @@ import type { SetupStep } from "@/lib/api";
 
 const STEPS: Array<{ key: SetupStep; label: string; sublabel: string }> = [
   { key: "account", label: "Claim ActivSync", sublabel: "Setup code, password" },
-  { key: "garmin", label: "Connect Garmin", sublabel: "Sign in, MFA if needed" },
-  { key: "strava", label: "Authorize Strava", sublabel: "OAuth callback" },
+  { key: "garmin", label: "Connect Garmin", sublabel: "Sign-in, two-factor code" },
+  { key: "strava", label: "Authorize Strava", sublabel: "API application, authorization" },
   { key: "hevy", label: "Hevy (optional)", sublabel: "API key" },
-  { key: "syncing", label: "First sync", sublabel: "Pull recent activities" },
+  { key: "syncing", label: "First sync", sublabel: "Fetch recent activities" },
 ];
 
 /**

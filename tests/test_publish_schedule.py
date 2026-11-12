@@ -179,7 +179,7 @@ def test_undo_after_the_scheduler_claimed_the_publish_is_a_conflict(env):
     response = client.post("/api/v1/activities/1/publish/cancel")
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Too late to undo: it is already being sent to Strava."
+    assert response.json()["detail"] == "Too late to undo: publishing to Strava has already started."
     assert _activity_item(client, 1)["publishPhase"] == "sending"
 
 

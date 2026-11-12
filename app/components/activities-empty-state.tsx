@@ -43,7 +43,7 @@ export function ActivitiesEmptyState({
           <EmptyMedia variant="icon" className="text-success">
             <CheckIcon />
           </EmptyMedia>
-          <EmptyTitle className="text-base">Nothing waiting for you</EmptyTitle>
+          <EmptyTitle className="text-base">Nothing needs review</EmptyTitle>
           <EmptyDescription>
             No activity is held for review or missing from Strava.
           </EmptyDescription>
@@ -107,34 +107,34 @@ function emptyCopy(
     case "held":
       return {
         title: "Nothing held for review",
-        description: "Activities whose type has auto-sync off wait here for you.",
+        description: "Activities whose type has auto-sync off wait here for your review.",
         next: context.showAll,
       };
     case "missing":
       return {
         title: "Nothing missing from Strava",
-        description: "A published activity that is removed from Strava shows up here.",
+        description: "A published activity that is removed from Strava appears here.",
         next: context.showAll,
       };
     case "published":
       return {
         title: "Nothing published yet",
-        description: "Activities show up here once they're on Strava.",
+        description: "Activities appear here once they are on Strava.",
         next: context.reviewCount > 0 ? context.review : undefined,
       };
     case "excluded":
       return {
         title: "Nothing excluded",
         description:
-          "Exclude an activity to keep it off Strava for good. You can restore it later.",
+          "Excluded activities stay off Strava. You can restore them later.",
         next: context.reviewCount > 0 ? context.review : undefined,
       };
     case null:
       return {
         title: "No activities yet",
         description: context.garminMinutes
-          ? `ActivSync checks Garmin every ${context.garminMinutes} min. New activities show up here after the next check.`
-          : "New activities show up here after the next Garmin check.",
+          ? `ActivSync checks Garmin every ${context.garminMinutes} min. New activities appear here after the next check.`
+          : "New activities appear here after the next Garmin check.",
         next: { label: "Check connections", to: "/settings#connections" },
       };
   }

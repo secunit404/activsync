@@ -108,13 +108,13 @@ test("a path that only starts like a server prefix still routes in the SPA", asy
 
 test("shows the server's message for a wrong password", async () => {
   getAuthStatus.mockResolvedValue(status());
-  login.mockRejectedValue(new ApiError("Wrong password.", 401));
+  login.mockRejectedValue(new ApiError("Incorrect password.", 401));
   renderAt("/login");
 
   await userEvent.type(await screen.findByLabelText("Password"), "nope");
   await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password.");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect password.");
 });
 
 test("the password field can be shown and hidden", async () => {
