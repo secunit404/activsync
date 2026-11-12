@@ -130,7 +130,7 @@ pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySett
         match_mode: cfg.str("hevy_match_mode"),
         title_template: cfg.str("hevy_title_template"),
         description_template: cfg.str("hevy_description_template"),
-        summary_on_structured: db::truthy(cfg.get("hevy_summary_on_structured")),
+        summary_on_structured: cfg.summary_on_structured(),
         grace_minutes: cfg.int("hevy_grace_minutes"),
         poll_interval_minutes: cfg.int("hevy_poll_interval_minutes"),
         identity: setting(&settings, "hevy_device_identity_override"),

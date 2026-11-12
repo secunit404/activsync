@@ -56,6 +56,12 @@ impl Config {
             .to_string()
     }
 
+    pub fn summary_on_structured(&self) -> bool {
+        self.0
+            .get("hevy_summary_on_structured")
+            .is_none_or(|v| db::truthy(Some(v)))
+    }
+
     pub fn display_timezone(&self) -> String {
         self.0
             .get("display_timezone")

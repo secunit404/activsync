@@ -321,9 +321,7 @@ pub struct Apply<'a> {
 
 impl Apply<'_> {
     pub(crate) fn summary_on_structured(&self) -> bool {
-        self.cfg
-            .get("hevy_summary_on_structured")
-            .is_none_or(|v| db::truthy(Some(v)))
+        self.cfg.summary_on_structured()
     }
 
     pub(crate) fn template(&self, key: &str) -> Option<&str> {
