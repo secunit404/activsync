@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.2](https://github.com/secunit404/activsync/compare/v0.4.1...v0.4.2) (2026-11-12)
+
+
+### Features
+
+* **settings:** choose the undo delay before publishing (3, 5 or 10 seconds) or turn it off ([33d30ec](https://github.com/secunit404/activsync/commit/33d30ec4614827b56fedd280f7c9534dcf7727f1))
+* **strava:** connecting Strava is one click on Connect with Strava, not save and then connect ([d5a3a61](https://github.com/secunit404/activsync/commit/d5a3a61baea36d3c2154150a23cfa9ef143f8c50))
+* **ui:** plainer, more direct wording throughout the app ([#120](https://github.com/secunit404/activsync/issues/120)) ([eabb96f](https://github.com/secunit404/activsync/commit/eabb96fab53ec1dfe12e527429b624e0a7042c2b))
+
 ## [0.4.1](https://github.com/secunit404/activsync/compare/v0.4.0...v0.4.1) (2026-11-10)
 
 
