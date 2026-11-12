@@ -1,7 +1,7 @@
-//! Readable log lines for `docker logs`, as the Python app's
-//! `logging_setup.py` writes them: a timestamp in the app's display timezone,
-//! the level, the part of the app speaking, and the message. The level comes
-//! from `ACTIVSYNC_LOG_LEVEL`; the timezone follows the in-app setting live.
+//! Readable log lines for `docker logs`, in the Python app's format: a
+//! timestamp in the app's display timezone, the level, the part of the app
+//! speaking, and the message. The level comes from `ACTIVSYNC_LOG_LEVEL`; the
+//! timezone follows the in-app setting live.
 
 use std::io::Write;
 use std::net::SocketAddr;

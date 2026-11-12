@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -5,7 +7,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::Value;
 
-pub const SCHEMA: &str = r#"
+const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS activities (
     garmin_activity_id INTEGER PRIMARY KEY,
     activity_type TEXT NOT NULL,
@@ -200,34 +202,19 @@ fn columns(conn: &Connection, table: &str) -> DbResult<Vec<String>> {
 }
 
 fn migrate(conn: &Connection) -> DbResult<()> {
-    let activity_cols = columns(conn, "activities")?;
-    if !activity_cols.iter().any(|c| c == "garmin_data") {
-        conn.execute(
-            "ALTER TABLE activities ADD COLUMN garmin_data TEXT NOT NULL DEFAULT '{}'",
-            [],
-        )?;
-    }
-    if !activity_cols.iter().any(|c| c == "hold_reason") {
-        conn.execute("ALTER TABLE activities ADD COLUMN hold_reason TEXT", [])?;
-    }
-    if !columns(conn, "hevy_workouts")?
-        .iter()
-        .any(|c| c == "lease_owner")
-    {
-        conn.execute("ALTER TABLE hevy_workouts ADD COLUMN lease_owner TEXT", [])?;
-    }
-    let op_cols = columns(conn, "hevy_operations")?;
-    if !op_cols.iter().any(|c| c == "generated_calories") {
-        conn.execute(
-            "ALTER TABLE hevy_operations ADD COLUMN generated_calories REAL",
-            [],
-        )?;
-    }
-    if !op_cols.iter().any(|c| c == "generated_avg_hr") {
-        conn.execute(
-            "ALTER TABLE hevy_operations ADD COLUMN generated_avg_hr REAL",
-            [],
-        )?;
+    for (table, column, definition) in [
+        ("activities", "garmin_data", "TEXT NOT NULL DEFAULT '{}'"),
+        ("activities", "hold_reason", "TEXT"),
+        ("hevy_workouts", "lease_owner", "TEXT"),
+        ("hevy_operations", "generated_calories", "REAL"),
+        ("hevy_operations", "generated_avg_hr", "REAL"),
+    ] {
+        if !columns(conn, table)?.iter().any(|c| c == column) {
+            conn.execute(
+                &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
+                [],
+            )?;
+        }
     }
     conn.execute("DROP TABLE IF EXISTS sessions", [])?;
     conn.execute("DELETE FROM app_config WHERE key = 'auth'", [])?;
@@ -505,7 +492,7 @@ fn dump_string(text: &str, out: &mut String) {
             _ => {
                 let mut units = [0u16; 2];
                 for unit in ch.encode_utf16(&mut units) {
-                    out.push_str(&format!("\\u{unit:04x}"));
+                    let _ = write!(out, "\\u{unit:04x}");
                 }
             }
         }
@@ -546,7 +533,7 @@ pub fn truthy(value: Option<&Value>) -> bool {
 
 /// garmin_activity_id → applied Hevy strategy, for both the linked activity
 /// and the claimed watch source.
-pub fn hevy_badges(conn: &Connection) -> DbResult<std::collections::HashMap<i64, String>> {
+pub fn hevy_badges(conn: &Connection) -> DbResult<HashMap<i64, String>> {
     let mut stmt = conn.prepare(
         "SELECT applied_strategy, garmin_activity_id, source_garmin_activity_id
          FROM hevy_workouts ORDER BY start_time DESC",
@@ -558,7 +545,7 @@ pub fn hevy_badges(conn: &Connection) -> DbResult<std::collections::HashMap<i64,
             row.get::<_, Option<i64>>(2)?,
         ))
     })?;
-    let mut badges = std::collections::HashMap::new();
+    let mut badges = HashMap::new();
     for row in rows {
         let (strategy, target, source) = row?;
         let Some(strategy) = strategy.filter(|s| !s.is_empty()) else {
@@ -652,10 +639,7 @@ pub fn mark_removed(conn: &Connection, garmin_activity_id: i64) -> DbResult<()> 
 }
 
 /// Scoped by window: a sync speaks only for the span it fetched.
-pub fn list_active_ids_since(
-    conn: &Connection,
-    window_start: &str,
-) -> DbResult<std::collections::HashSet<i64>> {
+pub fn list_active_ids_since(conn: &Connection, window_start: &str) -> DbResult<HashSet<i64>> {
     let mut stmt =
         conn.prepare("SELECT garmin_activity_id FROM activities WHERE start_time >= ?1")?;
     let ids = stmt.query_map([window_start], |row| row.get(0))?;
@@ -675,7 +659,7 @@ pub fn oldest_unpublished_start_time(conn: &Connection) -> DbResult<Option<Strin
 
 /// Activities waiting out their undo window or being sent by the publish
 /// scheduler; nothing else may publish them meanwhile.
-pub fn scheduled_publish_ids(conn: &Connection) -> DbResult<std::collections::HashSet<i64>> {
+pub fn scheduled_publish_ids(conn: &Connection) -> DbResult<HashSet<i64>> {
     let mut stmt = conn.prepare(
         "SELECT garmin_activity_id FROM publish_schedule WHERE state IN ('waiting', 'sending')",
     )?;

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 
 pub const GARMIN_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
@@ -17,8 +17,8 @@ pub fn parse_garmin(start_time: &str) -> Option<DateTime<Utc>> {
         .map(|naive| naive.and_utc())
 }
 
-/// Python's `timeutil.parse_timestamp`: ISO-8601 with or without `Z`, a bare
-/// date, or Garmin's space-separated form; a naive value reads as UTC.
+/// ISO-8601 with or without `Z`, a bare date, or Garmin's space-separated
+/// form; a naive value reads as UTC.
 pub fn parse_timestamp(value: &str) -> Option<DateTime<Utc>> {
     let cleaned = value.trim().replace('Z', "+00:00");
     if cleaned.is_empty() {
@@ -46,7 +46,7 @@ pub fn parse_timestamp(value: &str) -> Option<DateTime<Utc>> {
             return Some(naive.and_utc());
         }
     }
-    chrono::NaiveDate::parse_from_str(&cleaned, "%Y-%m-%d")
+    NaiveDate::parse_from_str(&cleaned, "%Y-%m-%d")
         .ok()
         .and_then(|date| date.and_hms_opt(0, 0, 0))
         .map(|naive| naive.and_utc())

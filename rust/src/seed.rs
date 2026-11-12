@@ -3,11 +3,12 @@ use rusqlite::Connection;
 use serde_json::{Value, json};
 
 use crate::db::{self, DbResult, NewActivity};
+use crate::timefmt::GARMIN_TIME_FORMAT;
 use crate::{config, hevy_seed, mock};
 
 /// Bumped whenever the generated rows change, so an older dev database is
 /// rebuilt instead of mixing two generations of sample data.
-pub const SEED_VERSION: i64 = 3;
+const SEED_VERSION: i64 = 3;
 const SEED_VERSION_KEY: &str = "rust_dev_seed_version";
 
 struct Sample {
@@ -19,129 +20,111 @@ struct Sample {
     status: &'static str,
 }
 
-const fn sample(
-    activity_type: &'static str,
-    title: &'static str,
-    description: &'static str,
-    duration: i64,
-    distance: Option<i64>,
-    status: &'static str,
-) -> Sample {
-    Sample {
-        activity_type,
-        title,
-        description,
-        duration,
-        distance,
-        status,
-    }
-}
-
 const SAMPLES: [Sample; 13] = [
-    sample(
-        "running",
-        "Morning run",
-        "Easy loop before work.",
-        42 * 60,
-        Some(7_850),
-        "pending",
-    ),
-    sample(
-        "cycling",
-        "Saturday ride",
-        "Longer ride with a few good climbs.",
-        2 * 3600 + 8 * 60,
-        Some(52_400),
-        "held",
-    ),
-    sample(
-        "strength_training",
-        "Strength workout",
-        "Upper body and core.",
-        54 * 60,
-        None,
-        "published",
-    ),
-    sample(
-        "walking",
-        "Evening walk",
-        "Recovery walk.",
-        38 * 60,
-        Some(3_120),
-        "excluded",
-    ),
-    sample(
-        "trail_running",
-        "Forest trail run",
-        "Technical trails and soft ground.",
-        68 * 60,
-        Some(10_200),
-        "pending",
-    ),
-    sample(
-        "hiking",
-        "Mountain hike",
-        "Weekend hike with a view.",
-        4 * 3600 + 12 * 60,
-        Some(14_600),
-        "held",
-    ),
-    sample(
-        "swimming",
-        "Pool intervals",
-        "Technique and steady intervals.",
-        47 * 60,
-        None,
-        "published",
-    ),
-    sample(
-        "indoor_cycling",
-        "Indoor bike",
-        "Tempo session indoors.",
-        51 * 60,
-        Some(28_700),
-        "pending",
-    ),
-    sample(
-        "yoga",
-        "Yoga recovery",
-        "Mobility and breathing session.",
-        36 * 60,
-        None,
-        "excluded",
-    ),
-    sample(
-        "rowing",
-        "Rowing intervals",
-        "Short, hard intervals.",
-        32 * 60,
-        Some(6_400),
-        "pending",
-    ),
-    sample(
-        "elliptical",
-        "Cross trainer",
-        "Low-impact aerobic session.",
-        44 * 60,
-        None,
-        "held",
-    ),
-    sample(
-        "cardio",
-        "Cardio workout",
-        "Mixed cardio session.",
-        39 * 60,
-        None,
-        "published",
-    ),
-    sample(
-        "backcountry_skiing_snowboarding_ws",
-        "Backcountry day",
-        "Skinned up, rode down.",
-        5 * 3600 + 20 * 60,
-        Some(9_400),
-        "published",
-    ),
+    Sample {
+        activity_type: "running",
+        title: "Morning run",
+        description: "Easy loop before work.",
+        duration: 42 * 60,
+        distance: Some(7_850),
+        status: "pending",
+    },
+    Sample {
+        activity_type: "cycling",
+        title: "Saturday ride",
+        description: "Longer ride with a few good climbs.",
+        duration: 2 * 3600 + 8 * 60,
+        distance: Some(52_400),
+        status: "held",
+    },
+    Sample {
+        activity_type: "strength_training",
+        title: "Strength workout",
+        description: "Upper body and core.",
+        duration: 54 * 60,
+        distance: None,
+        status: "published",
+    },
+    Sample {
+        activity_type: "walking",
+        title: "Evening walk",
+        description: "Recovery walk.",
+        duration: 38 * 60,
+        distance: Some(3_120),
+        status: "excluded",
+    },
+    Sample {
+        activity_type: "trail_running",
+        title: "Forest trail run",
+        description: "Technical trails and soft ground.",
+        duration: 68 * 60,
+        distance: Some(10_200),
+        status: "pending",
+    },
+    Sample {
+        activity_type: "hiking",
+        title: "Mountain hike",
+        description: "Weekend hike with a view.",
+        duration: 4 * 3600 + 12 * 60,
+        distance: Some(14_600),
+        status: "held",
+    },
+    Sample {
+        activity_type: "swimming",
+        title: "Pool intervals",
+        description: "Technique and steady intervals.",
+        duration: 47 * 60,
+        distance: None,
+        status: "published",
+    },
+    Sample {
+        activity_type: "indoor_cycling",
+        title: "Indoor bike",
+        description: "Tempo session indoors.",
+        duration: 51 * 60,
+        distance: Some(28_700),
+        status: "pending",
+    },
+    Sample {
+        activity_type: "yoga",
+        title: "Yoga recovery",
+        description: "Mobility and breathing session.",
+        duration: 36 * 60,
+        distance: None,
+        status: "excluded",
+    },
+    Sample {
+        activity_type: "rowing",
+        title: "Rowing intervals",
+        description: "Short, hard intervals.",
+        duration: 32 * 60,
+        distance: Some(6_400),
+        status: "pending",
+    },
+    Sample {
+        activity_type: "elliptical",
+        title: "Cross trainer",
+        description: "Low-impact aerobic session.",
+        duration: 44 * 60,
+        distance: None,
+        status: "held",
+    },
+    Sample {
+        activity_type: "cardio",
+        title: "Cardio workout",
+        description: "Mixed cardio session.",
+        duration: 39 * 60,
+        distance: None,
+        status: "published",
+    },
+    Sample {
+        activity_type: "backcountry_skiing_snowboarding_ws",
+        title: "Backcountry day",
+        description: "Skinned up, rode down.",
+        duration: 5 * 3600 + 20 * 60,
+        distance: Some(9_400),
+        status: "published",
+    },
 ];
 
 /// Fills a mock database with a year of sample activities. When `onboarded`,
@@ -166,8 +149,8 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
     }
     let now = now.with_nanosecond(0).unwrap_or(now);
     let tx = conn.transaction()?;
-    tx.execute("DELETE FROM activities", [])?;
     for table in [
+        "activities",
         "hevy_workouts",
         "hevy_operations",
         "hevy_match_schedule",
@@ -219,7 +202,7 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
                     activity_type: sample.activity_type,
                     title: &title,
                     description: sample.description,
-                    start_time: &start.format("%Y-%m-%d %H:%M:%S").to_string(),
+                    start_time: &start.format(GARMIN_TIME_FORMAT).to_string(),
                     content_hash: &format!("dev-{id}"),
                     publish_status: sample.status,
                     garmin_data: &db::json_dumps(&data),

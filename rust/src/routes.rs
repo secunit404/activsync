@@ -5,15 +5,14 @@ use axum::Json;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderName, HeaderValue, StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
-use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::{Stream, StreamExt};
 
 use crate::db::{self, ActivityRow};
 use crate::schedule;
@@ -29,7 +28,7 @@ const PAGE_SIZES: [i64; 4] = [10, 20, 50, 100];
 pub struct ApiError {
     status: StatusCode,
     detail: String,
-    header: Option<(axum::http::HeaderName, String)>,
+    header: Option<(HeaderName, String)>,
 }
 
 impl ApiError {
@@ -41,7 +40,7 @@ impl ApiError {
         }
     }
 
-    pub fn with_header(self, name: axum::http::HeaderName, value: String) -> Self {
+    pub fn with_header(self, name: HeaderName, value: String) -> Self {
         Self {
             header: Some((name, value)),
             ..self
@@ -61,7 +60,7 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let mut response = (self.status, Json(json!({ "detail": self.detail }))).into_response();
         if let Some((name, value)) = self.header
-            && let Ok(value) = axum::http::HeaderValue::from_str(&value)
+            && let Ok(value) = HeaderValue::from_str(&value)
         {
             response.headers_mut().insert(name, value);
         }
@@ -154,7 +153,7 @@ pub async fn app_state(State(state): State<AppState>) -> ApiResult<AppStateRespo
     let connections = view::connection_status(&conn, Utc::now())?;
     let step = onboarding::setup_step(&conn, &connections, state.auth.disabled)?;
     let (hevy_connected, hevy_status) = view::hevy_connection(&conn)?;
-    let cfg = config::load_config(&conn, development(&state))?;
+    let cfg = config::load_config(&conn, state.development)?;
     let catch_up_report = db::get_config_value(&conn, "catch_up_report")?.filter(|v| !v.is_null());
     let display = version::display_version();
     Ok(Json(AppStateResponse {
@@ -351,7 +350,7 @@ pub async fn activities_page(
     }
 
     let conn = state.db.lock();
-    let tz_name = config::load_config(&conn, development(&state))?.display_timezone();
+    let tz_name = config::load_config(&conn, state.development)?.display_timezone();
     let tz = timefmt::parse_tz(&tz_name);
     let all = view::activities_view(&conn, sort == "oldest", &tz_name)?;
     let (week_start, week_end) = timefmt::current_week(Utc::now(), tz);
@@ -371,14 +370,13 @@ pub async fn activities_page(
         }
     }
 
-    let wanted: Vec<&str> = match status.as_deref() {
-        Some("review") => REVIEW_STATUSES.to_vec(),
-        Some(other) => vec![other],
-        None => PUBLISH_STATUSES.to_vec(),
-    };
     let filtered: Vec<_> = all
         .into_iter()
-        .filter(|a| status.is_none() || wanted.contains(&a.row.publish_status.as_str()))
+        .filter(|a| match status.as_deref() {
+            None => true,
+            Some("review") => REVIEW_STATUSES.contains(&a.row.publish_status.as_str()),
+            Some(wanted) => a.row.publish_status == wanted,
+        })
         .collect();
     let total_count = filtered.len() as i64;
     let page_count = ((total_count + page_size - 1) / page_size).max(1);
@@ -631,7 +629,7 @@ pub async fn restore_activity(
     match payload {
         Some(p) => db::set_publish_status(&conn, id, &p.status, p.hold_reason())?,
         None => {
-            let held = config::load_config(&conn, development(&state))?.held_activity_types();
+            let held = config::load_config(&conn, state.development)?.held_activity_types();
             if held.contains(&activity.activity_type) {
                 db::set_publish_status(&conn, id, "held", Some("category"))?;
             } else {

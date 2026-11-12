@@ -1,5 +1,5 @@
-//! No-network stand-ins for Garmin, Strava and Hevy, matching what the Python
-//! app's `dev_mock.py` answers so the dev UI walks the same paths.
+//! No-network stand-ins for Garmin, Strava and Hevy that answer as the
+//! Python app's dev mock does, so the dev UI walks the same paths.
 
 use std::collections::HashSet;
 
@@ -13,11 +13,13 @@ use crate::strava_client::{self, StravaActivity};
 use crate::sync::{
     self, CatchUpStats, GarminSyncStats, PublishStats, StatusCheckStats, SyncError, SyncResult,
 };
+use crate::timefmt::GARMIN_TIME_FORMAT;
+use crate::view::parse_garmin_data;
 
 /// A Garmin password of "mfa" asks for a verification code.
-pub const MFA_TRIGGER_PASSWORD: &str = "mfa";
+const MFA_TRIGGER_PASSWORD: &str = "mfa";
 /// The one verification code the mock rejects.
-pub const MFA_REJECT_CODE: &str = "000000";
+const MFA_REJECT_CODE: &str = "000000";
 
 const GARMIN_ACTIVITY_TYPE_KEYS: &[&str] = &[
     "american_football",
@@ -252,7 +254,6 @@ pub fn strava_tokens(granted_scope: Option<&str>, now_epoch: i64) -> Value {
 const REMOTE_ACTIVITIES_KEY: &str = "dev_garmin_remote_activities";
 const DELETED_ACTIVITIES_KEY: &str = "dev_garmin_deleted_activity_ids";
 pub const STRAVA_ID_BASE: i64 = 9_000_000;
-const GARMIN_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
 const METRIC_KEYS: [&str; 20] = [
     "distance",
@@ -294,13 +295,6 @@ fn deleted_ids(conn: &rusqlite::Connection) -> DbResult<HashSet<i64>> {
     })
 }
 
-fn garmin_data(raw: &str) -> Map<String, Value> {
-    match serde_json::from_str::<Value>(raw) {
-        Ok(Value::Object(data)) => data,
-        _ => Map::new(),
-    }
-}
-
 fn text(data: &Map<String, Value>, key: &str) -> String {
     data.get(key)
         .and_then(Value::as_str)
@@ -309,10 +303,13 @@ fn text(data: &Map<String, Value>, key: &str) -> String {
 }
 
 fn record(
-    identity: (i64, String, String, String, String),
+    garmin_activity_id: i64,
+    activity_type: String,
+    title: String,
+    description: String,
+    start_time: String,
     data: &Map<String, Value>,
 ) -> ActivityRecord {
-    let (garmin_activity_id, activity_type, title, description, start_time) = identity;
     let n = |key: &str| match data.get(key) {
         Some(Value::Number(n)) => Some(n.clone()),
         _ => None,
@@ -377,7 +374,7 @@ fn remote_activity(
     activity.insert("title".into(), json!(row.title));
     activity.insert("description".into(), json!(row.description));
     activity.insert("start_time".into(), json!(row.start_time));
-    let data = garmin_data(&row.garmin_data);
+    let data = parse_garmin_data(&row.garmin_data);
     for key in METRIC_KEYS {
         activity.insert(key.into(), data.get(key).cloned().unwrap_or(Value::Null));
     }
@@ -385,8 +382,8 @@ fn remote_activity(
 }
 
 /// The mock Garmin's metadata edit, kept as an overlay that later fetches
-/// report, as the Python app's fake does.
-pub fn update_garmin_metadata(
+/// report.
+fn update_garmin_metadata(
     conn: &rusqlite::Connection,
     id: i64,
     title: &str,
@@ -436,14 +433,15 @@ fn fetch_recent_activities(
         if deleted.contains(&row.garmin_activity_id) || row.start_time < cutoff {
             continue;
         }
-        let identity = (
+        let data = parse_garmin_data(&row.garmin_data);
+        records.push(record(
             row.garmin_activity_id,
             row.activity_type,
             row.title,
             row.description,
             row.start_time,
-        );
-        records.push(record(identity, &garmin_data(&row.garmin_data)));
+            &data,
+        ));
     }
     for raw in remote_activities(conn)?.values() {
         let Some(raw) = raw.as_object() else { continue };
@@ -455,13 +453,11 @@ fn fetch_recent_activities(
             continue;
         }
         let overlay = record(
-            (
-                id,
-                text(raw, "activity_type"),
-                text(raw, "title"),
-                text(raw, "description"),
-                start_time,
-            ),
+            id,
+            text(raw, "activity_type"),
+            text(raw, "title"),
+            text(raw, "description"),
+            start_time,
             raw,
         );
         match records.iter_mut().find(|r| r.garmin_activity_id == id) {

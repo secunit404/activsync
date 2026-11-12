@@ -1,9 +1,3 @@
-//! Rust port of the ActivSync server, mock mode only so far: the activity
-//! dashboard, the settings page, the setup wizard and password and proxy
-//! sign-in including single sign-on, and the Hevy workout queue, exercise
-//! mappings and history import. Hevy polling and the real Garmin and Strava clients
-//! are still served by the Python app.
-
 pub mod auth_core;
 pub mod auth_guard;
 pub mod auth_routes;
@@ -62,7 +56,7 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use axum::http::{HeaderValue, Uri, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use tower_http::services::ServeDir;
 
 use crate::auth_core::{AttemptLimiter, SetupCode};
@@ -228,7 +222,6 @@ impl AppState {
 }
 
 fn settings_router() -> Router<AppState> {
-    use axum::routing::delete;
     use garmin_routes::{cancel_mfa, complete_mfa, reconnect_garmin, setup_garmin};
     use settings_routes::*;
     use strava_routes::strava_authorize;
@@ -285,10 +278,7 @@ fn auth_router() -> Router<AppState> {
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
         .route("/auth/sessions", get(list_sessions).delete(revoke_others))
-        .route(
-            "/auth/sessions/{public_id}",
-            axum::routing::delete(revoke_one),
-        )
+        .route("/auth/sessions/{public_id}", delete(revoke_one))
         .route("/auth/password", put(change_password))
         .route("/auth/settings", get(auth_settings))
         .route("/dev/unclaim", post(dev_unclaim))
@@ -329,10 +319,7 @@ fn api_router() -> Router<AppState> {
         .merge(auth_router())
         .merge(hevy_router())
         .route("/app", get(app_state))
-        .route(
-            "/catch-up-report",
-            axum::routing::delete(dismiss_catch_up_report),
-        )
+        .route("/catch-up-report", delete(dismiss_catch_up_report))
         .route("/activities", get(activities_page))
         .route("/activities/publish", post(publish_activities))
         .route(
@@ -360,13 +347,12 @@ fn api_router() -> Router<AppState> {
         .method_not_allowed_fallback(method_not_allowed)
 }
 
-/// The full app: JSON API, live refresh stream, and, when `web_dir` holds a
-/// built frontend, its assets with `index.html` for every other path outside
-/// the reserved prefixes.
-/// The browser-tab and home-screen icons, the files the Python app serves.
 const FAVICON: &[u8] = include_bytes!("../../src/activsync/static/favicon.png");
 const APPLE_TOUCH_ICON: &[u8] = include_bytes!("../../src/activsync/static/apple-touch-icon.png");
 
+/// The full app: JSON API, live refresh stream, and, when `web_dir` holds a
+/// built frontend, its assets with `index.html` for every other path outside
+/// the reserved prefixes.
 pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
     let index = web_dir.map(|d| d.join("index.html"));
     state.auth.csp = Arc::new(auth_guard::content_security_policy(index.as_deref()));
@@ -393,10 +379,7 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
                 .layer(axum::middleware::map_response(text_charset)),
         );
     }
-    let index = web_dir
-        .map(|d| d.join("index.html"))
-        .filter(|index| index.is_file())
-        .map(Arc::new);
+    let index = index.filter(|index| index.is_file()).map(Arc::new);
     app = app.fallback(get(move |uri: Uri| spa(index.clone(), uri)));
     app.layer(axum::middleware::from_fn_with_state(
         state.clone(),
@@ -449,8 +432,4 @@ async fn text_charset(mut response: Response) -> Response {
         response.headers_mut().insert(header::CONTENT_TYPE, value);
     }
     response
-}
-
-pub fn default_web_dir() -> PathBuf {
-    PathBuf::from("build/client")
 }

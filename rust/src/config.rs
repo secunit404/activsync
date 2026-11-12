@@ -3,6 +3,7 @@ use serde_json::{Map, Value, json};
 
 use crate::db::{self, DbResult};
 
+pub const DEFAULT_TIMEZONE: &str = "Europe/Stockholm";
 pub const DEFAULT_TITLE_TEMPLATE: &str = "{clean_title}";
 pub const DEFAULT_TEMPLATE: &str = "{duration}\n{calories}\n{avg_hr}\n\n{exercises}\n\n{marker}";
 const LEGACY_DEFAULT_TEMPLATE: &str =
@@ -14,7 +15,7 @@ pub fn defaults() -> Map<String, Value> {
         "strava_poll_interval_minutes": 5,
         "lookback_days": 7,
         "undo_delay_seconds": 5,
-        "display_timezone": "Europe/Stockholm",
+        "display_timezone": DEFAULT_TIMEZONE,
         "hevy_enabled": false,
         "hevy_match_mode": "automatic",
         "hevy_title_template": DEFAULT_TITLE_TEMPLATE,
@@ -59,7 +60,7 @@ impl Config {
         self.0
             .get("display_timezone")
             .and_then(Value::as_str)
-            .unwrap_or("Europe/Stockholm")
+            .unwrap_or(DEFAULT_TIMEZONE)
             .to_string()
     }
 

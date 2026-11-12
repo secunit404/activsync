@@ -7,7 +7,7 @@ use crate::db::{self, ActivityRow, DbResult};
 use crate::timefmt;
 
 pub const GARMIN_ACTIVITY_URL: &str = "https://connect.garmin.com/modern/activity/";
-pub const STRAVA_ACTIVITY_URL: &str = "https://www.strava.com/activities/";
+const STRAVA_ACTIVITY_URL: &str = "https://www.strava.com/activities/";
 const REQUIRED_STRAVA_SCOPES: [&str; 2] = ["activity:read_all", "activity:write"];
 
 pub fn strava_url_for(row: &ActivityRow) -> Option<String> {
@@ -22,13 +22,11 @@ pub fn strava_url_for(row: &ActivityRow) -> Option<String> {
 /// `None` means the grant was never reported (tokens stored before scopes
 /// were recorded); only a reported, narrower grant is a problem.
 pub fn scope_is_sufficient(granted: Option<&str>) -> bool {
-    match granted {
-        None => true,
-        Some(scope) => {
-            let granted: Vec<&str> = scope.split(',').collect();
-            REQUIRED_STRAVA_SCOPES.iter().all(|s| granted.contains(s))
-        }
-    }
+    granted.is_none_or(|scope| {
+        REQUIRED_STRAVA_SCOPES
+            .iter()
+            .all(|required| scope.split(',').any(|s| s == *required))
+    })
 }
 
 fn number(data: &Map<String, Value>, key: &str) -> Option<f64> {
@@ -163,14 +161,14 @@ pub struct ActivityView {
     pub detail: ActivityDetail,
 }
 
-fn parse_garmin_data(raw: &str) -> Map<String, Value> {
+pub(crate) fn parse_garmin_data(raw: &str) -> Map<String, Value> {
     match serde_json::from_str(raw) {
         Ok(Value::Object(map)) => map,
         _ => Map::new(),
     }
 }
 
-pub fn detail_for(row: &ActivityRow) -> (Option<f64>, ActivityDetail) {
+fn detail_for(row: &ActivityRow) -> (Option<f64>, ActivityDetail) {
     let gd = parse_garmin_data(&row.garmin_data);
     let duration = number(&gd, "duration");
     let distance = number(&gd, "distance");

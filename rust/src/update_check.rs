@@ -1,6 +1,6 @@
-//! Checks GitHub Releases for a newer ActivSync, as the Python app's
-//! `update_check.py` does. Pages only read the last answer; a failed check
-//! keeps the last-known one, so GitHub being down never shows on a page.
+//! Checks GitHub Releases for a newer ActivSync. Pages only read the last
+//! answer; a failed check keeps the last-known one, so GitHub being down
+//! never shows on a page.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -39,15 +39,16 @@ impl UpdateCache {
 /// A tag like `v1.2.3` as `[1, 2, 3]`, stopping at the first part that does
 /// not start with a digit; nothing usable gives an empty list.
 fn parse_version(text: &str) -> Vec<u64> {
-    let mut parts = Vec::new();
-    for chunk in text.trim().trim_start_matches(['v', 'V']).split('.') {
-        let digits: String = chunk.chars().take_while(char::is_ascii_digit).collect();
-        match digits.parse() {
-            Ok(number) => parts.push(number),
-            Err(_) => break,
-        }
-    }
-    parts
+    text.trim()
+        .trim_start_matches(['v', 'V'])
+        .split('.')
+        .map_while(|chunk| {
+            let digits = chunk
+                .find(|c: char| !c.is_ascii_digit())
+                .map_or(chunk, |end| &chunk[..end]);
+            digits.parse().ok()
+        })
+        .collect()
 }
 
 pub fn is_newer(latest: &str, current: &str) -> bool {

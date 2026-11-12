@@ -11,30 +11,26 @@ use activsync::poller::{self, Clients, Poller, RealClients};
 use activsync::{
     AppState, auth_core, build_app, config,
     db::{self, Db},
-    default_web_dir, log_error, log_info, log_warn, logging, net, schedule, seed, timefmt,
-    update_check,
+    log_error, log_info, log_warn, logging, net, schedule, seed, timefmt, update_check,
 };
 use openidconnect::http;
 
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 const DEV_PASSWORD: &str = "activsync-dev-password";
 
-/// `name`, else `legacy_name` (what it was called before the rename to
-/// ActivSync; empty for a name that never had one), skipping empty values.
-fn env_value(name: &str, legacy_name: &str) -> Option<String> {
-    [name, legacy_name]
-        .into_iter()
-        .filter(|n| !n.is_empty())
+/// The first of `names` that is set and not empty. A second name is the one
+/// used before the rename to ActivSync.
+fn env_value(names: &[&str]) -> Option<String> {
+    names
+        .iter()
         .find_map(|n| std::env::var(n).ok().filter(|v| !v.is_empty()))
 }
 
-fn env_enabled(name: &str, legacy_name: &str) -> bool {
-    env_value(name, legacy_name)
-        .is_some_and(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+fn env_enabled(names: &[&str]) -> bool {
+    env_value(names).is_some_and(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
-/// The in-app display timezone, else `TZ`, else Stockholm, as the Python app
-/// picks it for its logs.
+/// The in-app display timezone, else `TZ`, else the default.
 fn log_timezone(db: &Db, development: bool) -> String {
     let stored = config::load_config(&db.lock(), development)
         .ok()
@@ -43,7 +39,7 @@ fn log_timezone(db: &Db, development: bool) -> String {
         .into_iter()
         .flatten()
         .find(|tz| timefmt::is_valid_timezone(tz))
-        .unwrap_or_else(|| "Europe/Stockholm".into())
+        .unwrap_or_else(|| config::DEFAULT_TIMEZONE.into())
 }
 
 fn fail(message: &str) -> ! {
@@ -75,8 +71,8 @@ async fn main() {
     if std::env::args().nth(1).as_deref() == Some("health-check") {
         health_check(port).await;
     }
-    let mock = env_enabled("ACTIVSYNC_DEV_MOCK_DATA", "G2S_DEV_MOCK_DATA");
-    let manual_only = env_enabled("ACTIVSYNC_MANUAL_ONLY", "");
+    let mock = env_enabled(&["ACTIVSYNC_DEV_MOCK_DATA", "G2S_DEV_MOCK_DATA"]);
+    let manual_only = env_enabled(&["ACTIVSYNC_MANUAL_ONLY"]);
     let host: IpAddr = std::env::var("ACTIVSYNC_HOST")
         .ok()
         .map(|h| {
@@ -86,23 +82,21 @@ async fn main() {
         .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
     let auth = AuthConfig::from_env().unwrap_or_else(|e| fail(&e));
     let db_path = db::resolve_path(
-        env_value("ACTIVSYNC_DB_PATH", "G2S_DB_PATH"),
+        env_value(&["ACTIVSYNC_DB_PATH", "G2S_DB_PATH"]),
         mock,
         Path::exists,
     );
-    let token_dir = env_value("ACTIVSYNC_GARMIN_TOKEN_DIR", "G2S_GARMIN_TOKEN_DIR")
+    let token_dir = env_value(&["ACTIVSYNC_GARMIN_TOKEN_DIR", "G2S_GARMIN_TOKEN_DIR"])
         .unwrap_or_else(|| "/config/.garminconnect".into());
     let web_dir = std::env::var("ACTIVSYNC_WEB_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| default_web_dir());
+        .unwrap_or_else(|_| PathBuf::from("build/client"));
 
     let db = Db::open(&db_path)
         .unwrap_or_else(|e| fail(&format!("could not open {}: {e}", db_path.display())));
-    let development = ["ACTIVSYNC_DEV_MOCK_DATA", "ACTIVSYNC_MANUAL_ONLY"]
-        .iter()
-        .any(|name| env_enabled(name, ""));
+    let development = env_enabled(&["ACTIVSYNC_DEV_MOCK_DATA"]) || manual_only;
     logging::configure(
-        &env_value("ACTIVSYNC_LOG_LEVEL", "").unwrap_or_else(|| "INFO".into()),
+        &env_value(&["ACTIVSYNC_LOG_LEVEL"]).unwrap_or_else(|| "INFO".into()),
         &log_timezone(&db, development),
     );
     if auth.disabled
@@ -226,7 +220,7 @@ async fn shutdown_signal() {
 /// Sample data for the mock accounts, and the dev password on a server only
 /// this machine can reach.
 fn seed_mock(db: &Db, auth: &AuthConfig, host: IpAddr) {
-    let onboarded = env_enabled("ACTIVSYNC_DEV_E2E_ONBOARDED", "");
+    let onboarded = env_enabled(&["ACTIVSYNC_DEV_E2E_ONBOARDED"]);
     match seed::seed(&mut db.lock(), chrono::Utc::now(), onboarded) {
         Ok(true) => {}
         Ok(false) => fail("that database holds real activities; mock mode will not touch it"),
@@ -238,7 +232,7 @@ fn seed_mock(db: &Db, auth: &AuthConfig, host: IpAddr) {
     let claimed = auth_core::owner_claimed(&conn).unwrap_or(true);
     // The dev password is public, so it is only seeded for a server no one
     // else can reach; on a network address the setup-code claim applies.
-    if env_enabled("ACTIVSYNC_DEV_SEED_OWNER", "") && !claimed && host.is_loopback() {
+    if env_enabled(&["ACTIVSYNC_DEV_SEED_OWNER"]) && !claimed && host.is_loopback() {
         let hash = auth_core::hash_password(DEV_PASSWORD, auth.cost).unwrap_or_else(|e| fail(&e));
         auth_core::set_password_hash(&conn, &hash, now).unwrap_or_else(|e| fail(&e.to_string()));
         log_info!("main", "Dev sign-in password: {DEV_PASSWORD}");
