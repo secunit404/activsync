@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use activsync::garmin_client::{GarminClient, GarminError, Tokens, UploadResult, save_tokens, token_file_path};
-use activsync::net::{Http, HttpError};
+use activsync::net::{Http, HttpError, Timeout};
 use activsync::schedule::Clock;
 use base64::Engine;
 use chrono::{TimeZone, Utc};
@@ -217,10 +217,164 @@ async fn error_text_matches_the_python_library() {
         let body = case["body"].as_str().map_or_else(|| case["body"].to_string(), str::to_string);
         let status = case["status"].as_u64().unwrap() as u16;
         let (http, _) = garmin(move |_, _| Ok((status, body.clone().into_bytes())));
-        let err = client(http).fetch_activity_types().await.unwrap_err();
+        let err = client(http.clone()).delete_activity(5).await.unwrap_err();
         assert_eq!(err.to_string(), case["message"].as_str().unwrap());
         assert_eq!(matches!(err, GarminError::NotFound(_)), case["not_found"].as_bool().unwrap());
+
+        let message = case["message"].as_str().unwrap();
+        let wrapped = client(http).fetch_activity_types().await.unwrap_err();
+        let expected = match status {
+            404 => format!("API call client error (404): {message}"),
+            400..=499 => format!("API call client error ({status}): {message}"),
+            _ => format!("API call HTTP error: {message}"),
+        };
+        assert_eq!(wrapped.to_string(), expected);
+        assert_eq!(matches!(wrapped, GarminError::NotFound(_)), case["not_found"].as_bool().unwrap());
     }
+}
+
+fn count(seen: &Seen, prefix: &str) -> usize {
+    keys(seen).iter().filter(|k| k.starts_with(prefix)).count()
+}
+
+fn timeouts(seen: &Seen) -> Vec<Option<Duration>> {
+    seen.lock().unwrap().iter().map(|r| r.extensions().get::<Timeout>().map(|t| t.0)).collect()
+}
+
+#[tokio::test]
+async fn reads_retry_a_5xx_or_a_network_failure_three_times_like_the_library() {
+    let (http, seen) = garmin(|_, _| Ok((503, br#"{"message": "busy"}"#.to_vec())));
+    let err = client(http).fetch_activity_types().await.unwrap_err();
+    assert_eq!(err.to_string(), "API call HTTP error: API Error 503 - busy");
+    assert!(err.is_transient());
+    assert_eq!(keys(&seen).len(), 4, "one call and three retries");
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let (http, _) = garmin(move |_, _| {
+        if counter.fetch_add(1, Ordering::SeqCst) < 2 { Ok((500, b"{}".to_vec())) } else { ok(json!([{"typeKey": "running"}])) }
+    });
+    assert_eq!(client(http).fetch_activity_types().await.unwrap().len(), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+
+    let (http, seen) = garmin(|_, _| Err("connection reset"));
+    let err = client(http).fetch_activity_types().await.unwrap_err();
+    assert_eq!(err, GarminError::Network("Connection error: connection reset".into()));
+    assert!(err.is_transient());
+    assert_eq!(keys(&seen).len(), 4);
+
+    let (http, seen) = garmin(|_, _| Ok((503, b"{}".to_vec())));
+    let err = client(http).download_fit(5).await.unwrap_err();
+    assert_eq!(err.to_string(), "Download HTTP error: API Error 503");
+    assert_eq!(keys(&seen).len(), 4);
+
+    for (status, expected) in [
+        (400, "API call client error (400): API Error 400"),
+        (403, "API call client error (403): API Error 403"),
+        (404, "API call client error (404): API Error 404"),
+    ] {
+        let (http, seen) = garmin(move |_, _| Ok((status, b"{}".to_vec())));
+        let err = client(http).fetch_activity_types().await.unwrap_err();
+        assert_eq!(err.to_string(), expected);
+        assert!(!err.is_transient());
+        assert_eq!(keys(&seen).len(), 1, "a 4xx is not retried");
+    }
+}
+
+#[tokio::test]
+async fn a_rejected_token_is_worded_as_an_authentication_failure() {
+    let (http, seen) = garmin(|_, _| Ok((401, b"{}".to_vec())));
+    let err = client(http).fetch_activity_types().await.unwrap_err();
+    assert_eq!(err.to_string(), "Authentication failed: API Error 401");
+    assert!(!err.is_transient());
+    assert_eq!(count(&seen, "GET"), 2, "one retry after the refresh, no more");
+}
+
+#[tokio::test]
+async fn calls_the_library_does_not_wrap_are_sent_once() {
+    let (http, seen) = garmin(|_, _| Ok((503, b"{}".to_vec())));
+    let plain = client(http);
+    assert_eq!(plain.delete_activity(5).await.unwrap_err().to_string(), "API Error 503");
+    assert_eq!(plain.set_title(5, "x").await.unwrap_err().to_string(), "API Error 503");
+    assert_eq!(plain.put_exercise_sets(5, &json!({})).await.unwrap_err().to_string(), "API Error 503");
+    assert_eq!(keys(&seen).len(), 3);
+
+    let (http, seen) = garmin(|_, _| Err("connection reset"));
+    assert_eq!(client(http).delete_activity(5).await, Err(GarminError::Network("connection reset".into())));
+    assert_eq!(keys(&seen).len(), 1);
+
+    let (http, seen) = garmin(|_, _| Ok((429, b"{}".to_vec())));
+    let (_dir, path) = store();
+    let fit = path.join("w.fit");
+    std::fs::write(&fit, b"FIT").unwrap();
+    let err = client(http).upload_fit(&fit).await.unwrap_err();
+    assert_eq!(err.to_string(), "API Error 429");
+    assert!(err.is_transient());
+    assert_eq!(keys(&seen).len(), 1, "the library words an upload's 429 as a plain error, which the rate limiter leaves alone");
+
+    let (_dir, path) = store();
+    let token_dir = path.to_str().unwrap();
+    save_tokens(token_dir, &fresh_tokens()).unwrap();
+    let (http, seen) = garmin(|_, _| Ok((503, b"{}".to_vec())));
+    assert_eq!(GarminClient::open_with(http, clock(), token_dir, Duration::ZERO).await.err(), Some(GarminError::Unavailable));
+    assert_eq!(count(&seen, "GET"), 3, "the sign-in read makes its own three attempts and no more");
+}
+
+#[tokio::test]
+async fn a_rate_limit_is_waited_out_twice_before_it_is_given_up() {
+    let (http, seen) = garmin(|_, _| Ok((429, b"{}".to_vec())));
+    let slow = client(http).with_waits(Duration::ZERO, Duration::from_millis(20), Duration::ZERO);
+    let started = std::time::Instant::now();
+    let err = slow.fetch_recent_activities(7).await.unwrap_err();
+    assert_eq!(err.to_string(), "Rate limit exceeded: API Error 429");
+    assert!(err.is_transient());
+    assert_eq!(keys(&seen).len(), 3);
+    assert!(started.elapsed() >= Duration::from_millis(60), "20 ms, then 40 ms");
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let (http, _) = garmin(move |_, _| {
+        if counter.fetch_add(1, Ordering::SeqCst) == 0 { Ok((429, b"{}".to_vec())) } else { ok(json!([])) }
+    });
+    assert_eq!(client(http).fetch_recent_activities(7).await.unwrap(), vec![]);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn a_5xx_waits_for_a_jittered_backoff() {
+    let (http, seen) = garmin(|_, _| Ok((500, b"{}".to_vec())));
+    let backing_off = client(http).with_waits(Duration::ZERO, Duration::ZERO, Duration::from_millis(10));
+    let started = std::time::Instant::now();
+    assert!(backing_off.fetch_activity_types().await.is_err());
+    assert_eq!(keys(&seen).len(), 4);
+    assert!(started.elapsed() >= Duration::from_millis(35), "at least half of 10, 20 and 40 ms");
+}
+
+#[tokio::test]
+async fn every_call_carries_the_timeout_the_library_sets() {
+    let (_dir, path) = store();
+    let token_dir = path.to_str().unwrap();
+    let expiring = Tokens { di_token: Some(jwt(json!({"exp": now() + 100.0}))), ..fresh_tokens() };
+    save_tokens(token_dir, &expiring).unwrap();
+    let issued = jwt(json!({"exp": now() + 7200.0}));
+    let (http, seen) = garmin(move |key, _| match key {
+        "POST /di-oauth2-service/oauth/token" => ok(json!({"access_token": issued})),
+        "GET /download-service/files/activity/5" => Ok((200, zipped(&[("a.fit", b"F")]))),
+        "POST /upload-service/upload" => ok(json!({})),
+        "GET /userprofile-service/socialProfile" | "GET /userprofile-service/userprofile/user-settings" => profile_routes(key).unwrap(),
+        _ => ok(json!([])),
+    });
+    let opened = GarminClient::open_with(http, clock(), token_dir, Duration::ZERO).await.unwrap();
+    let fit = path.join("w.fit");
+    std::fs::write(&fit, b"FIT").unwrap();
+    opened.fetch_activity_types().await.unwrap();
+    opened.download_fit(5).await.unwrap();
+    opened.upload_fit(&fit).await.unwrap();
+    opened.set_title(5, "t").await.unwrap();
+
+    let secs = |n| Some(Duration::from_secs(n));
+    assert_eq!(timeouts(&seen), vec![secs(30), secs(15), secs(15), secs(15), secs(15), secs(15), secs(15)]);
+    assert_eq!(seen.lock().unwrap()[0].uri().path(), "/di-oauth2-service/oauth/token");
 }
 
 fn record_json(record: &activsync::garmin_client::ActivityRecord) -> Value {

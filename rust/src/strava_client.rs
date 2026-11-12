@@ -30,6 +30,9 @@ const ACTIVITIES_PER_PAGE: usize = 200;
 const MAX_ACTIVITY_PAGES: usize = 10;
 pub const DEFAULT_MATCH_TOLERANCE_MINUTES: i64 = 5;
 const POLL_ATTEMPTS: usize = 10;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const UPLOAD_TIMEOUT: Duration = Duration::from_secs(60);
+const REVOKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StravaError {
@@ -140,14 +143,21 @@ impl StravaClient {
         DateTime::from_timestamp_micros(((self.clock)() * 1_000_000.0) as i64).unwrap_or_default()
     }
 
-    async fn send(&self, method: http::Method, url: &str, headers: &[(&str, &str)], body: Vec<u8>) -> Result<HttpResponse, StravaError> {
+    async fn send(
+        &self,
+        method: http::Method,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Vec<u8>,
+        timeout: Duration,
+    ) -> Result<HttpResponse, StravaError> {
         let request = net::request(method, url, headers, body).map_err(|e| StravaError::Network(e.0))?;
-        (self.http)(request).await.map_err(|e| StravaError::Network(e.0))
+        (self.http)(net::with_timeout(request, timeout)).await.map_err(|e| StravaError::Network(e.0))
     }
 
     async fn post_form(&self, url: &str, pairs: &[(&str, &str)]) -> Result<HttpResponse, StravaError> {
         let headers = [("content-type", "application/x-www-form-urlencoded")];
-        self.send(http::Method::POST, url, &headers, net::form(pairs)).await
+        self.send(http::Method::POST, url, &headers, net::form(pairs), REQUEST_TIMEOUT).await
     }
 
     pub fn is_connected(&self) -> bool {
@@ -229,7 +239,7 @@ impl StravaClient {
             let auth = format!("Basic {basic}");
             let body = net::form(&[("token", access), ("token_type_hint", "access_token")]);
             let headers = [("authorization", auth.as_str()), ("content-type", "application/x-www-form-urlencoded")];
-            let _ = self.send(http::Method::POST, REVOKE_URL, &headers, body).await;
+            let _ = self.send(http::Method::POST, REVOKE_URL, &headers, body, REVOKE_TIMEOUT).await;
         }
         let _ = db::set_config_value(&self.db.lock(), "strava_tokens", &Value::Null);
         crate::log_info!("strava_client", "strava disconnected");
@@ -240,7 +250,7 @@ impl StravaClient {
         let body = net::json_body(&json!({"name": name, "description": description}));
         let url = format!("{ACTIVITY_URL}/{strava_activity_id}");
         let response = self
-            .send(http::Method::PUT, &url, &[("authorization", &bearer), ("content-type", "application/json")], body)
+            .send(http::Method::PUT, &url, &[("authorization", &bearer), ("content-type", "application/json")], body, REQUEST_TIMEOUT)
             .await?;
         if response.status().as_u16() == 401 {
             return Err(StravaError::Auth("Strava access token rejected".into()));
@@ -263,7 +273,7 @@ impl StravaClient {
             ("per_page", &per_page.to_string()),
             ("page", &page.to_string()),
         ]);
-        let response = self.send(http::Method::GET, &url, &[("authorization", bearer)], Vec::new()).await?;
+        let response = self.send(http::Method::GET, &url, &[("authorization", bearer)], Vec::new(), REQUEST_TIMEOUT).await?;
         if response.status().as_u16() == 401 {
             return Err(StravaError::Auth(
                 "Strava rejected the read request — the connected app may be missing the activity:read_all scope. \
@@ -364,7 +374,7 @@ impl StravaClient {
         parts.push(file);
         let (content_type, body) = net::multipart(&parts);
         let response = self
-            .send(http::Method::POST, UPLOAD_URL, &[("authorization", &bearer), ("content-type", &content_type)], body)
+            .send(http::Method::POST, UPLOAD_URL, &[("authorization", &bearer), ("content-type", &content_type)], body, UPLOAD_TIMEOUT)
             .await?;
         let status = response.status().as_u16();
         if status == 401 {
@@ -385,7 +395,7 @@ impl StravaClient {
     async fn poll_upload(&self, upload_id: i64, bearer: &str) -> Result<i64, StravaError> {
         let url = format!("{UPLOAD_URL}/{upload_id}");
         for _ in 0..POLL_ATTEMPTS {
-            let response = self.send(http::Method::GET, &url, &[("authorization", bearer)], Vec::new()).await?;
+            let response = self.send(http::Method::GET, &url, &[("authorization", bearer)], Vec::new(), REQUEST_TIMEOUT).await?;
             check_rate_limit(&response, self.now())?;
             check_status(&response)?;
             let payload = json_of(&response)?;

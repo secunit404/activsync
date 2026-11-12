@@ -1,9 +1,10 @@
 use std::collections::VecDeque;
+use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
 use activsync::db::{self, Db};
-use activsync::hevy_client::{HevyClient, HevyError};
-use activsync::net::{Http, HttpError};
+use activsync::hevy_client::{HevyClient, HevyError, retry_delay};
+use activsync::net::{Http, HttpError, Timeout};
 use activsync::strava_client::{StravaActivity, StravaClient, StravaError, match_closest_activity};
 use chrono::{TimeZone, Utc};
 use openidconnect::HttpRequest;
@@ -67,7 +68,11 @@ async fn hevy_retries_outages_but_never_reads_them_as_deleted() {
     let mut down = vec![status(502); 6];
     down.push(ok(json!({})));
     let (client, seen) = hevy(down);
-    assert_eq!(client.get_workout("w1").await, Err(HevyError::Status(502)));
+    let Err(HevyError::Status { code, message }) = client.get_workout("w1").await else {
+        panic!("an outage past the retries is an error");
+    };
+    assert_eq!(code, 502);
+    assert_eq!(message, "502 Server Error: Bad Gateway for url: https://api.hevyapp.com/v1/workouts/w1");
     assert_eq!(urls(&seen).len(), 6, "five retries, then the outage is reported");
 }
 
@@ -212,4 +217,101 @@ async fn strava_connect_stores_the_granted_scope() {
         client.authorize_url("http://127.0.0.1:8382/strava/callback", "st"),
         "https://www.strava.com/oauth/authorize?client_id=123&redirect_uri=http://127.0.0.1:8382/strava/callback&response_type=code&approval_prompt=auto&scope=read,activity:write,activity:read_all&state=st"
     );
+}
+
+fn timeouts(seen: &Seen) -> Vec<Option<Duration>> {
+    seen.lock().unwrap().iter().map(|r| r.extensions().get::<Timeout>().map(|t| t.0)).collect()
+}
+
+#[tokio::test]
+async fn hevy_words_failures_as_requests_does() {
+    let (client, seen) = hevy(vec![status(404), status(418), ok(json!({}))]);
+    assert_eq!(client.get_workouts_page(1, 10).await.unwrap_err().to_string(), "404 Client Error: Not Found for url: https://api.hevyapp.com/v1/workouts?page=1&pageSize=10");
+    assert_eq!(client.get_user_info().await.unwrap_err().to_string(), "418 Client Error: I'm a teapot for url: https://api.hevyapp.com/v1/user/info");
+    assert_eq!(timeouts(&seen), vec![Some(Duration::from_secs(30)); 2]);
+
+    let (client, _) = hevy(vec![status(500); 6]);
+    assert_eq!(
+        client.get_workouts_page(1, 10).await.unwrap_err().to_string(),
+        "500 Server Error: Internal Server Error for url: https://api.hevyapp.com/v1/workouts?page=1&pageSize=10"
+    );
+
+    let (client, seen) = hevy(vec![Err("connection refused"); 6]);
+    assert_eq!(
+        client.get_workouts_page(1, 10).await.unwrap_err().to_string(),
+        "HTTPSConnectionPool(host='api.hevyapp.com', port=443): Max retries exceeded with url: /v1/workouts?page=1&pageSize=10 (Caused by connection refused)"
+    );
+    assert_eq!(urls(&seen).len(), 6);
+
+    let (client, _) = hevy(vec![Err("error sending request: operation timed out"); 6]);
+    assert_eq!(
+        client.get_user_info().await.unwrap_err().to_string(),
+        "HTTPSConnectionPool(host='api.hevyapp.com', port=443): Max retries exceeded with url: /v1/user/info \
+         (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='api.hevyapp.com', port=443): Read timed out. (read timeout=30)\"))"
+    );
+
+    let (http, _) = scripted(vec![Ok((200, json!({}), vec![]))]);
+    let empty = HevyClient::with_base_url(
+        Arc::new(move |request| {
+            let reply = http(request);
+            Box::pin(async move {
+                let mut response = reply.await?;
+                *response.body_mut() = b"<html>".to_vec();
+                Ok(response)
+            })
+        }),
+        "key",
+        "http://localhost:9",
+    )
+    .unwrap();
+    assert_eq!(empty.get_user_info().await.unwrap_err().to_string(), "Expecting value: line 1 column 1 (char 0)");
+}
+
+#[tokio::test]
+async fn hevy_retries_follow_urllib3() {
+    let now = Utc.with_ymd_and_hms(2027, 1, 15, 8, 0, 0).unwrap();
+    let delay = |retry, header| retry_delay(retry, 2.0, header, now).as_secs_f64();
+    assert_eq!([delay(1, None), delay(2, None), delay(3, None), delay(5, None), delay(9, None)], [0.0, 4.0, 8.0, 32.0, 120.0]);
+    assert_eq!(delay(1, Some("7")), 7.0);
+    assert_eq!(delay(4, Some(" 7 ")), 7.0);
+    assert_eq!(delay(3, Some("0")), 8.0, "a Retry-After of nothing falls back to the backoff");
+    assert_eq!(delay(3, Some("soon")), 8.0);
+    assert_eq!(delay(1, Some("99999999")), 21600.0);
+    assert_eq!(delay(1, Some("Fri, 15 Jan 2027 08:01:30 GMT")), 90.0);
+    assert_eq!(delay(2, Some("Fri, 15 Jan 2027 07:00:00 GMT")), 4.0, "a date in the past asks for nothing");
+
+    let told = |status| Ok((status, json!({}), vec![("retry-after", "1")]));
+    let (client, seen) = hevy(vec![told(413), told(500), ok(json!({"id": "u1"}))]);
+    assert_eq!(client.get_user_info().await.unwrap(), json!({"id": "u1"}));
+    assert_eq!(urls(&seen).len(), 3, "a 413 is retried only when Hevy says when");
+
+    let (client, seen) = hevy(vec![status(413), ok(json!({}))]);
+    assert!(matches!(client.get_user_info().await, Err(HevyError::Status { code: 413, .. })));
+    assert_eq!(urls(&seen).len(), 1);
+}
+
+#[tokio::test]
+async fn strava_calls_carry_the_timeouts_python_sets() {
+    let stale = json!({"access_token": "old", "refresh_token": "rt", "expires_at": 0});
+    let after = Utc.with_ymd_and_hms(2027, 1, 8, 0, 0, 0).unwrap();
+    let before = Utc.with_ymd_and_hms(2027, 1, 15, 0, 0, 0).unwrap();
+    let token = || ok(json!({"access_token": "a", "refresh_token": "r", "expires_at": NOW + 3600}));
+    let secs = |n| Some(Duration::from_secs(n));
+
+    let (client, _, seen) = strava(vec![token(), status(200), ok(json!([]))], stale.clone());
+    client.update_activity_metadata(1, "a", "b").await.unwrap();
+    client.list_activities_between(after, before).await.unwrap();
+    assert_eq!(timeouts(&seen), vec![secs(30), secs(30), secs(30)], "token refresh, PUT, list");
+
+    let (client, _, seen) = strava(vec![ok(json!({"id": 5})), ok(json!({"activity_id": 9}))], fresh());
+    client.publish(42, b"x", None, None).await.unwrap();
+    assert_eq!(timeouts(&seen), vec![secs(60), secs(30)], "upload, status poll");
+
+    let (client, _, seen) = strava(vec![token()], Value::Null);
+    client.exchange_code("c", None).await.unwrap();
+    assert_eq!(timeouts(&seen), vec![secs(30)]);
+
+    let (client, _, seen) = strava(vec![status(200)], fresh());
+    client.disconnect().await;
+    assert_eq!(timeouts(&seen), vec![secs(10)]);
 }

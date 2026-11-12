@@ -2,12 +2,13 @@
 //! tests stand in for Hevy, Strava or an identity provider without a network.
 
 use std::future::Future;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use openidconnect::reqwest;
-use openidconnect::{AsyncHttpClient, HttpRequest, HttpResponse, http};
+use openidconnect::{HttpRequest, HttpResponse, http};
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,24 +28,85 @@ pub type Http = Arc<dyn Fn(HttpRequest) -> HttpFuture + Send + Sync>;
 fn wrap(client: &'static LazyLock<reqwest::Client>) -> Http {
     Arc::new(move |request| {
         let client = (*client).clone();
-        Box::pin(async move { client.call(request).await.map_err(|e| HttpError(e.to_string())) })
+        Box::pin(async move { execute(&client, request).await.map_err(HttpError) })
     })
 }
 
-/// For Hevy and Strava: a minute per request, the longest the Python app
-/// allows (a Strava upload).
+async fn execute(client: &reqwest::Client, request: HttpRequest) -> Result<HttpResponse, String> {
+    let timeout = request.extensions().get::<Timeout>().map(|t| t.0);
+    let mut outgoing = reqwest::Request::try_from(request).map_err(|e| describe(&e))?;
+    if let Some(timeout) = timeout {
+        *outgoing.timeout_mut() = Some(timeout);
+    }
+    let response = client.execute(outgoing).await.map_err(|e| describe(&e))?;
+    let mut builder = http::Response::builder().status(response.status()).version(response.version());
+    for (name, value) in response.headers() {
+        builder = builder.header(name, value);
+    }
+    let body = response.bytes().await.map_err(|e| describe(&e))?;
+    builder.body(body.to_vec()).map_err(|e| e.to_string())
+}
+
+fn describe(error: &reqwest::Error) -> String {
+    let mut text = error.to_string();
+    let mut source = std::error::Error::source(error);
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
+}
+
+/// Bundle variables in the order `requests` reads them.
+const REQUESTS_CA_VARS: [&str; 2] = ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"];
+/// The same for `httpx`, which the identity-provider client uses.
+const SSL_CERT_VARS: [&str; 2] = ["SSL_CERT_FILE", "SSL_CERT_DIR"];
+
+/// Certificates from the first of `vars` that is set: a PEM bundle, or a
+/// directory of them. Added to the built-in roots rather than replacing them.
+pub fn extra_roots(vars: &[&str], lookup: impl Fn(&str) -> Option<String>) -> Vec<reqwest::Certificate> {
+    let Some(path) = vars.iter().find_map(|var| lookup(var).filter(|value| !value.is_empty())) else {
+        return Vec::new();
+    };
+    let path = Path::new(&path);
+    let files: Vec<_> = if path.is_dir() {
+        std::fs::read_dir(path).into_iter().flatten().flatten().map(|entry| entry.path()).collect()
+    } else {
+        vec![path.to_path_buf()]
+    };
+    let roots: Vec<_> = files
+        .iter()
+        .filter_map(|file| std::fs::read(file).ok())
+        .filter_map(|pem| reqwest::Certificate::from_pem_bundle(&pem).ok())
+        .flatten()
+        .collect();
+    if roots.is_empty() {
+        crate::log_warn!("net", "no CA certificates could be read from {}", path.display());
+    }
+    roots
+}
+
+fn builder_with_roots(vars: &[&str]) -> reqwest::ClientBuilder {
+    extra_roots(vars, |name| std::env::var(name).ok())
+        .into_iter()
+        .fold(reqwest::Client::builder(), |builder, root| builder.add_root_certificate(root))
+}
+
+/// For Hevy and Strava: a minute per request unless the request names its
+/// own, the longest the Python app allows (a Strava upload).
 pub fn service_http() -> Http {
     static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-        reqwest::Client::builder().timeout(Duration::from_secs(60)).build().expect("HTTP client builds")
+        builder_with_roots(&REQUESTS_CA_VARS).timeout(Duration::from_secs(60)).build().expect("HTTP client builds")
     });
     wrap(&CLIENT)
 }
 
 /// For Garmin: the library waits 15 s for an API call and 30 s for a token
-/// refresh; one client serves both, so the longer.
+/// refresh; the requests say which, and this is the longer for any that do not.
 pub fn garmin_http() -> Http {
     static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-        reqwest::Client::builder().timeout(Duration::from_secs(30)).build().expect("HTTP client builds")
+        builder_with_roots(&REQUESTS_CA_VARS).timeout(Duration::from_secs(30)).build().expect("HTTP client builds")
     });
     wrap(&CLIENT)
 }
@@ -66,7 +128,7 @@ pub fn garmin_sign_in_http() -> Http {
 /// answering with one could otherwise point the server at any address.
 pub fn provider_http() -> Http {
     static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-        reqwest::Client::builder()
+        builder_with_roots(&SSL_CERT_VARS)
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(10))
             .build()
@@ -136,4 +198,13 @@ pub fn header<'a>(response: &'a HttpResponse, name: &str) -> Option<&'a str> {
 
 pub fn body_text(response: &HttpResponse) -> String {
     String::from_utf8_lossy(response.body()).into_owned()
+}
+
+/// How long one request may take, in place of the client's own limit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Timeout(pub Duration);
+
+pub fn with_timeout(mut request: HttpRequest, timeout: Duration) -> HttpRequest {
+    request.extensions_mut().insert(Timeout(timeout));
+    request
 }

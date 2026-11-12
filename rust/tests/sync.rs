@@ -182,7 +182,7 @@ async fn a_failed_garmin_fetch_is_recorded_for_the_settings_page() {
     assert!(sync::sync_garmin(&db, &garmin, &config(&db), now(), None, None).await.is_err());
     let value = |key: &str| db::get_config_value(&db.lock(), key).unwrap();
     assert_eq!(value("garmin_last_sync_ok"), Some(json!(false)));
-    assert_eq!(value("garmin_last_sync_error"), Some(json!("API Error 500")));
+    assert_eq!(value("garmin_last_sync_error"), Some(json!("API call HTTP error: API Error 500")));
     assert_eq!(value("garmin_credentials_verified"), Some(json!(true)), "an outage is retried, not a disconnect");
     assert_eq!(value("garmin_last_sync_at"), Some(json!("2026-11-10T12:00:00+00:00")));
     assert_eq!(value("garmin_last_sync_ok_at"), None);
@@ -191,10 +191,17 @@ async fn a_failed_garmin_fetch_is_recorded_for_the_settings_page() {
     let (garmin, _) = fake_garmin(|_, _| Err("connection reset"));
     assert!(sync::sync_garmin(&db, &garmin, &config(&db), now(), None, None).await.is_err());
     assert_eq!(value("garmin_credentials_verified"), Some(json!(true)));
+    assert_eq!(value("garmin_last_sync_error"), Some(json!("Connection error: connection reset")));
+
+    let (garmin, _) = fake_garmin(|_, _| Ok((429, b"{}".to_vec())));
+    assert!(sync::sync_garmin(&db, &garmin, &config(&db), now(), None, None).await.is_err());
+    assert_eq!(value("garmin_credentials_verified"), Some(json!(true)));
+    assert_eq!(value("garmin_last_sync_error"), Some(json!("Rate limit exceeded: API Error 429")));
 
     let (garmin, _) = fake_garmin(|key, _| if key.starts_with("POST") { Ok((400, b"{}".to_vec())) } else { Ok((401, b"{}".to_vec())) });
     assert!(sync::sync_garmin(&db, &garmin, &config(&db), now(), None, None).await.is_err());
     assert_eq!(value("garmin_credentials_verified"), Some(json!(false)), "a rejected token pauses Garmin");
+    assert_eq!(value("garmin_last_sync_error"), Some(json!("Authentication failed: API Error 401")));
 }
 
 /// Strava: one known activity starting at `twin_start`, uploads resolving to

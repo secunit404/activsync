@@ -314,10 +314,12 @@ impl HevyMatchScheduler {
 
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            if let Ok(recovered) = recover(&self.db.lock()) {
-                if recovered > 0 {
-                    crate::log_info!("hevy_match", "resuming {recovered} Hevy match decision(s) interrupted by a restart");
+            match recover(&self.db.lock()) {
+                Ok(0) => {}
+                Ok(recovered) => {
+                    crate::log_warn!("hevy_match", "resuming {recovered} Hevy match decision(s) interrupted by a restart");
                 }
+                Err(err) => crate::log_error!("hevy_match", "recovering interrupted Hevy match decisions failed: {err}"),
             }
             loop {
                 let timeout = match self.run_due().await.and_then(|_| self.sleep_seconds()) {
