@@ -77,7 +77,7 @@ test("blocks a short or mismatched password before asking the server", async () 
 });
 
 test("shows a wrong setup code", async () => {
-  claimOwner.mockRejectedValue(new ApiError("That setup code is not right.", 403));
+  claimOwner.mockRejectedValue(new ApiError("That setup code is incorrect.", 403));
   renderStep();
 
   await userEvent.type(screen.getByLabelText("Setup code"), "WRNG-CODE-WRNG-CODE");
@@ -85,7 +85,7 @@ test("shows a wrong setup code", async () => {
   await userEvent.type(screen.getByLabelText("Repeat password"), PASSWORD);
   await userEvent.click(screen.getByRole("button", { name: "Claim ActivSync" }));
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("That setup code is not right.");
+  expect(await screen.findByRole("alert")).toHaveTextContent("That setup code is incorrect.");
 });
 
 test("both password fields toggle visibility on their own", async () => {

@@ -84,7 +84,7 @@ test("exclude-many resolves with a warning on partial failure", async () => {
 
   await waitFor(() => expect(result.current.isSuccess).toBe(true));
   expect(result.current.data?.severity).toBe("warning");
-  expect(result.current.data?.message).toBe("Excluded 1; 1 failed and stayed as-is");
+  expect(result.current.data?.message).toBe("Excluded 1; 1 could not be excluded");
 });
 
 test("exclude-many rejects when every call fails", async () => {
@@ -124,7 +124,7 @@ test("undoing a bulk exclude puts each row back where it was, not where auto-syn
   expect(restoreActivity).toHaveBeenCalledWith(3, { status: "missing", holdReason: null });
   await waitFor(() =>
     expect(toast).toHaveBeenCalledWith("Restored 3 activities", {
-      description: "Back where they were.",
+      description: "Returned to their previous status.",
     }),
   );
 });
@@ -177,6 +177,6 @@ test("an undo that fails says so", async () => {
   undoFromToast();
 
   await waitFor(() =>
-    expect(toast.error).toHaveBeenCalledWith("Could not undo the exclude", expect.anything()),
+    expect(toast.error).toHaveBeenCalledWith("Could not undo the exclusion", expect.anything()),
   );
 });

@@ -114,7 +114,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return (
     <main className="error-page">
       <Brand />
-      <h1>ActivSync hit a snag</h1>
+      <h1>ActivSync ran into an error</h1>
       <p>{message}</p>
       <a href="/">Return to activities</a>
     </main>

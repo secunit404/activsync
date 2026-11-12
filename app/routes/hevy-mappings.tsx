@@ -29,7 +29,7 @@ export function meta(): Route.MetaDescriptors {
     { title: "Exercise mapping - ActivSync" },
     {
       name: "description",
-      content: "Every Hevy exercise ActivSync tracks and where it lands in Garmin.",
+      content: "Every Hevy exercise ActivSync tracks and where it appears in Garmin.",
     },
   ];
 }
@@ -130,7 +130,7 @@ export default function HevyMappings() {
     <PageContainer className="grid grid-cols-[minmax(0,1fr)] gap-6 py-8 md:gap-7 md:py-10">
       <PageHeader
         title="Exercise mapping"
-        description="Every Hevy exercise ActivSync tracks: where its sets land in Garmin, and which exercise Strava shows."
+        description="Every Hevy exercise ActivSync tracks: where its sets appear in Garmin, and which exercise Strava shows."
       />
 
       <HevySectionNav />

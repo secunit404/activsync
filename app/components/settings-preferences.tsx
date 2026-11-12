@@ -32,7 +32,7 @@ export function PreferencesSettings({
     <SettingsSection
       id="preferences"
       title="Preferences"
-      description="Control polling, history, and display timezone."
+      description="Sync intervals, history window, undo delay, and display timezone."
     >
       <div className="grid gap-6">
         <FieldGroup className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -53,7 +53,7 @@ export function PreferencesSettings({
           <NumberField
             id="history-window"
             label="Activity history window (days)"
-            description="How far back Garmin sync searches for activities."
+            description="How many days back ActivSync looks for Garmin activities."
             value={draft.lookbackDays}
             onChange={(value) => update({ lookbackDays: value })}
           />

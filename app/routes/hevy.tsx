@@ -164,7 +164,7 @@ export function HevyView({
           state below. */}
       <PageHeader
         title="Hevy"
-        description="Workouts flowing from Hevy into Garmin, then on to Strava."
+        description="Hevy workouts on their way to Garmin, and from there to Strava."
       />
 
       <HevySectionNav />
@@ -184,7 +184,7 @@ export function HevyView({
             <EmptyTitle>Connect Hevy to see your sync queue</EmptyTitle>
             <EmptyDescription>
               Once Hevy is connected in Settings, the sync queue, exercise
-              mapping, and backfill tools will show up here.
+              mapping, and backfill tools appear here.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>

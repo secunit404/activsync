@@ -34,7 +34,7 @@ export function ConnectionsSettings({ state }: { state: SettingsState }) {
     <SettingsSection
       id="connections"
       title="Connections"
-      description="Credentials are stored locally. Reconnecting only replaces them after verification succeeds."
+      description="Credentials are stored on this server. Reconnecting replaces them only after the new ones are verified."
     >
       <div>
         <ConnectionStatus
@@ -62,7 +62,8 @@ export function ConnectionsSettings({ state }: { state: SettingsState }) {
         <div>
           <h3 className="font-semibold">Manual sync</h3>
           <p className="text-sm text-muted-foreground">
-            ActivSync polls automatically. Use these to check right now.
+            ActivSync checks each service on a schedule. Use these buttons to
+            check immediately.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -133,7 +134,7 @@ function GarminDialog({ state }: { state: SettingsState }) {
         title="Manage Garmin"
         description={
           state.setup.mfaRequired
-            ? "Enter the verification code Garmin sent."
+            ? "Enter the 6-digit code Garmin sent to your email."
             : "Leave the password blank to keep the saved one."
         }
         mobile="sheet"
@@ -285,7 +286,7 @@ function StravaDialog({ state }: { state: SettingsState }) {
         open={open}
         onOpenChange={setOpen}
         title="Manage Strava"
-        description="Enter your app credentials, then connect to authorize on Strava. Leave the secret blank to keep the saved one."
+        description="Enter the client ID and secret of your Strava API application, then connect to authorize ActivSync on Strava. Leave the secret blank to keep the saved one."
         mobile="sheet"
         footer={
           <ConnectionFooter>
@@ -368,8 +369,8 @@ function StravaDialog({ state }: { state: SettingsState }) {
         open={confirmDisconnect}
         onOpenChange={setConfirmDisconnect}
         title="Disconnect Strava?"
-        description="Publishing pauses, but your activity list is kept."
-        confirmLabel="Disconnect"
+        description="Publishing stops until you reconnect. Your activity list is kept."
+        confirmLabel="Disconnect Strava"
         pendingLabel="Disconnecting…"
         pending={disconnect.isPending}
         onConfirm={async () => {
@@ -398,7 +399,7 @@ function HevyDialog({ state }: { state: SettingsState }) {
         open={open}
         onOpenChange={setOpen}
         title="Manage Hevy"
-        description="Requires Hevy Pro. The key is validated before it is saved. Watch strategy and sync behavior live in Hevy integration below."
+        description="Requires Hevy Pro. ActivSync checks the key with Hevy before saving it. Match handling and sync options are under Hevy integration."
         mobile="sheet"
         footer={
           <ConnectionFooter>
@@ -508,8 +509,8 @@ function HevyDialog({ state }: { state: SettingsState }) {
         open={confirmDisconnect}
         onOpenChange={setConfirmDisconnect}
         title="Disconnect Hevy?"
-        description="This also pauses Hevy sync."
-        confirmLabel="Disconnect"
+        description="Hevy sync stops until you connect Hevy again."
+        confirmLabel="Disconnect Hevy"
         pendingLabel="Disconnecting…"
         pending={disconnect.isPending}
         onConfirm={async () => {

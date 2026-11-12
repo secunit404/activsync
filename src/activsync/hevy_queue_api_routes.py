@@ -195,7 +195,7 @@ def create_router(
         if not token:
             raise HTTPException(
                 status_code=409,
-                detail="Workout is being processed right now — try again in a moment.",
+                detail="This workout is being processed. Try again in a moment.",
             )
         try:
             message = mutate(row)
@@ -253,8 +253,8 @@ def create_router(
                 raise HTTPException(
                     status_code=409,
                     detail=(
-                        "An operation is in progress for this workout — resolve or "
-                        "retry it instead of skipping."
+                        "This workout has an operation in progress. Resolve or "
+                        "retry it instead of skipping it."
                     ),
                 )
             match_scheduler.cancel(hevy_id)
@@ -290,8 +290,8 @@ def create_router(
                 raise HTTPException(
                     status_code=409,
                     detail=(
-                        "An operation is in progress for this workout — resolve it "
-                        "before re-syncing fresh."
+                        "This workout has an operation in progress. Resolve it "
+                        "before you re-sync it fresh."
                     ),
                 )
             if (

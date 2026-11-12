@@ -121,7 +121,7 @@ export function SettingsView({
       release={state.release}
       update={state.update}
       title="Settings"
-      description="Manage connections, decide what publishes automatically, and tune each sync leg."
+      description="Manage connections, choose what publishes automatically, and adjust how each service syncs."
     >
       {stravaError ? (
         <Alert variant="destructive">

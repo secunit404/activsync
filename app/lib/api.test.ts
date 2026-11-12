@@ -173,9 +173,9 @@ describe("signed-out handling", () => {
 
   it("leaves auth endpoints' own 401s to the caller", async () => {
     const assign = stubLocation("/login");
-    mockFetch({ ok: false, status: 401, json: async () => ({ detail: "Wrong password." }) });
+    mockFetch({ ok: false, status: 401, json: async () => ({ detail: "Incorrect password." }) });
 
-    await expect(login("nope")).rejects.toMatchObject({ message: "Wrong password." });
+    await expect(login("nope")).rejects.toMatchObject({ message: "Incorrect password." });
 
     expect(assign).not.toHaveBeenCalled();
   });

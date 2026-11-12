@@ -307,7 +307,7 @@ def test_a_rejected_key_fails_the_decision_and_marks_hevy_for_reconnect(env):
 
     assert client.get("/api/v1/hevy/hevy-1/match/status").json() == {
         "state": "failed",
-        "message": "Hevy rejected the stored API key — reconnect Hevy.",
+        "message": "Hevy rejected the saved API key. Reconnect Hevy in Settings.",
     }
     assert db.get_config_value(conn, "hevy_auth_ok") is False
 

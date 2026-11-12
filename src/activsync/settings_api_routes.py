@@ -250,7 +250,7 @@ def create_router(
         except HevyAuthError as exc:
             raise HTTPException(
                 status_code=401,
-                detail="Hevy rejected that API key — check it and try again.",
+                detail="Hevy rejected that API key. Check the key and try again.",
             ) from exc
         except Exception as exc:
             raise HTTPException(
@@ -396,7 +396,11 @@ def create_router(
         pending = pending_garmin_mfa.get("auth")
         if pending is None:
             raise HTTPException(
-                status_code=409, detail="The Garmin verification session expired."
+                status_code=409,
+                detail=(
+                    "The Garmin verification session expired. "
+                    "Sign in to Garmin again to get a new code."
+                ),
             )
         last_sync_ok_at = db.get_config_value(conn, "garmin_last_sync_ok_at")
         try:
@@ -474,7 +478,7 @@ def create_router(
             sync.check_strava_status(conn, build_strava_client(conn), cfg, now)
         except Exception as exc:
             raise HTTPException(
-                status_code=502, detail=f"Initial sync failed: {exc}"
+                status_code=502, detail=f"First sync failed: {exc}"
             ) from exc
         db.set_config_value(conn, "initial_sync_done", True)
         events.bus.publish("refresh")
@@ -498,7 +502,7 @@ def create_router(
         if not view.connection_status(conn)["garmin"]["connected"]:
             raise HTTPException(
                 status_code=409,
-                detail="Connect to Garmin before changing activity categories.",
+                detail="Connect Garmin before changing auto-sync settings.",
             )
         known = {
             item["type_key"]
@@ -507,24 +511,24 @@ def create_router(
         requested = set(payload.autosync_types)
         unknown = requested - known
         if unknown:
-            raise HTTPException(status_code=400, detail="Unknown activity category.")
+            raise HTTPException(status_code=400, detail="Unknown activity type.")
         held = sorted(known - requested)
         with config.editing(conn) as cfg:
             cfg["held_activity_types"] = held
         sync.reconcile_held_activities(conn, held)
         events.bus.publish("refresh")
-        return action("Autosync categories saved.")
+        return action("Auto-sync settings saved.")
 
     @router.post("/settings/activity-types/refresh", response_model=ActionResult)
     def refresh_activity_types() -> ActionResult:
         if not view.connection_status(conn)["garmin"]["connected"]:
             raise HTTPException(
                 status_code=409,
-                detail="Connect to Garmin before refreshing activity categories.",
+                detail="Connect Garmin before refreshing activity types.",
             )
         fetch_and_store_categories(hold_all=False)
         events.bus.publish("refresh")
-        return action("Garmin activity categories refreshed.")
+        return action("Activity types refreshed from Garmin.")
 
     @router.post("/settings/sync/{service}", response_model=ActionResult)
     def manual_sync(service: Literal["garmin", "strava"]) -> ActionResult:
@@ -535,7 +539,7 @@ def create_router(
             if not connections["garmin"]["connected"]:
                 raise HTTPException(
                     status_code=409,
-                    detail="Garmin is disconnected — reconnect it to sync.",
+                    detail="Garmin is disconnected. Reconnect Garmin to sync.",
                 )
             sync.sync_garmin(conn, build_garmin_client(conn), cfg, now)
             if connections["strava"]["connected"]:
@@ -545,7 +549,7 @@ def create_router(
             if not connections["strava"]["connected"]:
                 raise HTTPException(
                     status_code=409,
-                    detail="Strava is disconnected — reconnect it to sync.",
+                    detail="Strava is disconnected. Reconnect Strava to sync.",
                 )
             try:
                 sync.check_strava_status(conn, build_strava_client(conn), cfg, now)
@@ -573,7 +577,7 @@ def create_router(
         if provided and len(provided) != 3:
             raise HTTPException(
                 status_code=400,
-                detail="Device identity override needs all three numbers — or none.",
+                detail="Enter all three device identity values, or leave all three blank.",
             )
         with config.editing(conn) as cfg:
             cfg.update(

@@ -140,8 +140,8 @@ export default function ActivityDetail() {
         mobile="sheet"
       >
         <p className="text-sm text-muted-foreground">
-          This activity isn&apos;t in the current list — it may be on a different page or filter.
-          Close this and try again from the activity list.
+          This activity is not in the current list. It may be on another page or hidden by a
+          filter. Close this panel and open the activity from the list.
         </p>
       </ResponsiveOverlay>
     );

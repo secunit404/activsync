@@ -203,7 +203,7 @@ test("a publish the server could not send shows its error", async () => {
 
 test("an undo the server refuses as too late is reported and the publish is followed through", async () => {
   cancelPublish.mockRejectedValue(
-    new ApiError("Too late to undo: it is already being sent to Strava.", 409),
+    new ApiError("Too late to undo: publishing to Strava has already started.", 409),
   );
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   const { result } = renderQueue();
@@ -212,7 +212,7 @@ test("an undo the server refuses as too late is reported and the publish is foll
   await user.click(await screen.findByRole("button", { name: "Undo" }));
 
   expect(
-    await screen.findByText("Too late to undo: it is already being sent to Strava."),
+    await screen.findByText("Too late to undo: publishing to Strava has already started."),
   ).toBeInTheDocument();
   expect(await screen.findByText("Published 2 activities to Strava")).toBeInTheDocument();
   expect(result.current.queued.size).toBe(0);

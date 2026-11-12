@@ -60,7 +60,7 @@ function item(overrides: Partial<Item>): Item {
 // "3 importable, 1 locked" fixture shape exactly.
 function fourItemResult(overrides: Partial<BackfillResult> = {}): BackfillResult {
   return {
-    message: "4 workouts found. Nothing has been written yet.",
+    message: "4 workouts found. Nothing has been imported yet.",
     since: "2026-06-01",
     ran: false,
     linked: 0,
@@ -216,7 +216,7 @@ test("a fresh preview resets the selection", async () => {
 test("importing calls runHevyBackfill with since and reports the result via toast", async () => {
   previewHevyBackfill.mockResolvedValue(fourItemResult());
   runHevyBackfill.mockResolvedValue({
-    message: "Backfill complete: 4 workouts ingested, 1 linked to existing Garmin activities.",
+    message: "Backfill complete: 4 workouts imported, 1 matched to existing Garmin activities.",
     since: "2026-06-01",
     ran: true,
     linked: 1,
@@ -240,7 +240,7 @@ test("importing calls runHevyBackfill with since and reports the result via toas
   );
   await waitFor(() =>
     expect(toastSuccess).toHaveBeenCalledWith(
-      "Backfill complete: 4 workouts ingested, 1 linked to existing Garmin activities.",
+      "Backfill complete: 4 workouts imported, 1 matched to existing Garmin activities.",
     ),
   );
 });
@@ -248,7 +248,7 @@ test("importing calls runHevyBackfill with since and reports the result via toas
 test("deselecting a row before importing excludes it from the sent ids, and locked rows never reach the selection", async () => {
   previewHevyBackfill.mockResolvedValue(fourItemResult());
   runHevyBackfill.mockResolvedValue({
-    message: "Backfill complete: 2 workouts ingested, 1 linked to existing Garmin activities.",
+    message: "Backfill complete: 2 workouts imported, 1 matched to existing Garmin activities.",
     since: "2026-06-01",
     ran: true,
     linked: 1,

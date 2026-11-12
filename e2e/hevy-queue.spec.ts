@@ -48,7 +48,7 @@ test("skip: cancelling leaves the workout queued, confirming skips it — via th
   await row.getByRole("button", { name: "Skip Ring circuit (Hevy)", exact: true }).click();
   const dialog = page.getByRole("alertdialog", { name: "Skip this workout?" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAccessibleDescription("Skip Ring circuit (Hevy)?");
+  await expect(dialog).toHaveAccessibleDescription("Ring circuit (Hevy) will not be synced. You can unskip it later.");
 
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();

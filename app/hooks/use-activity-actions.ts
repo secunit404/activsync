@@ -103,11 +103,11 @@ async function undoExclude(queryClient: QueryClient, excluded: ExcludeTarget[]) 
 
   if (failed === 0) {
     const noun = restored === 1 ? "activity" : "activities";
-    toast(`Restored ${restored} ${noun}`, { description: "Back where they were." });
+    toast(`Restored ${restored} ${noun}`, { description: "Returned to their previous status." });
   } else {
     toast.error(
       restored === 0
-        ? "Could not undo the exclude"
+        ? "Could not undo the exclusion"
         : `Restored ${restored}; ${failed} stayed excluded`,
       { duration: ERROR_TOAST_DURATION_MS },
     );
@@ -180,7 +180,7 @@ async function excludeMany(activities: ExcludeTarget[]): Promise<ActivityActionO
   }
 
   return {
-    message: `Excluded ${succeeded}; ${failed} failed and stayed as-is`,
+    message: `Excluded ${succeeded}; ${failed} could not be excluded`,
     severity: "warning",
     publishedCount: 0,
     failedCount: failed,

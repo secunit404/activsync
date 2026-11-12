@@ -667,7 +667,7 @@ def test_hevy_backfill_json_preview_is_read_only_and_run_ingests(
     assert run.status_code == 200
     assert run.json()["ran"] is True
     assert len(hevy_db.list_workouts(conn)) == 8
-    assert "8 workouts ingested" in run.json()["message"]
+    assert "8 workouts imported" in run.json()["message"]
 
 
 def test_automatic_backfill_starts_a_known_garmin_match_immediately(
@@ -741,7 +741,7 @@ def test_hevy_backfill_run_with_explicit_ids_imports_only_those(
 
     assert run.status_code == 200
     assert run.json()["ran"] is True
-    assert "2 workouts ingested" in run.json()["message"]
+    assert "2 workouts imported" in run.json()["message"]
     ingested_ids = {w["hevy_id"] for w in hevy_db.list_workouts(conn)}
     assert ingested_ids == {dev_mock.HEVY_DEV_MERGED_ID, dev_mock.HEVY_DEV_PASSIVE_ID}
 
@@ -766,7 +766,7 @@ def test_hevy_backfill_run_rejects_needs_mapping_ids_even_when_requested(
     )
 
     assert run.status_code == 200
-    assert "1 workout ingested" in run.json()["message"]
+    assert "1 workout imported" in run.json()["message"]
     assert hevy_db.get_workout(conn, dev_mock.HEVY_DEV_UNMAPPED_ID) is None
     assert hevy_db.get_workout(conn, dev_mock.HEVY_DEV_MERGED_ID) is not None
 
@@ -785,7 +785,7 @@ def test_hevy_backfill_run_with_empty_id_list_imports_nothing(tmp_path, monkeypa
     )
 
     assert run.status_code == 200
-    assert "0 workouts ingested" in run.json()["message"]
+    assert "0 workouts imported" in run.json()["message"]
     assert hevy_db.list_workouts(conn) == []
 
 
@@ -818,7 +818,7 @@ def test_hevy_backfill_hides_tracked_workout_until_queue_skip(
     assert preview.status_code == 200
     assert workout["id"] not in {item["hevyId"] for item in preview.json()["items"]}
     assert blocked_run.status_code == 200
-    assert "0 workouts ingested" in blocked_run.json()["message"]
+    assert "0 workouts imported" in blocked_run.json()["message"]
 
     skipped = client.post(f"/api/v1/hevy/{workout['id']}/skip")
     after_skip = client.post(
@@ -837,7 +837,7 @@ def test_hevy_backfill_hides_tracked_workout_until_queue_skip(
     assert returned["workout"]["startTime"] == workout["start_time"]
     assert "descriptionPreview" in returned["workout"]
     assert reimported.status_code == 200
-    assert "1 workout ingested" in reimported.json()["message"]
+    assert "1 workout imported" in reimported.json()["message"]
     assert hevy_db.get_workout(conn, workout["id"])["status"] != "skipped"
 
 
@@ -858,7 +858,7 @@ def test_hevy_backfill_run_ignores_unknown_ids_without_importing_anything_else(
     )
 
     assert run.status_code == 200
-    assert "0 workouts ingested" in run.json()["message"]
+    assert "0 workouts imported" in run.json()["message"]
     assert hevy_db.list_workouts(conn) == []
 
 
@@ -876,7 +876,7 @@ def test_hevy_backfill_run_without_ids_still_imports_everything(tmp_path, monkey
     )
 
     assert run.status_code == 200
-    assert "8 workouts ingested" in run.json()["message"]
+    assert "8 workouts imported" in run.json()["message"]
     assert len(hevy_db.list_workouts(conn)) == 8
 
 

@@ -275,8 +275,8 @@ class StravaClient:
         )
         if response.status_code == 401:
             raise StravaAuthError(
-                "Strava rejected the read request — the connected app may be "
-                "missing the activity:read_all scope. Reconnect Strava in Settings."
+                "Strava rejected the read request. The connection may be missing "
+                "the activity:read_all permission. Reconnect Strava in Settings."
             )
         _raise_if_rate_limited(response, now)
         response.raise_for_status()

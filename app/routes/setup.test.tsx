@@ -318,13 +318,13 @@ test("renders the Hevy step with a skip option", async () => {
 test("renders the sync step and triggers the initial sync", async () => {
   runInitialSync.mockResolvedValue(actionResult);
   renderSetup({ ...baseState, setup: { ...baseState.setup, step: "syncing" } });
-  await userEvent.click(screen.getByRole("button", { name: "Start initial sync" }));
+  await userEvent.click(screen.getByRole("button", { name: "Start first sync" }));
   expect(runInitialSync).toHaveBeenCalled();
 });
 
 test("renders the completion screen once setup is done", () => {
   renderSetup({ ...baseState, setup: { complete: true, step: null, mfaRequired: false } });
-  expect(screen.getByRole("heading", { name: "You’re all set" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Setup complete" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Go to ActivSync" })).toHaveAttribute(
     "href",
     "/",

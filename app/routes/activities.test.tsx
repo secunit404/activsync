@@ -174,7 +174,7 @@ test("selecting a filter resets the page to 1", () => {
 
 test("a cleared inbox says so and offers every activity in one tap", () => {
   renderAt("/?status=review&sort=oldest", { ...activities, status: "review", items: [] });
-  expect(screen.getByText("Nothing waiting for you")).toBeInTheDocument();
+  expect(screen.getByText("Nothing needs review")).toBeInTheDocument();
   expect(screen.queryByText("No activities found")).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Show all activities" })).toHaveAttribute(
     "href",
@@ -197,7 +197,7 @@ test("an empty history says when Garmin is checked next and points at the connec
   expect(screen.getByText("No activities yet")).toBeInTheDocument();
   expect(
     screen.getByText(
-      "ActivSync checks Garmin every 20 min. New activities show up here after the next check.",
+      "ActivSync checks Garmin every 20 min. New activities appear here after the next check.",
     ),
   ).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Check connections" })).toHaveAttribute(
@@ -238,13 +238,13 @@ test.each([
 test("the selected filter is explained in one line, with the Strava check interval for pending", async () => {
   const router = renderAt("/?status=review", { ...activities, status: "review" }, connected);
   const group = screen.getByRole("radiogroup", { name: "Show activities" });
-  expect(group).toHaveAccessibleDescription("Held or removed from Strava. These wait for you.");
+  expect(group).toHaveAccessibleDescription("Held for review, or removed from Strava after publishing.");
 
   await act(() => router.navigate("/?status=pending"));
-  expect(group).toHaveAccessibleDescription("Publishes to Strava on its own, usually within 5 min.");
+  expect(group).toHaveAccessibleDescription("Publishes to Strava automatically, usually within 5 min.");
 
   await act(() => router.navigate("/?status=excluded"));
-  expect(group).toHaveAccessibleDescription("Kept off Strava for good, unless you restore it.");
+  expect(group).toHaveAccessibleDescription("Kept off Strava until you restore it.");
 });
 
 test("pending and its empty state promise nothing while Strava is disconnected", () => {

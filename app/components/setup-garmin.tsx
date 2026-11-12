@@ -117,9 +117,9 @@ export function GarminStep({
           Connect your Garmin account
         </h2>
         <p className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
-          ActivSync polls Garmin Connect and holds activities for review
-          before they reach Strava. Your credentials are stored locally on
-          your own server.
+          ActivSync checks Garmin Connect for new activities and holds them
+          for your review before they go to Strava. Your credentials are
+          stored on your own server.
         </p>
       </div>
       <form
@@ -173,7 +173,7 @@ export function GarminStep({
               required
             />
             <FieldDescription>
-              How far back the first Garmin sync should search.
+              How many days back the first sync looks for activities.
             </FieldDescription>
           </Field>
         </FieldGroup>
@@ -183,7 +183,8 @@ export function GarminStep({
             aria-hidden="true"
           />
           <p className="text-[12.5px] text-warning">
-            If MFA is on, we’ll prompt for your code next.
+            If your Garmin account uses two-factor authentication, enter the
+            code in the next step.
           </p>
         </div>
         <Button type="submit" className="h-12 sm:w-fit" disabled={pending}>
@@ -200,7 +201,7 @@ export function GarminStep({
         }}
         onOpenAutoFocus={focusFirstDigit}
         title="Enter your verification code"
-        description="We sent a 6-digit code to your Garmin email. It expires in a few minutes."
+        description="Garmin sent a 6-digit code to your email. The code expires in a few minutes."
         mobile="sheet"
         footer={
           <>

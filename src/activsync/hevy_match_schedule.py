@@ -37,7 +37,7 @@ _RESULT_RETENTION_SECONDS = 3600
 _MAX_SLEEP_SECONDS = 30.0
 _LABELS = {"merged": "Merged", "replaced": "Replaced", "described": "Described"}
 
-AUTH_MESSAGE = "Hevy rejected the stored API key — reconnect Hevy."
+AUTH_MESSAGE = "Hevy rejected the saved API key. Reconnect Hevy in Settings."
 MAPPING_MESSAGE = "Map the missing exercises before choosing Merge or Replace."
 FAILURE_MESSAGE = "Could not apply that Hevy match. Check the server log for details."
 

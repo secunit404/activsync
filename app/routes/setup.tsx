@@ -125,7 +125,7 @@ export function SetupView({
         </div>
         <div className="grid gap-1.5">
           <h1 className="text-2xl font-extrabold tracking-[-0.02em]">
-            You’re all set
+            Setup complete
           </h1>
           <p className="max-w-[40ch] text-sm text-muted-foreground">
             Garmin and Strava are connected and your activities are ready.
@@ -220,8 +220,9 @@ function SyncStep({
           Ready for the first sync
         </h2>
         <p className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
-          ActivSync will fetch your selected history and keep every category
-          held for review by default.
+          ActivSync fetches activities from the history window you chose. By
+          default, every activity is held for your review before it goes to
+          Strava.
         </p>
       </div>
       <ul className="grid max-w-[440px] gap-3 text-sm">
@@ -239,7 +240,7 @@ function SyncStep({
         onClick={() => void onSync()}
       >
         {pending ? <Spinner /> : null}
-        {pending ? "Syncing activities…" : "Start initial sync"}
+        {pending ? "Syncing activities…" : "Start first sync"}
       </Button>
     </div>
   );

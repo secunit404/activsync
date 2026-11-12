@@ -15,9 +15,11 @@ test("summarizes the reconnect catch-up and offers dismiss", async () => {
   const onDismiss = vi.fn();
   render(<CatchUpReport report={report} onDismiss={onDismiss} />);
 
-  expect(screen.getByText(/Found 12 activities over the last 30 days/)).toBeInTheDocument();
-  expect(screen.getByText(/8 already existed on Strava/)).toBeInTheDocument();
-  expect(screen.getByText(/4 are held for review/)).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Found 12 activities from the last 30 days. 8 were already on Strava. 4 are held for your review.",
+    ),
+  ).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
   expect(onDismiss).toHaveBeenCalledOnce();
@@ -28,9 +30,22 @@ test("is not an alert region — informational only", () => {
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
-test("singularizes activity/day counts of 1", () => {
+test("counts of 1 read in the singular", () => {
   render(
-    <CatchUpReport report={{ new: 1, held: 0, linked: 1, days: 1 }} onDismiss={vi.fn()} />,
+    <CatchUpReport report={{ new: 2, held: 1, linked: 1, days: 1 }} onDismiss={vi.fn()} />,
   );
-  expect(screen.getByText(/Found 1 activity over the last 1 day/)).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Found 2 activities from the last day. 1 was already on Strava. 1 is held for your review.",
+    ),
+  ).toBeInTheDocument();
+});
+
+test("a count of zero is left out rather than stated", () => {
+  render(
+    <CatchUpReport report={{ new: 1, held: 1, linked: 0, days: 3 }} onDismiss={vi.fn()} />,
+  );
+  expect(
+    screen.getByText("Found 1 activity from the last 3 days. 1 is held for your review."),
+  ).toBeInTheDocument();
 });

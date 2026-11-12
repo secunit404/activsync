@@ -201,7 +201,7 @@ def test_poller_pauses_all_garmin_work_when_cached_session_expires(conn):
     db.set_config_value(conn, "garmin_credentials_verified", True)
     factory = MagicMock(
         side_effect=GarminSessionExpired(
-            "Garmin session expired; reconnect Garmin to resume sync."
+            "Garmin session expired. Reconnect Garmin to resume syncing."
         )
     )
     poller = Poller(
@@ -220,7 +220,7 @@ def test_poller_pauses_all_garmin_work_when_cached_session_expires(conn):
     assert db.get_config_value(conn, "garmin_last_sync_ok") is False
     assert db.get_config_value(conn, "garmin_last_sync_at") == now.isoformat()
     assert db.get_config_value(conn, "garmin_last_sync_error") == (
-        "Garmin session expired; reconnect Garmin to resume sync."
+        "Garmin session expired. Reconnect Garmin to resume syncing."
     )
 
 
@@ -228,7 +228,7 @@ def test_poller_keeps_polling_garmin_through_an_outage(conn):
     db.set_config_value(conn, "initial_sync_done", True)
     db.set_config_value(conn, "garmin_credentials_verified", True)
     factory = MagicMock(
-        side_effect=GarminUnavailable("Garmin could not be reached; retrying on the next poll.")
+        side_effect=GarminUnavailable("Garmin could not be reached. ActivSync tries again at the next check.")
     )
     poller = Poller(
         conn,
@@ -245,7 +245,7 @@ def test_poller_keeps_polling_garmin_through_an_outage(conn):
     assert db.get_config_value(conn, "garmin_credentials_verified") is True
     assert db.get_config_value(conn, "garmin_last_sync_ok") is False
     assert db.get_config_value(conn, "garmin_last_sync_error") == (
-        "Garmin could not be reached; retrying on the next poll."
+        "Garmin could not be reached. ActivSync tries again at the next check."
     )
 
 

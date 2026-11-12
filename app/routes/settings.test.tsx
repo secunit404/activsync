@@ -171,6 +171,22 @@ test("auto-sync search filters the type list and reports the count", async () =>
   expect(screen.queryByText("Swimming")).not.toBeInTheDocument();
 });
 
+test("the bulk auto-sync buttons name what they act on: every type, or only the search matches", async () => {
+  renderSettings();
+  expect(await screen.findByRole("button", { name: "Turn all on" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Turn all off" })).toBeEnabled();
+
+  await userEvent.type(screen.getByRole("searchbox", { name: /search/i }), "run");
+  expect(screen.getByText("1 type")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Turn on 1 matching" }));
+
+  expect(screen.getByRole("switch", { name: /Running/ })).toBeChecked();
+  await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+  expect(screen.getByText(/On 1/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Turn all off" }));
+  expect(screen.getByText(/On 0/)).toBeInTheDocument();
+});
+
 test("save is disabled until a section is dirty", async () => {
   renderSettings();
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -297,7 +313,7 @@ test("Hevy automatic strategy is a real radio group, not clickable divs", () => 
   expect(options.map((option) => option.getAttribute("aria-label"))).toEqual([
     "Replace",
     "Merge",
-    "Describe",
+    "Description only",
   ]);
   expect(screen.getByRole("radio", { name: "Replace" })).toHaveAttribute(
     "data-state",
@@ -320,7 +336,7 @@ test("disconnect opens a real confirmation dialog with the preserved copy, and c
   await userEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
   const dialog = screen.getByRole("alertdialog", { name: "Disconnect Hevy?" });
-  expect(dialog).toHaveAccessibleDescription("This also pauses Hevy sync.");
+  expect(dialog).toHaveAccessibleDescription("Hevy sync stops until you connect Hevy again.");
 
   await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -339,7 +355,7 @@ test("confirming the dialog disconnects Hevy", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
   const dialog = screen.getByRole("alertdialog", { name: "Disconnect Hevy?" });
-  await userEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "Disconnect Hevy" }));
 
   await waitFor(() => expect(disconnectHevy).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());

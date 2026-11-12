@@ -195,7 +195,7 @@ test.each([
   [
     { publishStatus: "pending", holdReason: null },
     "PENDING",
-    "Publishes to Strava on its own, usually within 5 min.",
+    "Publishes to Strava automatically, usually within 5 min.",
   ],
 ] as const)("the header shows the status and what it means (%o)", (status, pill, line) => {
   renderDetail({ ...fixture, ...status });
@@ -273,7 +273,7 @@ test("renders a View on Strava link once the activity is published", () => {
 test("an id not present in the current list shows a real not-found message, not a blank overlay", () => {
   renderDetail(null, { activities: [] });
   expect(screen.getByRole("dialog")).toBeInTheDocument();
-  expect(screen.getByText(/isn't in the current list/i)).toBeInTheDocument();
+  expect(screen.getByText(/is not in the current list/i)).toBeInTheDocument();
 });
 
 test("an activity that drops out of the list closes the overlay instead of saying not found", async () => {
@@ -310,7 +310,7 @@ test("an activity that drops out of the list closes the overlay instead of sayin
 
   await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   expect(router.state.location.search).toBe("?status=review");
-  expect(screen.queryByText(/isn't in the current list/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/is not in the current list/i)).not.toBeInTheDocument();
 });
 
 test("Save stays disabled until a field changes, and re-disables when reverted", async () => {

@@ -288,7 +288,7 @@ test("an unresolved suggestion explains that the preselection is not active", as
   });
 
   expect(await screen.findByText("Suggested mapping (not active yet)")).toBeVisible();
-  expect(screen.getByText(/press Save mapping before structured sets can sync/i)).toBeVisible();
+  expect(screen.getByText(/select Save mapping so structured sets can sync/i)).toBeVisible();
   expect(screen.getByLabelText("Category")).toHaveValue("12");
   expect(screen.getByLabelText("Garmin exercise")).toHaveValue("120");
 });
@@ -332,7 +332,7 @@ test("changing a standard mapping immediately offers a local reset", async () =>
 test("an unknown templateId shows a real message, not a blank overlay", async () => {
   renderMapping("tmpl-nonexistent");
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(screen.getByText(/isn't in the current mapping list/i)).toBeInTheDocument();
+  expect(screen.getByText(/is not in the current mapping list/i)).toBeInTheDocument();
 });
 
 test("Cancel navigates back to the hub without saving", async () => {

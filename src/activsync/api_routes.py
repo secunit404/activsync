@@ -270,7 +270,7 @@ def _batch_outcome(
     if failed or blocked or skipped:
         parts = [f"Published {published}"]
         if failed:
-            parts.append(f"{failed} failed and stayed ready to retry")
+            parts.append(f"{failed} failed and can be retried")
         if blocked:
             parts.append(f"{blocked} blocked by Hevy sync")
         if skipped:
@@ -503,7 +503,7 @@ def create_router(
         if issues:
             parts = [f"Published {stats.published}"]
             if stats.failed:
-                parts.append(f"{stats.failed} failed and stayed ready to retry")
+                parts.append(f"{stats.failed} failed and can be retried")
             if stats.blocked:
                 parts.append(f"{stats.blocked} blocked by Hevy sync")
             return ActivityActionResult(
@@ -536,7 +536,10 @@ def create_router(
         except publish_schedule.AlreadyScheduled as exc:
             raise HTTPException(
                 status_code=409,
-                detail="Already publishing to Strava. Refresh to see where it stands.",
+                detail=(
+                    "This activity is already being published to Strava. "
+                    "Refresh to see its status."
+                ),
             ) from exc
         remaining = batch.deadline - publish_scheduler.now()
         return PublishScheduled(
@@ -567,7 +570,7 @@ def create_router(
         if any(publish_schedule.get(conn, activity_id) for activity_id in activity_ids):
             raise HTTPException(
                 status_code=409,
-                detail="Too late to undo: it is already being sent to Strava.",
+                detail="Too late to undo: publishing to Strava has already started.",
             )
         raise HTTPException(status_code=409, detail="Nothing is waiting to publish.")
 
