@@ -1,34 +1,24 @@
 import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { StravaConnectButton } from "@/components/strava-connect-button";
-import { useStravaConnectUrl } from "@/hooks/use-strava-authorize-url";
+import { useStravaConnect } from "@/hooks/use-strava-connect";
 import type { SettingsState } from "@/lib/api";
 
-export type StravaStepProps = {
-  state: SettingsState;
-  pending: boolean;
-  onSave: (payload: {
-    clientId: string;
-    clientSecret: string;
-  }) => Promise<void>;
-};
-
-/** Step 3: Strava app credentials, then the OAuth handoff. */
-export function StravaStep({ state, pending, onSave }: StravaStepProps) {
+/** Step 3: Strava app credentials and the OAuth handoff, in one action. */
+export function StravaStep({ state }: { state: SettingsState }) {
   const [clientId, setClientId] = useState(state.credentials.stravaClientId);
   const [clientSecret, setClientSecret] = useState("");
-  const saved =
-    Boolean(state.credentials.stravaClientId) && state.credentials.stravaClientSecretSaved;
+  const connect = useStravaConnect();
   const trimmedClientId = clientId.trim();
   const trimmedSecret = clientSecret.trim();
   const dirty =
     trimmedClientId !== state.credentials.stravaClientId || Boolean(trimmedSecret);
-  const authorize = useStravaConnectUrl(state.credentials.stravaClientId, saved);
+  const ready =
+    Boolean(trimmedClientId) &&
+    (Boolean(trimmedSecret) || state.credentials.stravaClientSecretSaved);
   return (
     <div className="flex flex-1 flex-col gap-6 md:gap-7">
       <div className="flex flex-col gap-2">
@@ -39,16 +29,16 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
           Authorize Strava
         </h2>
         <p className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
-          Save your Strava API application credentials, then authorize
-          ActivSync to publish on your behalf.
+          Enter your Strava API application credentials, then connect to
+          let ActivSync publish to your Strava account.
         </p>
       </div>
       <form
         className="grid max-w-[440px] gap-5"
         onSubmit={(event) => {
           event.preventDefault();
-          void onSave({ clientId: trimmedClientId, clientSecret: trimmedSecret }).then(() =>
-            setClientSecret(""),
+          connect.mutate(
+            dirty ? { clientId: trimmedClientId, clientSecret: trimmedSecret } : null,
           );
         }}
       >
@@ -90,13 +80,10 @@ export function StravaStep({ state, pending, onSave }: StravaStepProps) {
             address you use to open ActivSync.
           </AlertDescription>
         </Alert>
-        <Button type="submit" className="h-12 sm:w-fit" disabled={pending}>
-          {pending ? <Spinner /> : null}
-          {pending ? "Saving…" : "Save credentials"}
-        </Button>
         <StravaConnectButton
-          href={saved && !dirty ? (authorize.data?.url ?? null) : null}
-          error={authorize.error?.message}
+          disabled={!ready}
+          pending={connect.isPending}
+          error={connect.error?.message}
         />
         <p className="text-sm text-muted-foreground">
           Need the keys? See{" "}

@@ -14,10 +14,9 @@ test.describe.configure({ mode: "serial" });
 //   - Garmin: `POST /api/v1/settings/garmin/reconnect` accepts any password
 //     other than the literal string "mfa" (`dev_mock.begin_login`), the
 //     same hook e2e/setup.spec.ts already relies on.
-//   - Strava: credentials are saved via `PUT
-//     /api/v1/settings/strava-credentials`, then the "Connect with Strava"
-//     button links to the authorize URL `POST
-//     /api/v1/settings/strava/authorize` issued. In mock mode
+//   - Strava: the "Connect with Strava" button saves the credentials via
+//     `PUT /api/v1/settings/strava-credentials`, then follows the authorize
+//     URL `POST /api/v1/settings/strava/authorize` issues. In mock mode
 //     `FakeStravaClient.authorize_url` loops straight back to our own
 //     `/strava/callback` with a placeholder code instead of pointing at
 //     strava.com (see `dev_mock.py`), so the whole OAuth round trip
@@ -71,9 +70,7 @@ test("connecting Strava in mock mode and publishing an activity succeeds end to 
   await stravaDialog
     .getByLabel("Strava client secret")
     .fill("mock-strava-client-secret");
-  await stravaDialog.getByRole("button", { name: "Save credentials" }).click();
-  await expect(page.getByText("Strava credentials saved.")).toBeVisible();
-  await stravaDialog.getByRole("link", { name: "Connect with Strava" }).click();
+  await stravaDialog.getByRole("button", { name: "Connect with Strava" }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(stravaStatus.getByText("Connected", { exact: true })).toBeVisible();
 

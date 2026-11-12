@@ -20,7 +20,6 @@ import {
   getSettings,
   loginPath,
   runInitialSync,
-  saveStravaCredentials,
   setupGarmin,
   setupHevy,
   skipHevy,
@@ -113,7 +112,6 @@ export function SetupView({
   const garmin = useSettingsAction(setupGarmin);
   const mfa = useSettingsAction(completeGarminMfa);
   const cancelMfa = useSettingsAction(cancelGarminMfa);
-  const strava = useSettingsAction(saveStravaCredentials);
   const hevy = useSettingsAction(setupHevy);
   const skip = useSettingsAction(skipHevy);
   const initialSync = useSettingsAction(runInitialSync);
@@ -161,13 +159,7 @@ export function SetupView({
           />
         ) : null}
         {step === "strava" ? (
-          <StravaStep
-            state={state}
-            pending={strava.isPending}
-            onSave={async (payload) => {
-              await strava.mutateAsync(payload);
-            }}
-          />
+          <StravaStep state={state} />
         ) : null}
         {step === "hevy" ? (
           <HevyStep

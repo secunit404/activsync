@@ -14,7 +14,7 @@ import { ResponsiveOverlay } from "@/components/ui/responsive-overlay";
 import { Spinner } from "@/components/ui/spinner";
 import { StravaConnectButton } from "@/components/strava-connect-button";
 import { useSettingsAction } from "@/hooks/use-settings-action";
-import { useStravaConnectUrl } from "@/hooks/use-strava-authorize-url";
+import { useStravaConnect } from "@/hooks/use-strava-connect";
 import {
   cancelGarminMfa,
   completeGarminMfa,
@@ -23,7 +23,6 @@ import {
   reconnectGarmin,
   runManualSync,
   saveHevyCredentials,
-  saveStravaCredentials,
   type SettingsState,
 } from "@/lib/api";
 import { MetaList } from "@/components/meta-list";
@@ -268,19 +267,15 @@ function StravaDialog({ state }: { state: SettingsState }) {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [clientId, setClientId] = useState(state.credentials.stravaClientId);
   const [clientSecret, setClientSecret] = useState("");
-  const save = useSettingsAction(saveStravaCredentials);
+  const connect = useStravaConnect();
   const disconnect = useSettingsAction(disconnectStrava);
-  const saved =
-    Boolean(state.credentials.stravaClientId) && state.credentials.stravaClientSecretSaved;
   const trimmedClientId = clientId.trim();
   const trimmedSecret = clientSecret.trim();
   const dirty =
     trimmedClientId !== state.credentials.stravaClientId || Boolean(trimmedSecret);
-  const canSave =
-    dirty &&
+  const ready =
     Boolean(trimmedClientId) &&
     (Boolean(trimmedSecret) || state.credentials.stravaClientSecretSaved);
-  const authorize = useStravaConnectUrl(state.credentials.stravaClientId, saved && open);
   return (
     <>
       <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
@@ -290,7 +285,7 @@ function StravaDialog({ state }: { state: SettingsState }) {
         open={open}
         onOpenChange={setOpen}
         title="Manage Strava"
-        description="Save your app credentials, then connect to authorize on Strava. Leave the secret blank to keep the saved one."
+        description="Enter your app credentials, then connect to authorize on Strava. Leave the secret blank to keep the saved one."
         mobile="sheet"
         footer={
           <ConnectionFooter>
@@ -314,28 +309,17 @@ function StravaDialog({ state }: { state: SettingsState }) {
                 Cancel
               </Button>
             )}
-            <Button
-              type="submit"
-              form={STRAVA_FORM_ID}
-              size="xl"
-              disabled={!canSave || save.isPending}
-            >
-              {save.isPending ? <Spinner /> : null}
-              {save.isPending ? "Saving…" : "Save credentials"}
-            </Button>
           </ConnectionFooter>
         }
       >
         <form
           id={STRAVA_FORM_ID}
           className="grid gap-4"
-          onSubmit={async (event) => {
+          onSubmit={(event) => {
             event.preventDefault();
-            await save.mutateAsync({
-              clientId: trimmedClientId,
-              clientSecret: trimmedSecret,
-            });
-            setClientSecret("");
+            connect.mutate(
+              dirty ? { clientId: trimmedClientId, clientSecret: trimmedSecret } : null,
+            );
           }}
         >
           <FieldGroup>
@@ -374,8 +358,10 @@ function StravaDialog({ state }: { state: SettingsState }) {
         </form>
         <StravaConnectButton
           className="mt-5"
-          href={saved && !dirty ? (authorize.data?.url ?? null) : null}
-          error={authorize.error?.message}
+          form={STRAVA_FORM_ID}
+          disabled={!ready}
+          pending={connect.isPending}
+          error={connect.error?.message}
         />
       </ResponsiveOverlay>
       <ConfirmDialog
