@@ -187,7 +187,7 @@ async fn claim_checks_code_and_password_then_signs_in() {
         short.json["detail"]
             .as_str()
             .unwrap()
-            .starts_with("Use at least 15 characters.")
+            .starts_with("Use at least 12 characters.")
     );
     let wrong = c
         .send(

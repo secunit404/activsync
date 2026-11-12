@@ -37,6 +37,14 @@ fn verify_password(conn: &Connection, password: &str, cost: HashCost) -> bool {
 }
 
 #[test]
+fn password_policy_bounds_length_without_composition_rules() {
+    assert!(password_problem(&"x".repeat(11)).is_some());
+    assert!(password_problem(&"x".repeat(12)).is_none());
+    assert!(password_problem(&"x".repeat(256)).is_none());
+    assert!(password_problem(&"x".repeat(257)).is_some());
+}
+
+#[test]
 fn verifies_hashes_made_by_the_python_app() {
     let db = crate::db::Db::open_in_memory().unwrap();
     let conn = db.lock();

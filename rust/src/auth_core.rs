@@ -28,7 +28,7 @@ pub(crate) const OWNER_KEY: &str = "auth_owner";
 const THROTTLE_KEY: &str = "auth_login_throttle";
 const TRUSTED_DEVICES_KEY: &str = "auth_trusted_devices";
 
-const PASSWORD_MIN_LENGTH: usize = 15;
+const PASSWORD_MIN_LENGTH: usize = 12;
 const PASSWORD_MAX_LENGTH: usize = 256;
 
 const FREE_FAILURES: i64 = 5;
