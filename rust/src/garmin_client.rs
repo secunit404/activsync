@@ -94,16 +94,6 @@ pub(crate) fn check_path(path: &str) -> Result<(), GarminError> {
     Ok(())
 }
 
-/// `quote(value, safe="")`: everything but letters, digits and `_.-~`.
-fn quote_segment(value: &str) -> String {
-    const RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
-        .remove(b'_')
-        .remove(b'.')
-        .remove(b'-')
-        .remove(b'~');
-    percent_encoding::utf8_percent_encode(value, RESERVED).to_string()
-}
-
 fn is_subcategory_rejection(err: &GarminError) -> bool {
     let message = err.to_string().to_lowercase();
     message.contains("sub-category")
@@ -256,7 +246,7 @@ impl GarminClient {
     }
 
     fn now(&self) -> DateTime<Utc> {
-        DateTime::from_timestamp_micros(((self.clock)() * 1_000_000.0) as i64).unwrap_or_default()
+        crate::timefmt::from_epoch((self.clock)())
     }
 
     pub(crate) async fn rest(&self) {
@@ -604,7 +594,7 @@ impl GarminClient {
         let name = self.display_name.as_deref().ok_or_else(|| {
             GarminError::Api("Display name is not set. Your Garmin profile did not include a display name, so this request cannot be made.".into())
         })?;
-        let path = format!("{DAILY_HEART_RATE_PATH}/{}", quote_segment(name));
+        let path = format!("{DAILY_HEART_RATE_PATH}/{}", crate::auth_guard::quote(name));
         let query = [("date", date)];
         let data = self.limited(|| self.get_json(&path, &query)).await?;
         if data.is_null() {

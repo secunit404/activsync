@@ -8,9 +8,9 @@ pub mod exercise_tables;
 pub mod fit_builder;
 pub mod fit_encode;
 pub mod garmin_client;
-pub mod garmin_errors;
+mod garmin_errors;
 pub mod garmin_login;
-pub mod garmin_retry;
+mod garmin_retry;
 pub mod garmin_routes;
 pub mod hevy_apply;
 pub mod hevy_backfill;
@@ -135,7 +135,7 @@ impl AppState {
             auth,
             setup_code,
             limiter: AttemptLimiter::default(),
-            oidc_http: oidc_flow::real_http(),
+            oidc_http: net::provider_http(),
             oidc_sessions: oidc_flow::OidcSessions::default(),
             pending_mfa: Arc::default(),
             clients: None,
@@ -389,10 +389,6 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
     .with_state(state)
 }
 
-/// Paths under these belong to the API and the OAuth routes, so a miss is a
-/// 404 rather than the app's front page.
-const SPA_RESERVED_PREFIXES: [&str; 4] = ["api", "assets", "strava", "auth"];
-
 async fn spa(index: Option<Arc<PathBuf>>, uri: Uri) -> Response {
     let first_segment = uri
         .path()
@@ -402,7 +398,7 @@ async fn spa(index: Option<Arc<PathBuf>>, uri: Uri) -> Response {
         .next()
         .unwrap_or_default();
     let body = match &index {
-        Some(index) if !SPA_RESERVED_PREFIXES.contains(&first_segment) => {
+        Some(index) if !auth_guard::SPA_RESERVED_PREFIXES.contains(&first_segment) => {
             tokio::fs::read(index.as_path()).await.ok()
         }
         _ => None,

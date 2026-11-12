@@ -216,7 +216,7 @@ pub enum GarminLogin {
     MfaRequired,
 }
 
-pub fn begin_garmin_login(_email: &str, password: &str) -> GarminLogin {
+pub fn begin_garmin_login(password: &str) -> GarminLogin {
     if password == MFA_TRIGGER_PASSWORD {
         GarminLogin::MfaRequired
     } else {
@@ -412,7 +412,7 @@ pub fn edit_activity_metadata(db: &Db, id: i64, title: &str, description: &str) 
     } else {
         &row.garmin_data
     };
-    let hash = sync::content_hash(title, description, &row.activity_type, data);
+    let hash = crate::routes::content_hash(title, description, &row.activity_type, data);
     db::update_activity_metadata(&conn, id, title, description, &hash)?;
     Ok(())
 }
@@ -487,7 +487,8 @@ pub fn sync_garmin(
     for act in &fetched {
         fetched_ids.insert(act.garmin_activity_id);
         let data = sync::garmin_data_json(act);
-        let new_hash = sync::content_hash(&act.title, &act.description, &act.activity_type, &data);
+        let new_hash =
+            crate::routes::content_hash(&act.title, &act.description, &act.activity_type, &data);
         let Some(existing) = db::get_activity(&conn, act.garmin_activity_id)? else {
             let (status, hold_reason) = if hold_cutoff
                 .as_deref()

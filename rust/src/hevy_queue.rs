@@ -11,7 +11,7 @@ use crate::hevy_apply::float;
 use crate::hevy_db::{self, Workout};
 use crate::hevy_description::generate_description;
 use crate::hevy_match::{self, MatchError};
-use crate::routes::{ApiError, ApiResult, development};
+use crate::routes::{ApiError, ApiResult};
 use crate::{AppState, config, db, schedule, timefmt, view};
 
 const IN_FLIGHT: [&str; 3] = ["waiting_watch", "awaiting_match", "syncing"];
@@ -122,7 +122,7 @@ fn queue_items(
 
 pub async fn queue_state(State(state): State<AppState>) -> ApiResult<HevyQueueState> {
     let conn = state.db.lock();
-    let cfg = config::load_config(&conn, development(&state))?;
+    let cfg = config::load_config(&conn, state.development)?;
     let tz_name = cfg.display_timezone();
     let in_flight = queue_items(&conn, &IN_FLIGHT, &tz_name)?;
     let problems = queue_items(&conn, &PROBLEMS, &tz_name)?;
@@ -263,7 +263,7 @@ pub async fn workout(
 ) -> ApiResult<HevyWorkoutDetail> {
     let conn = state.db.lock();
     let workout = require_workout(&conn, &hevy_id)?;
-    let cfg = config::load_config(&conn, development(&state))?;
+    let cfg = config::load_config(&conn, state.development)?;
     let row = (
         workout.hevy_id.as_str(),
         workout.title.as_str(),

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::AppState;
 use crate::auth_guard::{RequestContext, cookie, declared_length, quote};
 use crate::auth_routes::{
-    ApiResult, body, require_password, require_session, set_cookie, start_session, trusted_device,
+    ApiResult, require_password, require_session, set_cookie, start_session, trusted_device,
     with_cookies,
 };
 use crate::oidc_config::{self, DEFAULT_SCOPES, Linked, NewConfig, OIDC_METHOD, default_scopes};
@@ -138,7 +138,7 @@ pub async fn save_oidc(
     Extension(ctx): Extension<RequestContext>,
     payload: Result<Json<OidcConfigRequest>, JsonRejection>,
 ) -> ApiResult<AuthActionResult> {
-    let request = body(payload)?;
+    let Json(request) = payload?;
     length(&request.display_name, 1, 64, "displayName")?;
     length(&request.issuer, 1, 512, "issuer")?;
     length(&request.client_id, 1, 256, "clientId")?;
@@ -199,7 +199,7 @@ pub async fn delete_oidc(
     Extension(ctx): Extension<RequestContext>,
     payload: Result<Json<CurrentPasswordRequest>, JsonRejection>,
 ) -> ApiResult<AuthActionResult> {
-    confirm_password(&state, &headers, &ctx, &body(payload)?.current_password).await?;
+    confirm_password(&state, &headers, &ctx, &payload?.0.current_password).await?;
     oidc_config::delete(&state.db.lock())?;
     state.oidc_sessions.forget_provider();
     Ok(message("Single sign-on removed."))
@@ -222,7 +222,7 @@ pub async fn start_link(
     if oidc_config::load(&state.db.lock())?.is_none() {
         return Err(ApiError::conflict("Set up single sign-on first."));
     }
-    confirm_password(&state, &headers, &ctx, &body(payload)?.current_password).await?;
+    confirm_password(&state, &headers, &ctx, &payload?.0.current_password).await?;
     let key = state
         .oidc_sessions
         .grant_link(cookie(&headers, oidc_cookie(&ctx)), state.scheduler.now());

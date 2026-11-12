@@ -10,9 +10,10 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::auth_core::constant_time_eq;
 use crate::auth_guard::RequestContext;
 use crate::routes::ApiError;
-use crate::settings_routes::{conflict, onboarded};
+use crate::settings_routes::onboarded;
 use crate::sync_routes::run_catch_up;
 use crate::{AppState, db, mock, oidc_routes, onboarding, view};
 
@@ -24,7 +25,7 @@ pub async fn strava_authorize(
     let conn = state.db.lock();
     let credentials = db::get_config_value(&conn, "strava_credentials")?.unwrap_or(Value::Null);
     if !db::truthy(credentials.get("client_id")) || !db::truthy(credentials.get("client_secret")) {
-        return Err(conflict(
+        return Err(ApiError::conflict(
             "Save your Strava client ID and client secret before connecting.",
         ));
     }
@@ -48,14 +49,6 @@ pub struct StravaCallback {
     state: Option<String>,
     error: Option<String>,
     scope: Option<String>,
-}
-
-fn constant_time_eq(a: &str, b: &str) -> bool {
-    a.len() == b.len()
-        && a.bytes()
-            .zip(b.bytes())
-            .fold(0u8, |acc, (x, y)| acc | (x ^ y))
-            == 0
 }
 
 /// `urllib.parse.urlencode`'s quoting: spaces become `+`.
@@ -120,10 +113,13 @@ pub async fn strava_callback(
              API application.",
         );
     }
-    let state_matches = expected
-        .as_deref()
-        .zip(query.state.as_deref())
-        .is_some_and(|(expected, got)| !expected.is_empty() && constant_time_eq(expected, got));
+    let state_matches =
+        expected
+            .as_deref()
+            .zip(query.state.as_deref())
+            .is_some_and(|(expected, got)| {
+                !expected.is_empty() && constant_time_eq(expected.as_bytes(), got.as_bytes())
+            });
     if !state_matches {
         return fail(
             "That Strava response did not match the connection request, so it \

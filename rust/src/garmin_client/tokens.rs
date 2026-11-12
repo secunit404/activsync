@@ -95,7 +95,7 @@ pub fn save_tokens(path: &str, tokens: &Tokens) -> std::io::Result<()> {
         .unwrap_or_default();
     let mut suffix = [0u8; 8];
     rand::fill(&mut suffix);
-    let hex: String = suffix.iter().map(|b| format!("{b:02x}")).collect();
+    let hex: String = crate::auth_core::hex(&suffix);
     let tmp = dir.join(format!(".{name}.{hex}.tmp"));
     let written = (|| {
         let mut file = std::fs::OpenOptions::new()

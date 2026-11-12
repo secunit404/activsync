@@ -14,7 +14,7 @@ use crate::exercise_tables::{
 use crate::hevy_backfill::{self, Item, workout_id};
 use crate::hevy_client::HevyError;
 use crate::hevy_queue::{HevyWorkoutDetail, workout_detail};
-use crate::routes::{ApiError, ApiResult, development};
+use crate::routes::{ApiError, ApiResult};
 use crate::view::GARMIN_ACTIVITY_URL;
 use crate::{AppState, config, db, hevy_db, hevy_seed, hevy_sync, timefmt, view};
 
@@ -417,8 +417,7 @@ async fn fetch_backfill(
 }
 
 fn scheduler_now(state: &AppState) -> DateTime<Utc> {
-    DateTime::<Utc>::from_timestamp_micros((state.scheduler.now() * 1_000_000.0) as i64)
-        .unwrap_or_default()
+    timefmt::from_epoch(state.scheduler.now())
 }
 
 fn build_backfill(
@@ -426,7 +425,7 @@ fn build_backfill(
     conn: &Connection,
     workouts: Vec<Value>,
 ) -> Result<Backfill, ApiError> {
-    let cfg = config::load_config(conn, development(state))?;
+    let cfg = config::load_config(conn, state.development)?;
     let raw = hevy_backfill::preview_items(conn, workouts, &cfg, scheduler_now(state))?;
     let template = db::get_config_value(conn, "hevy_description_template")?;
     let template = template.as_ref().and_then(Value::as_str);
@@ -446,7 +445,7 @@ fn start_workouts(state: &AppState, hevy_ids: Vec<String>) {
     if hevy_ids.is_empty() {
         return;
     }
-    let (db, events, development) = (state.db.clone(), state.events.clone(), development(state));
+    let (db, events, development) = (state.db.clone(), state.events.clone(), state.development);
     tokio::spawn(async move {
         for hevy_id in hevy_ids {
             if let Err(err) =

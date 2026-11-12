@@ -50,7 +50,7 @@ const PUBLIC_ROUTES: &[(&str, &str)] = &[
     ("GET", "/auth/oidc/callback"),
     ("GET", "/api/v1/auth/oidc/logo"),
 ];
-const SPA_RESERVED_PREFIXES: &[&str] = &["api", "assets", "strava", "auth"];
+pub(crate) const SPA_RESERVED_PREFIXES: &[&str] = &["api", "assets", "strava", "auth"];
 
 /// `urllib.parse.quote(value, safe="")`.
 const QUOTED: &AsciiSet = &NON_ALPHANUMERIC

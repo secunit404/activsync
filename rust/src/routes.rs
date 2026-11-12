@@ -83,10 +83,6 @@ impl From<JsonRejection> for ApiError {
 
 pub(crate) type ApiResult<T> = Result<Json<T>, ApiError>;
 
-pub(crate) fn development(state: &AppState) -> bool {
-    state.development
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupState {
@@ -491,11 +487,9 @@ pub fn content_hash(
     activity_type: &str,
     garmin_data: &str,
 ) -> String {
-    use sha2::{Digest, Sha256};
-    let digest = Sha256::digest(format!(
-        "{title}\0{description}\0{activity_type}\0{garmin_data}"
-    ));
-    digest.iter().map(|b| format!("{b:02x}")).collect()
+    crate::auth_core::sha256_hex(
+        format!("{title}\0{description}\0{activity_type}\0{garmin_data}").as_bytes(),
+    )
 }
 
 async fn save_metadata(

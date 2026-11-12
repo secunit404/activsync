@@ -13,10 +13,9 @@ use serde_json::{Value, json};
 
 use crate::garmin_login::Login;
 use crate::mock::{self, GarminLogin};
-use crate::routes::{ApiError, development};
+use crate::routes::ApiError;
 use crate::settings_routes::{
-    ActionResult, action, bad_request, body, conflict, invalid, onboarded, require_not_onboarded,
-    text,
+    ActionResult, action, bad_request, onboarded, require_not_onboarded, text,
 };
 use crate::sync_routes::{fetch_categories, run_catch_up};
 use crate::{AppState, GarminCredentials, PendingMfa, config, db, onboarding, timefmt};
@@ -33,7 +32,7 @@ enum GarminOutcome {
 async fn finalize_garmin_connect(state: &AppState) -> Result<(), ApiError> {
     let now = Utc::now();
     let Some(clients) = state.clients.clone() else {
-        onboarding::finalize_garmin_connect(&state.db.lock(), development(state), now)?;
+        onboarding::finalize_garmin_connect(&state.db.lock(), state.development, now)?;
         return Ok(());
     };
     let first_run = {
@@ -80,7 +79,7 @@ async fn save_and_verify_garmin(
                 format!("Could not connect to Garmin: {err}"),
             )
         })?,
-        None => match mock::begin_garmin_login(email, password) {
+        None => match mock::begin_garmin_login(password) {
             GarminLogin::MfaRequired => Login::MfaRequired(Default::default()),
             GarminLogin::Connected => Login::Connected,
         },
@@ -149,15 +148,15 @@ pub async fn setup_garmin(
     State(state): State<AppState>,
     payload: Result<Json<GarminSetupRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     if payload.lookback_days < 1 {
-        return Err(invalid("lookbackDays must be at least 1"));
+        return Err(ApiError::invalid("lookbackDays must be at least 1"));
     }
     let (email, password) = {
         let conn = state.db.lock();
         require_not_onboarded(&conn)?;
         let fields = garmin_login_fields(&conn, &payload.email, &payload.password)?;
-        config::edit(&conn, development(&state), |cfg| {
+        config::edit(&conn, state.development, |cfg| {
             cfg.set("lookback_days", json!(payload.lookback_days));
             if timefmt::is_valid_timezone(&payload.detected_timezone) {
                 cfg.set("display_timezone", json!(payload.detected_timezone));
@@ -188,7 +187,7 @@ pub async fn reconnect_garmin(
     State(state): State<AppState>,
     payload: Result<Json<GarminReconnectRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     let (email, password) =
         garmin_login_fields(&state.db.lock(), &payload.email, &payload.password)?;
     let last_ok = last_sync_ok_at(&state)?;
@@ -219,9 +218,9 @@ pub async fn complete_mfa(
     State(state): State<AppState>,
     payload: Result<Json<MfaRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     let Some(pending) = state.pending_mfa() else {
-        return Err(conflict(
+        return Err(ApiError::conflict(
             "The Garmin verification session expired. Sign in to Garmin again to get a new code.",
         ));
     };

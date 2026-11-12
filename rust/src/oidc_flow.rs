@@ -23,7 +23,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use crate::auth_core::random_token;
-use crate::net::{self, Http, HttpError, HttpFuture};
+use crate::net::{Http, HttpError, HttpFuture};
 use crate::oidc_config::OidcConfig;
 
 const FLOW_SECONDS: f64 = 600.0;
@@ -33,10 +33,6 @@ const LINK_GRANT_SECONDS: f64 = 300.0;
 /// Every call to the identity provider goes through this, so tests can stand
 /// in for the provider.
 pub type OidcHttp = Http;
-
-pub fn real_http() -> OidcHttp {
-    net::provider_http()
-}
 
 /// A named client rather than a closure: a closure here makes the handler's
 /// future fail axum's `Send` check across the provider calls.

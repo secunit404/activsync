@@ -483,8 +483,7 @@ impl Poller {
     pub fn spawn(mut self, clock: Clock) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             loop {
-                let now = DateTime::from_timestamp_micros((clock() * 1_000_000.0) as i64)
-                    .unwrap_or_default();
+                let now = crate::timefmt::from_epoch(clock());
                 if let Err(err) = self.loop_once(now).await {
                     crate::log_warn!("poller", "poll tick failed: {err}");
                 }

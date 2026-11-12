@@ -51,20 +51,6 @@ pub(crate) fn bad_request(detail: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::BAD_REQUEST, detail)
 }
 
-pub(crate) fn conflict(detail: impl Into<String>) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, detail)
-}
-
-pub(crate) fn invalid(detail: impl Into<String>) -> ApiError {
-    ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
-}
-
-pub(crate) fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
-    payload
-        .map(|Json(value)| value)
-        .map_err(|rejection| invalid(rejection.body_text()))
-}
-
 pub(crate) fn onboarded(conn: &Connection) -> Result<bool, ApiError> {
     Ok(db::truthy(
         db::get_config_value(conn, "initial_sync_done")?.as_ref(),
@@ -73,7 +59,7 @@ pub(crate) fn onboarded(conn: &Connection) -> Result<bool, ApiError> {
 
 pub(crate) fn require_not_onboarded(conn: &Connection) -> Result<(), ApiError> {
     if onboarded(conn)? {
-        return Err(conflict("Setup is already complete."));
+        return Err(ApiError::conflict("Setup is already complete."));
     }
     Ok(())
 }
@@ -225,7 +211,7 @@ pub async fn save_strava_credentials(
     State(state): State<AppState>,
     payload: Result<Json<StravaCredentialsRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     let conn = state.db.lock();
     let existing = db::get_config_value(&conn, "strava_credentials")?.unwrap_or(Value::Null);
     let client_id = payload.client_id.trim();
@@ -358,7 +344,7 @@ pub async fn setup_hevy(
     State(state): State<AppState>,
     payload: Result<Json<HevyCredentialsRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     require_not_onboarded(&state.db.lock())?;
     connect_hevy(&state, &payload.api_key, true).await?;
     state.events.publish("refresh");
@@ -382,7 +368,7 @@ pub async fn save_hevy_credentials(
     State(state): State<AppState>,
     payload: Result<Json<HevyCredentialsRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     connect_hevy(&state, &payload.api_key, false).await?;
     state.events.publish("refresh");
     action(&state, &state.db.lock(), "Hevy connected.", false)
@@ -415,17 +401,19 @@ pub async fn save_preferences(
     State(state): State<AppState>,
     payload: Result<Json<PreferencesRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let p = body(payload)?;
+    let Json(p) = payload?;
     if p.garmin_poll_interval_minutes < 1
         || p.strava_poll_interval_minutes < 1
         || p.lookback_days < 1
     {
-        return Err(invalid(
+        return Err(ApiError::invalid(
             "Poll intervals and lookback days must be at least 1",
         ));
     }
     if !UNDO_DELAYS.contains(&p.undo_delay_seconds) {
-        return Err(invalid("undoDelaySeconds must be one of 0, 3, 5 or 10"));
+        return Err(ApiError::invalid(
+            "undoDelaySeconds must be one of 0, 3, 5 or 10",
+        ));
     }
     if !timefmt::is_valid_timezone(&p.display_timezone) {
         return Err(bad_request(format!(
@@ -456,7 +444,7 @@ pub(crate) fn require_garmin(conn: &Connection, detail: &str) -> Result<(), ApiE
     if view::connection_status(conn, Utc::now())?.garmin.connected {
         Ok(())
     } else {
-        Err(conflict(detail))
+        Err(ApiError::conflict(detail))
     }
 }
 
@@ -470,7 +458,7 @@ pub async fn save_activity_types(
     State(state): State<AppState>,
     payload: Result<Json<ActivityTypesRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     let conn = state.db.lock();
     require_garmin(&conn, "Connect Garmin before changing auto-sync settings.")?;
     let known: std::collections::BTreeSet<String> =
@@ -561,7 +549,7 @@ fn check_hevy_request(p: &HevySettingsRequest) -> Result<(), ApiError> {
         ),
     ];
     match problems.iter().find(|(bad, _)| *bad) {
-        Some((_, detail)) => Err(invalid(*detail)),
+        Some((_, detail)) => Err(ApiError::invalid(*detail)),
         None => Ok(()),
     }
 }
@@ -570,7 +558,7 @@ pub async fn save_hevy_settings(
     State(state): State<AppState>,
     payload: Result<Json<HevySettingsRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
-    let p = body(payload)?;
+    let Json(p) = payload?;
     check_hevy_request(&p)?;
     hevy_settings::validate_title_template(&p.title_template).map_err(bad_request)?;
     hevy_settings::validate_description_template(&p.description_template).map_err(bad_request)?;
@@ -646,7 +634,7 @@ pub async fn set_dev_onboarding_state(
     if !state.mock_mode {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "Not found"));
     }
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     state.set_pending_mfa(None);
     db::set_config_value(
         &state.db.lock(),

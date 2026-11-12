@@ -14,9 +14,9 @@ use serde_json::{Value, json};
 use crate::config::Config;
 use crate::db::{self, ActivityRow, Db, NewActivity};
 use crate::garmin_client::{GarminClient, GarminError};
+use crate::routes::content_hash;
 use crate::strava_client::{self, StravaClient, StravaError};
-
-pub use crate::routes::content_hash;
+use crate::timefmt::GARMIN_TIME_FORMAT;
 pub use publish::{publish_now, publish_pending};
 pub use python_json::garmin_data_json;
 
@@ -33,8 +33,6 @@ pub const HOLD_BACKLOG: &str = "backlog";
 /// Widens the Strava window so an activity whose Strava start sits just
 /// outside the cutoff still turns up instead of looking deleted.
 const WINDOW_PADDING_MINUTES: i64 = 30;
-
-const GARMIN_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
 #[derive(Debug)]
 pub enum SyncError {

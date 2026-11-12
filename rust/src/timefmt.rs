@@ -3,6 +3,10 @@ use chrono_tz::Tz;
 
 pub const GARMIN_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
+pub fn from_epoch(seconds: f64) -> DateTime<Utc> {
+    DateTime::from_timestamp_micros((seconds * 1_000_000.0) as i64).unwrap_or_default()
+}
+
 pub fn is_valid_timezone(name: &str) -> bool {
     name.parse::<Tz>().is_ok()
 }

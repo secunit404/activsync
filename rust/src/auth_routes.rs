@@ -56,12 +56,6 @@ pub async fn auth_status(
     Ok(Json(status_for(&state, ctx.auth.as_ref())?))
 }
 
-pub(crate) fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
-    payload
-        .map(|Json(value)| value)
-        .map_err(|rejection| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, rejection.body_text()))
-}
-
 fn too_long(fields: &[&str]) -> Result<(), ApiError> {
     if fields.iter().any(|f| f.chars().count() > MAX_FIELD) {
         return Err(ApiError::new(
@@ -210,7 +204,7 @@ pub async fn claim(
     headers: HeaderMap,
     payload: Result<Json<ClaimRequest>, JsonRejection>,
 ) -> Result<Response, ApiError> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     if payload.setup_code.chars().count() > 64 {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -262,7 +256,7 @@ pub async fn login(
     headers: HeaderMap,
     payload: Result<Json<LoginRequest>, JsonRejection>,
 ) -> Result<Response, ApiError> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     too_long(&[&payload.password])?;
     if !auth_core::owner_claimed(&state.db.lock())? {
         return Err(ApiError::new(
@@ -386,7 +380,7 @@ pub async fn change_password(
     headers: HeaderMap,
     payload: Result<Json<PasswordChangeRequest>, JsonRejection>,
 ) -> ApiResult<Value> {
-    let payload = body(payload)?;
+    let Json(payload) = payload?;
     too_long(&[&payload.current, &payload.new])?;
     let auth = require_session(&ctx)?;
     let device = trusted_device(&state, &headers, &ctx);

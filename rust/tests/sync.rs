@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use activsync::db::{self, Db, NewActivity};
 use activsync::garmin_client::{GarminClient, Tokens};
 use activsync::net::{Http, HttpError};
+use activsync::routes;
 use activsync::strava_client::StravaClient;
 use activsync::sync::{self, Services};
 use base64::Engine;
@@ -877,7 +878,7 @@ async fn edits_reach_garmin_and_a_published_strava_copy() {
     );
     assert_eq!(
         row.content_hash,
-        sync::content_hash("Tempo", "fast", "running", r#"{"distance": 5.0}"#)
+        routes::content_hash("Tempo", "fast", "running", r#"{"distance": 5.0}"#)
     );
     assert!(strava_seen.lock().unwrap().is_empty());
     assert_eq!(garmin_seen.lock().unwrap().len(), 2);
