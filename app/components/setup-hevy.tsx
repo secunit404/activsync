@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -45,10 +45,6 @@ export function HevyStep({ pending, onConnect, onSkip }: HevyStepProps) {
             onChange={(event) => setApiKey(event.target.value)}
             required
           />
-          <FieldDescription>
-            If you run hevy2garmin separately, stop it before you connect
-            Hevy here.
-          </FieldDescription>
         </Field>
         <div className="flex flex-col gap-2.5 sm:flex-row">
           <Button type="submit" className="h-12 sm:w-fit" disabled={pending}>
