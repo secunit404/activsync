@@ -19,6 +19,8 @@ use sha2::{Digest, Sha256};
 
 use crate::AppState;
 use crate::auth_core::{self, HashCost};
+use crate::logging::ClientAddr;
+pub use crate::proxy_headers::{Forwarded, ForwardedTrust, Network, WarnLimits, latin1, py_repr};
 
 pub const SESSION_COOKIE: &str = "activsync_session";
 pub const SECURE_SESSION_COOKIE: &str = "__Host-activsync_session";
@@ -43,60 +45,6 @@ const PUBLIC_ROUTES: &[(&str, &str)] = &[
     ("GET", "/api/v1/auth/oidc/logo"),
 ];
 const SPA_RESERVED_PREFIXES: &[&str] = &["api", "assets", "strava", "auth"];
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Network {
-    address: IpAddr,
-    prefix: u8,
-}
-
-impl Network {
-    /// Parses "10.0.0.0/8" or a bare address. Host bits are ignored, as with
-    /// Python's `ip_network(strict=False)`.
-    pub fn parse(text: &str) -> Option<Self> {
-        let (addr, prefix) = match text.split_once('/') {
-            Some((addr, prefix)) => (addr, Some(prefix)),
-            None => (text, None),
-        };
-        let address: IpAddr = addr.trim().parse().ok()?;
-        let max = if address.is_ipv4() { 32 } else { 128 };
-        let prefix = match prefix {
-            Some(p) => p.trim().parse::<u8>().ok().filter(|p| *p <= max)?,
-            None => max,
-        };
-        Some(Self { address, prefix })
-    }
-
-    pub fn contains(&self, ip: IpAddr) -> bool {
-        match (self.address, ip) {
-            (IpAddr::V4(net), IpAddr::V4(ip)) => {
-                let mask = if self.prefix == 0 { 0 } else { u32::MAX << (32 - u32::from(self.prefix)) };
-                u32::from(net) & mask == u32::from(ip) & mask
-            }
-            (IpAddr::V6(net), IpAddr::V6(ip)) => {
-                let mask = if self.prefix == 0 { 0 } else { u128::MAX << (128 - u32::from(self.prefix)) };
-                u128::from(net) & mask == u128::from(ip) & mask
-            }
-            _ => false,
-        }
-    }
-}
-
-impl std::fmt::Display for Network {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let masked = match self.address {
-            IpAddr::V4(a) => {
-                let mask = if self.prefix == 0 { 0 } else { u32::MAX << (32 - u32::from(self.prefix)) };
-                IpAddr::V4((u32::from(a) & mask).into())
-            }
-            IpAddr::V6(a) => {
-                let mask = if self.prefix == 0 { 0 } else { u128::MAX << (128 - u32::from(self.prefix)) };
-                IpAddr::V6((u128::from(a) & mask).into())
-            }
-        };
-        write!(f, "{masked}/{}", self.prefix)
-    }
-}
 
 /// Sign-in through an authenticating reverse proxy.
 #[derive(Clone, Debug)]
@@ -189,46 +137,6 @@ pub fn read_default_gateways() -> Vec<IpAddr> {
     found
 }
 
-/// Who may set X-Forwarded-For/-Proto, from `FORWARDED_ALLOW_IPS`.
-#[derive(Clone, Debug)]
-pub struct ForwardedTrust {
-    always: bool,
-    networks: Vec<Network>,
-    literals: Vec<String>,
-}
-
-impl ForwardedTrust {
-    pub fn parse(value: &str) -> Self {
-        let mut trust = Self { always: false, networks: Vec::new(), literals: Vec::new() };
-        for item in value.split(',').map(str::trim).filter(|i| !i.is_empty()) {
-            if item == "*" {
-                trust.always = true;
-            } else if let Some(network) = Network::parse(item) {
-                trust.networks.push(network);
-            } else {
-                trust.literals.push(item.to_string());
-            }
-        }
-        trust
-    }
-
-    fn trusts(&self, host: &str) -> bool {
-        self.always
-            || host.parse::<IpAddr>().is_ok_and(|ip| self.networks.iter().any(|n| n.contains(ip)))
-            || self.literals.iter().any(|l| l == host)
-    }
-
-    /// uvicorn's rule: the rightmost forwarded address that is not itself a
-    /// trusted proxy is the client.
-    fn client_from(&self, forwarded_for: &str) -> String {
-        let hosts: Vec<&str> = forwarded_for.split(',').map(str::trim).collect();
-        if self.always {
-            return hosts[0].to_string();
-        }
-        hosts.iter().rev().find(|h| !self.trusts(h)).unwrap_or(&hosts[0]).to_string()
-    }
-}
-
 #[derive(Clone)]
 pub struct AuthConfig {
     pub disabled: bool,
@@ -238,6 +146,7 @@ pub struct AuthConfig {
     pub forwarded: ForwardedTrust,
     pub cost: HashCost,
     pub csp: Arc<String>,
+    pub warnings: Arc<WarnLimits>,
 }
 
 impl AuthConfig {
@@ -260,6 +169,7 @@ impl AuthConfig {
             forwarded: ForwardedTrust::parse(&get("FORWARDED_ALLOW_IPS").unwrap_or_else(|| "127.0.0.1".into())),
             cost: if enabled("ACTIVSYNC_ARGON2_TEST_PARAMS") { HashCost::cheapest() } else { HashCost::standard() },
             csp: Arc::new(content_security_policy(None)),
+            warnings: Arc::default(),
         })
     }
 
@@ -273,6 +183,7 @@ impl AuthConfig {
             forwarded: ForwardedTrust::parse("127.0.0.1"),
             cost: HashCost::cheapest(),
             csp: Arc::new(content_security_policy(None)),
+            warnings: Arc::default(),
         }
     }
 
@@ -456,15 +367,18 @@ fn authenticate(state: &AppState, headers: &HeaderMap, ctx: &RequestContext) -> 
         return Ok(Authenticated::Yes(AuthState::of("disabled")));
     }
     if let Some(proxy) = &auth.proxy {
-        if let Some(value) = headers.get(proxy.header.as_str()).and_then(|v| v.to_str().ok()) {
+        if let Some(value) = headers.get(proxy.header.as_str()).map(latin1) {
+            let peer = ctx.peer.map_or_else(|| "None".to_string(), |p| p.to_string());
             if proxy.trusts(ctx.peer) {
                 if value == proxy.user {
-                    return Ok(Authenticated::Yes(AuthState { user: Some(value.into()), ..AuthState::of("proxy") }));
+                    return Ok(Authenticated::Yes(AuthState { user: Some(value), ..AuthState::of("proxy") }));
                 }
-                crate::log_warn!("auth_guard", "proxy at {:?} asserted {}={value:?}, which is not the configured owner", ctx.peer, proxy.header);
+                crate::log_warn!("auth", "proxy at {peer} asserted {}={}, which is not the configured owner", proxy.header, py_repr(&value));
                 return Ok(Authenticated::Rejected);
             }
-            crate::log_warn!("auth_guard", "ignored {} from untrusted peer {:?}; is something bypassing the proxy?", proxy.header, ctx.peer);
+            if auth.warnings.untrusted_proxy_due(state.scheduler.now()) {
+                crate::log_warn!("auth", "ignored {} from untrusted peer {peer}; is something bypassing the proxy?", proxy.header);
+            }
         }
     }
     let Some(token) = cookie(headers, ctx.session_cookie()).filter(|t| !t.is_empty()) else {
@@ -495,23 +409,23 @@ fn origin_of(url: &str) -> String {
 }
 
 pub fn csrf_problem(headers: &HeaderMap, expected_origin: &str) -> Option<String> {
-    let get = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    let get = |name: &str| headers.get(name).map(latin1);
     let expected = origin_of(expected_origin);
-    if get("x-activsync-request") != Some("1") {
+    if get("x-activsync-request").as_deref() != Some("1") {
         return Some("missing X-ActivSync-Request header".into());
     }
     let origin = get("origin");
-    if origin == Some("null") {
+    if origin.as_deref() == Some("null") {
         return Some("opaque Origin".into());
     }
     if let Some(site) = get("sec-fetch-site") {
         return (site != "same-origin").then(|| format!("Sec-Fetch-Site is {site}"));
     }
     if let Some(origin) = origin.filter(|o| !o.is_empty()) {
-        return (origin_of(origin) != expected).then(|| format!("Origin {origin} does not match"));
+        return (origin_of(&origin) != expected).then(|| format!("Origin {origin} does not match"));
     }
     if let Some(referer) = get("referer").filter(|r| !r.is_empty()) {
-        return (origin_of(referer) != expected).then(|| "Referer does not match".into());
+        return (origin_of(&referer) != expected).then(|| "Referer does not match".into());
     }
     Some("no Origin or Referer".into())
 }
@@ -542,30 +456,26 @@ fn add_security_headers(response: &mut Response, csp: &str, https: bool) {
 /// the real socket peer may decide who can assert the proxy sign-in header.
 pub async fn guard(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let extensions = request.extensions();
-    let peer = extensions
+    let socket = extensions
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|c| c.0.ip())
-        .or_else(|| extensions.get::<MockConnectInfo<SocketAddr>>().map(|c| c.0.ip()));
-    let headers = request.headers().clone();
-    let get = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
-    let mut client_ip = peer.map(|p| p.to_string()).unwrap_or_default();
-    let mut https = false;
-    if peer.is_some_and(|p| state.auth.forwarded.trusts(&p.to_string())) {
-        if let Some(proto) = get("x-forwarded-proto").map(|p| p.trim().to_lowercase()) {
-            if matches!(proto.as_str(), "http" | "https" | "ws" | "wss") {
-                https = proto == "https" || proto == "wss";
-            }
-        }
-        if let Some(forwarded) = get("x-forwarded-for") {
-            client_ip = state.auth.forwarded.client_from(forwarded);
-        }
-    }
-    if state.auth.force_https() {
-        https = true;
-    }
+        .map(|c| c.0)
+        .or_else(|| extensions.get::<MockConnectInfo<SocketAddr>>().map(|c| c.0));
+    let peer = socket.map(|s| s.ip());
+    let peer_text = peer.map(|p| p.to_string());
+    let forwarded = state.auth.forwarded.apply(peer_text.as_deref(), request.headers());
+    let (client_ip, client_port) = forwarded
+        .client
+        .or_else(|| socket.map(|s| (s.ip().to_string(), i64::from(s.port()))))
+        .unwrap_or_default();
+    let scheme = forwarded.scheme.unwrap_or_else(|| "http".into());
+    let https = scheme == "https" || state.auth.force_https();
     let csp = state.auth.csp.clone();
-    let mut response = guarded(state, request, next, peer, client_ip, https).await;
+    let log_address = socket.map(|_| ClientAddr(format!("{client_ip}:{client_port}")));
+    let mut response = guarded(state, request, next, peer, client_ip, scheme, https).await;
     add_security_headers(&mut response, &csp, https);
+    if let Some(address) = log_address {
+        response.extensions_mut().insert(address);
+    }
     response
 }
 
@@ -575,21 +485,35 @@ async fn guarded(
     next: Next,
     peer: Option<IpAddr>,
     client_ip: String,
+    scheme: String,
     https: bool,
 ) -> Response {
     let path = request.uri().path().to_string();
     let method = request.method().clone();
     let headers = request.headers().clone();
-    let host = headers.get(header::HOST).and_then(|v| v.to_str().ok());
+    let host = headers.get(header::HOST).map(latin1);
     let public_origin = state.auth.public_origin();
 
     if path != "/health" {
         let accepted = match &public_origin {
-            Some((scheme, expected)) => normalize_host(host.unwrap_or_default(), Some(scheme)) == *expected,
-            None => host_is_allowed(host, &state.auth.allowed_hosts),
+            Some((scheme, expected)) => normalize_host(host.as_deref().unwrap_or_default(), Some(scheme)) == *expected,
+            None => host_is_allowed(host.as_deref(), &state.auth.allowed_hosts),
         };
         if !accepted {
-            crate::log_warn!("auth_guard", "rejected a request for Host {:?}", host.unwrap_or_default().chars().take(255).collect::<String>());
+            if state.auth.warnings.unknown_host_due(state.scheduler.now()) {
+                let shown = py_repr(&host.as_deref().unwrap_or_default().chars().take(255).collect::<String>());
+                match &public_origin {
+                    Some((_, expected)) => crate::log_warn!(
+                        "auth",
+                        "rejected a request for Host {shown}; ACTIVSYNC_PUBLIC_URL allows only {}",
+                        py_repr(expected)
+                    ),
+                    None => crate::log_warn!(
+                        "auth",
+                        "rejected a request for Host {shown}; set ACTIVSYNC_PUBLIC_URL or add the name to ACTIVSYNC_ALLOWED_HOSTS"
+                    ),
+                }
+            }
             let message = if public_origin.is_some() { PUBLIC_HOST_MESSAGE } else { UNKNOWN_HOST_MESSAGE };
             return (StatusCode::BAD_REQUEST, message).into_response();
         }
@@ -599,7 +523,7 @@ async fn guarded(
     let auth = match authenticate(&state, &headers, &ctx) {
         Ok(auth) => auth,
         Err(err) => {
-            crate::log_error!("auth_guard", "database error while signing in: {err}");
+            crate::log_error!("auth", "database error while signing in: {err}");
             return detail(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error");
         }
     };
@@ -620,17 +544,6 @@ async fn guarded(
         return Redirect::to(&format!("/login?next={}", quote(&target))).into_response();
     }
 
-    if is_unsafe(&method) {
-        let expected = match &public_origin {
-            Some((scheme, host)) => format!("{scheme}://{host}"),
-            None => format!("{}://{}", if https { "https" } else { "http" }, host.unwrap_or_default()),
-        };
-        if let Some(problem) = csrf_problem(&headers, &expected) {
-            crate::log_warn!("auth_guard", "blocked {method} {path}: {problem}");
-            return detail(StatusCode::FORBIDDEN, "This request was blocked as cross-site.");
-        }
-    }
-
     if ctx.auth.is_none() && is_unsafe(&method) {
         let declared = headers.get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<usize>().ok());
         if declared.is_some_and(|n| n > PUBLIC_BODY_LIMIT) {
@@ -641,6 +554,17 @@ async fn guarded(
             return detail(StatusCode::PAYLOAD_TOO_LARGE, TOO_LARGE);
         };
         request = Request::from_parts(parts, Body::from(bytes));
+    }
+
+    if is_unsafe(&method) {
+        let expected = match &public_origin {
+            Some((scheme, host)) => format!("{scheme}://{host}"),
+            None => format!("{scheme}://{}", host.as_deref().unwrap_or_default()),
+        };
+        if let Some(problem) = csrf_problem(&headers, &expected) {
+            crate::log_warn!("auth", "blocked {method} {path}: {problem}");
+            return detail(StatusCode::FORBIDDEN, "This request was blocked as cross-site.");
+        }
     }
 
     request.extensions_mut().insert(ctx);
@@ -683,12 +607,13 @@ mod tests {
     }
 
     #[test]
-    fn forwarded_for_takes_rightmost_untrusted() {
-        let trust = ForwardedTrust::parse("127.0.0.1, 10.0.0.0/8");
-        assert_eq!(trust.client_from("203.0.113.9, 10.1.2.3"), "203.0.113.9");
-        assert_eq!(trust.client_from("1.1.1.1, 203.0.113.9"), "203.0.113.9");
-        assert_eq!(trust.client_from("10.0.0.1, 127.0.0.1"), "10.0.0.1");
-        assert_eq!(ForwardedTrust::parse("*").client_from("1.1.1.1, 2.2.2.2"), "1.1.1.1");
+    fn a_non_ascii_origin_is_compared_not_skipped() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-activsync-request", HeaderValue::from_static("1"));
+        headers.insert("origin", HeaderValue::from_bytes(b"http://\xe9vil.example").unwrap());
+        headers.insert("referer", HeaderValue::from_static("http://127.0.0.1:8381/settings"));
+        let problem = csrf_problem(&headers, "http://127.0.0.1:8381");
+        assert_eq!(problem.as_deref(), Some("Origin http://\u{e9}vil.example does not match"));
     }
 
     #[test]

@@ -24,15 +24,19 @@ pub enum Level {
     Info = 20,
     Warning = 30,
     Error = 40,
+    Critical = 50,
 }
 
 impl Level {
-    /// Python's level names; anything else reads as INFO.
+    /// Python's level names, which `logging.getLevelName` matches exactly
+    /// (no trimming); anything else reads as INFO. NOTSET inherits the root
+    /// logger's WARNING.
     pub fn parse(name: &str) -> Self {
-        match name.trim().to_uppercase().as_str() {
+        match name.to_uppercase().as_str() {
             "DEBUG" => Self::Debug,
-            "WARNING" | "WARN" => Self::Warning,
-            "ERROR" | "CRITICAL" => Self::Error,
+            "WARNING" | "WARN" | "NOTSET" => Self::Warning,
+            "ERROR" => Self::Error,
+            "CRITICAL" | "FATAL" => Self::Critical,
             _ => Self::Info,
         }
     }
@@ -43,6 +47,7 @@ impl Level {
             Self::Info => "INFO",
             Self::Warning => "WARNING",
             Self::Error => "ERROR",
+            Self::Critical => "CRITICAL",
         }
     }
 }
@@ -112,15 +117,22 @@ pub fn routine(path: &str, status: u16) -> bool {
     status < 400 && (path == "/health" || path == "/favicon.ico" || path.starts_with("/assets/"))
 }
 
-/// One line per request, as uvicorn's access log writes it. Routine
-/// successes are only kept at DEBUG.
+/// The `host:port` the access log shows for a request, set on the response
+/// by the auth guard once it has applied the trusted forwarded headers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClientAddr(pub String);
+
+/// One line per request, as uvicorn's access log writes it: the client after
+/// proxy headers were applied, `host:port` with no brackets around IPv6.
+/// Routine successes are only kept at DEBUG.
 pub async fn access_log(request: Request, next: Next) -> Response {
-    let peer = request.extensions().get::<ConnectInfo<SocketAddr>>().map_or_else(|| "-".to_string(), |c| c.0.to_string());
+    let socket = request.extensions().get::<ConnectInfo<SocketAddr>>().map(|c| format!("{}:{}", c.0.ip(), c.0.port()));
     let method = request.method().clone();
     let target = request.uri().path_and_query().map_or_else(|| request.uri().path().to_string(), |pq| pq.to_string());
     let version = request.version();
     let path = request.uri().path().to_string();
     let response = next.run(request).await;
+    let peer = response.extensions().get::<ClientAddr>().map(|a| a.0.clone()).or(socket).unwrap_or_else(|| "-".into());
     let status = response.status().as_u16();
     if enabled(Level::Debug) || !routine(&path, status) {
         write(Level::Info, "access", format_args!("{peer} - \"{method} {target} {version:?}\" {status}"));

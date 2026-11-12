@@ -16,7 +16,7 @@ use http_body_util::BodyExt;
 use openidconnect::core::{CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm, CoreRsaPrivateSigningKey};
 use openidconnect::url::Url;
 use openidconnect::{
-    Audience, EmptyAdditionalClaims, IssuerUrl, JsonWebKeyId, Nonce, PrivateSigningKey, StandardClaims,
+    Audience, ClientId, EmptyAdditionalClaims, IssuerUrl, JsonWebKeyId, Nonce, PrivateSigningKey, StandardClaims,
     SubjectIdentifier,
 };
 use serde_json::{Value, json};
@@ -44,6 +44,11 @@ struct Idp {
     token_error: Option<&'static str>,
     nonce: Option<String>,
     challenge: Option<String>,
+    extra_audiences: Vec<String>,
+    authorized_party: Option<String>,
+    jwks_kid: &'static str,
+    token_kid: &'static str,
+    calls: Vec<String>,
 }
 
 impl Default for Idp {
@@ -56,12 +61,17 @@ impl Default for Idp {
             token_error: None,
             nonce: None,
             challenge: None,
+            extra_audiences: Vec::new(),
+            authorized_party: None,
+            jwks_kid: "k1",
+            token_kid: "k1",
+            calls: Vec::new(),
         }
     }
 }
 
-fn key() -> CoreRsaPrivateSigningKey {
-    CoreRsaPrivateSigningKey::from_pem(signing_pem(), Some(JsonWebKeyId::new("k1".into()))).unwrap()
+fn key(kid: &str) -> CoreRsaPrivateSigningKey {
+    CoreRsaPrivateSigningKey::from_pem(signing_pem(), Some(JsonWebKeyId::new(kid.into()))).unwrap()
 }
 
 fn reply(status: u16, body: Value) -> openidconnect::HttpResponse {
@@ -75,6 +85,7 @@ fn reply(status: u16, body: Value) -> openidconnect::HttpResponse {
 fn answer(idp: &Mutex<Idp>, request: openidconnect::HttpRequest) -> openidconnect::HttpResponse {
     let idp = &mut *idp.lock().unwrap();
     let url = request.uri().to_string();
+    idp.calls.push(url.strip_prefix(ISSUER).unwrap_or_default().to_string());
     match url.strip_prefix(ISSUER).unwrap_or_default() {
         "/.well-known/openid-configuration" if idp.discovery_down => reply(503, json!({})),
         "/.well-known/openid-configuration" => reply(200, json!({
@@ -87,7 +98,7 @@ fn answer(idp: &Mutex<Idp>, request: openidconnect::HttpRequest) -> openidconnec
             "subject_types_supported": ["public"],
             "id_token_signing_alg_values_supported": ["RS256"],
         })),
-        "/jwks" => reply(200, json!({"keys": [serde_json::to_value(key().as_verification_key()).unwrap()]})),
+        "/jwks" => reply(200, json!({"keys": [serde_json::to_value(key(idp.jwks_kid).as_verification_key()).unwrap()]})),
         "/token" => {
             if let Some(error) = idp.token_error {
                 return reply(400, json!({"error": error}));
@@ -102,16 +113,18 @@ fn answer(idp: &Mutex<Idp>, request: openidconnect::HttpRequest) -> openidconnec
             let expected = base64::engine::general_purpose::STANDARD.encode("activsync:s3cret");
             assert_eq!(auth, format!("Basic {expected}"));
             let nonce = idp.nonce_override.clone().or(idp.nonce.clone()).unwrap();
+            let audiences = std::iter::once(idp.audience.clone()).chain(idp.extra_audiences.clone()).map(Audience::new).collect();
             let claims = CoreIdTokenClaims::new(
                 IssuerUrl::new(format!("{ISSUER}/")).unwrap(),
-                vec![Audience::new(idp.audience.clone())],
+                audiences,
                 Utc::now() + chrono::Duration::minutes(5),
                 Utc::now(),
                 StandardClaims::new(SubjectIdentifier::new(idp.sub.clone())),
                 EmptyAdditionalClaims {},
             )
-            .set_nonce(Some(Nonce::new(nonce)));
-            let token = CoreIdToken::new(claims, &key(), CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256, None, None).unwrap();
+            .set_nonce(Some(Nonce::new(nonce)))
+            .set_authorized_party(idp.authorized_party.clone().map(ClientId::new));
+            let token = CoreIdToken::new(claims, &key(idp.token_kid), CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256, None, None).unwrap();
             reply(200, json!({"access_token": "at", "token_type": "Bearer", "id_token": token.to_string()}))
         }
         "/userinfo" => reply(200, json!({"sub": idp.sub, "preferred_username": "owner@example.test"})),
@@ -336,6 +349,7 @@ async fn bad_answers_from_the_provider_are_rejected() {
     let back = c.visit(&format!("/auth/oidc/callback?state={state}&code=good-code")).await;
     assert_eq!(back.location(), "/login?error=oidc_denied");
 
+    c.configure().await;
     c.idp.lock().unwrap().discovery_down = true;
     let down = c.visit("/auth/oidc/login").await;
     assert_eq!(down.location(), "/login?error=oidc_unavailable");
@@ -414,4 +428,76 @@ async fn sign_in_button_logo() {
     let removed = c.send(Method::DELETE, "/api/v1/auth/oidc/logo", None).await;
     assert_eq!(removed.json["message"], "Logo removed. The sign-in button shows a key again.");
     assert_eq!(c.visit(&url).await.status, StatusCode::NOT_FOUND);
+}
+
+fn fetched(c: &Client, path: &str) -> usize {
+    c.idp.lock().unwrap().calls.iter().filter(|call| call.as_str() == path).count()
+}
+
+async fn sign_in_through_provider(c: &mut Client) -> Reply {
+    let state = c.to_provider("/auth/oidc/login").await;
+    c.visit(&format!("/auth/oidc/callback?state={state}&code=good-code")).await
+}
+
+#[tokio::test]
+async fn discovery_and_keys_are_fetched_once_per_provider() {
+    let mut c = client();
+    c.claim().await;
+    c.configure().await;
+    c.link().await;
+    for _ in 0..2 {
+        let back = sign_in_through_provider(&mut c).await;
+        assert_eq!(back.location(), "/");
+    }
+    assert_eq!(fetched(&c, "/.well-known/openid-configuration"), 1);
+    assert_eq!(fetched(&c, "/jwks"), 1);
+
+    c.configure().await;
+    let back = sign_in_through_provider(&mut c).await;
+    assert_eq!(back.location(), "/");
+    assert_eq!(fetched(&c, "/.well-known/openid-configuration"), 2, "saving the settings drops the cache");
+    assert_eq!(fetched(&c, "/jwks"), 2);
+}
+
+#[tokio::test]
+async fn an_unknown_key_id_refetches_the_keys_once() {
+    let mut c = client();
+    c.claim().await;
+    c.configure().await;
+    c.link().await;
+    assert_eq!(fetched(&c, "/jwks"), 1);
+
+    {
+        let mut idp = c.idp.lock().unwrap();
+        idp.jwks_kid = "k2";
+        idp.token_kid = "k2";
+    }
+    let back = sign_in_through_provider(&mut c).await;
+    assert_eq!(back.location(), "/", "the rotated key is picked up");
+    assert_eq!(fetched(&c, "/jwks"), 2);
+
+    c.idp.lock().unwrap().token_kid = "missing";
+    let back = sign_in_through_provider(&mut c).await;
+    assert_eq!(back.location(), "/login?error=oidc_state");
+    assert_eq!(fetched(&c, "/jwks"), 3, "one refetch per failed callback, not a loop");
+}
+
+#[tokio::test]
+async fn other_audiences_are_allowed_when_azp_names_the_client() {
+    let mut c = client();
+    c.claim().await;
+    c.configure().await;
+    c.link().await;
+
+    c.idp.lock().unwrap().extra_audiences = vec!["another-client".into()];
+    let back = sign_in_through_provider(&mut c).await;
+    assert_eq!(back.location(), "/login?error=oidc_state", "several audiences need azp");
+
+    c.idp.lock().unwrap().authorized_party = Some("activsync".into());
+    let back = sign_in_through_provider(&mut c).await;
+    assert_eq!(back.location(), "/");
+
+    c.idp.lock().unwrap().authorized_party = Some("another-client".into());
+    let back = sign_in_through_provider(&mut c).await;
+    assert_eq!(back.location(), "/login?error=oidc_state", "azp must be this client");
 }

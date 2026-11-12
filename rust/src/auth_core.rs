@@ -213,27 +213,62 @@ pub fn claim_owner(conn: &Connection, password_hash: &str, now: f64) -> DbResult
     Ok(true)
 }
 
+fn stored_hash(conn: &Connection) -> DbResult<Option<String>> {
+    Ok(owner(conn)?.get("password_hash").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string))
+}
+
+/// The outcome of checking a password against a stored hash, with the
+/// replacement hash when the stored one was made with other cost settings.
+pub struct Verdict {
+    pub verified: bool,
+    stored: Option<String>,
+    rehash: Option<String>,
+}
+
+/// The slow, database-free half of a password check. Run it off the database
+/// lock: argon2 takes long enough to stall every other request.
+pub fn verify_stored(stored: Option<&str>, password: &str, cost: HashCost) -> Verdict {
+    let rejected = || Verdict { verified: false, stored: None, rehash: None };
+    let Some(stored) = stored else {
+        return rejected();
+    };
+    let Some(parsed) = Encoded::parse(stored) else {
+        return rejected();
+    };
+    if !parsed.verify(password) {
+        return rejected();
+    }
+    let rehash = if parsed.uses(&cost) { None } else { hash_password(password, cost).ok() };
+    Verdict { verified: true, stored: Some(stored.to_string()), rehash }
+}
+
+fn store_rehash(conn: &Connection, verdict: &Verdict) -> DbResult<()> {
+    let Some(rehashed) = &verdict.rehash else {
+        return Ok(());
+    };
+    let record = owner(conn)?;
+    if record.get("password_hash").and_then(Value::as_str) != verdict.stored.as_deref() {
+        return Ok(());
+    }
+    let mut updated = record;
+    updated["password_hash"] = json!(rehashed);
+    db::set_config_value(conn, OWNER_KEY, &updated)
+}
+
 /// Verifies against the stored hash, rehashing it when it was made with other
 /// cost settings.
 pub fn verify_password(conn: &Connection, password: &str, cost: HashCost) -> DbResult<bool> {
-    let record = owner(conn)?;
-    let Some(stored) = record.get("password_hash").and_then(Value::as_str).filter(|s| !s.is_empty()) else {
-        return Ok(false);
-    };
-    let Some(parsed) = Encoded::parse(stored) else {
-        return Ok(false);
-    };
-    if !parsed.verify(password) {
-        return Ok(false);
+    let verdict = verify_stored(stored_hash(conn)?.as_deref(), password, cost);
+    if verdict.verified {
+        store_rehash(conn, &verdict)?;
     }
-    if !parsed.uses(&cost) {
-        if let Ok(rehashed) = hash_password(password, cost) {
-            let mut updated = record.clone();
-            updated["password_hash"] = json!(rehashed);
-            db::set_config_value(conn, OWNER_KEY, &updated)?;
-        }
-    }
-    Ok(true)
+    Ok(verdict.verified)
+}
+
+pub async fn hash_password_blocking(password: String, cost: HashCost) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || hash_password(&password, cost))
+        .await
+        .map_err(|err| err.to_string())?
 }
 
 fn bucket_wait(state: &Value, now: f64) -> i64 {
@@ -366,15 +401,16 @@ pub struct PasswordCheck {
     pub retry_after: i64,
 }
 
-/// Reserve, then verify: a throttled attempt is never verified, so timing
-/// reveals nothing.
-pub fn check_password(
-    conn: &Connection,
-    password: &str,
-    now: f64,
-    device_id: Option<&str>,
-    cost: HashCost,
-) -> DbResult<PasswordCheck> {
+/// A password check that has counted its attempt and is ready to verify.
+pub struct Reserved {
+    on_device: bool,
+    pub stored: Option<String>,
+}
+
+/// First half of a check, under the database lock: counts this attempt, or
+/// returns the seconds to wait. A throttled attempt is never verified, so
+/// timing reveals nothing.
+pub fn reserve_check(conn: &Connection, now: f64, device_id: Option<&str>) -> DbResult<Result<Reserved, i64>> {
     let device_wait = match device_id {
         Some(id) => reserve_device_attempt(conn, id, now)?,
         None => None,
@@ -385,16 +421,38 @@ pub fn check_password(
         None => reserve_attempt(conn, now)?,
     };
     if wait > 0 {
-        return Ok(PasswordCheck { verified: false, retry_after: wait });
+        return Ok(Err(wait));
     }
-    if !verify_password(conn, password, cost)? {
-        return Ok(PasswordCheck { verified: false, retry_after: 0 });
+    Ok(Ok(Reserved { on_device, stored: stored_hash(conn)? }))
+}
+
+/// Last half of a check, under the database lock: a success clears the
+/// failures this attempt was counted as and stores a refreshed hash.
+pub fn settle_check(conn: &Connection, device_id: Option<&str>, reserved: &Reserved, verdict: &Verdict) -> DbResult<()> {
+    if !verdict.verified {
+        return Ok(());
     }
+    store_rehash(conn, verdict)?;
     match device_id {
-        Some(id) if on_device => reset_device(conn, id)?,
-        _ => reset_throttle(conn)?,
+        Some(id) if reserved.on_device => reset_device(conn, id),
+        _ => reset_throttle(conn),
     }
-    Ok(PasswordCheck { verified: true, retry_after: 0 })
+}
+
+pub fn check_password(
+    conn: &Connection,
+    password: &str,
+    now: f64,
+    device_id: Option<&str>,
+    cost: HashCost,
+) -> DbResult<PasswordCheck> {
+    let reserved = match reserve_check(conn, now, device_id)? {
+        Ok(reserved) => reserved,
+        Err(wait) => return Ok(PasswordCheck { verified: false, retry_after: wait }),
+    };
+    let verdict = verify_stored(reserved.stored.as_deref(), password, cost);
+    settle_check(conn, device_id, &reserved, &verdict)?;
+    Ok(PasswordCheck { verified: verdict.verified, retry_after: 0 })
 }
 
 /// Per-client sliding window in front of the account throttle, so one address

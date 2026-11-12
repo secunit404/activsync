@@ -1,12 +1,14 @@
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use activsync::auth_core::{self, HashCost};
 use activsync::auth_guard::{AuthConfig, ForwardedTrust, ProxyAuth};
 use activsync::db::Db;
 use activsync::{AppState, build_app, schedule, seed};
 use axum::Router;
 use axum::body::Body;
 use axum::extract::connect_info::MockConnectInfo;
-use axum::http::{HeaderMap, Method, Request, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode};
 use chrono::Utc;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -24,6 +26,7 @@ struct Reply {
     status: StatusCode,
     headers: HeaderMap,
     json: Value,
+    client_addr: Option<String>,
 }
 
 fn client_with(auth: AuthConfig, peer: &str) -> Client {
@@ -56,6 +59,7 @@ impl Client {
         let response = self.app.clone().oneshot(request.body(body).unwrap()).await.unwrap();
         let status = response.status();
         let headers = response.headers().clone();
+        let client_addr = response.extensions().get::<activsync::logging::ClientAddr>().map(|a| a.0.clone());
         for set in headers.get_all("set-cookie") {
             let text = set.to_str().unwrap();
             let (pair, attributes) = text.split_once(';').unwrap_or((text, ""));
@@ -67,7 +71,7 @@ impl Client {
         }
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         let json = serde_json::from_slice(&bytes).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into()));
-        Reply { status, headers, json }
+        Reply { status, headers, json, client_addr }
     }
 
     async fn send(&mut self, method: Method, uri: &str, body: Option<Value>) -> Reply {
@@ -333,4 +337,134 @@ async fn dev_unclaim_issues_a_new_code() {
     let code = reply.json["setupCode"].as_str().unwrap().to_string();
     assert_eq!(c.state.setup_code.current(), Some(code));
     assert_eq!(c.send(Method::GET, "/api/v1/auth/status", None).await.json["ownerClaimed"], false);
+}
+
+async fn claim_through_proxy(c: &mut Client, headers: &[(&str, &str)]) -> Reply {
+    let code = c.state.setup_code.current().unwrap();
+    let mut request = Request::builder()
+        .method(Method::POST)
+        .uri("/api/v1/auth/claim")
+        .header("host", "activsync.localhost")
+        .header("x-activsync-request", "1")
+        .header("origin", "https://activsync.localhost");
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    c.raw(request, Some(json!({"setupCode": code, "password": PASSWORD}))).await
+}
+
+#[tokio::test]
+async fn forwarded_for_lines_are_joined_and_ports_dropped() {
+    let mut c = client();
+    let reply = claim_through_proxy(
+        &mut c,
+        &[("x-forwarded-proto", "https"), ("x-forwarded-for", "1.1.1.1"), ("x-forwarded-for", "203.0.113.7:4444")],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+    assert_eq!(reply.client_addr.as_deref(), Some("203.0.113.7:4444"));
+    let sessions = c.raw(
+        Request::get("/api/v1/auth/sessions")
+            .header("host", "activsync.localhost")
+            .header("x-forwarded-proto", "https")
+            .header("x-forwarded-for", "1.1.1.1")
+            .header("x-forwarded-for", "203.0.113.7:4444"),
+        None,
+    ).await;
+    assert_eq!(sessions.json[0]["ip"], "203.0.113.7");
+}
+
+#[tokio::test]
+async fn an_empty_forwarded_for_keeps_the_socket_peer() {
+    let mut c = client();
+    let reply = claim_through_proxy(&mut c, &[("x-forwarded-proto", "https"), ("x-forwarded-for", "")]).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+    assert_eq!(reply.client_addr.as_deref(), Some("127.0.0.1:50000"));
+}
+
+#[tokio::test]
+async fn forwarded_proto_is_case_sensitive() {
+    let mut c = client();
+    let reply = claim_through_proxy(&mut c, &[("x-forwarded-proto", "HTTPS")]).await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN, "scheme stays http, so an https Origin does not match");
+    assert!(!reply.headers.contains_key("strict-transport-security"));
+
+    let wss = claim_through_proxy(&mut c, &[("x-forwarded-proto", "wss")]).await;
+    assert_eq!(wss.status, StatusCode::FORBIDDEN, "wss is taken as the scheme, which is not https");
+    assert!(!wss.headers.contains_key("strict-transport-security"));
+}
+
+#[tokio::test]
+async fn access_log_shows_the_forwarded_client() {
+    let mut c = client();
+    let plain = c.send(Method::GET, "/api/v1/auth/status", None).await;
+    assert_eq!(plain.client_addr.as_deref(), Some("127.0.0.1:50000"));
+    let no_port = c.raw(
+        Request::get("/api/v1/auth/status").header("host", "127.0.0.1:8382").header("x-forwarded-for", "203.0.113.9"),
+        None,
+    ).await;
+    assert_eq!(no_port.client_addr.as_deref(), Some("203.0.113.9:0"));
+    let refused = c.raw(Request::get("/api/v1/auth/status").header("host", "evil.example").header("x-forwarded-for", "203.0.113.9:80"), None).await;
+    assert_eq!((refused.status, refused.client_addr.as_deref()), (StatusCode::BAD_REQUEST, Some("203.0.113.9:80")));
+
+    let mut v6 = client_with(AuthConfig::for_tests(), "[::1]");
+    let reply = v6.send(Method::GET, "/api/v1/auth/status", None).await;
+    assert_eq!(reply.client_addr.as_deref(), Some("::1:50000"), "uvicorn writes IPv6 hosts without brackets");
+}
+
+#[tokio::test]
+async fn forwarded_allow_ips_with_host_bits_trusts_no_one() {
+    let mut auth = AuthConfig::for_tests();
+    auth.forwarded = ForwardedTrust::parse("172.18.0.5/16");
+    let mut c = client_with(auth, "172.18.0.5");
+    let reply = c.raw(
+        Request::get("/api/v1/auth/status").header("host", "127.0.0.1:8382").header("x-forwarded-for", "203.0.113.9"),
+        None,
+    ).await;
+    assert_eq!(reply.client_addr.as_deref(), Some("172.18.0.5:50000"));
+}
+
+#[tokio::test]
+async fn anonymous_body_cap_comes_before_the_csrf_check() {
+    let mut c = client();
+    let request = Request::post("/api/v1/auth/login").header("host", "127.0.0.1:8382");
+    let reply = c.raw(request, Some(json!({"password": "x".repeat(20_000)}))).await;
+    assert_eq!((reply.status, reply.json), (StatusCode::PAYLOAD_TOO_LARGE, json!({"detail": "That request is too large."})));
+}
+
+#[tokio::test]
+async fn a_proxy_header_with_non_ascii_bytes_is_a_mismatch() {
+    let mut proxied = client_with(proxy_auth(), "172.18.0.10");
+    let odd = || Request::get("/api/v1/auth/status").header("host", "127.0.0.1:8382").header("remote-user", HeaderValue::from_bytes(b"caf\xe9").unwrap());
+    let reply = proxied.raw(odd(), None).await;
+    assert_eq!((reply.status, reply.json), (StatusCode::UNAUTHORIZED, json!({"detail": "Not signed in"})));
+
+    let mut bypass = client_with(proxy_auth(), "192.0.2.1");
+    assert_eq!(bypass.raw(odd(), None).await.status, StatusCode::OK, "an untrusted peer's header is ignored");
+}
+
+#[tokio::test]
+async fn password_checks_leave_the_database_free() {
+    let mut c = client();
+    c.claim().await;
+    let slow = HashCost { memory_kib: 65536, time: 12, parallelism: 4, hash_len: 32, salt_len: 16 };
+    let hash = auth_core::hash_password(PASSWORD, slow).unwrap();
+    auth_core::set_password_hash(&c.state.db.lock(), &hash, 0.0).unwrap();
+    let mut other = Client { app: c.app.clone(), state: c.state.clone(), cookies: Vec::new() };
+    let login_done = AtomicBool::new(false);
+    let (login, finished_first) = tokio::join!(
+        async {
+            let reply = other.send(Method::POST, "/api/v1/auth/login", Some(json!({"password": PASSWORD}))).await;
+            login_done.store(true, Ordering::SeqCst);
+            reply
+        },
+        async {
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            let status = c.send(Method::GET, "/api/v1/auth/status", None).await;
+            assert_eq!(status.status, StatusCode::OK);
+            !login_done.load(Ordering::SeqCst)
+        }
+    );
+    assert_eq!(login.status, StatusCode::OK);
+    assert!(finished_first, "other requests were served while the password was being verified");
 }

@@ -124,7 +124,7 @@ pub async fn save_oidc(
     length(&request.scopes, 0, 512, "scopes")?;
     length(&request.current_password, 0, 1024, "currentPassword")?;
     let device = trusted_device(&state, &headers, &ctx)?;
-    require_password(&state, &request.current_password, StatusCode::BAD_REQUEST, device.as_deref())?;
+    require_password(&state, &request.current_password, StatusCode::BAD_REQUEST, device.as_deref()).await?;
     let config = oidc_config::save(
         &state.db.lock(),
         &NewConfig {
@@ -137,6 +137,7 @@ pub async fn save_oidc(
         },
     )
     .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, err))?;
+    state.oidc_sessions.forget_provider();
     Ok(message(if config.linked.is_some() {
         "Single sign-on settings saved."
     } else {
@@ -150,7 +151,7 @@ pub struct CurrentPasswordRequest {
     current_password: String,
 }
 
-fn confirm_password(
+async fn confirm_password(
     state: &AppState,
     headers: &HeaderMap,
     ctx: &RequestContext,
@@ -159,7 +160,7 @@ fn confirm_password(
     let request = body(payload)?;
     length(&request.current_password, 0, 1024, "currentPassword")?;
     let device = trusted_device(state, headers, ctx)?;
-    require_password(state, &request.current_password, StatusCode::BAD_REQUEST, device.as_deref())
+    require_password(state, &request.current_password, StatusCode::BAD_REQUEST, device.as_deref()).await
 }
 
 pub async fn delete_oidc(
@@ -168,8 +169,9 @@ pub async fn delete_oidc(
     Extension(ctx): Extension<RequestContext>,
     payload: Result<Json<CurrentPasswordRequest>, JsonRejection>,
 ) -> ApiResult<AuthActionResult> {
-    confirm_password(&state, &headers, &ctx, payload)?;
+    confirm_password(&state, &headers, &ctx, payload).await?;
     oidc_config::delete(&state.db.lock())?;
+    state.oidc_sessions.forget_provider();
     Ok(message("Single sign-on removed."))
 }
 
@@ -190,7 +192,7 @@ pub async fn start_link(
     if oidc_config::load(&state.db.lock())?.is_none() {
         return Err(ApiError::conflict("Set up single sign-on first."));
     }
-    confirm_password(&state, &headers, &ctx, payload)?;
+    confirm_password(&state, &headers, &ctx, payload).await?;
     let key = state.oidc_sessions.grant_link(cookie(&headers, oidc_cookie(&ctx)), state.scheduler.now());
     let url = format!("/auth/oidc/login?intent=link&next={}", quote("/settings"));
     Ok(with_cookies(
@@ -350,7 +352,7 @@ pub async fn oidc_callback(
     let flow = state.oidc_sessions.take_flow(cookie(&headers, oidc_cookie(&ctx)));
     let config = oidc_config::load(&state.db.lock())?;
     let callback = Callback { state: query.state.as_deref(), code: query.code.as_deref(), error: query.error.as_deref() };
-    let result = match oidc_flow::finish(&state.oidc_http, config.as_ref(), flow, callback).await {
+    let result = match oidc_flow::finish(&state.oidc_http, &state.oidc_sessions, config.as_ref(), flow, callback, state.scheduler.now()).await {
         Ok(result) => result,
         Err(err) => return Ok(error_response(&err)),
     };

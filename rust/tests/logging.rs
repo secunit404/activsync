@@ -19,6 +19,13 @@ fn lines_read_like_the_python_apps() {
 
     logging::configure("nonsense", "UTC");
     assert!(logging::enabled(Level::Info) && !logging::enabled(Level::Debug));
+
+    logging::configure("CRITICAL", "UTC");
+    assert!(logging::enabled(Level::Critical) && !logging::enabled(Level::Error));
+    logging::configure("error", "UTC");
+    assert!(logging::enabled(Level::Error) && !logging::enabled(Level::Warning));
+    logging::configure(" debug", "UTC");
+    assert!(logging::enabled(Level::Info) && !logging::enabled(Level::Debug), "Python does not trim the name");
 }
 
 #[test]

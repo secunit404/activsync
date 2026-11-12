@@ -84,13 +84,23 @@ pub(crate) fn trusted_device(state: &AppState, headers: &HeaderMap, ctx: &Reques
     Ok(device.filter(|d| auth_core::is_trusted(&state.db.lock(), Some(d)).unwrap_or(false)))
 }
 
-pub(crate) fn require_password(state: &AppState, password: &str, wrong_status: StatusCode, device: Option<&str>) -> Result<(), ApiError> {
-    let check = auth_core::check_password(&state.db.lock(), password, state.scheduler.now(), device, state.auth.cost)?;
-    if check.retry_after > 0 {
-        let wait = check.retry_after;
-        return Err(retry_error(format!("Too many wrong passwords. Try again in {wait} seconds."), wait));
-    }
-    if !check.verified {
+pub(crate) async fn require_password(
+    state: &AppState,
+    password: &str,
+    wrong_status: StatusCode,
+    device: Option<&str>,
+) -> Result<(), ApiError> {
+    let reserved = auth_core::reserve_check(&state.db.lock(), state.scheduler.now(), device)?;
+    let reserved = match reserved {
+        Ok(reserved) => reserved,
+        Err(wait) => return Err(retry_error(format!("Too many wrong passwords. Try again in {wait} seconds."), wait)),
+    };
+    let (stored, candidate, cost) = (reserved.stored.clone(), password.to_string(), state.auth.cost);
+    let verdict = tokio::task::spawn_blocking(move || auth_core::verify_stored(stored.as_deref(), &candidate, cost))
+        .await
+        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    auth_core::settle_check(&state.db.lock(), device, &reserved, &verdict)?;
+    if !verdict.verified {
         return Err(ApiError::new(wrong_status, "Wrong password."));
     }
     Ok(())
@@ -170,7 +180,8 @@ pub async fn claim(
             "That setup code is not right. Check the server log for the current one.",
         ));
     }
-    let hash = auth_core::hash_password(&payload.password, state.auth.cost)
+    let hash = auth_core::hash_password_blocking(payload.password.clone(), state.auth.cost)
+        .await
         .map_err(|problem| ApiError::new(StatusCode::BAD_REQUEST, problem))?;
     if !auth_core::claim_owner(&state.db.lock(), &hash, state.scheduler.now())? {
         return Err(ApiError::new(StatusCode::CONFLICT, "ActivSync is already claimed."));
@@ -200,7 +211,7 @@ pub async fn login(
     if device.is_none() {
         limit_client(&state, &ctx)?;
     }
-    require_password(&state, &payload.password, StatusCode::UNAUTHORIZED, device.as_deref())?;
+    require_password(&state, &payload.password, StatusCode::UNAUTHORIZED, device.as_deref()).await?;
     let cookies = start_session(&state, &headers, &ctx, "password")?;
     Ok(with_cookies(Json(status_for(&state, Some(&AuthState::of("password")))?), cookies))
 }
@@ -285,8 +296,9 @@ pub async fn change_password(
     too_long(&[&payload.current, &payload.new])?;
     let auth = require_session(&ctx)?;
     let device = trusted_device(&state, &headers, &ctx)?;
-    require_password(&state, &payload.current, StatusCode::BAD_REQUEST, device.as_deref())?;
-    let hash = auth_core::hash_password(&payload.new, state.auth.cost)
+    require_password(&state, &payload.current, StatusCode::BAD_REQUEST, device.as_deref()).await?;
+    let hash = auth_core::hash_password_blocking(payload.new.clone(), state.auth.cost)
+        .await
         .map_err(|problem| ApiError::new(StatusCode::BAD_REQUEST, problem))?;
     let conn = state.db.lock();
     auth_core::set_password_hash(&conn, &hash, state.scheduler.now())?;
