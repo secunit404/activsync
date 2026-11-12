@@ -137,7 +137,7 @@ pub fn upsert_workout(
                 "INSERT INTO hevy_workouts
                    (hevy_id, title, start_time, end_time, source_updated_at, payload, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
-                params![hevy_id, title, start_time, end_time, source_updated_at, payload.to_string(), now],
+                params![hevy_id, title, start_time, end_time, source_updated_at, db::json_dumps(payload), now],
             )?;
         }
         Some(current) => {
@@ -147,7 +147,7 @@ pub fn upsert_workout(
             conn.execute(
                 "UPDATE hevy_workouts SET title = ?1, start_time = ?2, end_time = ?3,
                    source_updated_at = ?4, payload = ?5, updated_at = ?6 WHERE hevy_id = ?7",
-                params![title, start_time, end_time, source_updated_at, payload.to_string(), now, hevy_id],
+                params![title, start_time, end_time, source_updated_at, db::json_dumps(payload), now, hevy_id],
             )?;
         }
     }
@@ -423,7 +423,7 @@ pub fn save_backup(
          VALUES (?1, ?2, ?3, ?4, ?5)
          ON CONFLICT(garmin_activity_id) DO UPDATE SET original_fit = excluded.original_fit
          WHERE merge_backups.original_fit IS NULL AND excluded.original_fit IS NOT NULL",
-        params![garmin_activity_id, hevy_id, original_sets.to_string(), original_fit, now_iso()],
+        params![garmin_activity_id, hevy_id, db::json_dumps(original_sets), original_fit, now_iso()],
     )?;
     Ok(())
 }
@@ -469,7 +469,7 @@ pub fn upsert_template(conn: &Connection, template: &Template<'_>) -> DbResult<(
             template.id,
             template.title,
             template.primary_muscle_group,
-            serde_json::to_string(template.secondary_muscle_groups).unwrap_or_else(|_| "[]".into()),
+            db::json_dumps(&serde_json::json!(template.secondary_muscle_groups)),
             template.equipment_category,
             i64::from(template.is_custom),
             now_iso()

@@ -41,9 +41,7 @@ LABEL org.opencontainers.image.title="ActivSync" \
 ENV ACTIVSYNC_BUILD="${VERSION}" \
     ACTIVSYNC_HOST=0.0.0.0 \
     PORT=8381 \
-    ACTIVSYNC_WEB_DIR=/app/web \
-    ACTIVSYNC_DB_PATH=/config/activsync.db \
-    ACTIVSYNC_GARMIN_TOKEN_DIR=/config/.garminconnect
+    ACTIVSYNC_WEB_DIR=/app/web
 
 COPY --from=server /usr/local/bin/activsync /usr/local/bin/activsync
 COPY --from=web /web/build/client /app/web

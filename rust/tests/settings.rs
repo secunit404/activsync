@@ -12,6 +12,18 @@ use tower::ServiceExt;
 fn app(onboarded: bool) -> (AppState, Router) {
     let db = Db::open_in_memory().unwrap();
     seed::seed(&mut db.lock(), Utc::now(), onboarded).unwrap();
+    if onboarded {
+        for (key, value) in [
+            ("garmin_credentials", json!({"email": "dev@example.com", "password": "dev-password"})),
+            ("garmin_credentials_verified", json!(true)),
+            ("garmin_last_sync_at", json!(db::iso(Utc::now()))),
+            ("garmin_last_sync_ok", json!(true)),
+            ("strava_credentials", json!({"client_id": "12345", "client_secret": "dev-secret"})),
+            ("strava_tokens", json!({"refresh_token": "dev-refresh-token"})),
+        ] {
+            db::set_config_value(&db.lock(), key, &value).unwrap();
+        }
+    }
     let state = AppState::new(db, true, schedule::system_clock(), schedule::UNDO_WINDOW_SECONDS, AuthConfig::sign_in_off());
     let app = build_app(state.clone(), None);
     (state, app)

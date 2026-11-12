@@ -47,8 +47,8 @@ const SAMPLES: [Sample; 13] = [
 ];
 
 /// Fills a mock database with a year of sample activities. When `onboarded`,
-/// it is also past the setup wizard with both services reading as connected;
-/// otherwise the wizard starts at its first step.
+/// it is also past the setup wizard (`initial_sync_done`, nothing else), even
+/// on a database that already holds the current sample data.
 ///
 /// Refuses to touch a database holding any activity it did not generate, so
 /// pointing the mock server at a real database cannot alter it.
@@ -56,6 +56,9 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
     let existing = db::list_activities(conn, false)?;
     if existing.iter().any(|row| !row.content_hash.starts_with("dev-")) {
         return Ok(false);
+    }
+    if onboarded {
+        db::set_config_value(conn, "initial_sync_done", &json!(true))?;
     }
     if db::get_config_value(conn, SEED_VERSION_KEY)? == Some(json!(SEED_VERSION)) {
         return Ok(true);
@@ -69,6 +72,8 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
         "hevy_match_schedule",
         "exercise_templates",
         "exercise_mappings",
+        "merge_backups",
+        "hevy_events_seen",
         "publish_schedule",
     ] {
         tx.execute(&format!("DELETE FROM {table}"), [])?;
@@ -116,7 +121,7 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
                     start_time: &start.format("%Y-%m-%d %H:%M:%S").to_string(),
                     content_hash: &format!("dev-{id}"),
                     publish_status: sample.status,
-                    garmin_data: &data.to_string(),
+                    garmin_data: &db::json_dumps(&data),
                     hold_reason,
                 },
                 now,
@@ -133,15 +138,6 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
     settings.insert("held_activity_types".into(), json!(held));
     db::set_config_value(&tx, "settings", &Value::Object(settings))?;
     db::set_config_value(&tx, "garmin_activity_types", &Value::Array(mock::garmin_activity_types()))?;
-    if onboarded {
-        db::set_config_value(&tx, "initial_sync_done", &json!(true))?;
-        db::set_config_value(&tx, "garmin_credentials", &json!({"email": "dev@example.com", "password": "dev-password"}))?;
-        db::set_config_value(&tx, "garmin_credentials_verified", &json!(true))?;
-        db::set_config_value(&tx, "garmin_last_sync_at", &json!(db::iso(now)))?;
-        db::set_config_value(&tx, "garmin_last_sync_ok", &json!(true))?;
-        db::set_config_value(&tx, "strava_credentials", &json!({"client_id": "12345", "client_secret": "dev-secret"}))?;
-        db::set_config_value(&tx, "strava_tokens", &json!({"refresh_token": "dev-refresh-token"}))?;
-    }
     db::set_config_value(&tx, SEED_VERSION_KEY, &json!(SEED_VERSION))?;
     tx.commit()?;
     Ok(true)

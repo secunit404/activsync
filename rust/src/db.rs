@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use chrono::{DateTime, Utc};
@@ -380,6 +380,21 @@ pub fn set_published(
     Ok(())
 }
 
+/// Where the database lives: `configured` (`ACTIVSYNC_DB_PATH`, else
+/// `G2S_DB_PATH`), else the default for the mode. An install from before the
+/// rename keeps its old database name until a new one exists.
+pub fn resolve_path(configured: Option<String>, mock_mode: bool, exists: impl Fn(&Path) -> bool) -> PathBuf {
+    if let Some(path) = configured.filter(|path| !path.is_empty()) {
+        return PathBuf::from(path);
+    }
+    let (preferred, legacy) = if mock_mode {
+        (PathBuf::from("/config/activsync-dev.db"), PathBuf::from("/config/dev-mock.db"))
+    } else {
+        (PathBuf::from("/config/activsync.db"), PathBuf::from("/config/garmin2strava.db"))
+    };
+    if exists(&legacy) && !exists(&preferred) { legacy } else { preferred }
+}
+
 /// Values are stored as JSON text, exactly as the Python app writes them.
 pub fn get_config_value(conn: &Connection, key: &str) -> DbResult<Option<Value>> {
     let raw: Option<String> = conn
@@ -392,9 +407,90 @@ pub fn set_config_value(conn: &Connection, key: &str, value: &Value) -> DbResult
     conn.execute(
         "INSERT INTO app_config (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params![key, value.to_string()],
+        params![key, json_dumps(value)],
     )?;
     Ok(())
+}
+
+/// `json.dumps` with its defaults: `", "` and `": "` separators and every
+/// non-ASCII character as a `\uXXXX` escape (surrogate pairs above U+FFFF),
+/// so a row reads the same whichever server wrote it.
+pub fn json_dumps(value: &Value) -> String {
+    let mut out = String::new();
+    dump_value(value, &mut out);
+    out
+}
+
+fn dump_value(value: &Value, out: &mut String) {
+    match value {
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::Number(n) if n.is_f64() => out.push_str(&python_float(n.as_f64().unwrap_or_default())),
+        Value::Number(n) => out.push_str(&n.to_string()),
+        Value::String(s) => dump_string(s, out),
+        Value::Array(items) => {
+            out.push('[');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    out.push_str(", ");
+                }
+                dump_value(item, out);
+            }
+            out.push(']');
+        }
+        Value::Object(map) => {
+            out.push('{');
+            for (index, (key, item)) in map.iter().enumerate() {
+                if index > 0 {
+                    out.push_str(", ");
+                }
+                dump_string(key, out);
+                out.push_str(": ");
+                dump_value(item, out);
+            }
+            out.push('}');
+        }
+    }
+}
+
+fn dump_string(text: &str, out: &mut String) {
+    out.push('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            ' '..='~' => out.push(ch),
+            _ => {
+                let mut units = [0u16; 2];
+                for unit in ch.encode_utf16(&mut units) {
+                    out.push_str(&format!("\\u{unit:04x}"));
+                }
+            }
+        }
+    }
+    out.push('"');
+}
+
+/// Python's `repr()` of a float: shortest round-trip digits, `1e-05` and
+/// `1e+16` style exponents outside 1e-4..1e16.
+fn python_float(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".into();
+    }
+    if value.is_infinite() {
+        return if value > 0.0 { "Infinity" } else { "-Infinity" }.into();
+    }
+    let text = format!("{value:?}");
+    let Some((mantissa, exponent)) = text.split_once('e') else {
+        return text;
+    };
+    let (sign, digits) = exponent.strip_prefix('-').map_or(("+", exponent), |digits| ("-", digits));
+    format!("{mantissa}e{sign}{digits:0>2}")
 }
 
 /// Python truthiness for a stored config value.

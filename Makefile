@@ -63,12 +63,13 @@ dev-rust:
 	npx concurrently --kill-others --names api-rs,web --prefix-colors magenta,green "$(MAKE) dev-api-rust" "npm run dev:web"
 
 dev-api-rust:
-	ACTIVSYNC_DEV_MOCK_DATA=1 $(CARGO) run --manifest-path rust/Cargo.toml
+	ACTIVSYNC_DEV_MOCK_DATA=1 ACTIVSYNC_DEV_SEED_OWNER=$${ACTIVSYNC_DEV_SEED_OWNER:-1} ACTIVSYNC_DB_PATH=data/activsync-rust-dev.db $(CARGO) run --manifest-path rust/Cargo.toml
 
-# Wipe the Rust dev database and start at the first step of the setup wizard.
+# Wipe the Rust dev database and start at the first step of the setup wizard,
+# with the claim step instead of the dev password.
 dev-rust-fresh:
 	rm -f data/activsync-rust-dev.db data/activsync-rust-dev.db-shm data/activsync-rust-dev.db-wal
-	ACTIVSYNC_DEV_FRESH=1 $(MAKE) dev-rust
+	ACTIVSYNC_DEV_SEED_OWNER=0 $(MAKE) dev-rust
 
 # Real accounts, as `dev-real`: same database and checks, Garmin and Strava
 # polling off, Hevy matches held for review.

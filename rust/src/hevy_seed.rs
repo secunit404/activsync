@@ -124,7 +124,7 @@ fn watch_activity(conn: &Connection, id: i64, title: &str, workout: &Value, now:
             start_time: start,
             content_hash: &format!("dev-{id}"),
             publish_status: "pending",
-            garmin_data: &data.to_string(),
+            garmin_data: &db::json_dumps(&data),
             hold_reason: None,
         },
         now,
