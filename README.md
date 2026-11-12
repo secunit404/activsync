@@ -109,7 +109,7 @@ use and 30 days at most.
 
 ### Password
 
-Chosen when you claim the install; at least 15 characters. Repeated wrong
+Chosen when you claim the install; at least 12 characters. Repeated wrong
 guesses are slowed down, up to 15 minutes, but a browser you have signed in
 from before is never locked out by someone guessing elsewhere.
 
