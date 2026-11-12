@@ -365,7 +365,7 @@ async fn settings_need_the_password_and_a_safe_issuer() {
         "displayName": "X", "issuer": ISSUER, "clientId": "c", "currentPassword": "nope",
     })))
     .await;
-    assert_eq!((wrong.status, wrong.json["detail"].clone()), (StatusCode::BAD_REQUEST, json!("Wrong password.")));
+    assert_eq!((wrong.status, wrong.json["detail"].clone()), (StatusCode::BAD_REQUEST, json!("Incorrect password.")));
     let insecure = c.send(Method::PUT, "/api/v1/auth/oidc", Some(json!({
         "displayName": "X", "issuer": "http://id.example.test", "clientId": "c", "currentPassword": PASSWORD,
     })))

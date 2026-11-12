@@ -79,16 +79,17 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
     let fail = |message: &str| Ok(Redirect::to(&format!("{landing}?stravaError={}", urlencode(message))));
     if query.error.as_deref() == Some("access_denied") {
         return fail(
-            "The Strava authorization was declined, so nothing was connected. \
-             Press Connect and choose Authorize on Strava's page to continue.",
+            "Strava authorization was declined, so nothing was connected. \
+             Press Connect with Strava and choose Authorize on Strava's page.",
         );
     }
     let code = query.code.as_deref().unwrap_or_default();
     if query.error.as_deref().is_some_and(|error| !error.is_empty()) || code.is_empty() {
         crate::log_warn!("strava_routes", "strava authorization did not complete: error={:?}", query.error);
         return fail(
-            "Strava did not send an authorization back. Try again and check \
-             the Authorization Callback Domain if the problem continues.",
+            "Strava did not return an authorization. Try again. If the problem \
+             continues, check the Authorization Callback Domain of your Strava \
+             API application.",
         );
     }
     let state_matches = match (&expected, &query.state) {

@@ -175,7 +175,7 @@ pub async fn complete_mfa(
 ) -> ApiResult<ActionResult> {
     let payload = body(payload)?;
     let Some(pending) = state.pending_mfa() else {
-        return Err(conflict("The Garmin verification session expired."));
+        return Err(conflict("The Garmin verification session expired. Sign in to Garmin again to get a new code."));
     };
     let last_ok = last_sync_ok_at(&state)?;
     let completed = match &state.garmin_sign_in {

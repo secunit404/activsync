@@ -178,7 +178,7 @@ async fn a_rejected_key_is_not_saved() {
     let h = harness(true, Box::new(|_, _| (401, json!({"error": "Unauthorized"}))));
     let (status, body) = call(&h.app, "/api/v1/settings/hevy/credentials", json!({"apiKey": " bad "})).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body["detail"], "Hevy rejected that API key — check it and try again.");
+    assert_eq!(body["detail"], "Hevy rejected that API key. Check the key and try again.");
     assert_eq!(h.config("hevy_api_key"), None);
     assert_eq!(h.hevy("/exercise_templates"), Vec::<String>::new());
 }
@@ -246,7 +246,7 @@ async fn backfill_pages_through_history_bounded_by_the_account_total() {
     let (status, body) = call(&h.app, "/api/v1/settings/hevy/backfill/preview", json!({"since": "2026-09-01"})).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["items"].as_array().unwrap().len(), 25);
-    assert_eq!(body["message"], "25 workouts found, of 25 on your Hevy account. Nothing has been written yet.");
+    assert_eq!(body["message"], "25 workouts found, of 25 on your Hevy account. Nothing has been imported yet.");
     assert_eq!(h.hevy("/workouts?").len(), 3);
     assert!(hevy_db::get_workout(&h.db.lock(), "h0").unwrap().is_none());
 }
@@ -267,7 +267,7 @@ async fn without_an_account_total_backfill_reads_one_page() {
     h.connect_key();
     let (status, body) = call(&h.app, "/api/v1/settings/hevy/backfill/preview", json!({"since": "2026-09-01"})).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["message"], "10 workouts found. Nothing has been written yet.");
+    assert_eq!(body["message"], "10 workouts found. Nothing has been imported yet.");
     assert_eq!(h.hevy("/workouts?").len(), 1);
 }
 
@@ -277,7 +277,7 @@ async fn backfill_reports_a_rejected_key_and_an_outage() {
     h.connect_key();
     let (status, body) = call(&h.app, "/api/v1/settings/hevy/backfill/preview", json!({"since": "2026-09-01"})).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body["detail"], "Hevy rejected the stored API key — reconnect Hevy.");
+    assert_eq!(body["detail"], "Hevy rejected the saved API key. Reconnect Hevy in Settings.");
 
     let h = harness(true, Box::new(|_, _| (400, json!({}))));
     h.connect_key();

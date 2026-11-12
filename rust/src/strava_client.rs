@@ -276,7 +276,7 @@ impl StravaClient {
         let response = self.send(http::Method::GET, &url, &[("authorization", bearer)], Vec::new(), REQUEST_TIMEOUT).await?;
         if response.status().as_u16() == 401 {
             return Err(StravaError::Auth(
-                "Strava rejected the read request — the connected app may be missing the activity:read_all scope. \
+                "Strava rejected the read request. The connection may be missing the activity:read_all permission. \
                  Reconnect Strava in Settings."
                     .into(),
             ));

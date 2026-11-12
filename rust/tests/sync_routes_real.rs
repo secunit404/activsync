@@ -184,7 +184,7 @@ async fn a_failed_first_sync_keeps_setup_open() {
     let h = harness(false, true, false);
     let (status, body) = post(&h.app, "/api/v1/setup/initial-sync").await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
-    assert!(body["detail"].as_str().unwrap().starts_with("Initial sync failed: "), "{body}");
+    assert!(body["detail"].as_str().unwrap().starts_with("First sync failed: "), "{body}");
     assert_eq!(h.config("initial_sync_done"), Some(json!(false)));
 }
 

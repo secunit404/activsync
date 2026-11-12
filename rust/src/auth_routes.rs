@@ -93,14 +93,14 @@ pub(crate) async fn require_password(
     let reserved = auth_core::reserve_check(&state.db.lock(), state.scheduler.now(), device)?;
     let reserved = match reserved {
         Ok(reserved) => reserved,
-        Err(wait) => return Err(retry_error(format!("Too many wrong passwords. Try again in {wait} seconds."), wait)),
+        Err(wait) => return Err(retry_error(format!("Too many incorrect passwords. Try again in {wait} seconds."), wait)),
     };
     let (stored, candidate, cost) = (reserved.stored.clone(), password.to_string(), state.auth.cost);
     let verdict = tokio::task::spawn_blocking(move || auth_core::verify_stored(stored.as_deref(), &candidate, cost))
         .await
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     if !auth_core::settle_check(&state.db.lock(), device, &reserved, &verdict)? {
-        return Err(ApiError::new(wrong_status, "Wrong password."));
+        return Err(ApiError::new(wrong_status, "Incorrect password."));
     }
     Ok(())
 }
@@ -176,7 +176,7 @@ pub async fn claim(
     if !state.setup_code.check(&payload.setup_code) {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
-            "That setup code is not right. Check the server log for the current one.",
+            "That setup code is incorrect. Check the server log for the current code.",
         ));
     }
     let hash = auth_core::hash_password_blocking(payload.password.clone(), state.auth.cost)
@@ -218,7 +218,7 @@ pub async fn login(
 pub async fn logout(State(state): State<AppState>, Extension(ctx): Extension<RequestContext>) -> Result<Response, ApiError> {
     let auth = require_session(&ctx)?;
     let Some(token_hash) = &auth.token_hash else {
-        return Err(ApiError::new(StatusCode::CONFLICT, "You are signed in through your proxy; sign out there."));
+        return Err(ApiError::new(StatusCode::CONFLICT, "You are signed in through your reverse proxy. Sign out there."));
     };
     auth_core::revoke_session(&state.db.lock(), token_hash)?;
     Ok(with_cookies(StatusCode::NO_CONTENT, vec![clear_cookie(ctx.session_cookie(), ctx.https)]))
@@ -276,7 +276,7 @@ pub async fn revoke_others(
     let conn = state.db.lock();
     let revoked = auth_core::revoke_all(&conn, auth.token_hash.as_deref())?;
     auth_core::clear_trusted_devices(&conn, device.as_deref())?;
-    Ok(Json(json!({ "message": format!("Signed out {revoked} other session(s).") })))
+    Ok(Json(json!({ "message": format!("Signed out {revoked} other {}.", if revoked == 1 { "session" } else { "sessions" }) })))
 }
 
 #[derive(Deserialize)]

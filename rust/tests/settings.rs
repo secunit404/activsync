@@ -139,7 +139,7 @@ async fn strava_callback_rejects_bad_state_and_missing_scope() {
         Some("/settings?stravaError=That+Strava+response+did+not+match+the+connection+request%2C+so+it+was+ignored.+Start+the+connection+again.")
     );
     let (_, _, location) = send(&app, Method::GET, "/strava/callback?error=access_denied", None).await;
-    assert!(location.unwrap().starts_with("/settings?stravaError=The+Strava+authorization+was+declined"));
+    assert!(location.unwrap().starts_with("/settings?stravaError=Strava+authorization+was+declined"));
 
     db::set_config_value(&state.db.lock(), "strava_oauth_state", &json!("abc")).unwrap();
     let (_, _, location) = send(&app, Method::GET, "/strava/callback?code=x&state=abc&scope=read", None).await;
@@ -244,7 +244,7 @@ async fn autosync_categories_release_category_holds_but_not_backlog() {
 
     let (status, body, _) = send(&app, Method::PUT, "/api/v1/settings/activity-types", Some(json!({"autosyncTypes": ["teleporting"]}))).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["detail"], "Unknown activity category.");
+    assert_eq!(body["detail"], "Unknown activity type.");
 
     ok(&app, Method::PUT, "/api/v1/settings/activity-types", Some(json!({"autosyncTypes": all}))).await;
     let rows = db::list_activities(&state.db.lock(), false).unwrap();
@@ -256,7 +256,7 @@ async fn autosync_categories_release_category_holds_but_not_backlog() {
     db::set_config_value(&state.db.lock(), "garmin_credentials_verified", &json!(false)).unwrap();
     let (status, body, _) = send(&app, Method::POST, "/api/v1/settings/activity-types/refresh", None).await;
     assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["detail"], "Connect to Garmin before refreshing activity categories.");
+    assert_eq!(body["detail"], "Connect Garmin before refreshing activity types.");
 }
 
 #[tokio::test]
@@ -267,7 +267,7 @@ async fn manual_sync_reports_per_service() {
     ok(&app, Method::DELETE, "/api/v1/settings/strava", None).await;
     let (status, body, _) = send(&app, Method::POST, "/api/v1/settings/sync/strava", None).await;
     assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["detail"], "Strava is disconnected — reconnect it to sync.");
+    assert_eq!(body["detail"], "Strava is disconnected. Reconnect Strava to sync.");
     assert_eq!(db::get_config_value(&state.db.lock(), "strava_tokens").unwrap(), Some(Value::Null));
 }
 
@@ -326,7 +326,7 @@ async fn hevy_settings_save_and_reject_bad_input() {
     partial["identity"] = json!({"manufacturer": 1});
     let (status, body, _) = send(&app, Method::PUT, "/api/v1/settings/hevy", Some(partial)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["detail"], "Device identity override needs all three numbers — or none.");
+    assert_eq!(body["detail"], "Enter all three device identity values, or leave all three blank.");
 
     let mut bad_template = hevy_body();
     bad_template["titleTemplate"] = json!("{nope}");

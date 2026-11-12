@@ -450,7 +450,7 @@ async fn a_publish_strava_rejects_is_a_409_for_one_and_a_failure_count_for_many(
 
     let (status, body) = call(&h.app, Method::POST, "/api/v1/activities/publish", Some(json!({"activityIds": [1, 2]}))).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["message"], "Published 0; 2 failed and stayed ready to retry");
+    assert_eq!(body["message"], "Published 0; 2 failed and can be retried");
     assert_eq!((body["severity"].as_str(), body["failedCount"].as_i64()), (Some("warning"), Some(2)));
 }
 
@@ -510,5 +510,5 @@ async fn the_strava_callback_in_setup_sends_no_refresh_and_ignores_an_empty_erro
     assert!(h.config("strava_tokens").is_some());
 
     let location = strava_callback(&h, "error=&state=tok").await;
-    assert!(location.starts_with("/setup?stravaError=Strava+did+not+send+an+authorization+back."), "{location}");
+    assert!(location.starts_with("/setup?stravaError=Strava+did+not+return+an+authorization."), "{location}");
 }

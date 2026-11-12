@@ -323,7 +323,7 @@ struct Backfill {
 async fn fetch_backfill(state: &AppState, since: &str) -> Result<(Vec<Value>, Option<i64>), ApiError> {
     let api_key = db::get_config_value(&state.db.lock(), "hevy_api_key")?;
     let Some(api_key) = api_key.filter(|key| db::truthy(Some(key))) else {
-        return Err(ApiError::conflict("Connect Hevy before using history tools."));
+        return Err(ApiError::conflict("Connect Hevy before backfilling workouts."));
     };
     let Some(since) = timefmt::parse_timestamp(since) else {
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "Enter the backfill start date as YYYY-MM-DD."));
@@ -341,7 +341,7 @@ async fn fetch_backfill(state: &AppState, since: &str) -> Result<(Vec<Value>, Op
     let total = hevy_backfill::account_workout_count(&client).await;
     match hevy_backfill::fetch_since(&client, since, total).await {
         Ok(workouts) => Ok((workouts, total)),
-        Err(HevyError::Auth) => Err(ApiError::new(StatusCode::UNAUTHORIZED, "Hevy rejected the stored API key — reconnect Hevy.")),
+        Err(HevyError::Auth) => Err(ApiError::new(StatusCode::UNAUTHORIZED, "Hevy rejected the saved API key. Reconnect Hevy in Settings.")),
         Err(err) => Err(fetch_failed(&err)),
     }
 }
@@ -406,7 +406,7 @@ pub async fn preview_backfill(
             Some(total) => format!(", of {total} on your Hevy account"),
             None => String::new(),
         };
-        format!("{count} workout{} found{scale}. Nothing has been written yet.", plural(count))
+        format!("{count} workout{} found{scale}. Nothing has been imported yet.", plural(count))
     };
     Ok(Json(BackfillResult { message, since: request.since, ran: false, linked: 0, items: backfill.items }))
 }
@@ -444,7 +444,7 @@ pub async fn run_backfill(
     state.events.publish("refresh");
     Ok(Json(BackfillResult {
         message: format!(
-            "Backfill complete: {selected} workout{} ingested, {matched} matched with existing Garmin activities.",
+            "Backfill complete: {selected} workout{} imported, {matched} matched to existing Garmin activities.",
             plural(selected)
         ),
         since: request.since,

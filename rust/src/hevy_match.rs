@@ -23,7 +23,7 @@ pub const FAILED: &str = "failed";
 pub const SKIPPED: &str = "skipped";
 
 pub const FAILURE_MESSAGE: &str = "Could not apply that Hevy match. Check the server log for details.";
-pub const AUTH_MESSAGE: &str = "Hevy rejected the stored API key — reconnect Hevy.";
+pub const AUTH_MESSAGE: &str = "Hevy rejected the saved API key. Reconnect Hevy in Settings.";
 pub const MAPPING_MESSAGE: &str = "Map the missing exercises before choosing Merge or Replace.";
 
 const RESULT_RETENTION_SECONDS: f64 = 3600.0;

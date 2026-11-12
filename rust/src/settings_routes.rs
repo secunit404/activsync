@@ -230,7 +230,7 @@ async fn validate_hevy_key(state: &AppState, api_key: &str) -> Result<Option<Hev
     match client.get_user_info().await {
         Ok(_) => Ok(Some(client)),
         Err(HevyError::Auth) => {
-            Err(ApiError::new(StatusCode::UNAUTHORIZED, "Hevy rejected that API key — check it and try again."))
+            Err(ApiError::new(StatusCode::UNAUTHORIZED, "Hevy rejected that API key. Check the key and try again."))
         }
         Err(err) => Err(unreachable(&err)),
     }
@@ -378,19 +378,19 @@ pub async fn save_activity_types(
 ) -> ApiResult<ActionResult> {
     let payload = body(payload)?;
     let conn = state.db.lock();
-    require_garmin(&conn, "Connect to Garmin before changing activity categories.")?;
+    require_garmin(&conn, "Connect Garmin before changing auto-sync settings.")?;
     let known: std::collections::BTreeSet<String> = match db::get_config_value(&conn, "garmin_activity_types")? {
         Some(Value::Array(items)) => items.iter().map(|i| text(i, "type_key")).collect(),
         _ => Default::default(),
     };
     if payload.autosync_types.iter().any(|t| !known.contains(t)) {
-        return Err(bad_request("Unknown activity category."));
+        return Err(bad_request("Unknown activity type."));
     }
     let held: Vec<String> = known.into_iter().filter(|k| !payload.autosync_types.contains(k)).collect();
     config::edit(&conn, development(&state), |cfg| cfg.set("held_activity_types", json!(held)))?;
     onboarding::reconcile_held_activities(&conn, &held)?;
     state.events.publish("refresh");
-    action(&state, &conn, "Autosync categories saved.", false)
+    action(&state, &conn, "Auto-sync settings saved.", false)
 }
 
 #[derive(Deserialize)]
@@ -453,7 +453,7 @@ pub async fn save_hevy_settings(
     let identity = &p.identity;
     let provided = [identity.manufacturer, identity.product, identity.serial].iter().filter(|v| v.is_some()).count();
     if provided != 0 && provided != 3 {
-        return Err(bad_request("Device identity override needs all three numbers — or none."));
+        return Err(bad_request("Enter all three device identity values, or leave all three blank."));
     }
     let profile = &p.profile_override;
     let mut stored_profile = serde_json::Map::new();

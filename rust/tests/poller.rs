@@ -178,7 +178,7 @@ async fn an_expired_garmin_session_pauses_garmin_and_tells_the_page() {
     poller.loop_once(t0()).await.unwrap();
     assert_eq!(h.config("garmin_credentials_verified"), Some(json!(false)));
     assert_eq!(h.config("garmin_last_sync_ok"), Some(json!(false)));
-    assert_eq!(h.config("garmin_last_sync_error"), Some(json!("Garmin session expired; reconnect Garmin to resume sync.")));
+    assert_eq!(h.config("garmin_last_sync_error"), Some(json!("Garmin session expired. Reconnect Garmin to resume syncing.")));
     assert_eq!(refreshes.try_recv().unwrap(), "refresh");
 
     let opens = h.fake.opens.load(Ordering::SeqCst);
@@ -251,7 +251,7 @@ async fn a_garmin_outage_is_shown_and_retried_without_a_reconnect() {
     poller.loop_once(t0()).await.unwrap();
     assert_eq!(h.config("garmin_credentials_verified"), Some(json!(true)));
     assert_eq!(h.config("garmin_last_sync_ok"), Some(json!(false)));
-    assert_eq!(h.config("garmin_last_sync_error"), Some(json!("Garmin could not be reached; retrying on the next poll.")));
+    assert_eq!(h.config("garmin_last_sync_error"), Some(json!("Garmin could not be reached. ActivSync tries again at the next check.")));
 
     *h.fake.failure.lock().unwrap() = None;
     poller.loop_once(t0() + Duration::minutes(20)).await.unwrap();

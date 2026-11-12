@@ -151,7 +151,7 @@ async fn an_outage_while_opening_the_session_is_not_an_expiry() {
     assert_eq!(open(http).await.err(), Some(GarminError::Unavailable));
     let (http, _) = garmin(|key, _| if key.starts_with("POST") { Ok((400, b"{}".to_vec())) } else { Ok((403, b"{}".to_vec())) });
     assert_eq!(open(http).await.err(), Some(GarminError::SessionExpired));
-    assert_eq!(GarminError::Unavailable.to_string(), "Garmin could not be reached; retrying on the next poll.");
+    assert_eq!(GarminError::Unavailable.to_string(), "Garmin could not be reached. ActivSync tries again at the next check.");
 }
 
 #[tokio::test]

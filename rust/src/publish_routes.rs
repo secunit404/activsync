@@ -40,7 +40,7 @@ fn schedule_publish(state: &AppState, ids: &[i64], kind: &str) -> ApiResult<Publ
     let activities = publishable_activities(state, ids, kind == "single")?;
     let batch = state.scheduler.schedule(&activities, kind).map_err(|err| match err {
         ScheduleError::AlreadyScheduled => {
-            ApiError::conflict("Already publishing to Strava. Refresh to see where it stands.")
+            ApiError::conflict("This activity is already being published to Strava. Refresh to see its status.")
         }
         ScheduleError::Db(err) => err.into(),
     })?;
@@ -127,7 +127,7 @@ pub async fn publish_activities(
     if stats.failed + stats.blocked > 0 {
         let mut parts = vec![format!("Published {}", stats.published)];
         if stats.failed > 0 {
-            parts.push(format!("{} failed and stayed ready to retry", stats.failed));
+            parts.push(format!("{} failed and can be retried", stats.failed));
         }
         if stats.blocked > 0 {
             parts.push(format!("{} blocked by Hevy sync", stats.blocked));
@@ -154,7 +154,7 @@ fn cancel_publish(state: &AppState, ids: &[i64]) -> ApiResult<ActionResult> {
     let conn = state.db.lock();
     for id in ids {
         if schedule::get(&conn, *id)?.is_some() {
-            return Err(ApiError::conflict("Too late to undo: it is already being sent to Strava."));
+            return Err(ApiError::conflict("Too late to undo: publishing to Strava has already started."));
         }
     }
     Err(ApiError::conflict("Nothing is waiting to publish."))
@@ -203,7 +203,7 @@ fn batch_outcome(rows: &[schedule::ScheduleRow], titles: &HashMap<i64, String>) 
     if failed + blocked + skipped > 0 {
         let mut parts = vec![format!("Published {published}")];
         if failed > 0 {
-            parts.push(format!("{failed} failed and stayed ready to retry"));
+            parts.push(format!("{failed} failed and can be retried"));
         }
         if blocked > 0 {
             parts.push(format!("{blocked} blocked by Hevy sync"));

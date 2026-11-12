@@ -259,7 +259,7 @@ async fn retry_requeues_or_resumes_the_operation() {
     assert_eq!(queue["problems"].as_array().unwrap().iter().find(|i| i["hevyId"] == "hw-dev-midnight").unwrap()["hasOpenOperation"], true);
     let (status, detail) = refused(&h.app, "/api/v1/hevy/hw-dev-midnight/skip", None).await;
     assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(detail, "An operation is in progress for this workout — resolve or retry it instead of skipping.");
+    assert_eq!(detail, "This workout has an operation in progress. Resolve or retry it instead of skipping it.");
 
     ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-midnight/retry", None).await;
     assert_eq!(status_of(&h, hevy_seed::MIDNIGHT_ID), "syncing");
@@ -291,7 +291,7 @@ async fn busy_workout_refuses_actions() {
     let token = hevy_db::acquire_lease(&h.state.db.lock(), hevy_seed::UNMAPPED_ID, Utc::now()).unwrap();
     assert!(token.is_some());
     let (status, detail) = refused(&h.app, "/api/v1/hevy/hw-dev-unmapped/retry", None).await;
-    assert_eq!((status, detail.as_str()), (StatusCode::CONFLICT, "Workout is being processed right now — try again in a moment."));
+    assert_eq!((status, detail.as_str()), (StatusCode::CONFLICT, "This workout is being processed. Try again in a moment."));
     let (status, detail) = refused(&h.app, "/api/v1/hevy/nope/retry", None).await;
     assert_eq!((status, detail.as_str()), (StatusCode::NOT_FOUND, "Unknown Hevy workout."));
 }

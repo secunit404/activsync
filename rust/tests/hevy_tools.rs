@@ -231,7 +231,7 @@ async fn history_import_needs_hevy_and_a_date() {
     let (db, app) = app();
     let uri = "/api/v1/settings/hevy/backfill/preview";
     let (status, body) = call(&app, Method::POST, uri, Some(json!({"since": "2026-01-01"}))).await;
-    assert_eq!((status, body["detail"].as_str()), (StatusCode::CONFLICT, Some("Connect Hevy before using history tools.")));
+    assert_eq!((status, body["detail"].as_str()), (StatusCode::CONFLICT, Some("Connect Hevy before backfilling workouts.")));
     activsync::db::set_config_value(&db.lock(), "hevy_api_key", &json!("k")).unwrap();
     let (status, body) = call(&app, Method::POST, uri, Some(json!({"since": "last week"}))).await;
     assert_eq!((status, body["detail"].as_str()), (StatusCode::BAD_REQUEST, Some("Enter the backfill start date as YYYY-MM-DD.")));
@@ -240,5 +240,5 @@ async fn history_import_needs_hevy_and_a_date() {
 
     let body = json!({"since": "2026-01-01", "hevyIds": []});
     let run = ok(&app, Method::POST, "/api/v1/settings/hevy/backfill/run", Some(body)).await;
-    assert_eq!(run["message"], "Backfill complete: 0 workouts ingested, 0 matched with existing Garmin activities.");
+    assert_eq!(run["message"], "Backfill complete: 0 workouts imported, 0 matched to existing Garmin activities.");
 }

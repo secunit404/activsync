@@ -31,8 +31,8 @@ pub enum GarminError {
 impl std::fmt::Display for GarminError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SessionExpired => f.write_str("Garmin session expired; reconnect Garmin to resume sync."),
-            Self::Unavailable => f.write_str("Garmin could not be reached; retrying on the next poll."),
+            Self::SessionExpired => f.write_str("Garmin session expired. Reconnect Garmin to resume syncing."),
+            Self::Unavailable => f.write_str("Garmin could not be reached. ActivSync tries again at the next check."),
             Self::ActivityGone(id) => write!(f, "activity {id} not found"),
             Self::NotFound(msg) | Self::UploadRejected(msg) | Self::SubcategoryRejected(msg) | Self::Api(msg) => {
                 f.write_str(msg)

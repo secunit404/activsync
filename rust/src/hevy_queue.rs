@@ -357,7 +357,7 @@ fn with_lease(
         let conn = state.db.lock();
         let workout = require_workout(&conn, hevy_id)?;
         let Some(token) = hevy_db::acquire_lease(&conn, hevy_id, Utc::now())? else {
-            return Err(ApiError::conflict("Workout is being processed right now — try again in a moment."));
+            return Err(ApiError::conflict("This workout is being processed. Try again in a moment."));
         };
         let result = mutate(&conn, &workout);
         hevy_db::release_lease(&conn, hevy_id, &token)?;
@@ -402,7 +402,7 @@ pub async fn skip(State(state): State<AppState>, Path(hevy_id): Path<String>) ->
         }
         if hevy_db::get_open_operation(conn, &row.hevy_id)?.is_some() {
             return Err(ApiError::conflict(
-                "An operation is in progress for this workout — resolve or retry it instead of skipping.",
+                "This workout has an operation in progress. Resolve or retry it instead of skipping it.",
             ));
         }
         scheduler.cancel(conn, &row.hevy_id)?;
@@ -434,7 +434,7 @@ pub async fn resync_fresh(
     with_lease(&state, &hevy_id, |conn, row| {
         if hevy_db::get_open_operation(conn, &row.hevy_id)?.is_some() {
             return Err(ApiError::conflict(
-                "An operation is in progress for this workout — resolve it before re-syncing fresh.",
+                "This workout has an operation in progress. Resolve it before you re-sync it fresh.",
             ));
         }
         let deleted = row.error.as_deref().unwrap_or_default().contains("deleted on Garmin");

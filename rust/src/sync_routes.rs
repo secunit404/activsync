@@ -73,8 +73,8 @@ pub async fn initial_sync(State(state): State<AppState>) -> ApiResult<ActionResu
     match state.clients.clone() {
         Some(clients) => first_sync(&state, clients.as_ref(), now)
             .await
-            .map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("Initial sync failed: {err}")))?,
-        None => mock_first_sync(&state, now).map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("Initial sync failed: {err}")))?,
+            .map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("First sync failed: {err}")))?,
+        None => mock_first_sync(&state, now).map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("First sync failed: {err}")))?,
     }
     let conn = state.db.lock();
     db::set_config_value(&conn, "initial_sync_done", &json!(true))?;
@@ -84,7 +84,7 @@ pub async fn initial_sync(State(state): State<AppState>) -> ApiResult<ActionResu
 
 pub async fn refresh_activity_types(State(state): State<AppState>) -> ApiResult<ActionResult> {
     let now = Utc::now();
-    require_garmin(&state.db.lock(), "Connect to Garmin before refreshing activity categories.")?;
+    require_garmin(&state.db.lock(), "Connect Garmin before refreshing activity types.")?;
     match state.clients.clone() {
         Some(clients) => {
             let garmin = open_garmin(clients.as_ref()).await.map_err(|err| server_error("Garmin activity types", err))?;
@@ -93,7 +93,7 @@ pub async fn refresh_activity_types(State(state): State<AppState>) -> ApiResult<
         None => onboarding::store_garmin_categories(&state.db.lock(), development(&state), false, now)?,
     }
     state.events.publish("refresh");
-    action(&state, &state.db.lock(), "Garmin activity categories refreshed.", false)
+    action(&state, &state.db.lock(), "Activity types refreshed from Garmin.", false)
 }
 
 async fn sync_garmin_now(state: &AppState, clients: &dyn Clients, strava_connected: bool, now: DateTime<Utc>) -> Result<(), ApiError> {
@@ -132,7 +132,7 @@ pub async fn manual_sync(State(state): State<AppState>, Path(service): Path<Stri
     let message = match service.as_str() {
         "garmin" => {
             if !connections.garmin.connected {
-                return Err(conflict("Garmin is disconnected — reconnect it to sync."));
+                return Err(conflict("Garmin is disconnected. Reconnect Garmin to sync."));
             }
             match state.clients.clone() {
                 Some(clients) => sync_garmin_now(&state, clients.as_ref(), connections.strava.connected, now).await?,
@@ -142,7 +142,7 @@ pub async fn manual_sync(State(state): State<AppState>, Path(service): Path<Stri
         }
         "strava" => {
             if !connections.strava.connected {
-                return Err(conflict("Strava is disconnected — reconnect it to sync."));
+                return Err(conflict("Strava is disconnected. Reconnect Strava to sync."));
             }
             match state.clients.clone() {
                 Some(clients) => sync_strava_now(&state, clients.as_ref(), now).await?,

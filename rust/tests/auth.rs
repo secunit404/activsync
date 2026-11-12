@@ -127,7 +127,7 @@ async fn claim_checks_code_and_password_then_signs_in() {
     assert!(short.json["detail"].as_str().unwrap().starts_with("Use at least 15 characters."));
     let wrong = c.send(Method::POST, "/api/v1/auth/claim", Some(json!({"setupCode": "AAAA-AAAA-AAAA-AAAA", "password": PASSWORD}))).await;
     assert_eq!(wrong.status, StatusCode::FORBIDDEN);
-    assert_eq!(wrong.json["detail"], "That setup code is not right. Check the server log for the current one.");
+    assert_eq!(wrong.json["detail"], "That setup code is incorrect. Check the server log for the current code.");
 
     let claimed = c.claim().await;
     assert_eq!(claimed.status, StatusCode::OK, "{}", claimed.json);
@@ -154,7 +154,7 @@ async fn login_logout_and_wrong_password() {
     assert_eq!(owner.send(Method::GET, "/api/v1/app", None).await.status, StatusCode::UNAUTHORIZED);
 
     let wrong = owner.send(Method::POST, "/api/v1/auth/login", Some(json!({"password": "not the password at all"}))).await;
-    assert_eq!((wrong.status, wrong.json["detail"].clone()), (StatusCode::UNAUTHORIZED, json!("Wrong password.")));
+    assert_eq!((wrong.status, wrong.json["detail"].clone()), (StatusCode::UNAUTHORIZED, json!("Incorrect password.")));
     let ok = owner.send(Method::POST, "/api/v1/auth/login", Some(json!({"password": PASSWORD}))).await;
     assert_eq!(ok.status, StatusCode::OK, "{}", ok.json);
     assert_eq!(owner.send(Method::GET, "/api/v1/app", None).await.status, StatusCode::OK);
@@ -256,7 +256,7 @@ async fn sessions_list_revoke_and_password_change() {
     assert_eq!((missing.status, missing.json["detail"].clone()), (StatusCode::NOT_FOUND, json!("That session has already ended.")));
 
     let wrong = first.send(Method::PUT, "/api/v1/auth/password", Some(json!({"current": "nope", "new": "a brand new long passphrase"}))).await;
-    assert_eq!((wrong.status, wrong.json["detail"].clone()), (StatusCode::BAD_REQUEST, json!("Wrong password.")));
+    assert_eq!((wrong.status, wrong.json["detail"].clone()), (StatusCode::BAD_REQUEST, json!("Incorrect password.")));
     let changed = first.send(Method::PUT, "/api/v1/auth/password", Some(json!({"current": PASSWORD, "new": "a brand new long passphrase"}))).await;
     assert_eq!(changed.json["message"], "Password changed. Other sessions were signed out.");
     assert_eq!(second.send(Method::GET, "/api/v1/app", None).await.status, StatusCode::UNAUTHORIZED);
@@ -264,9 +264,15 @@ async fn sessions_list_revoke_and_password_change() {
 
     let mut third = Client { app: first.app.clone(), state: first.state.clone(), cookies: Vec::new() };
     third.send(Method::POST, "/api/v1/auth/login", Some(json!({"password": "a brand new long passphrase"}))).await;
+    let mut fourth = Client { app: first.app.clone(), state: first.state.clone(), cookies: Vec::new() };
+    fourth.send(Method::POST, "/api/v1/auth/login", Some(json!({"password": "a brand new long passphrase"}))).await;
     let others = first.send(Method::DELETE, "/api/v1/auth/sessions", None).await;
-    assert_eq!(others.json["message"], "Signed out 1 other session(s).");
+    assert_eq!(others.json["message"], "Signed out 2 other sessions.");
     assert_eq!(third.send(Method::GET, "/api/v1/app", None).await.status, StatusCode::UNAUTHORIZED);
+    let mut fifth = Client { app: first.app.clone(), state: first.state.clone(), cookies: Vec::new() };
+    fifth.send(Method::POST, "/api/v1/auth/login", Some(json!({"password": "a brand new long passphrase"}))).await;
+    let one = first.send(Method::DELETE, "/api/v1/auth/sessions", None).await;
+    assert_eq!(one.json["message"], "Signed out 1 other session.");
 }
 
 #[tokio::test]
@@ -311,7 +317,7 @@ async fn proxy_sign_in_trusts_only_its_own_address() {
         Request::post("/api/v1/auth/logout").header("host", "127.0.0.1:8382").header("remote-user", "owner").header("x-activsync-request", "1").header("sec-fetch-site", "same-origin"),
         None,
     ).await;
-    assert_eq!(logout.json["detail"], "You are signed in through your proxy; sign out there.");
+    assert_eq!(logout.json["detail"], "You are signed in through your reverse proxy. Sign out there.");
 
     let mut bypass = client_with(proxy_auth(), "192.0.2.1");
     let ignored = bypass.raw(as_owner(), None).await.json;
