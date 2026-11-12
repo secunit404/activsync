@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.3](https://github.com/secunit404/activsync/compare/v0.4.2...v0.4.3) (2026-11-12)
+
+
+### Features
+
+* **auth:** passwords need 12 characters instead of 15 ([#123](https://github.com/secunit404/activsync/issues/123)) ([49a7415](https://github.com/secunit404/activsync/commit/49a7415fe55f5604bad03aa16c0e208b14ebbdfd))
+
+
+### Bug Fixes
+
+* **hevy:** Hevy setup no longer mentions hevy2garmin ([#125](https://github.com/secunit404/activsync/issues/125)) ([b0db186](https://github.com/secunit404/activsync/commit/b0db18659bc1090a38433962497b3b07de776c0d))
+* **ui:** the setup wizard card's left corners keep their border ([#122](https://github.com/secunit404/activsync/issues/122)) ([ad846b5](https://github.com/secunit404/activsync/commit/ad846b56839edf728b8931a5d62c595b2bdecd1d))
+
 ## [0.4.2](https://github.com/secunit404/activsync/compare/v0.4.1...v0.4.2) (2026-11-12)
 
 
