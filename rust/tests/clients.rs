@@ -353,7 +353,6 @@ async fn strava_disconnect_forgets_tokens_even_offline() {
         db::get_config_value(&db.lock(), "strava_tokens").unwrap(),
         Some(Value::Null)
     );
-    assert!(!client.is_connected());
 }
 
 #[tokio::test]

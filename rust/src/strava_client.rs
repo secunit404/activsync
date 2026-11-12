@@ -173,7 +173,7 @@ impl StravaClient {
     }
 
     fn now(&self) -> DateTime<Utc> {
-        DateTime::from_timestamp_micros(((self.clock)() * 1_000_000.0) as i64).unwrap_or_default()
+        crate::timefmt::from_epoch((self.clock)())
     }
 
     async fn send(
@@ -205,13 +205,6 @@ impl StravaClient {
             REQUEST_TIMEOUT,
         )
         .await
-    }
-
-    pub fn is_connected(&self) -> bool {
-        let tokens = db::get_config_value(&self.db.lock(), "strava_tokens")
-            .ok()
-            .flatten();
-        tokens.is_some_and(|t| db::truthy(t.get("refresh_token")))
     }
 
     /// `state` comes back to the callback unchanged; the caller keeps the
