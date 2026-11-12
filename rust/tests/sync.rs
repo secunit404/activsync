@@ -174,7 +174,6 @@ fn zipped(fit: &[u8]) -> Vec<u8> {
     writer.finish().unwrap().into_inner()
 }
 
-/// The multipart field named `name` in an upload body.
 fn part(request: &HttpRequest, name: &str) -> Option<String> {
     let body = String::from_utf8_lossy(request.body()).into_owned();
     let marker = format!("name=\"{name}\"");

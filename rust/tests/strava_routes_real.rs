@@ -55,8 +55,6 @@ struct Harness {
     _dir: tempfile::TempDir,
 }
 
-/// The real clients against stand-ins: a saved Garmin session with one new
-/// activity, and Strava's token endpoint answering `token_status`.
 fn harness(onboarded: bool, token_status: u16, public_url: Option<&str>) -> Harness {
     let db = Db::open_in_memory().unwrap();
     {

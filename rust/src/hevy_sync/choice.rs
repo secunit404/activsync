@@ -85,9 +85,8 @@ fn record_choice_failure(conn: &Connection, hevy_id: &str, error: &str) -> rusql
     }
 }
 
-/// Applies the owner's explicit choice to a claimed watch match. A refused
-/// choice changes nothing: a scheduled choice can run after the workout was
-/// applied, and recording the refusal would mark it failed.
+/// A refused choice changes nothing: a scheduled choice can run after the
+/// workout was applied, and recording the refusal would mark it failed.
 pub async fn apply_match_choice(
     apply: &Apply<'_>,
     hevy: &HevyClient,
@@ -124,8 +123,7 @@ pub async fn apply_match_choice(
     outcome.and_then(|()| Ok(hevy_db::get_workout(&conn, hevy_id)?))
 }
 
-/// Applies an owner's match choice to Garmin, then reads Garmin back so the
-/// dashboard shows the result.
+/// Reads Garmin back after applying so the dashboard shows the result.
 pub struct RealMatchApplier {
     pub db: Db,
     pub events: EventBus,

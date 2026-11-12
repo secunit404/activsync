@@ -92,9 +92,8 @@ fn apply_deleted(conn: &Connection, event: &Value) -> rusqlite::Result<()> {
     }
 }
 
-/// Reads Hevy's events feed and applies the new ones; returns how many. A
-/// missing cursor starts at `now`: history is never replayed here, backfill
-/// is its own action.
+/// Returns how many events were applied. A missing cursor starts at `now`:
+/// history is never replayed here, backfill is its own action.
 pub(super) async fn ingest_events(
     db: &Db,
     hevy: &HevyClient,

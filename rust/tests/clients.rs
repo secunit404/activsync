@@ -13,7 +13,6 @@ use serde_json::{Value, json};
 type Seen = Arc<Mutex<Vec<HttpRequest>>>;
 type Reply = Result<(u16, Value, Vec<(&'static str, &'static str)>), &'static str>;
 
-/// Answers each call with the next scripted reply and keeps every request.
 fn scripted(replies: Vec<Reply>) -> (Http, Seen) {
     let queue = Arc::new(Mutex::new(VecDeque::from(replies)));
     let seen: Seen = Arc::default();

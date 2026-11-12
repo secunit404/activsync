@@ -1,7 +1,5 @@
-//! Strength-training FIT files from Hevy workouts (after hevy2garmin, MIT):
-//! exercises arrive resolved, the profile and device identity are injected,
-//! and calories use sex-correct Keytel constants. The bytes must match the
-//! Python build exactly.
+//! Strength-training FIT files from Hevy workouts (after hevy2garmin, MIT).
+//! The bytes must match the Python build exactly.
 
 use chrono::{DateTime, Datelike, Utc};
 use serde::Serialize;
@@ -17,7 +15,6 @@ pub const REST_BETWEEN_SETS_S: f64 = 75.0;
 pub const REST_BETWEEN_EXERCISES_S: f64 = 120.0;
 pub const MIN_SCALE: f64 = 0.3;
 pub const MAX_SCALE: f64 = 2.0;
-/// Calorie fallback when there is no heart rate at all.
 const DEFAULT_HR_BPM: i64 = 90;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,17 +24,15 @@ pub struct DeviceIdentity {
     pub serial: i64,
 }
 
-/// A generic Garmin identity (manufacturer 1, product 0) is accepted and
-/// still gets Training Effect and Load; installs persist their own serial
-/// via [`new_fallback_identity`] rather than sharing this placeholder.
+/// A generic Garmin identity (manufacturer 1, product 0) still gets Training
+/// Effect and Load.
 pub const GENERIC_GARMIN_IDENTITY: DeviceIdentity = DeviceIdentity {
     manufacturer: 1,
     product: 0,
     serial: 424242,
 };
 
-/// Generated once per install and persisted (`hevy_device_identity`), so
-/// installs do not share a serial.
+/// Persisted per install (`hevy_device_identity`), so installs do not share a serial.
 pub fn new_fallback_identity() -> DeviceIdentity {
     DeviceIdentity {
         manufacturer: 1,
@@ -46,10 +41,8 @@ pub fn new_fallback_identity() -> DeviceIdentity {
     }
 }
 
-/// The messages of a FIT file with enums as numbers and no CRC check.
 /// Watch files come through Garmin's download endpoint, sometimes truncated,
-/// so whatever was read before a fault is kept rather than nothing, as the
-/// Python SDK's decoder does.
+/// so whatever was read before a fault is kept, as the Python SDK's decoder does.
 pub(crate) fn decode_fit(fit: &[u8]) -> Vec<fitparser::FitDataRecord> {
     use fitparser::de::{DecodeOption, FitObject, FitStreamProcessor};
     let mut processor = FitStreamProcessor::new();
@@ -80,8 +73,7 @@ pub(crate) fn decode_fit(fit: &[u8]) -> Vec<fitparser::FitDataRecord> {
     records
 }
 
-/// The identity in a watch FIT's file_id message, so each install uploads
-/// as its owner's own watch; `None` when unreadable.
+/// Lets each install upload as its owner's own watch.
 pub fn identity_from_fit(fit: &[u8]) -> Option<DeviceIdentity> {
     let records = decode_fit(fit);
     let file_id = records

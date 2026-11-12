@@ -191,8 +191,6 @@ fn custom_metric(value: Option<&Value>) -> Option<Value> {
     }
 }
 
-/// The row a workout's queue entry or import preview row shows, with its
-/// description as it would be written.
 pub fn workout_detail(
     payload: &Value,
     row: (&str, &str, &str, &str),

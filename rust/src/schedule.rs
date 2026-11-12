@@ -241,8 +241,6 @@ pub fn system_clock() -> Clock {
     Arc::new(|| Utc::now().timestamp_micros() as f64 / 1_000_000.0)
 }
 
-/// Sends each scheduled publish once its deadline passes, whether or not the
-/// page that asked for it is still open.
 #[derive(Clone)]
 pub struct PublishScheduler {
     db: Db,
@@ -309,7 +307,6 @@ impl PublishScheduler {
         Ok(cancelled)
     }
 
-    /// Sends every publish whose deadline has passed. Returns how many.
     pub async fn run_due(&self) -> DbResult<usize> {
         let claimed = claim_due(&self.db.lock(), self.now())?;
         if claimed.is_empty() {
@@ -425,8 +422,7 @@ fn settled_state(activity: Option<&ActivityRow>) -> Option<&'static str> {
     }
 }
 
-/// Mock-mode stand-in for the Garmin download and Strava upload: Hevy work
-/// still blocks, and anything else publishes.
+/// Mock mode: Hevy work still blocks, and anything else publishes.
 fn mock_send(conn: &Connection, id: i64) -> DbResult<(&'static str, Option<String>)> {
     if let Some(state) = settled_state(db::get_activity(conn, id)?.as_ref()) {
         return Ok((state, None));

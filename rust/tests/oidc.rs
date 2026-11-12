@@ -39,7 +39,6 @@ fn signing_pem() -> &'static str {
     })
 }
 
-/// A stand-in identity provider: discovery, keys, token and userinfo.
 struct Idp {
     sub: String,
     audience: String,

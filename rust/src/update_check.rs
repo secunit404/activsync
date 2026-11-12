@@ -1,6 +1,5 @@
-//! Checks GitHub Releases for a newer ActivSync. Pages only read the last
-//! answer; a failed check keeps the last-known one, so GitHub being down
-//! never shows on a page.
+//! Pages only read the last answer; a failed check keeps it, so GitHub being
+//! down never shows on a page.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -22,7 +21,6 @@ pub struct UpdateStatus {
     pub available: bool,
 }
 
-/// The last answer GitHub gave, shared by every request.
 #[derive(Clone, Default)]
 pub struct UpdateCache(Arc<Mutex<Option<UpdateStatus>>>);
 
@@ -77,7 +75,6 @@ async fn latest_tag(http: &Http) -> Result<String, String> {
         .ok_or_else(|| "no tag_name".into())
 }
 
-/// Asks GitHub once and keeps the answer; a failure keeps the last one.
 pub async fn refresh(http: &Http, cache: &UpdateCache, current: &str) {
     match latest_tag(http).await {
         Ok(latest) => cache.set(UpdateStatus {

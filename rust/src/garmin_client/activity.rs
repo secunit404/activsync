@@ -51,7 +51,6 @@ pub struct UserProfile {
     pub vo2max: Option<f64>,
 }
 
-/// An activity id as Garmin sends it, a number or a numeric string.
 pub(super) fn activity_id_of(value: &Value) -> Option<i64> {
     value
         .as_i64()
@@ -121,7 +120,6 @@ pub(super) fn record_of(act: &Value) -> Result<ActivityRecord, GarminError> {
     })
 }
 
-/// The first `.fit` member of Garmin's "original" download, in archive order.
 pub(super) fn fit_from_zip(zip_bytes: &[u8], activity_id: i64) -> Result<Vec<u8>, GarminError> {
     let malformed = |e: zip::result::ZipError| GarminError::Malformed(e.to_string());
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).map_err(malformed)?;
@@ -145,8 +143,6 @@ pub(super) fn fit_from_zip(zip_bytes: &[u8], activity_id: i64) -> Result<Vec<u8>
     )))
 }
 
-/// Garmin's type taxonomy for the autosync checklist, without Garmin's own
-/// "all" pseudo-type.
 pub(super) fn activity_types_of(raw: &Value) -> Vec<Value> {
     let mut seen = HashSet::new();
     let mut types: Vec<(&str, String)> = raw

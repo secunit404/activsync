@@ -1,8 +1,3 @@
-//! Garmin Connect after sign-in: the saved DI token opens a session, every
-//! call goes to connectapi with the Android app's headers, and a token near
-//! expiry or a 401 is answered with one refresh. Signing in with a password
-//! is [`crate::garmin_login`]'s job.
-
 mod activity;
 mod tokens;
 
@@ -50,7 +45,6 @@ const ACTIVITY_TYPES_PATH: &str = "/activity-service/activity/activityTypes";
 const DOWNLOAD_LABEL: &str = "Download";
 const UPLOAD_FORMATS: [&str; 3] = ["FIT", "GPX", "TCX"];
 
-/// The Android app's headers, with `extra` replacing any of the same name.
 pub(crate) fn native_headers<'a>(
     extra: impl IntoIterator<Item = (&'a str, String)>,
 ) -> Vec<(&'a str, String)> {
@@ -141,8 +135,6 @@ pub struct GarminClient {
 }
 
 impl GarminClient {
-    /// A client over tokens already in hand; [`GarminClient::open`] is the
-    /// normal way in.
     pub fn new(http: Http, clock: Clock, tokens: Tokens, token_path: Option<&str>) -> Self {
         Self {
             http,
@@ -155,8 +147,6 @@ impl GarminClient {
         }
     }
 
-    /// The account's display name, which `open` reads from the profile;
-    /// for a client built from tokens directly.
     pub fn with_display_name(self, name: &str) -> Self {
         Self {
             display_name: Some(name.to_string()),
@@ -164,8 +154,6 @@ impl GarminClient {
         }
     }
 
-    /// No pause after calls, between profile retries or before a retry, for
-    /// tests.
     pub fn without_waits(self) -> Self {
         Self {
             waits: Waits::from_pause(Duration::ZERO),
@@ -173,8 +161,7 @@ impl GarminClient {
         }
     }
 
-    /// The pause after each call, the rate-limit wait's unit and the first
-    /// backoff, each of which defaults to what the Python app waits.
+    /// `rate_limit` is the unit of the escalating rate-limit wait, not the whole wait.
     pub fn with_waits(self, pause: Duration, rate_limit: Duration, backoff: Duration) -> Self {
         Self {
             waits: Waits {
@@ -186,15 +173,13 @@ impl GarminClient {
         }
     }
 
-    /// Opens the saved session without ever starting a password login, so
-    /// the unattended poller cannot trigger an MFA challenge it cannot
-    /// answer. Garmin must accept the token for the profile reads.
+    /// Never starts a password login, so the unattended poller cannot trigger
+    /// an MFA challenge it cannot answer.
     pub async fn open(http: Http, clock: Clock, token_dir: &str) -> Result<Self, GarminError> {
         Self::open_with(http, clock, token_dir, CALL_PAUSE).await
     }
 
-    /// As [`GarminClient::open`], pausing `pause` after each call; zero turns
-    /// every wait off.
+    /// A zero `pause` also turns off the rate-limit and retry waits.
     pub async fn open_with(
         http: Http,
         clock: Clock,
@@ -218,8 +203,6 @@ impl GarminClient {
         Ok(client)
     }
 
-    /// A session fresh from a password sign-in; Garmin must accept the token
-    /// for the profile reads.
     pub(crate) async fn signed_in(
         http: Http,
         clock: Clock,
@@ -255,8 +238,6 @@ impl GarminClient {
         }
     }
 
-    /// The social profile names the account in URLs; a profile without a
-    /// display name is retried, then accepted without one.
     async fn load_profile_and_settings(&mut self) -> Result<(), GarminError> {
         let mut profile = None;
         let mut name = None;
@@ -295,8 +276,8 @@ impl GarminClient {
         Err(GarminError::SessionExpired)
     }
 
-    /// The Python library words every failed profile read at sign-in as an
-    /// auth error; here an outage stays an outage.
+    /// Unlike the Python library, which calls every failed profile read at
+    /// sign-in an auth error, an outage stays an outage.
     fn open_failure(err: &GarminError) -> GarminError {
         if err.is_transient() {
             GarminError::Unavailable
@@ -381,7 +362,6 @@ impl GarminClient {
         }
     }
 
-    /// Newest first, 20 a page, until one older than the lookback.
     pub async fn fetch_recent_activities(
         &self,
         lookback_days: i64,
@@ -483,8 +463,8 @@ impl GarminClient {
             .map_err(Self::gone(id))
     }
 
-    /// Uploads a FIT (or GPX/TCX) file. A 409 or "duplicate activity", or
-    /// failures with no success, is a definite non-import.
+    /// A 409, "duplicate activity", or failures with no success is a definite
+    /// non-import.
     pub async fn upload_fit(&self, fit_path: &Path) -> Result<UploadResult, GarminError> {
         let data = std::fs::read(fit_path).map_err(|_| {
             GarminError::Invalid(format!("FIT file not found: {}", fit_path.display()))
@@ -603,8 +583,6 @@ impl GarminClient {
         Ok(data)
     }
 
-    /// Physiology for calorie estimates. A missing piece comes back as
-    /// `None` for the profile defaults to fill; a failed read is not fatal.
     pub async fn fetch_user_profile(&self) -> UserProfile {
         let settings = self
             .limited(|| self.get_json(USER_SETTINGS_PATH, &[]))
@@ -656,9 +634,8 @@ impl GarminClient {
         }
     }
 
-    /// Every activity of any type from the day before `start_time`'s date to
-    /// the day after. A failure is an error, never an empty list: the
-    /// operation journal diffs these snapshots.
+    /// A failure is an error, never an empty list: the operation journal diffs
+    /// these snapshots.
     pub async fn list_activities_near(&self, start_time: &str) -> Result<Vec<Value>, GarminError> {
         let target = crate::timefmt::parse_timestamp(start_time).ok_or_else(|| {
             GarminError::Invalid(format!("unparseable start_time: {start_time:?}"))
@@ -715,8 +692,6 @@ impl GarminClient {
             .collect()
     }
 
-    /// Garmin's type taxonomy for the autosync checklist, without Garmin's
-    /// own "all" pseudo-type.
     pub async fn fetch_activity_types(&self) -> Result<Vec<Value>, GarminError> {
         Ok(activity_types_of(
             &self.get_json(ACTIVITY_TYPES_PATH, &[]).await?,

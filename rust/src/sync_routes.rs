@@ -1,7 +1,5 @@
-//! The sync buttons: "Sync now" for Garmin or Strava, the first sync that
-//! ends setup, and refreshing Garmin's activity types. Against real accounts
-//! they call Garmin and Strava; against the mock accounts nothing new turns
-//! up, so only the bookkeeping is recorded.
+//! Against the mock accounts nothing new turns up, so only the bookkeeping
+//! is recorded.
 
 use axum::Json;
 use axum::extract::{Path, State};

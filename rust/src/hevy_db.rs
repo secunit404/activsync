@@ -22,7 +22,6 @@ pub struct Workout {
     pub strava_applied_updated_at: Option<String>,
 }
 
-/// The statuses of a workout that has landed on Garmin.
 pub const APPLIED_STATUSES: [&str; 4] = ["merged", "described", "replaced", "uploaded_passive"];
 
 impl Workout {
@@ -249,8 +248,7 @@ pub fn link_target(
     Ok(())
 }
 
-/// Detaches a workout from its Garmin activities for a fresh sync. Callers
-/// make sure no operation is open, or its journal would be orphaned.
+/// Callers make sure no operation is open, or its journal would be orphaned.
 pub fn reset_links(conn: &Connection, hevy_id: &str) -> DbResult<()> {
     conn.execute(
         "UPDATE hevy_workouts
@@ -376,7 +374,6 @@ pub fn open_operation(
     Ok(unless_conflict(inserted)?.map(|_| conn.last_insert_rowid()))
 }
 
-/// One journal column to change.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpField {
     Phase(&'static str),
@@ -526,7 +523,6 @@ pub fn backup_fit(conn: &Connection, garmin_activity_id: i64) -> DbResult<Option
     Ok(fit.flatten())
 }
 
-/// Hands a journalled operation back to its resume point with fresh counters.
 pub fn resume_operation(conn: &Connection, id: i64, phase: &str) -> DbResult<()> {
     conn.execute(
         "UPDATE hevy_operations SET phase = ?1, attempt_count = 0, delete_attempt_count = 0,
@@ -676,7 +672,6 @@ pub fn wake_needs_mapping(conn: &Connection, template_id: &str) -> DbResult<Vec<
     Ok(affected)
 }
 
-/// Wakes one parked workout, for a newer Hevy revision of it.
 pub fn wake_workout(conn: &Connection, hevy_id: &str) -> DbResult<()> {
     wake(conn, hevy_id, &now_iso())
 }

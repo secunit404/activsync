@@ -1,6 +1,4 @@
-//! Outbound HTTP for the service clients. Every call goes through `Http`, so
-//! tests stand in for Garmin, Hevy, Strava or an identity provider without a
-//! network.
+//! All outbound HTTP goes through `Http`, so tests can stand in for any service.
 
 use std::future::Future;
 use std::path::Path;
@@ -72,8 +70,7 @@ const REQUESTS_CA_VARS: [&str; 2] = ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"];
 /// The same for `httpx`, which the identity-provider client uses.
 const SSL_CERT_VARS: [&str; 2] = ["SSL_CERT_FILE", "SSL_CERT_DIR"];
 
-/// Certificates from the first of `vars` that is set: a PEM bundle, or a
-/// directory of them. Added to the built-in roots rather than replacing them.
+/// Added to the built-in roots rather than replacing them.
 pub fn extra_roots(
     vars: &[&str],
     lookup: impl Fn(&str) -> Option<String>,
@@ -143,9 +140,8 @@ pub fn garmin_http() -> Http {
     wrap(&CLIENT)
 }
 
-/// The browser a Garmin sign-in request presents itself as, in TLS and
-/// HTTP/2 and in the headers the request leaves unset. Named after the
-/// `curl_cffi` profiles the Python library impersonates.
+/// Named after the `curl_cffi` profiles the Python library impersonates;
+/// covers TLS and HTTP/2 as well as headers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Browser {
     SafariIos,
@@ -167,9 +163,8 @@ impl Browser {
     }
 }
 
-/// For Garmin's sign-in, which follows redirects itself to keep each hop's
-/// cookies. A request carrying a `Browser` extension goes out looking like
-/// that browser; any other goes out as the other clients' requests do.
+/// Does not follow redirects: Garmin's sign-in follows them itself to keep
+/// each hop's cookies.
 pub fn garmin_sign_in_http() -> Http {
     static PLAIN: LazyLock<reqwest::Client> = LazyLock::new(|| {
         reqwest::Client::builder()
@@ -275,7 +270,6 @@ pub struct Part<'a> {
     pub data: &'a [u8],
 }
 
-/// A `multipart/form-data` body and its Content-Type header value.
 pub fn multipart(parts: &[Part<'_>]) -> (String, Vec<u8>) {
     let boundary = format!("activsync-{}", crate::auth_core::random_token(12));
     let mut body = Vec::new();
@@ -306,7 +300,6 @@ pub fn body_text(response: &HttpResponse) -> String {
     String::from_utf8_lossy(response.body()).into_owned()
 }
 
-/// How long one request may take, in place of the client's own limit.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Timeout(pub Duration);
 

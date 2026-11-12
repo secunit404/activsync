@@ -1,5 +1,3 @@
-//! The Hevy history import, reading the real Hevy account or the mock one.
-
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
@@ -35,7 +33,7 @@ pub fn workout_id(workout: &Value) -> &str {
     field(workout, "id")
 }
 
-/// The mock account's workouts from `since` on; it serves them all at once.
+/// For the mock account, which serves every workout at once.
 pub fn workouts_since(account: Vec<Value>, since: DateTime<Utc>) -> Vec<Value> {
     account
         .into_iter()
@@ -43,8 +41,8 @@ pub fn workouts_since(account: Vec<Value>, since: DateTime<Utc>) -> Vec<Value> {
         .collect()
 }
 
-/// Total workouts on the Hevy account, or `None` if it cannot be read. It
-/// only bounds the scan and labels the preview, so an outage degrades.
+/// `None` when unreadable: it only bounds the scan and labels the preview,
+/// so an outage degrades.
 pub async fn account_workout_count(client: &HevyClient) -> Option<i64> {
     client.get_workout_count().await.unwrap_or_else(|err| {
         crate::log_warn!("hevy_backfill", "hevy workout count unavailable: {err}");
@@ -164,8 +162,7 @@ fn owned(conn: &Connection, activity_id: i64) -> DbResult<bool> {
     Ok(found.is_some())
 }
 
-/// The import plan, without writing anything. Workouts already in the queue
-/// are left out unless the owner skipped them there.
+/// Workouts already queued are left out unless the owner skipped them there.
 pub fn preview_items(
     conn: &Connection,
     workouts: Vec<Value>,
@@ -247,8 +244,7 @@ pub fn preview_items(
     Ok(items)
 }
 
-/// Ingests the chosen items and claims their unique Garmin matches; returns
-/// how many were matched. Nothing polls Hevy in mock mode, so matched
+/// Returns how many were matched. Nothing polls Hevy in mock mode, so matched
 /// workouts stay waiting until a real server picks them up.
 pub fn run_items(conn: &Connection, items: &[&Item]) -> DbResult<usize> {
     let mut matched = 0;

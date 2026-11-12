@@ -1,5 +1,4 @@
-//! Exercise lookups for Hevy workouts, over the tables
-//! `assets/export_exercise_tables.py` exports from the Python app.
+//! Tables exported from the Python app by `assets/export_exercise_tables.py`.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::LazyLock;
@@ -84,8 +83,7 @@ impl Tables {
 
 const ACRONYMS: [&str; 7] = ["BOSU", "EZ", "GHD", "HIIT", "KBS", "RDL", "TRX"];
 
-/// A FIT enum identifier as a sentence-case label; the raw name is what
-/// Garmin is sent.
+/// Display only; the raw enum name is what Garmin is sent.
 pub fn garmin_exercise_label(enum_name: &str) -> String {
     let words: Vec<String> = enum_name
         .split('_')
@@ -208,8 +206,7 @@ pub fn user_mapping(conn: &Connection, template_id: &str) -> DbResult<Option<(i6
     .optional()
 }
 
-/// The built-in pair, ignoring saved mappings: what "Reset to standard"
-/// would restore.
+/// Ignores saved mappings: what "Reset to standard" would restore.
 pub fn standard_mapping(title: &str, template_id: Option<&str>) -> Option<(i64, i64)> {
     let tables = &*TABLES;
     if let Some(id) = template_id.filter(|id| !id.is_empty()) {
@@ -228,8 +225,7 @@ pub fn standard_mapping(title: &str, template_id: Option<&str>) -> Option<(i64, 
         .copied()
 }
 
-/// Saved mapping, then the template tables, then the name table; `None` is
-/// a miss that parks the workout for mapping.
+/// `None` is a miss that parks the workout for mapping.
 pub fn lookup_exercise(
     conn: &Connection,
     title: &str,
@@ -260,8 +256,6 @@ fn muscle_group_fallback(muscle: &str) -> Option<i64> {
     })
 }
 
-/// A starting point for the picker on an unmapped exercise: the closest
-/// built-in name, else the template's muscle group.
 pub fn suggest_mapping(title: &str, primary_muscle_group: Option<&str>) -> Option<(i64, i64)> {
     let normalized = normalize(title);
     if !normalized.is_empty() {
@@ -282,8 +276,6 @@ fn user_strava_exercise(conn: &Connection, template_id: &str) -> DbResult<Option
     .optional()
 }
 
-/// Strava's exercise without the owner's choice, with where it came from:
-/// the template table, or the Garmin mapping's exercise or generic id.
 pub fn default_strava_exercise(
     conn: &Connection,
     title: &str,

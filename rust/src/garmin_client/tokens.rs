@@ -46,9 +46,8 @@ impl Tokens {
     }
 }
 
-/// The token file a directory or `.json` path names. Refuses `~otheruser`
-/// and a symlink anywhere in the path, so a planted link cannot redirect the
-/// refresh token elsewhere.
+/// Refuses `~otheruser` and a symlink anywhere in the path, so a planted link
+/// cannot redirect the refresh token elsewhere.
 pub fn token_file_path(path: &str) -> Result<PathBuf, GarminError> {
     let mut chars = path.chars();
     if chars.next() == Some('~') && chars.next().is_some_and(|c| c != '/' && c != '\\') {

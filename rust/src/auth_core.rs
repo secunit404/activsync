@@ -1,6 +1,5 @@
-//! The owner's credential, login throttling, the setup code and sessions,
-//! stored exactly as the Python app's `auth_core.py` and `auth_devices.py`
-//! store them, so a database moves between the two servers.
+//! Stored exactly as the Python server stores them, so a database moves
+//! between the two servers.
 
 mod sessions;
 #[cfg(test)]
@@ -66,8 +65,7 @@ pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// argon2id cost settings. `standard()` matches argon2-cffi's defaults, which
-/// is what the Python app hashes with.
+/// `standard()` matches argon2-cffi's defaults, which the Python server hashes with.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HashCost {
     pub memory_kib: u32,
@@ -100,9 +98,8 @@ impl HashCost {
     }
 }
 
-/// An argon2 hash in the PHC string form argon2-cffi writes,
-/// `$argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>`. Parsed by hand because the
-/// generic PHC parser rejects the 4-byte hashes of argon2-cffi's test profile.
+/// Parsed by hand because the generic PHC parser rejects the 4-byte hashes
+/// of argon2-cffi's test profile.
 struct Encoded {
     algorithm: Algorithm,
     version: u32,
@@ -264,8 +261,7 @@ fn stored_hash(conn: &Connection) -> DbResult<Option<String>> {
         .map(str::to_string))
 }
 
-/// The outcome of checking a password against a stored hash, with the
-/// replacement hash when the stored one was made with other cost settings.
+/// `rehash` is set when the stored hash was made with other cost settings.
 #[derive(Default)]
 pub struct Verdict {
     pub verified: bool,
@@ -455,7 +451,6 @@ fn reset_device(conn: &Connection, device_id: &str) -> DbResult<()> {
     db::set_config_value(conn, TRUSTED_DEVICES_KEY, &Value::Array(all))
 }
 
-/// A password check that has counted its attempt and is ready to verify.
 pub struct Reserved {
     on_device: bool,
     pub stored: Option<String>,

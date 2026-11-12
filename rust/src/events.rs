@@ -1,7 +1,6 @@
 use tokio::sync::broadcast;
 
-/// Broadcasts refresh events to every open page. Late joiners only see
-/// future events.
+/// Late joiners only see future events.
 #[derive(Clone)]
 pub struct EventBus(broadcast::Sender<&'static str>);
 

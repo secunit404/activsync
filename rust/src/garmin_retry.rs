@@ -75,7 +75,6 @@ impl Waits {
         }
     }
 
-    /// Exponential with 50-100% jitter, capped at ten times the first wait.
     fn backoff_for(&self, attempt: u32) -> Duration {
         let base =
             (self.backoff * 2u32.saturating_pow(attempt)).min(self.backoff * BACKOFF_MAX_FACTOR);
@@ -132,9 +131,8 @@ impl GarminClient {
     }
 
     /// The library's `connectapi` and `download`: a 5xx or a network failure
-    /// is retried with a jittered backoff, and what finally fails is worded
-    /// by status. The profile reads at sign-in and the PUT, POST and DELETE
-    /// calls go through [`GarminClient::run`] alone, as the library sends them.
+    /// is retried with backoff. The sign-in profile reads and the PUT, POST and
+    /// DELETE calls go through [`GarminClient::run`] alone, as the library sends them.
     pub(crate) async fn call(
         &self,
         label: &str,

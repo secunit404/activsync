@@ -34,8 +34,7 @@ pub fn setup_step(
     Ok(Some("syncing"))
 }
 
-/// Store the mock account's activity types, optionally holding every type
-/// for review.
+/// Uses the mock account's activity types.
 pub fn store_garmin_categories(
     conn: &Connection,
     development: bool,
@@ -51,7 +50,6 @@ pub fn store_garmin_categories(
     )
 }
 
-/// Store Garmin's activity types, optionally holding every type for review.
 pub fn save_garmin_categories(
     conn: &Connection,
     development: bool,

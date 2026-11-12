@@ -74,7 +74,6 @@ pub struct GarminCredentials {
     pub password: String,
 }
 
-/// A Garmin sign-in waiting for its one-time code.
 #[derive(Clone, Debug)]
 pub struct PendingMfa {
     pub credentials: GarminCredentials,
@@ -152,7 +151,6 @@ impl AppState {
         }
     }
 
-    /// Applies the owner's Hevy match choices with `applier`.
     pub fn with_match_applier(self, applier: Arc<dyn hevy_match::MatchApplier>) -> Self {
         let match_scheduler = self.match_scheduler.clone().with_applier(applier);
         Self {
@@ -194,7 +192,6 @@ impl AppState {
             .map(|http| hevy_client::HevyClient::new(http.clone(), api_key))
     }
 
-    /// Serves real accounts: syncing and publishing go to Garmin and Strava.
     pub fn with_clients(self, clients: Arc<dyn poller::Clients>) -> Self {
         let scheduler = self.scheduler.clone().with_clients(clients.clone());
         Self {
@@ -204,7 +201,7 @@ impl AppState {
         }
     }
 
-    /// Points single sign-on at a stand-in identity provider.
+    /// For tests: a stand-in identity provider.
     pub fn with_oidc_http(self, oidc_http: oidc_flow::OidcHttp) -> Self {
         Self { oidc_http, ..self }
     }
@@ -350,9 +347,8 @@ fn api_router() -> Router<AppState> {
 const FAVICON: &[u8] = include_bytes!("../../src/activsync/static/favicon.png");
 const APPLE_TOUCH_ICON: &[u8] = include_bytes!("../../src/activsync/static/apple-touch-icon.png");
 
-/// The full app: JSON API, live refresh stream, and, when `web_dir` holds a
-/// built frontend, its assets with `index.html` for every other path outside
-/// the reserved prefixes.
+/// With a built frontend in `web_dir`, every path outside the reserved
+/// prefixes falls back to its `index.html`.
 pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
     let index = web_dir.map(|d| d.join("index.html"));
     state.auth.csp = Arc::new(auth_guard::content_security_policy(index.as_deref()));

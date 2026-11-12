@@ -188,13 +188,11 @@ pub fn get(conn: &Connection, hevy_id: &str) -> DbResult<Option<Decision>> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApplyFailure {
-    /// Hevy rejected the stored API key.
     HevyAuth,
     Failed(String),
 }
 
-/// Applies one owner's choice once its undo window has passed; returns the
-/// workout's new status.
+/// `apply` returns the workout's new status.
 pub trait MatchApplier: Send + Sync {
     fn apply<'a>(
         &'a self,
@@ -222,8 +220,6 @@ impl MatchApplier for MockApplier {
     }
 }
 
-/// Mock-mode stand-in for applying the choice to Garmin: records it on the
-/// workout and its claimed watch activity without any network call.
 fn mock_apply(conn: &Connection, hevy_id: &str, strategy: &str) -> DbResult<Option<&'static str>> {
     let Some(workout) = hevy_db::get_workout(conn, hevy_id)? else {
         return Ok(None);
@@ -252,8 +248,6 @@ fn label(status: &str) -> &'static str {
     }
 }
 
-/// Applies each scheduled match once its deadline passes, whether or not the
-/// page that chose it is still open.
 #[derive(Clone)]
 pub struct HevyMatchScheduler {
     db: Db,

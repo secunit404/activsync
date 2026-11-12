@@ -3,7 +3,6 @@ use openidconnect::http::Method;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-/// Answers one request and returns its head, lowercased.
 async fn one_request(listener: TcpListener) -> String {
     let (mut socket, _) = listener.accept().await.unwrap();
     let mut seen = Vec::new();

@@ -1,8 +1,6 @@
-//! Hevy API v1 client: retries only when Hevy signals 429 or 5xx, a distinct
-//! error for a rejected key, and the events cursor that drives incremental
-//! sync. Responses are checked defensively, since Hevy warns the event shapes
-//! may change. A failure reads as Python's `requests` words it, since that
-//! text is stored on the workout.
+//! Responses are checked defensively, since Hevy warns the event shapes may
+//! change. A failure reads as Python's `requests` words it, since that text
+//! is stored on the workout.
 
 use std::time::Duration;
 
@@ -189,7 +187,6 @@ impl HevyClient {
         })
     }
 
-    /// No waiting between retries, for tests.
     pub fn without_backoff(self) -> Self {
         Self {
             backoff_factor: 0.0,
@@ -259,7 +256,6 @@ impl HevyClient {
             .map_err(|e| HevyError::Malformed(json_message(response.body(), &e)))
     }
 
-    /// Used to check an API key when Hevy is connected.
     pub async fn get_user_info(&self) -> Result<Value, HevyError> {
         self.get("/user/info", &[]).await
     }
@@ -315,8 +311,7 @@ impl HevyClient {
         .await
     }
 
-    /// Every event newer than `since` across all pages. A malformed entry is
-    /// skipped, so one bad event cannot stall the cursor.
+    /// A malformed entry is skipped, so one bad event cannot stall the cursor.
     pub async fn iter_events_since(&self, since: &str) -> Result<Vec<Value>, HevyError> {
         let mut events = Vec::new();
         let mut page = 1;
@@ -355,7 +350,6 @@ impl HevyClient {
         }
     }
 
-    /// One page of exercise templates, and whether another follows.
     async fn get_exercise_templates_page(
         &self,
         page: i64,

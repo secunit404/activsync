@@ -1,6 +1,5 @@
-//! The request pipeline in front of every route: trusted proxy headers, the
-//! Host check, sign-in, the body cap for anonymous writes, CSRF, and security
-//! headers.
+//! Proxy headers, the Host check, sign-in, the anonymous body cap, CSRF and
+//! security headers, in front of every route.
 
 mod proxy_auth;
 
@@ -282,7 +281,6 @@ pub(crate) fn quote(value: &str) -> String {
     utf8_percent_encode(value, QUOTED).to_string()
 }
 
-/// How the current request reached the app and who sent it.
 #[derive(Clone, Debug)]
 pub struct RequestContext {
     pub peer: Option<IpAddr>,

@@ -1,6 +1,5 @@
-//! Heart rate for generated FITs (after hevy2garmin, MIT): the watch FIT's
-//! records, Garmin's daily wrist HR sliced to the workout, and the merge. Best-effort throughout: HR must never break
-//! a sync, so a failure gives no samples and the upload goes ahead without.
+//! Heart rate for generated FITs (after hevy2garmin, MIT). Best-effort: HR must
+//! never break a sync, so a failure gives no samples.
 //! Samples are `{"time": seconds_from_start, "hr": bpm}`, sorted by time.
 
 use chrono::{DateTime, Duration, Utc};
@@ -23,7 +22,6 @@ fn sorted(mut samples: Vec<Value>) -> Vec<Value> {
     samples
 }
 
-/// The watch's own HR records as offsets from the workout start.
 pub fn extract_fit_hr(fit: &[u8], workout_start_ms: i64) -> Vec<Value> {
     use fitparser::Value as Fit;
     let mut samples = Vec::new();
@@ -65,9 +63,8 @@ fn dates_touched(start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<String> {
     dates
 }
 
-/// Garmin's daily wrist HR within a minute either side of the workout,
-/// fetching every date it touches so a session across midnight keeps both
-/// halves.
+/// Fetches every date the window touches, so a session across midnight keeps
+/// both halves.
 pub async fn passive_hr_for_window(
     garmin: &GarminClient,
     start: DateTime<Utc>,
@@ -109,7 +106,6 @@ pub async fn passive_hr_for_window(
     sorted(samples)
 }
 
-/// Per 10-second bucket the primary sample wins and the secondary fills gaps.
 pub fn merge_hr_sources(primary: &[Value], secondary: &[Value]) -> Vec<Value> {
     if primary.is_empty() {
         return sorted(secondary.to_vec());

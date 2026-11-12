@@ -127,9 +127,9 @@ const SAMPLES: [Sample; 13] = [
     },
 ];
 
-/// Fills a mock database with a year of sample activities. When `onboarded`,
-/// it is also past the setup wizard (`initial_sync_done`, nothing else), even
-/// on a database that already holds the current sample data.
+/// When `onboarded`, the database is also past the setup wizard
+/// (`initial_sync_done`, nothing else), even if it already holds the current
+/// sample data.
 ///
 /// Refuses to touch a database holding any activity it did not generate, so
 /// pointing the mock server at a real database cannot alter it.

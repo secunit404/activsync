@@ -1,12 +1,6 @@
-//! Signing in to Garmin with the account's email and password, the one path
-//! allowed to use them. Like the Python `garminconnect` library it tries the
-//! mobile app's sign-in, then the SSO widget, then the web portal. Each
-//! either gets a service ticket, which is exchanged for the DI tokens the
-//! rest of the client uses, or a request for a one-time code. Wrong
-//! credentials or a code request end the chain; anything else moves on to
-//! the next route. As in the library, each route's requests look like a
-//! browser down to the TLS handshake, and the mobile and portal routes try
-//! several browsers in turn, since Cloudflare rate-limits each separately.
+//! Password sign-in, trying the mobile app's, the SSO widget's and the web
+//! portal's routes in the `garminconnect` library's order. Wrong credentials
+//! or a code request end the chain; anything else moves on to the next route.
 //! The library's further retries over plain TLS have no counterpart here.
 
 mod sso;
@@ -73,7 +67,6 @@ impl fmt::Display for Route {
     }
 }
 
-/// Which sign-in asked for the code, and what finishing it needs.
 #[derive(Clone, Debug, Default)]
 enum Flow {
     #[default]
@@ -85,14 +78,13 @@ enum Flow {
     },
 }
 
-/// A sign-in paused on Garmin's one-time code. A wrong code leaves it
-/// usable, so the owner can try again against the same challenge.
+/// A wrong code leaves this usable, so the owner can retry the same challenge.
 #[derive(Clone, Debug, Default)]
 pub struct PendingLogin {
     flow: Flow,
     mfa_method: String,
     cookies: String,
-    /// The browser the sign-in looked like, which the code goes in as too.
+    /// The code must go in as the same browser the sign-in presented.
     browser: Option<Browser>,
 }
 
@@ -106,7 +98,6 @@ enum Attempt {
     Challenged(PendingLogin),
 }
 
-/// Why one sign-in attempt stopped, in the library's terms.
 enum Failure {
     /// Wrong credentials, or a code Garmin refused: trying again won't help.
     Auth(String),
@@ -122,7 +113,6 @@ impl Failure {
     }
 }
 
-/// Where sign-in reaches Garmin and keeps the session it gets.
 #[derive(Clone)]
 pub struct SignIn {
     /// Must not follow redirects: sign-in follows them itself, collecting
@@ -130,12 +120,10 @@ pub struct SignIn {
     pub http: Http,
     pub clock: Clock,
     pub token_dir: String,
-    /// The pause between profile retries; zero in tests, which also drops
-    /// the waits the web routes keep before posting the password.
+    /// Zero in tests, which also drops the waits before posting the password.
     pub pause: Duration,
 }
 
-/// The cookies Garmin set during one sign-in, sent back on each call.
 #[derive(Default)]
 struct Jar(Vec<(String, String)>);
 
@@ -199,10 +187,9 @@ impl SignIn {
             .await
     }
 
-    /// Sends and follows redirects itself, keeping every hop's cookies, the
-    /// way Python's `requests` does: after a 301, 302 or 303 a form post
-    /// carries on as a plain GET; a 307 or 308 posts it again. Returns the
-    /// final answer and the address it came from.
+    /// Follows redirects itself, keeping every hop's cookies, as Python's
+    /// `requests` does: after a 301, 302 or 303 a form post carries on as a
+    /// plain GET; a 307 or 308 posts it again.
     async fn follow(
         &self,
         mut method: http::Method,
@@ -245,8 +232,8 @@ impl SignIn {
         }
     }
 
-    /// Starts a sign-in. A session Garmin still accepts is kept without
-    /// checking the password, as the library does with a token store.
+    /// A session Garmin still accepts is kept without checking the password,
+    /// as the library does with a token store.
     pub async fn begin(&self, email: &str, password: &str) -> Result<Login, GarminError> {
         if GarminClient::open_with(
             self.http.clone(),
@@ -301,8 +288,7 @@ impl SignIn {
         }))
     }
 
-    /// One route as each of its browsers in turn, until one gets past the
-    /// rate limit or the bot check.
+    /// Each browser in turn, since Cloudflare rate-limits each separately.
     async fn rotate(&self, route: Route, email: &str, password: &str) -> Result<Attempt, Failure> {
         let mut last = Failure::Connection("no browser to sign in as".into());
         for &browser in route.browsers() {
@@ -333,8 +319,7 @@ impl SignIn {
         Err(last)
     }
 
-    /// This sign-in with every request looking like `browser`, unless a call
-    /// inside it has already picked one: the ticket exchange always looks
+    /// A browser a call already picked wins: the ticket exchange always looks
     /// like Chrome, whichever route got the ticket.
     fn presenting(&self, browser: Browser) -> SignIn {
         let http = self.http.clone();
@@ -350,7 +335,6 @@ impl SignIn {
         }
     }
 
-    /// Finishes a paused sign-in with the owner's code and keeps the session.
     pub async fn complete(&self, pending: &PendingLogin, code: &str) -> Result<(), GarminError> {
         let sign_in = pending
             .browser
@@ -385,8 +369,7 @@ impl SignIn {
             .map_err(|e| GarminError::Invalid(format!("Could not save the Garmin session: {e}")))
     }
 
-    /// Trades the SSO's service ticket for DI tokens, trying each known
-    /// app identity in turn. `service` must be the one the ticket was for.
+    /// `service` must be the one the ticket was for.
     async fn exchange_ticket(&self, ticket: &str, service: &str) -> Result<Tokens, Failure> {
         let chrome = self.presenting(Browser::Chrome);
         for client_id in DI_CLIENT_IDS {

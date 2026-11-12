@@ -162,8 +162,8 @@ CREATE TABLE IF NOT EXISTS hevy_events_seen (
 
 pub type DbResult<T> = rusqlite::Result<T>;
 
-/// One shared connection behind a mutex: every request and the publish
-/// scheduler take it for a single short unit of work.
+/// One shared connection behind a mutex: every holder takes it for a single
+/// short unit of work.
 #[derive(Clone)]
 pub struct Db(Arc<Mutex<Connection>>);
 
@@ -667,8 +667,7 @@ pub fn scheduled_publish_ids(conn: &Connection) -> DbResult<HashSet<i64>> {
     ids.collect()
 }
 
-/// Whether any Hevy workout is durably linked to the activity, whatever its
-/// status.
+/// Any linked Hevy workout counts, whatever its status.
 pub fn has_linked_workout(conn: &Connection, garmin_activity_id: i64) -> DbResult<bool> {
     conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM hevy_workouts WHERE source_garmin_activity_id = ?1 OR garmin_activity_id = ?1)",

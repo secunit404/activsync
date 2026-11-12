@@ -9,21 +9,15 @@ pub(crate) fn truthy(value: &Value) -> bool {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum GarminError {
-    /// The saved session is missing or Garmin no longer accepts it.
     SessionExpired,
-    /// Opening the session failed on an outage; the session may be fine and
-    /// the next poll tries again.
+    /// Opening the session hit an outage; the session may still be good.
     Unavailable,
-    /// A definitive 404 on an activity call.
     ActivityGone(i64),
-    /// A 404 anywhere else.
     NotFound(String),
-    /// Garmin definitively refused a FIT upload.
     UploadRejected(String),
-    /// Garmin 400-rejected an exercise-sets payload over a (category,
-    /// subcategory) pair. The PUT is atomic, so the whole payload failed.
+    /// The exercise-sets PUT is atomic, so the whole payload failed.
     SubcategoryRejected(String),
-    /// Any other answer of 400 or above, worded as the library words it.
+    /// Worded as the library words it.
     Api(String),
     Network(String),
     Malformed(String),

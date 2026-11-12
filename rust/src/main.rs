@@ -217,8 +217,6 @@ async fn shutdown_signal() {
     }
 }
 
-/// Sample data for the mock accounts, and the dev password on a server only
-/// this machine can reach.
 fn seed_mock(db: &Db, auth: &AuthConfig, host: IpAddr) {
     let onboarded = env_enabled(&["ACTIVSYNC_DEV_E2E_ONBOARDED"]);
     match seed::seed(&mut db.lock(), chrono::Utc::now(), onboarded) {
@@ -239,7 +237,6 @@ fn seed_mock(db: &Db, auth: &AuthConfig, host: IpAddr) {
     }
 }
 
-/// Garmin, Strava and Hevy for real, and the background poller.
 /// `ACTIVSYNC_MANUAL_ONLY` keeps Garmin and Strava polling off, so only Hevy
 /// is polled and matches wait for review.
 fn real_accounts(

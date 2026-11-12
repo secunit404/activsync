@@ -77,7 +77,6 @@ fn workout(
     })
 }
 
-/// The workouts the queue shows, timestamped relative to `now`.
 fn dev_workouts(now: DateTime<Utc>) -> Vec<Value> {
     let now = now.with_nanosecond(0).unwrap_or(now);
     let midnight = (now - Duration::days(1))

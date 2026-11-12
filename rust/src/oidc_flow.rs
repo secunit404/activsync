@@ -1,6 +1,5 @@
-//! The OIDC authorization-code flow with PKCE and nonce, as the Python app
-//! runs it through Authlib. Per-browser flow state lives in memory behind
-//! an opaque cookie, standing in for the Python app's signed session cookie.
+//! Per-browser flow state lives in memory behind an opaque cookie, where the
+//! Python server uses a signed session cookie.
 
 mod claims;
 
@@ -30,8 +29,7 @@ const FLOW_SECONDS: f64 = 600.0;
 const MAX_BROWSERS: usize = 1024;
 const LINK_GRANT_SECONDS: f64 = 300.0;
 
-/// Every call to the identity provider goes through this, so tests can stand
-/// in for the provider.
+/// Injectable so tests can stand in for the provider.
 pub type OidcHttp = Http;
 
 /// A named client rather than a closure: a closure here makes the handler's
@@ -92,10 +90,9 @@ struct Discovered {
     jwks: Option<CoreJsonWebKeySet>,
 }
 
-/// Flow and link-grant state per browser, keyed by the value of its OIDC
-/// cookie, plus the provider's discovery document and signing keys, fetched
-/// once per configured provider as Authlib does. A restart forgets both, so a
-/// sign-in in progress then starts over.
+/// Keyed by the browser's OIDC cookie value. Discovery and signing keys are
+/// fetched once per configured provider, as Authlib does. A restart forgets
+/// both, so a sign-in in progress then starts over.
 #[derive(Clone, Default)]
 pub struct OidcSessions {
     browsers: Arc<Mutex<HashMap<String, BrowserState>>>,
@@ -292,7 +289,6 @@ fn client_for(
     .set_redirect_uri(redirect))
 }
 
-/// Where a sign-in returns to, and what it was started for.
 pub struct Return<'a> {
     pub redirect_uri: &'a str,
     pub intent: &'a str,
@@ -379,8 +375,6 @@ pub struct Callback<'a> {
     pub error: Option<&'a str>,
 }
 
-/// Checks the provider's answer against the flow it started: state, PKCE,
-/// the ID token's signature, issuer, audience and nonce.
 pub async fn finish(
     http: &OidcHttp,
     sessions: &OidcSessions,

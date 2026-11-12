@@ -1,7 +1,3 @@
-//! Connecting Strava: the authorization link and Strava's callback. Against
-//! real accounts the code is exchanged with Strava; the mock accounts hand
-//! out stand-in tokens.
-
 use axum::Json;
 use axum::extract::{Extension, Query, State};
 use axum::http::HeaderMap;

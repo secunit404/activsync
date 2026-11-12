@@ -25,7 +25,6 @@ fn identity(value: &Value) -> DeviceIdentity {
     }
 }
 
-/// The first byte where two files part, for a readable failure.
 fn first_difference(a: &[u8], b: &[u8]) -> Option<usize> {
     a.iter()
         .zip(b)

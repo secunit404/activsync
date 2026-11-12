@@ -56,8 +56,7 @@ static PROFILE: LazyLock<Profile> = LazyLock::new(|| {
         .expect("fit_profile.json parses")
 });
 
-/// A field value as the SDK accepts it: a number, a profile enum by name, a
-/// UTC instant in Unix seconds for `date_time` fields, text, or an array.
+/// `date_time` fields take a UTC instant in Unix seconds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FitValue {
     Int(i64),
@@ -68,8 +67,7 @@ pub enum FitValue {
     List(Vec<FitValue>),
 }
 
-/// One message: its profile name and fields in the order they are written.
-/// A field left out is simply absent, as the SDK drops `None`.
+/// Fields are written in the order given; one left out is absent, as the SDK drops `None`.
 pub struct Mesg {
     pub name: &'static str,
     pub fields: Vec<(&'static str, FitValue)>,

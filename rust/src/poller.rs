@@ -1,6 +1,4 @@
-//! The background poller: Garmin fetch, Strava publish and status check, and
-//! the Hevy leg each run on their own interval, checked on a short shared
-//! tick.
+//! Each leg runs on its own interval, checked on a short shared tick.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -31,8 +29,7 @@ const MAX_SESSION_HOURS: i64 = 24;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// Builds the service clients for one pass. Garmin is opened fresh each
-/// time from the saved session, never by password.
+/// Garmin is opened fresh each pass from the saved session, never by password.
 pub trait Clients: Send + Sync {
     fn garmin(&self) -> BoxFuture<'_, Result<GarminClient, GarminError>>;
     fn strava(&self) -> StravaClient;
@@ -45,8 +42,7 @@ pub enum HevyLegError {
     Failed(String),
 }
 
-/// One pass of the Hevy integration. Returns whether anything changed on
-/// Garmin.
+/// `run` returns whether anything changed on Garmin.
 pub trait HevyLeg: Send + Sync {
     fn run<'a>(
         &'a self,
@@ -66,7 +62,6 @@ pub struct Options {
     pub garmin_polling: bool,
     pub strava_polling: bool,
     pub hevy_polling: bool,
-    /// See `AppState::development`.
     pub development: bool,
 }
 
@@ -340,10 +335,9 @@ impl Poller {
         self.strava_backoff_until.is_some_and(|until| now < until)
     }
 
-    /// One Strava pass with failures absorbed; whether anything changed. A
-    /// 429 means the quota is spent, so Strava is left alone until the time
-    /// the client worked out when the 429 landed: retrying each tick is what
-    /// keeps a quota exhausted.
+    /// Returns whether anything changed. A 429 means the quota is spent, so
+    /// Strava is left alone until the time the client worked out when the 429
+    /// landed: retrying each tick is what keeps a quota exhausted.
     async fn run_strava_guarded(&mut self, now: DateTime<Utc>, failure: &str) -> bool {
         match self.run_strava_once(now).await {
             Ok((published, status)) => {
@@ -479,7 +473,6 @@ impl Poller {
         Ok(())
     }
 
-    /// Runs until the task is aborted, one tick per `options.tick`.
     pub fn spawn(mut self, clock: Clock) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             loop {
@@ -493,9 +486,9 @@ impl Poller {
     }
 }
 
-/// A signed-in Garmin client. An expired session pauses Garmin durably: the
-/// Settings page shows it and the poller stops trying until the user
-/// reconnects. An outage is shown as a failed attempt and retried.
+/// An expired session pauses Garmin durably: the Settings page shows it and
+/// the poller stops trying until the user reconnects. An outage is shown as a
+/// failed attempt and retried.
 pub async fn open_garmin(
     db: &Db,
     events: &EventBus,
@@ -515,8 +508,6 @@ pub async fn open_garmin(
     }
 }
 
-/// The real clients: Garmin from the token directory, Strava from the
-/// stored tokens and the app's client credentials.
 pub struct RealClients {
     pub db: Db,
     pub clock: Clock,

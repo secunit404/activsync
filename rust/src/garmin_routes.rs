@@ -1,7 +1,3 @@
-//! Connecting Garmin: the setup step, reconnecting, and Garmin's one-time
-//! code. Against real accounts the email and password go to Garmin's
-//! sign-in; the mock account takes any password but the MFA trigger.
-
 use axum::Json;
 use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
@@ -27,8 +23,8 @@ enum GarminOutcome {
     Mfa,
 }
 
-/// Marks Garmin connected, then fetches its activity categories, best
-/// effort; on the first run every category starts held.
+/// Fetching the activity categories is best effort; on the first run every
+/// category starts held.
 async fn finalize_garmin_connect(state: &AppState) -> Result<(), ApiError> {
     let now = Utc::now();
     let Some(clients) = state.clients.clone() else {
@@ -60,8 +56,8 @@ fn save_credentials(state: &AppState, credentials: &GarminCredentials) -> Result
     Ok(())
 }
 
-/// Starts a Garmin sign-in. A pending verification from an earlier attempt is
-/// dropped first, so a code can only ever finish the latest attempt.
+/// A pending verification from an earlier attempt is dropped first, so a code
+/// can only ever finish the latest attempt.
 async fn save_and_verify_garmin(
     state: &AppState,
     email: &str,
@@ -213,7 +209,6 @@ pub struct MfaRequest {
     code: String,
 }
 
-/// A wrong code keeps the challenge open for another try.
 pub async fn complete_mfa(
     State(state): State<AppState>,
     payload: Result<Json<MfaRequest>, JsonRejection>,

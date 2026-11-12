@@ -80,7 +80,6 @@ fn identity_display(detected: &Map<String, Value>) -> String {
     }
 }
 
-/// A stored object setting, or the default when it is missing or unreadable.
 fn setting<T: DeserializeOwned + Default>(settings: &Map<String, Value>, key: &str) -> T {
     settings
         .get(key)
@@ -88,8 +87,8 @@ fn setting<T: DeserializeOwned + Default>(settings: &Map<String, Value>, key: &s
         .unwrap_or_default()
 }
 
-/// The settings page's Hevy card. The detected device identity and the hand
-/// override are kept apart, so a save with a blank override keeps detection.
+/// The detected device identity and the hand override are kept apart, so a
+/// save with a blank override keeps detection.
 pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySettingsState> {
     let settings = object(db::get_config_value(conn, "settings")?);
     let api_key_saved = db::truthy(db::get_config_value(conn, "hevy_api_key")?.as_ref());

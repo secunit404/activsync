@@ -1,7 +1,4 @@
-//! Garmin activities ↔ local status ↔ Strava: the Garmin fetch reconciles
-//! the activity table, the publish pass uploads pending rows, and one Strava
-//! window read links activities that reached Strava some other way and flags
-//! ones deleted there.
+//! Garmin fetch, Strava publish, and Strava status reconciliation.
 
 mod publish;
 mod python_json;
@@ -182,10 +179,9 @@ pub fn record_sync_outcome(
     Ok(())
 }
 
-/// Fetches recent Garmin activities into the table and records the outcome
-/// for the Settings page. `hold_before` holds newly seen activities that
-/// started before it, so an outage backlog is reviewed rather than
-/// blast-published; rows already known keep their status.
+/// `hold_before` holds newly seen activities that started before it, so an
+/// outage backlog is reviewed rather than blast-published; rows already known
+/// keep their status.
 pub async fn sync_garmin(
     db: &Db,
     garmin: &GarminClient,

@@ -1,8 +1,6 @@
-//! Strava's JSON strength upload for a Hevy-linked activity. Strava reads a
-//! FIT's sets through its own partial table of Garmin exercise ids, so machine
-//! variants come out wrong or "Unknown"; the JSON names each set's Strava
-//! exercise directly. Sets come from Hevy; time, heart rate and calories from
-//! the watch's recording.
+//! Strava's JSON strength upload. Strava reads a FIT's sets through its own
+//! partial table of Garmin exercise ids, so machine variants come out wrong
+//! or "Unknown"; the JSON names each set's Strava exercise directly.
 
 use chrono::{DateTime, Offset, TimeZone, Utc};
 use fitparser::profile::MesgNum;
@@ -42,9 +40,7 @@ fn py_round(value: f64) -> i64 {
     value.round_ties_even() as i64
 }
 
-/// The upload document for a Hevy workout recorded as `fit`. The error is
-/// the reason to upload the FIT instead: an exercise with no Strava
-/// exercise, no sets, or no usable time window.
+/// The error is the reason to upload the FIT instead.
 pub fn build_strength_upload(
     conn: &Connection,
     workout: &Value,
@@ -193,7 +189,6 @@ fn text(value: Option<&Fit>) -> Option<&str> {
     }
 }
 
-/// What the watch measured, or `None` when the file cannot be read.
 fn read_fit(fit: &[u8]) -> Option<Recording> {
     if fit.is_empty() {
         return None;

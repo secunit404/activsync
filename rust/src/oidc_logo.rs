@@ -1,5 +1,5 @@
-//! The optional logo on the single sign-on button. Uploads are decoded and
-//! re-encoded to a small PNG, so nothing the uploader wrote is served back.
+//! Uploads are decoded and re-encoded to a small PNG, so nothing the uploader
+//! wrote is served back.
 
 use std::io::Cursor;
 
@@ -63,7 +63,6 @@ fn thumbnail_size(width: u32, height: u32) -> Option<(u32, u32)> {
     (x < width || y < height).then_some((x, y))
 }
 
-/// The logo as a PNG at most 96 pixels tall, or the message to show.
 pub fn normalize(data: &[u8]) -> Result<Vec<u8>, &'static str> {
     if data.len() > MAX_UPLOAD_BYTES {
         return Err(TOO_LARGE);

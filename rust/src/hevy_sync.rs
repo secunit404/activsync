@@ -1,8 +1,3 @@
-//! The Hevy leg of the poller: read Hevy's events feed, park workouts with
-//! unmapped exercises, match each workout to its watch activity, apply it
-//! with the configured strategy, re-apply edits, and push edited titles and
-//! descriptions to Strava copies.
-//!
 //! The events cursor advances only past events whose effect landed, and each
 //! effect is applied before its dedupe key is recorded, so a crash anywhere
 //! is absorbed on the next poll.
@@ -62,8 +57,8 @@ impl From<rusqlite::Error> for HevyLegError {
     }
 }
 
-/// A failure while handling one workout. Only a Hevy auth failure escapes
-/// the workout, so the poller can pause the leg.
+/// Only a Hevy auth failure escapes the workout, so the poller can pause the
+/// leg.
 #[derive(Debug)]
 pub enum StepError {
     HevyAuth,
@@ -128,10 +123,9 @@ pub(crate) fn store_template(
     )
 }
 
-/// Whether the workout may go ahead under `strategy`. Strategies that push
-/// structured sets need every exercise mapped; a miss parks the workout
-/// listing every missing title and caches unknown templates for the
-/// mappings page. Describe uses Hevy's own titles and always passes.
+/// Strategies that push structured sets need every exercise mapped; a miss
+/// parks the workout listing every missing title and caches unknown templates
+/// for the mappings page. Describe uses Hevy's own titles and always passes.
 async fn apply_mapping_gate(
     db: &Db,
     row: &Workout,
@@ -407,7 +401,6 @@ async fn decide(
     Ok(())
 }
 
-/// One workout's turn this tick, under its lease.
 async fn process_workout(
     apply: &Apply<'_>,
     hevy: &HevyClient,
@@ -449,8 +442,8 @@ fn fingerprint(row: &Workout) -> (&str, Option<i64>, Option<&str>, Option<&str>)
     )
 }
 
-/// One tick of the Hevy leg; whether anything changed, which hands off to
-/// the Garmin leg and refreshes open pages.
+/// Returns whether anything changed, which hands off to the Garmin leg and
+/// refreshes open pages.
 pub async fn run_hevy_leg(
     apply: &Apply<'_>,
     hevy: &HevyClient,
@@ -489,7 +482,6 @@ pub async fn run_hevy_leg(
     Ok(changed)
 }
 
-/// Hevy and the calorie profile for a tick, with the config snapshot.
 async fn hevy_context(
     db: &Db,
     garmin: &GarminClient,
@@ -549,8 +541,8 @@ pub async fn process_now(
     Ok(status)
 }
 
-/// The poller's Hevy leg against the real Hevy API. The profile and config
-/// are read fresh each tick, so settings changes apply on the next poll.
+/// The profile and config are read fresh each tick, so settings changes
+/// apply on the next poll.
 pub struct RealHevyLeg {
     pub http: Http,
     pub development: bool,

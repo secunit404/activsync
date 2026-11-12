@@ -38,14 +38,12 @@ enum Sso {
     WrongPassword,
     RateLimited,
     Blocked,
-    /// Rate-limits the first browser the route tries, then asks for a code.
     MfaAfterRateLimit,
 }
 
 #[derive(Clone, Copy)]
 enum Widget {
     Ticket,
-    /// The password post answers with a redirect to the page holding the ticket.
     RedirectedTicket,
     Mfa,
     Locked,

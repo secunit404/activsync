@@ -1,6 +1,4 @@
-//! Applying a Hevy workout to Garmin: the exercise-sets payload, the four
-//! strategies, and the crash-safe operation journal that uploads a rebuilt
-//! FIT and then deletes the watch original.
+//! Applies a Hevy workout to Garmin by one of four strategies.
 
 mod journal;
 
@@ -24,7 +22,6 @@ const GONE_ON_GARMIN: &str = "watch activity deleted on Garmin";
 
 #[derive(Debug)]
 pub enum ApplyError {
-    /// An exercise with no Garmin mapping; routes to the mapping gate.
     MappingMiss {
         title: String,
         template_id: Option<String>,
@@ -65,7 +62,6 @@ impl From<rusqlite::Error> for ApplyError {
     }
 }
 
-/// Every exercise resolved, or the first unmapped one as a miss.
 pub(crate) fn resolve_exercises(
     conn: &Connection,
     workout: &Value,
@@ -119,8 +115,7 @@ fn number(value: Option<&Value>) -> Option<f64> {
     value.and_then(Value::as_f64)
 }
 
-/// The exerciseSets PUT payload, the synthetic set timing spread across the
-/// real activity window.
+/// Set timings are synthetic, spread across the real activity window.
 pub fn build_exercise_sets_payload(
     resolved: &[ResolvedExercise],
     start: &str,
@@ -217,7 +212,6 @@ pub fn build_exercise_sets_payload(
     Ok(json!({"exerciseSets": sets}))
 }
 
-/// The duration in an activity's `garmin_data`; 0 when absent or unreadable.
 pub(crate) fn activity_duration_seconds(activity: &db::ActivityRow) -> f64 {
     let data: Value = serde_json::from_str(&activity.garmin_data).unwrap_or(Value::Null);
     float(data.get("duration")).unwrap_or(0.0)
@@ -245,7 +239,6 @@ pub(crate) fn total_seconds(span: Duration) -> f64 {
         .map_or(span.num_seconds() as f64, |us| us as f64 / 1e6)
 }
 
-/// The linked activity's start and duration, else the workout's own window.
 fn activity_window(
     conn: &Connection,
     activity_id: i64,
@@ -261,7 +254,6 @@ fn activity_window(
     Ok((row.start_time.clone(), duration))
 }
 
-/// The exerciseSets PUT body for `activity_id`, timed over its window.
 pub(crate) fn exercise_sets_for(
     conn: &Connection,
     resolved: &[ResolvedExercise],
@@ -275,9 +267,8 @@ pub(crate) fn exercise_sets_for(
     Ok(payload)
 }
 
-/// Garmin's recorded calories and heart rate (the target, then the watch
-/// original), then what the rebuilt FIT carries. A replace target is not in
-/// the local table until polling sees it, so the original is the source.
+/// The target's Garmin metrics, then the watch original's, then the rebuilt
+/// FIT's: a replace target is not in the local table until polling sees it.
 pub(crate) fn activity_metrics(
     conn: &Connection,
     row: &Workout,
@@ -310,8 +301,6 @@ pub(crate) fn activity_metrics(
     ))
 }
 
-/// What applying needs: the database, a signed-in Garmin, a config snapshot
-/// and the merged calorie profile (cached Garmin values plus the override).
 pub struct Apply<'a> {
     pub db: &'a Db,
     pub garmin: &'a GarminClient,

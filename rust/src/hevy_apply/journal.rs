@@ -1,5 +1,5 @@
-//! The replace and passive strategies: a journalled upload of a rebuilt FIT,
-//! then the watch original's deletion.
+//! The replace and passive strategies: a journalled FIT upload, then the
+//! watch original's deletion.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -55,9 +55,8 @@ fn identity_for_build(conn: &Connection, cfg: &Config) -> Result<DeviceIdentity,
     Ok(identity)
 }
 
-/// The workout's window overlapping any local activity: the passive path's
-/// guard, since a blind upload would duplicate a session recorded under
-/// another type.
+/// The passive path's guard: a blind upload would duplicate a session
+/// recorded under another type.
 fn overlapping_any_type(conn: &Connection, row: &Workout) -> Result<Option<String>, ApplyError> {
     let Some((start, end)) = workout_window(row) else {
         return Ok(None);
@@ -128,7 +127,6 @@ fn resolution_candidates(
     candidates
 }
 
-/// A FIT written to its own temporary folder for the upload, removed after.
 struct TempFit(PathBuf);
 
 impl TempFit {
@@ -208,10 +206,9 @@ impl Apply<'_> {
         Ok(())
     }
 
-    /// Drives one operation as far as it can go this tick. Every transition
-    /// is saved before the next side effect, so a crash resumes where it
-    /// stopped. `submission_unknown` is entered only from the upload call
-    /// itself and is never resubmitted.
+    /// Every transition is saved before the next side effect, so a crash
+    /// resumes where it stopped. `submission_unknown` is entered only from the
+    /// upload call itself and is never resubmitted.
     pub async fn advance_operation(&self, row: &Workout) -> Result<(), ApplyError> {
         loop {
             let Some(op) = hevy_db::get_open_operation(&self.db.lock(), &row.hevy_id)? else {

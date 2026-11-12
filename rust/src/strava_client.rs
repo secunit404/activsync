@@ -1,7 +1,3 @@
-//! Strava v3 client: OAuth tokens kept in `strava_tokens`, activity upload
-//! with the upload-status poll, metadata edits, and window reads for
-//! duplicate detection.
-
 use std::time::Duration;
 
 use base64::Engine;
@@ -37,7 +33,6 @@ const REVOKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StravaError {
-    /// Strava rejected the credentials or refresh token.
     Auth(String),
     /// A 429, with the instant it is worth asking again. An instant rather
     /// than a wait, so a caller acting on it later does not retry early.
@@ -123,8 +118,7 @@ pub struct StravaActivity {
     pub start_date: DateTime<Utc>,
 }
 
-/// The activity starting closest to `start`, within the tolerance; shared by
-/// the single lookup and the window scan so both agree on "the same one".
+/// Shared by the single lookup and the window scan so both agree on "the same one".
 pub fn match_closest_activity(
     activities: &[StravaActivity],
     start: DateTime<Utc>,
@@ -164,7 +158,6 @@ impl StravaClient {
         }
     }
 
-    /// No pause between upload-status checks, for tests.
     pub fn without_waits(self) -> Self {
         Self {
             poll_delay: Duration::ZERO,
@@ -296,8 +289,8 @@ impl StravaClient {
         Ok(format!("Bearer {}", self.access_token().await?))
     }
 
-    /// Forgets the connection here and on Strava. The revoke is best-effort:
-    /// the local tokens go even if Strava cannot be reached.
+    /// The revoke is best-effort: the local tokens go even if Strava cannot be
+    /// reached.
     pub async fn disconnect(&self) {
         let tokens = db::get_config_value(&self.db.lock(), "strava_tokens")
             .ok()
@@ -411,8 +404,8 @@ impl StravaClient {
             .collect()
     }
 
-    /// Every activity in a window, paged; one read reconciles many
-    /// activities, which keeps the poller inside Strava's quota.
+    /// One read reconciles many activities, which keeps the poller inside
+    /// Strava's quota.
     pub async fn list_activities_between(
         &self,
         after: DateTime<Utc>,
@@ -476,7 +469,6 @@ impl StravaClient {
             .await
     }
 
-    /// A strength activity in Strava's JSON upload format.
     pub async fn publish_strength(
         &self,
         garmin_activity_id: i64,

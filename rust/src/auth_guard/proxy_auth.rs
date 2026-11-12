@@ -5,7 +5,6 @@ use crate::proxy_headers::Network;
 
 const TRUST_GATEWAY_VARIABLE: &str = "ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY";
 
-/// Sign-in through an authenticating reverse proxy.
 #[derive(Clone, Debug)]
 pub struct ProxyAuth {
     pub header: String,

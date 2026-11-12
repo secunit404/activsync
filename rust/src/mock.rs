@@ -1,5 +1,5 @@
-//! No-network stand-ins for Garmin, Strava and Hevy that answer as the
-//! Python app's dev mock does, so the dev UI walks the same paths.
+//! Answers as the Python server's dev mock does, so the dev UI walks the same
+//! paths.
 
 use std::collections::HashSet;
 
@@ -16,9 +16,7 @@ use crate::sync::{
 use crate::timefmt::GARMIN_TIME_FORMAT;
 use crate::view::parse_garmin_data;
 
-/// A Garmin password of "mfa" asks for a verification code.
 const MFA_TRIGGER_PASSWORD: &str = "mfa";
-/// The one verification code the mock rejects.
 const MFA_REJECT_CODE: &str = "000000";
 
 const GARMIN_ACTIVITY_TYPE_KEYS: &[&str] = &[
@@ -232,8 +230,8 @@ pub fn complete_garmin_login(code: &str) -> Result<(), String> {
     }
 }
 
-/// Skips Strava entirely: bounces straight back to our own callback with a
-/// placeholder code, echoing the state as the real Strava would.
+/// Bounces straight back to our own callback with a placeholder code,
+/// echoing the state as the real Strava would.
 pub fn strava_authorize_url(redirect_uri: &str, state: &str) -> String {
     let separator = if redirect_uri.contains('?') { '&' } else { '?' };
     format!("{redirect_uri}{separator}code=dev-mock-code&state={state}")
@@ -381,8 +379,7 @@ fn remote_activity(
     Ok(activity)
 }
 
-/// The mock Garmin's metadata edit, kept as an overlay that later fetches
-/// report.
+/// Kept as an overlay that later fetches report.
 fn update_garmin_metadata(
     conn: &rusqlite::Connection,
     id: i64,
@@ -397,7 +394,6 @@ fn update_garmin_metadata(
     db::set_config_value(conn, REMOTE_ACTIVITIES_KEY, &Value::Object(activities))
 }
 
-/// `sync::edit_activity_metadata` against the mock accounts.
 pub fn edit_activity_metadata(db: &Db, id: i64, title: &str, description: &str) -> SyncResult<()> {
     let (title, description) = (title.trim(), description.trim());
     if title.is_empty() {
@@ -468,7 +464,6 @@ fn fetch_recent_activities(
     Ok(records)
 }
 
-/// `sync::sync_garmin` against the mock Garmin.
 pub fn sync_garmin(
     db: &Db,
     cfg: &Config,
@@ -548,8 +543,7 @@ pub fn sync_garmin(
     Ok(stats)
 }
 
-/// `sync::check_strava_status` against the mock Strava, which reports back
-/// exactly the activities this app published.
+/// The mock Strava reports back exactly the activities this app published.
 pub fn check_strava_status(
     db: &Db,
     cfg: &Config,
@@ -623,7 +617,6 @@ pub fn check_strava_status(
     Ok(stats)
 }
 
-/// `sync::catch_up_sync` against the mock accounts.
 pub fn catch_up_sync(
     db: &Db,
     cfg: &Config,
@@ -653,7 +646,6 @@ pub fn catch_up_sync(
     })
 }
 
-/// `sync::publish_now` against the mock accounts.
 pub fn publish_now(db: &Db, id: i64, now: DateTime<Utc>) -> SyncResult<()> {
     let conn = db.lock();
     if let Some((hevy_id, status)) = db::blocking_workout_for_activity(&conn, id)? {
@@ -669,7 +661,6 @@ pub fn publish_now(db: &Db, id: i64, now: DateTime<Utc>) -> SyncResult<()> {
     Ok(())
 }
 
-/// A manual `sync::publish_pending` against the mock accounts.
 pub fn publish_selected(
     db: &Db,
     selected: &HashSet<i64>,
@@ -695,7 +686,6 @@ pub fn publish_selected(
     Ok(stats)
 }
 
-/// The exercise templates the mock Hevy account holds.
 pub fn hevy_templates() -> Vec<Value> {
     let mut templates: Vec<Value> = [
         ("tpl-dev-bench", "Bench Press (Barbell)", "chest", "barbell"),
