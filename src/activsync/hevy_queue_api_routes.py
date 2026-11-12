@@ -158,7 +158,7 @@ def create_router(
             remaining_ms=max(
                 0, round((scheduled.deadline - match_scheduler.now()) * 1000)
             ),
-            undo_window_ms=round(match_scheduler.window_seconds * 1000),
+            undo_window_ms=round(scheduled.window_seconds * 1000),
         )
 
     @router.post("/{hevy_id}/match/cancel", response_model=HevyMatchCancelled)

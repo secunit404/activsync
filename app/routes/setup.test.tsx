@@ -84,6 +84,7 @@ const baseState: SettingsState = {
     garminPollIntervalMinutes: 20,
     stravaPollIntervalMinutes: 5,
     lookbackDays: 7,
+    undoDelaySeconds: 5,
   },
   timezones: ["Europe/Stockholm"],
   activityTypes: [],

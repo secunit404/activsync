@@ -6,7 +6,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { Toaster } from "@/components/ui/sonner";
 import { ApiError, type HevyMatchScheduled, type HevyMatchStatus } from "@/lib/api";
-import { HEVY_MATCH_UNDO_WINDOW_MS, useHevyMatchQueue } from "./use-hevy-match-queue";
+import { useHevyMatchQueue } from "./use-hevy-match-queue";
+
+const HEVY_MATCH_UNDO_WINDOW_MS = 5000;
 
 const { scheduleHevyMatch, cancelHevyMatch, getHevyMatchStatus } = vi.hoisted(() => ({
   scheduleHevyMatch: vi.fn(),
@@ -75,6 +77,17 @@ test("a merge is scheduled on the server at once and the toast counts down with 
   expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
   expect(result.current.queued.get("hevy-1")).toBe("waiting");
   expect(getHevyMatchStatus).not.toHaveBeenCalled();
+});
+
+test("a zero undo window skips the Undo toast and applies straight away", async () => {
+  scheduleHevyMatch.mockResolvedValue({ ...scheduledMatch(), remainingMs: 0, undoWindowMs: 0 });
+  const { result } = renderQueue();
+
+  await choose(result);
+  await act(() => vi.advanceTimersByTimeAsync(0));
+
+  expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  expect(getHevyMatchStatus).toHaveBeenCalledWith("hevy-1");
 });
 
 test.each([

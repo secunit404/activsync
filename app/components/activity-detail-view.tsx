@@ -5,7 +5,7 @@ import { PublishBlockedNote } from "@/components/publish-blocked-note";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import { PUBLISH_UNDO_WINDOW_MS, type PublishPhase } from "@/hooks/use-publish-queue";
+import { type PublishPhase } from "@/hooks/use-publish-queue";
 import { activityDetailMetrics, isPublishableStatus } from "@/lib/activity-metrics";
 import type { Activity } from "@/lib/api";
 
@@ -75,6 +75,8 @@ export type ActivityDetailViewFooterProps = {
   busy: boolean;
   /** Set while this activity's publish waits out its undo window or is in flight. */
   publishPhase?: PublishPhase;
+  /** The undo window the server applied; unknown for a publish another device started. */
+  undoWindowMs?: number;
   isPublishing: boolean;
   isExcluding: boolean;
   isRestoring: boolean;
@@ -102,6 +104,7 @@ export function ActivityDetailViewFooter({
   connectionsBroken,
   busy,
   publishPhase,
+  undoWindowMs,
   isPublishing,
   isExcluding,
   isRestoring,
@@ -207,7 +210,9 @@ export function ActivityDetailViewFooter({
     <>
       <span role="status" className="sr-only">
         {publishPhase === "waiting"
-          ? `Publishing to Strava in ${PUBLISH_UNDO_WINDOW_MS / 1000} seconds. Undo publish to cancel.`
+          ? undoWindowMs === undefined
+            ? "Publishing to Strava shortly. Undo publish to cancel."
+            : `Publishing to Strava in ${undoWindowMs / 1000} seconds. Undo publish to cancel.`
           : ""}
       </span>
       <div className="flex flex-col gap-2.5 md:hidden">

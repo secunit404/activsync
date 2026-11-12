@@ -40,6 +40,7 @@ logger = logging.getLogger("activsync.settings_api_routes")
 
 SetupStep = onboarding.SetupStep
 HevyMatchMode = Literal["review", "automatic"]
+UndoDelay = Literal[0, 3, 5, 10]
 
 
 class SetupProgress(ApiModel):
@@ -60,6 +61,7 @@ class PreferenceState(ApiModel):
     garmin_poll_interval_minutes: int
     strava_poll_interval_minutes: int
     lookback_days: int
+    undo_delay_seconds: UndoDelay
 
 
 class ActivityTypeState(ApiModel):
@@ -154,6 +156,7 @@ class PreferencesRequest(ApiModel):
     garmin_poll_interval_minutes: int = Field(ge=1)
     strava_poll_interval_minutes: int = Field(ge=1)
     lookback_days: int = Field(ge=1)
+    undo_delay_seconds: UndoDelay
 
 
 class ActivityTypesRequest(ApiModel):
