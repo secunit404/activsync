@@ -99,7 +99,7 @@ function PasswordChangeForm() {
           <PasswordInput
             id="access-new-password"
             autoComplete="new-password"
-            minLength={15}
+            minLength={12}
             value={next}
             onChange={(event) => setNext(event.target.value)}
             required

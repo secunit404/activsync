@@ -15,7 +15,7 @@ import { claimOwner } from "@/lib/auth-api";
 import { passwordsMismatch } from "@/lib/password";
 import { queryKeys } from "@/lib/query-keys";
 
-const MIN_PASSWORD = 15;
+const MIN_PASSWORD = 12;
 
 /**
  * Step 0: claim the install. The setup code is only in the server log, so

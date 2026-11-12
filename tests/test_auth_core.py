@@ -15,8 +15,8 @@ def conn(tmp_path):
 
 
 def test_password_policy_bounds_length_without_composition_rules():
-    assert auth_core.password_problem("x" * 14) is not None
-    assert auth_core.password_problem("x" * 15) is None
+    assert auth_core.password_problem("x" * 11) is not None
+    assert auth_core.password_problem("x" * 12) is None
     assert auth_core.password_problem("x" * 256) is None
     assert auth_core.password_problem("x" * 257) is not None
 
