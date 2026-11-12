@@ -2,10 +2,11 @@
 //! runs it through Authlib. Per-browser flow state lives in memory behind
 //! an opaque cookie, standing in for the Python app's signed session cookie.
 
+mod claims;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use base64::Engine;
 use chrono::{DateTime, Utc};
 use openidconnect::core::{
     CoreAuthenticationFlow, CoreClient, CoreJsonWebKeySet, CoreJwsSigningAlgorithm,
@@ -13,13 +14,13 @@ use openidconnect::core::{
 };
 use openidconnect::{
     AsyncHttpClient, AuthorizationCode, ClaimsVerificationError, ClientId, ClientSecret, CsrfToken,
-    HttpRequest, JwsSigningAlgorithm, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, RequestTokenError, Scope, SignatureVerificationError,
-    TokenResponse, http,
+    EndUserEmail, EndUserName, EndUserUsername, EndpointMaybeSet, EndpointNotSet, EndpointSet,
+    HttpRequest, JwsSigningAlgorithm, LocalizedClaim, Nonce, OAuth2TokenResponse,
+    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RequestTokenError, Scope,
+    SignatureVerificationError, TokenResponse, http,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256, Sha384, Sha512};
 
 use crate::auth_core::random_token;
 use crate::net::{self, Http, HttpError, HttpFuture};
@@ -27,8 +28,7 @@ use crate::oidc_config::OidcConfig;
 
 const FLOW_SECONDS: f64 = 600.0;
 const MAX_BROWSERS: usize = 1024;
-const LEEWAY_SECONDS: f64 = 120.0;
-pub const LINK_GRANT_SECONDS: f64 = 300.0;
+const LINK_GRANT_SECONDS: f64 = 300.0;
 
 /// Every call to the identity provider goes through this, so tests can stand
 /// in for the provider.
@@ -53,8 +53,8 @@ impl<'c> AsyncHttpClient<'c> for Caller<'_> {
 
 #[derive(Clone, Debug)]
 pub struct Flow {
-    pub intent: String,
-    pub next: String,
+    intent: String,
+    next: String,
     csrf: String,
     nonce: String,
     verifier: String,
@@ -164,7 +164,6 @@ impl OidcSessions {
             .and_then(|s| s.flow.take())
     }
 
-    /// Called when the sign-in settings are saved or removed.
     pub fn forget_provider(&self) {
         *self.provider.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
@@ -224,10 +223,6 @@ async fn get_json<T: DeserializeOwned>(http: &OidcHttp, url: &str) -> Result<T, 
     serde_json::from_slice(response.body()).map_err(|e| format!("{url}: {e}"))
 }
 
-pub fn discovery_url(issuer: &str) -> String {
-    format!("{issuer}/.well-known/openid-configuration")
-}
-
 /// Discovery is read from the configured issuer as given; the ID token's
 /// `iss` must then equal the issuer the document names, as Authlib checks.
 /// A document that omits its signing algorithms means RS256, as in Authlib.
@@ -240,7 +235,7 @@ async fn discovered(
     if let Some(found) = sessions.cached(&key) {
         return Ok(found.metadata);
     }
-    let url = discovery_url(&config.issuer);
+    let url = format!("{}/.well-known/openid-configuration", config.issuer);
     let mut document: Value = get_json(http, &url).await?;
     let advertised = document
         .get("id_token_signing_alg_values_supported")
@@ -276,30 +271,29 @@ async fn signing_keys(
     Ok(jwks)
 }
 
+type Client = CoreClient<
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointMaybeSet,
+    EndpointMaybeSet,
+>;
+
 fn client_for(
     metadata: CoreProviderMetadata,
     config: &OidcConfig,
     redirect_uri: &str,
-) -> Result<
-    CoreClient<
-        openidconnect::EndpointSet,
-        openidconnect::EndpointNotSet,
-        openidconnect::EndpointNotSet,
-        openidconnect::EndpointNotSet,
-        openidconnect::EndpointMaybeSet,
-        openidconnect::EndpointMaybeSet,
-    >,
-    String,
-> {
-    let secret = Some(config.client_secret.clone())
-        .filter(|s| !s.is_empty())
-        .map(ClientSecret::new);
+) -> Result<Client, String> {
+    let secret =
+        (!config.client_secret.is_empty()).then(|| ClientSecret::new(config.client_secret.clone()));
+    let redirect = RedirectUrl::new(redirect_uri.into()).map_err(|e| e.to_string())?;
     Ok(CoreClient::from_provider_metadata(
         metadata,
         ClientId::new(config.client_id.clone()),
         secret,
     )
-    .set_redirect_uri(RedirectUrl::new(redirect_uri.into()).map_err(|e| e.to_string())?))
+    .set_redirect_uri(redirect))
 }
 
 /// Where a sign-in returns to, and what it was started for.
@@ -371,138 +365,16 @@ fn allowed_algs(metadata: &CoreProviderMetadata) -> Vec<CoreJwsSigningAlgorithm>
         .collect()
 }
 
-fn decode_segment(jwt: &str, index: usize) -> Option<Value> {
-    let segment = jwt.split('.').nth(index)?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(segment.trim_end_matches('='))
-        .ok()?;
-    serde_json::from_slice(&bytes).ok()
-}
-
-fn truthy(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Number(n)) => n.as_f64() != Some(0.0),
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(Value::Array(a)) => !a.is_empty(),
-        Some(Value::Object(o)) => !o.is_empty(),
-    }
-}
-
-fn half_hash(text: &str, alg: &str) -> Option<String> {
-    let digest = match alg {
-        "EdDSA" => Sha512::digest(text.as_bytes()).to_vec(),
-        _ => match alg.get(2..)? {
-            "256" => Sha256::digest(text.as_bytes()).to_vec(),
-            "384" => Sha384::digest(text.as_bytes()).to_vec(),
-            "512" => Sha512::digest(text.as_bytes()).to_vec(),
-            _ => return None,
-        },
-    };
-    Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest[..digest.len() / 2]))
-}
-
-struct Expected<'a> {
-    issuer: &'a str,
-    client_id: &'a str,
-    nonce: &'a str,
-    access_token: &'a str,
-}
-
-/// The ID token claim checks Authlib makes once the signature holds (its
-/// `CodeIDToken.validate` with the app's `claims_options`): the client must be
-/// among the audiences but others may be too; `azp` is required when the sole
-/// audience is not the client, or there are several, and must then be the
-/// client; time claims get two minutes of leeway.
-fn authlib_problem(
-    header: &Value,
-    claims: &Value,
-    expected: &Expected<'_>,
-    now: f64,
-) -> Result<(), String> {
-    let get = |name: &str| claims.get(name).filter(|v| !v.is_null());
-    for name in ["iss", "sub", "aud", "exp", "iat"] {
-        if get(name).is_none() {
-            return Err(format!("missing claim: {name}"));
-        }
-    }
-    let invalid = |name: &str| Err(format!("invalid claim: {name}"));
-    match get("iss").and_then(Value::as_str) {
-        Some(iss) if !iss.is_empty() && iss == expected.issuer => {}
-        _ => return invalid("iss"),
-    }
-    if get("sub").and_then(Value::as_str).is_none() {
-        return invalid("sub");
-    }
-    let audiences: Vec<&str> = match get("aud") {
-        Some(Value::String(aud)) => vec![aud.as_str()],
-        Some(Value::Array(list)) => {
-            match list.iter().map(Value::as_str).collect::<Option<Vec<_>>>() {
-                Some(list) => list,
-                None => return invalid("aud"),
-            }
-        }
-        _ => return invalid("aud"),
-    };
-    if !audiences.contains(&expected.client_id) {
-        return invalid("aud");
-    }
-    let number =
-        |name: &str| get(name).map(|v| v.as_f64().ok_or_else(|| format!("invalid claim: {name}")));
-    if number("exp")
-        .transpose()?
-        .is_some_and(|exp| exp < now - LEEWAY_SECONDS)
-    {
-        return Err("expired token".into());
-    }
-    if number("nbf")
-        .transpose()?
-        .is_some_and(|nbf| nbf > now + LEEWAY_SECONDS)
-    {
-        return Err("invalid claim: nbf".into());
-    }
-    if number("iat")
-        .transpose()?
-        .is_some_and(|iat| iat > now + LEEWAY_SECONDS)
-    {
-        return Err("invalid claim: iat".into());
-    }
-    if truthy(claims.get("auth_time")) && !claims["auth_time"].is_number() {
-        return invalid("auth_time");
-    }
-    if !expected.nonce.is_empty() {
-        match get("nonce") {
-            None => return Err("missing claim: nonce".into()),
-            Some(nonce) if nonce.as_str() != Some(expected.nonce) => return invalid("nonce"),
-            Some(_) => {}
-        }
-    }
-    if truthy(claims.get("amr")) && !claims["amr"].is_array() {
-        return invalid("amr");
-    }
-    let azp = claims.get("azp").filter(|_| truthy(claims.get("azp")));
-    let sole_client = audiences.len() == 1 && audiences[0] == expected.client_id;
-    if !sole_client && azp.is_none() {
-        return Err("missing claim: azp".into());
-    }
-    if azp.is_some_and(|azp| azp.as_str() != Some(expected.client_id)) {
-        return invalid("azp");
-    }
-    if let Some(at_hash) = claims
-        .get("at_hash")
-        .filter(|_| truthy(claims.get("at_hash")))
-        && !expected.access_token.is_empty()
-    {
-        let alg = header
-            .get("alg")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        if half_hash(expected.access_token, alg).as_deref() != at_hash.as_str() {
-            return invalid("at_hash");
-        }
-    }
-    Ok(())
+fn display_label(
+    username: Option<&EndUserUsername>,
+    email: Option<&EndUserEmail>,
+    name: Option<&LocalizedClaim<EndUserName>>,
+) -> Option<String> {
+    username
+        .map(|v| v.as_str())
+        .or_else(|| email.map(|v| v.as_str()))
+        .or_else(|| name.and_then(|n| n.get(None)).map(|v| v.as_str()))
+        .map(str::to_string)
 }
 
 pub struct Callback<'a> {
@@ -651,15 +523,13 @@ pub async fn finish(
         .ok()
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_default();
-    let expected = Expected {
+    let expected = claims::Expected {
         issuer: metadata.issuer().as_str(),
         client_id: &config.client_id,
         nonce: &flow.nonce,
         access_token: token.access_token().secret(),
     };
-    let header = decode_segment(&jwt, 0).unwrap_or(Value::Null);
-    let payload = decode_segment(&jwt, 1).unwrap_or(Value::Null);
-    if let Err(err) = authlib_problem(&header, &payload, &expected, now.trunc()) {
+    if let Err(err) = claims::check(&jwt, &expected, now.trunc()) {
         crate::log_warn!(
             "oidc_flow",
             "rejected an OIDC ID token from {}: {err}",
@@ -686,26 +556,10 @@ pub async fn finish(
                 .ok(),
             Err(_) => None,
         };
-    let from_info = info.as_ref().and_then(|i| {
-        i.preferred_username()
-            .map(|v| v.as_str().to_string())
-            .or_else(|| i.email().map(|v| v.as_str().to_string()))
-            .or_else(|| {
-                i.name()
-                    .and_then(|n| n.get(None))
-                    .map(|v| v.as_str().to_string())
-            })
-    });
-    let from_token = claims
-        .preferred_username()
-        .map(|v| v.as_str().to_string())
-        .or_else(|| claims.email().map(|v| v.as_str().to_string()))
-        .or_else(|| {
-            claims
-                .name()
-                .and_then(|n| n.get(None))
-                .map(|v| v.as_str().to_string())
-        });
+    let from_info = info
+        .as_ref()
+        .and_then(|i| display_label(i.preferred_username(), i.email(), i.name()));
+    let from_token = display_label(claims.preferred_username(), claims.email(), claims.name());
     let label = from_info
         .or(from_token)
         .filter(|l| !l.is_empty())
@@ -722,95 +576,6 @@ pub async fn finish(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const NOW: f64 = 1_000_000.0;
-    const ISSUER: &str = "https://id.example.test/";
-
-    fn verdict(patch: Value) -> bool {
-        let mut claims = json!({
-            "iss": ISSUER, "sub": "s", "aud": "activsync", "exp": NOW + 300.0, "iat": NOW, "nonce": "n1",
-        });
-        for (key, value) in patch.as_object().unwrap() {
-            if value.is_null() {
-                claims.as_object_mut().unwrap().remove(key);
-            } else {
-                claims[key] = value.clone();
-            }
-        }
-        let expected = Expected {
-            issuer: ISSUER,
-            client_id: "activsync",
-            nonce: "n1",
-            access_token: "at",
-        };
-        authlib_problem(&json!({"alg": "RS256"}), &claims, &expected, NOW).is_ok()
-    }
-
-    #[test]
-    fn id_token_claims_follow_authlib() {
-        let cases = [
-            ("plain", json!({}), true),
-            ("aud_list_one", json!({"aud": ["activsync"]}), true),
-            (
-                "aud_two_no_azp",
-                json!({"aud": ["activsync", "other"]}),
-                false,
-            ),
-            (
-                "aud_two_azp",
-                json!({"aud": ["activsync", "other"], "azp": "activsync"}),
-                true,
-            ),
-            (
-                "aud_two_wrong_azp",
-                json!({"aud": ["activsync", "other"], "azp": "other"}),
-                false,
-            ),
-            ("aud_other_only", json!({"aud": ["other"]}), false),
-            (
-                "aud_other_azp_client",
-                json!({"aud": ["other"], "azp": "activsync"}),
-                false,
-            ),
-            ("azp_other_single_aud", json!({"azp": "other"}), false),
-            ("azp_client", json!({"azp": "activsync"}), true),
-            ("aud_empty_list", json!({"aud": []}), false),
-            ("exp_within_leeway", json!({"exp": NOW - 100.0}), true),
-            ("exp_past_leeway", json!({"exp": NOW - 121.0}), false),
-            ("exp_edge", json!({"exp": NOW - 120.0}), true),
-            ("iat_within_leeway", json!({"iat": NOW + 100.0}), true),
-            ("iat_future", json!({"iat": NOW + 121.0}), false),
-            ("nbf_future", json!({"nbf": NOW + 121.0}), false),
-            ("nbf_ok", json!({"nbf": NOW + 100.0}), true),
-            ("amr_string", json!({"amr": "pwd"}), false),
-            ("amr_list", json!({"amr": ["pwd"]}), true),
-            ("auth_time_string", json!({"auth_time": "x"}), false),
-            ("auth_time_number", json!({"auth_time": 5}), true),
-            (
-                "at_hash_ok",
-                json!({"at_hash": "sda5G2fCr6XjIpiNlGJjjQ"}),
-                true,
-            ),
-            ("at_hash_bad", json!({"at_hash": "AAAA"}), false),
-            ("nonce_wrong", json!({"nonce": "other"}), false),
-            ("nonce_missing", json!({"nonce": null}), false),
-            ("iss_other", json!({"iss": "https://evil.example/"}), false),
-            ("iss_blank", json!({"iss": ""}), false),
-        ];
-        for (name, patch, expected) in cases {
-            assert_eq!(verdict(patch), expected, "{name}");
-        }
-    }
-
-    #[test]
-    fn half_hash_matches_authlib() {
-        assert_eq!(
-            half_hash("at", "RS256").as_deref(),
-            Some("sda5G2fCr6XjIpiNlGJjjQ")
-        );
-        assert_eq!(half_hash("at", "ES256K"), None);
-        assert_eq!(half_hash("at", "HS1"), None);
-    }
 
     #[test]
     fn flow_state_is_bounded_and_drops_the_oldest() {

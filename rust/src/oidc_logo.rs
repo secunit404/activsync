@@ -5,8 +5,8 @@ use std::io::Cursor;
 
 use image::{ImageDecoder, ImageFormat, ImageReader, Limits};
 use rusqlite::{Connection, OptionalExtension, params};
-use sha2::{Digest, Sha256};
 
+use crate::auth_core::sha256_hex;
 use crate::db::DbResult;
 
 pub const MAX_UPLOAD_BYTES: usize = 1024 * 1024;
@@ -14,10 +14,10 @@ const MAX_PIXELS: u64 = 4096 * 4096;
 const LOGO_HEIGHT: u32 = 96;
 const LOGO_MAX_WIDTH: u32 = 4 * LOGO_HEIGHT;
 
-pub const UNSUPPORTED: &str = "Use a PNG, JPEG or WebP image.";
-pub const UNREADABLE: &str = "That image could not be read. Try exporting it again as PNG.";
+const UNSUPPORTED: &str = "Use a PNG, JPEG or WebP image.";
+const UNREADABLE: &str = "That image could not be read. Try exporting it again as PNG.";
 pub const TOO_LARGE: &str = "That image is too large. Use one under 1 MB.";
-pub const TOO_MANY_PIXELS: &str = "That image has too many pixels. Use one under 4096×4096.";
+const TOO_MANY_PIXELS: &str = "That image has too many pixels. Use one under 4096×4096.";
 
 /// Never the filename or Content-Type: both are the uploader's claims. SVG
 /// is left out because it can carry script.
@@ -111,14 +111,10 @@ pub fn current_url(conn: &Connection) -> DbResult<Option<String>> {
 }
 
 pub fn save(conn: &Connection, png: &[u8], now: f64) -> DbResult<()> {
-    let sha: String = Sha256::digest(png)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
     conn.execute(
         "INSERT INTO auth_oidc_logo (id, png, sha256, updated_at) VALUES (1, ?1, ?2, ?3)
          ON CONFLICT(id) DO UPDATE SET png = excluded.png, sha256 = excluded.sha256, updated_at = excluded.updated_at",
-        params![png, sha, now as i64],
+        params![png, sha256_hex(png), now as i64],
     )?;
     Ok(())
 }

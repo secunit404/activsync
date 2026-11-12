@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::net::IpAddr;
 use std::sync::Mutex;
 
@@ -51,44 +52,22 @@ impl Network {
     fn masked(&self) -> IpAddr {
         match self.address {
             IpAddr::V4(a) => {
-                let mask = if self.prefix == 0 {
-                    0
-                } else {
-                    u32::MAX << (32 - u32::from(self.prefix))
-                };
-                IpAddr::V4((u32::from(a) & mask).into())
+                let mask = u32::MAX.checked_shl(32 - u32::from(self.prefix));
+                IpAddr::V4((u32::from(a) & mask.unwrap_or(0)).into())
             }
             IpAddr::V6(a) => {
-                let mask = if self.prefix == 0 {
-                    0
-                } else {
-                    u128::MAX << (128 - u32::from(self.prefix))
-                };
-                IpAddr::V6((u128::from(a) & mask).into())
+                let mask = u128::MAX.checked_shl(128 - u32::from(self.prefix));
+                IpAddr::V6((u128::from(a) & mask.unwrap_or(0)).into())
             }
         }
     }
 
     pub fn contains(&self, ip: IpAddr) -> bool {
-        match (self.address, ip) {
-            (IpAddr::V4(net), IpAddr::V4(ip)) => {
-                let mask = if self.prefix == 0 {
-                    0
-                } else {
-                    u32::MAX << (32 - u32::from(self.prefix))
-                };
-                u32::from(net) & mask == u32::from(ip) & mask
-            }
-            (IpAddr::V6(net), IpAddr::V6(ip)) => {
-                let mask = if self.prefix == 0 {
-                    0
-                } else {
-                    u128::MAX << (128 - u32::from(self.prefix))
-                };
-                u128::from(net) & mask == u128::from(ip) & mask
-            }
-            _ => false,
-        }
+        let candidate = Self {
+            address: ip,
+            prefix: self.prefix,
+        };
+        ip.is_ipv4() == self.address.is_ipv4() && candidate.masked() == self.masked()
     }
 }
 
@@ -178,10 +157,7 @@ impl ForwardedTrust {
             let network = if item.contains('/') {
                 Network::parse_strict(item)
             } else {
-                item.parse::<IpAddr>().ok().map(|address| Network {
-                    address,
-                    prefix: if address.is_ipv4() { 32 } else { 128 },
-                })
+                Network::parse(item)
             };
             match network {
                 Some(network) => trust.networks.push(network),
@@ -264,7 +240,7 @@ pub fn py_repr(text: &str) -> String {
                 out.push(c);
             }
             c if (c as u32) < 0x20 || (0x7f..=0xa0).contains(&(c as u32)) || c as u32 == 0xad => {
-                out.push_str(&format!("\\x{:02x}", c as u32));
+                let _ = write!(out, "\\x{:02x}", c as u32);
             }
             c => out.push(c),
         }

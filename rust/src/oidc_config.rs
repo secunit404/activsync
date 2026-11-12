@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::db::{self, DbResult};
 use crate::oidc_logo;
 
-pub const OIDC_KEY: &str = "auth_oidc";
+const OIDC_KEY: &str = "auth_oidc";
 pub const DEFAULT_SCOPES: &str = "openid profile email";
 pub const OIDC_METHOD: &str = "oidc";
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "localhost", "::1"];
@@ -33,7 +33,7 @@ pub struct OidcConfig {
     pub linked: Option<Linked>,
 }
 
-fn default_scopes() -> String {
+pub(crate) fn default_scopes() -> String {
     DEFAULT_SCOPES.into()
 }
 
@@ -51,7 +51,7 @@ fn store(conn: &Connection, config: &OidcConfig) -> DbResult<()> {
     )
 }
 
-pub fn revoke_method(
+fn revoke_method(
     conn: &Connection,
     method: &str,
     keep_token_hash: Option<&str>,
@@ -79,7 +79,7 @@ fn hostname(url: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_lowercase())
 }
 
-pub fn normalize_issuer(issuer: &str) -> Result<String, String> {
+fn normalize_issuer(issuer: &str) -> Result<String, String> {
     let value = issuer.trim().trim_end_matches('/').to_string();
     let host = hostname(&value);
     let secure = value.starts_with("https://") && host.is_some();

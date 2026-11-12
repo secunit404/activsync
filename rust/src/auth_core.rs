@@ -1,32 +1,36 @@
 //! The owner's credential, login throttling, the setup code and sessions,
 //! stored exactly as the Python app's `auth_core.py` and `auth_devices.py`
 //! store them, so a database moves between the two servers.
-//!
-//! Sessions are server-side: the browser holds an opaque token and the
-//! database only its SHA-256, so a copied database cannot be replayed.
+
+mod sessions;
+#[cfg(test)]
+mod tests;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::Engine;
+use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
 use rand::{Rng, RngCore};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::Connection;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::db::{self, DbResult};
 
-pub const OWNER_KEY: &str = "auth_owner";
+pub(crate) use sessions::{
+    SESSION_ABSOLUTE_SECONDS, create_session, list_sessions, resolve_session, revoke_all,
+    revoke_public_id, revoke_session,
+};
+pub use sessions::{Session, prune_expired_sessions};
+
+pub(crate) const OWNER_KEY: &str = "auth_owner";
 const THROTTLE_KEY: &str = "auth_login_throttle";
 const TRUSTED_DEVICES_KEY: &str = "auth_trusted_devices";
 
-pub const PASSWORD_MIN_LENGTH: usize = 15;
-pub const PASSWORD_MAX_LENGTH: usize = 256;
-
-pub const SESSION_IDLE_SECONDS: i64 = 7 * 24 * 3600;
-pub const SESSION_ABSOLUTE_SECONDS: i64 = 30 * 24 * 3600;
-const LAST_SEEN_WRITE_SECONDS: i64 = 5 * 60;
+const PASSWORD_MIN_LENGTH: usize = 15;
+const PASSWORD_MAX_LENGTH: usize = 256;
 
 const FREE_FAILURES: i64 = 5;
 const MAX_DELAY_SECONDS: f64 = 900.0;
@@ -36,21 +40,25 @@ const IP_ATTEMPT_WINDOW_SECONDS: f64 = 60.0;
 
 const MAX_TRUSTED_DEVICES: usize = 20;
 const DEVICE_MAX_FAILURES: i64 = 10;
-pub const DEVICE_COOKIE_MAX_AGE: i64 = 365 * 24 * 3600;
+pub(crate) const DEVICE_COOKIE_MAX_AGE: i64 = 365 * 24 * 3600;
 
 const SETUP_CODE_ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
 pub fn random_token(bytes: usize) -> String {
     let mut buf = vec![0u8; bytes];
     rand::rng().fill_bytes(&mut buf);
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(buf)
+    URL_SAFE_NO_PAD.encode(buf)
 }
 
-pub fn hash_token(token: &str) -> String {
-    Sha256::digest(token.as_bytes())
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
+}
+
+pub(crate) fn hash_token(token: &str) -> String {
+    sha256_hex(token.as_bytes())
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -89,21 +97,6 @@ impl HashCost {
             salt_len: 8,
         }
     }
-
-    fn hasher(&self) -> Result<Argon2<'static>, String> {
-        let params = Params::new(
-            self.memory_kib,
-            self.time,
-            self.parallelism,
-            Some(self.hash_len),
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
-    }
-}
-
-fn b64() -> base64::engine::GeneralPurpose {
-    base64::engine::general_purpose::STANDARD_NO_PAD
 }
 
 /// An argon2 hash in the PHC string form argon2-cffi writes,
@@ -120,12 +113,9 @@ struct Encoded {
 impl Encoded {
     fn parse(text: &str) -> Option<Self> {
         let parts: Vec<&str> = text.split('$').collect();
-        let [empty, algorithm, version, params, salt, hash] = parts.as_slice() else {
+        let ["", algorithm, version, params, salt, hash] = parts.as_slice() else {
             return None;
         };
-        if !empty.is_empty() {
-            return None;
-        }
         let algorithm = match *algorithm {
             "argon2id" => Algorithm::Argon2id,
             "argon2i" => Algorithm::Argon2i,
@@ -133,31 +123,29 @@ impl Encoded {
             _ => return None,
         };
         let version: u32 = version.strip_prefix("v=")?.parse().ok()?;
-        let mut cost = HashCost {
-            memory_kib: 0,
-            time: 0,
-            parallelism: 0,
-            hash_len: 0,
-            salt_len: 0,
-        };
+        let (mut memory_kib, mut time, mut parallelism) = (0, 0, 0);
         for pair in params.split(',') {
             let (key, value) = pair.split_once('=')?;
             let value: u32 = value.parse().ok()?;
             match key {
-                "m" => cost.memory_kib = value,
-                "t" => cost.time = value,
-                "p" => cost.parallelism = value,
+                "m" => memory_kib = value,
+                "t" => time = value,
+                "p" => parallelism = value,
                 _ => return None,
             }
         }
-        let salt = b64().decode(salt).ok()?;
-        let hash = b64().decode(hash).ok()?;
-        cost.salt_len = salt.len();
-        cost.hash_len = hash.len();
+        let salt = STANDARD_NO_PAD.decode(salt).ok()?;
+        let hash = STANDARD_NO_PAD.decode(hash).ok()?;
         Some(Self {
             algorithm,
             version,
-            cost,
+            cost: HashCost {
+                memory_kib,
+                time,
+                parallelism,
+                hash_len: hash.len(),
+                salt_len: salt.len(),
+            },
             salt,
             hash,
         })
@@ -189,7 +177,7 @@ impl Encoded {
     }
 }
 
-pub fn password_problem(password: &str) -> Option<String> {
+pub(crate) fn password_problem(password: &str) -> Option<String> {
     let length = password.chars().count();
     if length < PASSWORD_MIN_LENGTH {
         return Some(format!(
@@ -206,10 +194,17 @@ pub fn hash_password(password: &str, cost: HashCost) -> Result<String, String> {
     if let Some(problem) = password_problem(password) {
         return Err(problem);
     }
+    let params = Params::new(
+        cost.memory_kib,
+        cost.time,
+        cost.parallelism,
+        Some(cost.hash_len),
+    )
+    .map_err(|e| e.to_string())?;
     let mut salt = vec![0u8; cost.salt_len];
     rand::rng().fill_bytes(&mut salt);
     let mut out = vec![0u8; cost.hash_len];
-    cost.hasher()?
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
         .hash_password_into(password.as_bytes(), &salt, &mut out)
         .map_err(|e| e.to_string())?;
     Ok(format!(
@@ -217,9 +212,18 @@ pub fn hash_password(password: &str, cost: HashCost) -> Result<String, String> {
         cost.memory_kib,
         cost.time,
         cost.parallelism,
-        b64().encode(&salt),
-        b64().encode(&out)
+        STANDARD_NO_PAD.encode(&salt),
+        STANDARD_NO_PAD.encode(&out)
     ))
+}
+
+pub(crate) async fn hash_password_blocking(
+    password: String,
+    cost: HashCost,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || hash_password(&password, cost))
+        .await
+        .map_err(|err| err.to_string())?
 }
 
 fn owner(conn: &Connection) -> DbResult<Value> {
@@ -232,18 +236,18 @@ pub fn owner_claimed(conn: &Connection) -> DbResult<bool> {
     Ok(db::truthy(owner(conn)?.get("password_hash")))
 }
 
-fn owner_record(password_hash: &str, now: f64) -> Value {
-    json!({"password_hash": password_hash, "password_changed_at": now.trunc() as i64})
-}
-
 pub fn set_password_hash(conn: &Connection, password_hash: &str, now: f64) -> DbResult<()> {
-    db::set_config_value(conn, OWNER_KEY, &owner_record(password_hash, now))
+    db::set_config_value(
+        conn,
+        OWNER_KEY,
+        &json!({"password_hash": password_hash, "password_changed_at": now.trunc() as i64}),
+    )
 }
 
 /// Stores the first owner's password, or returns false if someone claimed
 /// first. The caller hashes beforehand: argon2 is slow, and the check and the
 /// write must share one lock.
-pub fn claim_owner(conn: &Connection, password_hash: &str, now: f64) -> DbResult<bool> {
+pub(crate) fn claim_owner(conn: &Connection, password_hash: &str, now: f64) -> DbResult<bool> {
     if owner_claimed(conn)? {
         return Ok(false);
     }
@@ -261,6 +265,7 @@ fn stored_hash(conn: &Connection) -> DbResult<Option<String>> {
 
 /// The outcome of checking a password against a stored hash, with the
 /// replacement hash when the stored one was made with other cost settings.
+#[derive(Default)]
 pub struct Verdict {
     pub verified: bool,
     stored: Option<String>,
@@ -270,29 +275,20 @@ pub struct Verdict {
 /// The slow, database-free half of a password check. Run it off the database
 /// lock: argon2 takes long enough to stall every other request.
 pub fn verify_stored(stored: Option<&str>, password: &str, cost: HashCost) -> Verdict {
-    let rejected = || Verdict {
-        verified: false,
-        stored: None,
-        rehash: None,
-    };
-    let Some(stored) = stored else {
-        return rejected();
-    };
-    let Some(parsed) = Encoded::parse(stored) else {
-        return rejected();
-    };
-    if !parsed.verify(password) {
-        return rejected();
-    }
-    let rehash = if parsed.uses(&cost) {
-        None
-    } else {
-        hash_password(password, cost).ok()
+    let Some((stored, parsed)) = stored
+        .and_then(|stored| Some((stored, Encoded::parse(stored)?)))
+        .filter(|(_, parsed)| parsed.verify(password))
+    else {
+        return Verdict::default();
     };
     Verdict {
         verified: true,
         stored: Some(stored.to_string()),
-        rehash,
+        rehash: if parsed.uses(&cost) {
+            None
+        } else {
+            hash_password(password, cost).ok()
+        },
     }
 }
 
@@ -300,29 +296,12 @@ fn store_rehash(conn: &Connection, verdict: &Verdict) -> DbResult<()> {
     let Some(rehashed) = &verdict.rehash else {
         return Ok(());
     };
-    let record = owner(conn)?;
+    let mut record = owner(conn)?;
     if record.get("password_hash").and_then(Value::as_str) != verdict.stored.as_deref() {
         return Ok(());
     }
-    let mut updated = record;
-    updated["password_hash"] = json!(rehashed);
-    db::set_config_value(conn, OWNER_KEY, &updated)
-}
-
-/// Verifies against the stored hash, rehashing it when it was made with other
-/// cost settings.
-pub fn verify_password(conn: &Connection, password: &str, cost: HashCost) -> DbResult<bool> {
-    let verdict = verify_stored(stored_hash(conn)?.as_deref(), password, cost);
-    if verdict.verified {
-        store_rehash(conn, &verdict)?;
-    }
-    Ok(verdict.verified)
-}
-
-pub async fn hash_password_blocking(password: String, cost: HashCost) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || hash_password(&password, cost))
-        .await
-        .map_err(|err| err.to_string())?
+    record["password_hash"] = json!(rehashed);
+    db::set_config_value(conn, OWNER_KEY, &record)
 }
 
 fn bucket_wait(state: &Value, now: f64) -> i64 {
@@ -384,7 +363,11 @@ fn devices(conn: &Connection) -> DbResult<Vec<Value>> {
 /// Every successful sign-in trusts the browser: attempts from a trusted
 /// browser are throttled on its own counters, so anonymous guessing can only
 /// exhaust the shared bucket, never the owner's known browsers.
-pub fn trust_device(conn: &Connection, now: f64, replacing: Option<&str>) -> DbResult<String> {
+pub(crate) fn trust_device(
+    conn: &Connection,
+    now: f64,
+    replacing: Option<&str>,
+) -> DbResult<String> {
     let device_id = random_token(32);
     let dropped = replacing.map(hash_token);
     let entry = json!({
@@ -393,21 +376,22 @@ pub fn trust_device(conn: &Connection, now: f64, replacing: Option<&str>) -> DbR
         "failures": 0,
         "next_allowed_at": null,
     });
-    let mut kept: Vec<Value> = vec![entry];
-    kept.extend(
-        devices(conn)?
-            .into_iter()
-            .filter(|d| d["hash"].as_str() != dropped.as_deref()),
-    );
-    kept.truncate(MAX_TRUSTED_DEVICES);
+    let kept: Vec<Value> = std::iter::once(entry)
+        .chain(
+            devices(conn)?
+                .into_iter()
+                .filter(|d| d["hash"].as_str() != dropped.as_deref()),
+        )
+        .take(MAX_TRUSTED_DEVICES)
+        .collect();
     db::set_config_value(conn, TRUSTED_DEVICES_KEY, &Value::Array(kept))?;
     Ok(device_id)
 }
 
-pub fn is_trusted(conn: &Connection, device_id: Option<&str>) -> DbResult<bool> {
-    let Some(device_id) = device_id.filter(|d| !d.is_empty()) else {
+pub(crate) fn is_trusted(conn: &Connection, device_id: &str) -> DbResult<bool> {
+    if device_id.is_empty() {
         return Ok(false);
-    };
+    }
     let digest = hash_token(device_id);
     Ok(devices(conn)?
         .iter()
@@ -416,7 +400,10 @@ pub fn is_trusted(conn: &Connection, device_id: Option<&str>) -> DbResult<bool> 
 
 /// Forgets every trusted browser except the one asking, which would otherwise
 /// fall into the shared bucket anyone can keep exhausted.
-pub fn clear_trusted_devices(conn: &Connection, keep_device_id: Option<&str>) -> DbResult<()> {
+pub(crate) fn clear_trusted_devices(
+    conn: &Connection,
+    keep_device_id: Option<&str>,
+) -> DbResult<()> {
     let kept = keep_device_id.map(hash_token);
     let remaining: Vec<Value> = devices(conn)?
         .into_iter()
@@ -429,30 +416,23 @@ pub fn clear_trusted_devices(conn: &Connection, keep_device_id: Option<&str>) ->
 /// the device, since that looks like a stolen cookie.
 fn reserve_device_attempt(conn: &Connection, device_id: &str, now: f64) -> DbResult<Option<i64>> {
     let digest = hash_token(device_id);
+    let is_this = |d: &Value| d["hash"].as_str() == Some(digest.as_str());
     let all = devices(conn)?;
-    let Some(entry) = all
-        .iter()
-        .find(|d| d["hash"].as_str() == Some(digest.as_str()))
-        .cloned()
-    else {
+    let Some(entry) = all.iter().find(|d| is_this(d)) else {
         return Ok(None);
     };
-    let wait = bucket_wait(&entry, now);
+    let wait = bucket_wait(entry, now);
     if wait > 0 {
         return Ok(Some(wait));
     }
-    let updated = bucket_after_failure(&entry, now);
-    let failures = updated["failures"].as_i64().unwrap_or(0);
+    let updated = bucket_after_failure(entry, now);
+    let dropped = updated["failures"].as_i64().unwrap_or(0) >= DEVICE_MAX_FAILURES;
     let remaining: Vec<Value> = all
-        .into_iter()
-        .filter_map(|d| {
-            if d["hash"].as_str() != Some(digest.as_str()) {
-                Some(d)
-            } else if failures >= DEVICE_MAX_FAILURES {
-                None
-            } else {
-                Some(updated.clone())
-            }
+        .iter()
+        .filter_map(|d| match is_this(d) {
+            false => Some(d.clone()),
+            true if dropped => None,
+            true => Some(updated.clone()),
         })
         .collect();
     db::set_config_value(conn, TRUSTED_DEVICES_KEY, &Value::Array(remaining))?;
@@ -472,12 +452,6 @@ fn reset_device(conn: &Connection, device_id: &str) -> DbResult<()> {
         })
         .collect();
     db::set_config_value(conn, TRUSTED_DEVICES_KEY, &Value::Array(all))
-}
-
-#[derive(Debug, PartialEq)]
-pub struct PasswordCheck {
-    pub verified: bool,
-    pub retry_after: i64,
 }
 
 /// A password check that has counted its attempt and is ready to verify.
@@ -533,30 +507,6 @@ pub fn settle_check(
     Ok(true)
 }
 
-pub fn check_password(
-    conn: &Connection,
-    password: &str,
-    now: f64,
-    device_id: Option<&str>,
-    cost: HashCost,
-) -> DbResult<PasswordCheck> {
-    let reserved = match reserve_check(conn, now, device_id)? {
-        Ok(reserved) => reserved,
-        Err(wait) => {
-            return Ok(PasswordCheck {
-                verified: false,
-                retry_after: wait,
-            });
-        }
-    };
-    let verdict = verify_stored(reserved.stored.as_deref(), password, cost);
-    let verified = settle_check(conn, device_id, &reserved, &verdict)?;
-    Ok(PasswordCheck {
-        verified,
-        retry_after: 0,
-    })
-}
-
 /// Per-client sliding window in front of the account throttle, so one address
 /// cannot keep the owner locked out by burning the shared backoff.
 #[derive(Clone, Default)]
@@ -564,23 +514,22 @@ pub struct AttemptLimiter(Arc<Mutex<HashMap<String, VecDeque<f64>>>>);
 
 impl AttemptLimiter {
     /// Records an attempt and returns 0, or returns the seconds to wait.
-    pub fn retry_after(&self, key: &str, now: f64) -> i64 {
+    pub(crate) fn retry_after(&self, key: &str, now: f64) -> i64 {
         let cutoff = now - IP_ATTEMPT_WINDOW_SECONDS;
         let mut attempts = self.0.lock().unwrap_or_else(|p| p.into_inner());
         attempts.retain(|_, stamps| stamps.back().is_some_and(|last| *last > cutoff));
-        let recent: VecDeque<f64> = attempts
+        let mut recent: VecDeque<f64> = attempts
             .get(key)
             .map(|s| s.iter().copied().filter(|t| *t > cutoff).collect())
             .unwrap_or_default();
-        if recent.len() >= IP_ATTEMPT_LIMIT {
-            let wait = (recent[0] + IP_ATTEMPT_WINDOW_SECONDS - now).ceil() as i64;
-            attempts.insert(key.to_string(), recent);
-            return wait.max(1);
-        }
-        let mut recent = recent;
-        recent.push_back(now);
+        let wait = if recent.len() >= IP_ATTEMPT_LIMIT {
+            ((recent[0] + IP_ATTEMPT_WINDOW_SECONDS - now).ceil() as i64).max(1)
+        } else {
+            recent.push_back(now);
+            0
+        };
         attempts.insert(key.to_string(), recent);
-        0
+        wait
     }
 }
 
@@ -589,17 +538,6 @@ impl AttemptLimiter {
 /// or any anonymous client could invalidate the code in the owner's log.
 #[derive(Clone, Default)]
 pub struct SetupCode(Arc<Mutex<Option<String>>>);
-
-fn new_setup_code() -> String {
-    let mut rng = rand::rng();
-    let raw: Vec<char> = (0..16)
-        .map(|_| SETUP_CODE_ALPHABET[rng.random_range(0..SETUP_CODE_ALPHABET.len())] as char)
-        .collect();
-    raw.chunks(4)
-        .map(|c| c.iter().collect::<String>())
-        .collect::<Vec<_>>()
-        .join("-")
-}
 
 fn normalize_code(value: &str) -> Vec<u8> {
     value
@@ -615,7 +553,7 @@ impl SetupCode {
         self.0.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    pub fn ensure(&self, conn: &Connection, auth_disabled: bool) -> DbResult<()> {
+    pub(crate) fn ensure(&self, conn: &Connection, auth_disabled: bool) -> DbResult<()> {
         let mut code = self.0.lock().unwrap_or_else(|p| p.into_inner());
         if auth_disabled || owner_claimed(conn)? {
             *code = None;
@@ -625,317 +563,42 @@ impl SetupCode {
         Ok(())
     }
 
-    pub fn reissue(&self) -> String {
+    pub(crate) fn reissue(&self) -> String {
         let fresh = Self::issue();
         *self.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(fresh.clone());
         fresh
     }
 
-    pub fn check(&self, submitted: &str) -> bool {
-        match &*self.0.lock().unwrap_or_else(|p| p.into_inner()) {
-            Some(code) => constant_time_eq(&normalize_code(submitted), &normalize_code(code)),
-            None => false,
-        }
+    pub(crate) fn check(&self, submitted: &str) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_deref()
+            .is_some_and(|code| constant_time_eq(&normalize_code(submitted), &normalize_code(code)))
     }
 
-    pub fn discard(&self) {
+    pub(crate) fn discard(&self) {
         *self.0.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
 
     fn issue() -> String {
-        let code = new_setup_code();
+        let mut rng = rand::rng();
+        let code = (0..4)
+            .map(|_| {
+                (0..4)
+                    .map(|_| {
+                        char::from(
+                            SETUP_CODE_ALPHABET[rng.random_range(0..SETUP_CODE_ALPHABET.len())],
+                        )
+                    })
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("-");
         crate::log_warn!(
             "auth_core",
             "ActivSync is unclaimed. Open the app and enter setup code {code}"
         );
         code
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Session {
-    pub token_hash: String,
-    pub public_id: String,
-    pub method: String,
-    pub created_at: i64,
-    pub last_seen_at: i64,
-    pub expires_at: i64,
-    pub ip: String,
-    pub user_agent: String,
-}
-
-fn session_from_row(row: &rusqlite::Row<'_>) -> DbResult<Session> {
-    Ok(Session {
-        token_hash: row.get("token_hash")?,
-        public_id: row.get("public_id")?,
-        method: row.get("method")?,
-        created_at: row.get("created_at")?,
-        last_seen_at: row.get("last_seen_at")?,
-        expires_at: row.get("expires_at")?,
-        ip: row.get("ip")?,
-        user_agent: row.get("user_agent")?,
-    })
-}
-
-fn truncate(text: &str, max_chars: usize) -> String {
-    text.chars().take(max_chars).collect()
-}
-
-pub fn create_session(
-    conn: &Connection,
-    method: &str,
-    ip: &str,
-    user_agent: &str,
-    now: f64,
-) -> DbResult<String> {
-    let token = random_token(32);
-    let issued = now.trunc() as i64;
-    conn.execute(
-        "INSERT INTO auth_sessions
-           (token_hash, public_id, method, created_at, last_seen_at, expires_at, ip, user_agent)
-         VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7)",
-        params![
-            hash_token(&token),
-            random_token(12),
-            method,
-            issued,
-            issued + SESSION_ABSOLUTE_SECONDS,
-            truncate(ip, 64),
-            truncate(user_agent, 256)
-        ],
-    )?;
-    Ok(token)
-}
-
-pub fn resolve_session(conn: &Connection, token: &str, now: f64) -> DbResult<Option<Session>> {
-    let Some(session) = conn
-        .query_row(
-            "SELECT * FROM auth_sessions WHERE token_hash = ?1",
-            [hash_token(token)],
-            session_from_row,
-        )
-        .optional()?
-    else {
-        return Ok(None);
-    };
-    if now >= session.expires_at as f64
-        || now - session.last_seen_at as f64 >= SESSION_IDLE_SECONDS as f64
-    {
-        revoke_session(conn, &session.token_hash)?;
-        return Ok(None);
-    }
-    if now - session.last_seen_at as f64 >= LAST_SEEN_WRITE_SECONDS as f64 {
-        let seen = now.trunc() as i64;
-        conn.execute(
-            "UPDATE auth_sessions SET last_seen_at = ?1 WHERE token_hash = ?2",
-            params![seen, session.token_hash],
-        )?;
-        return Ok(Some(Session {
-            last_seen_at: seen,
-            ..session
-        }));
-    }
-    Ok(Some(session))
-}
-
-pub fn revoke_session(conn: &Connection, token_hash: &str) -> DbResult<()> {
-    conn.execute(
-        "DELETE FROM auth_sessions WHERE token_hash = ?1",
-        [token_hash],
-    )?;
-    Ok(())
-}
-
-pub fn revoke_public_id(conn: &Connection, public_id: &str) -> DbResult<bool> {
-    Ok(conn.execute(
-        "DELETE FROM auth_sessions WHERE public_id = ?1",
-        [public_id],
-    )? > 0)
-}
-
-pub fn revoke_all(conn: &Connection, keep_token_hash: Option<&str>) -> DbResult<usize> {
-    conn.execute(
-        "DELETE FROM auth_sessions WHERE token_hash != ?1",
-        [keep_token_hash.unwrap_or("")],
-    )
-}
-
-pub fn list_sessions(conn: &Connection) -> DbResult<Vec<Session>> {
-    let mut stmt = conn.prepare("SELECT * FROM auth_sessions ORDER BY last_seen_at DESC")?;
-    let rows = stmt.query_map([], session_from_row)?;
-    rows.collect()
-}
-
-pub fn prune_expired_sessions(conn: &Connection, now: f64) -> DbResult<usize> {
-    let now = now.trunc() as i64;
-    conn.execute(
-        "DELETE FROM auth_sessions WHERE expires_at <= ?1 OR last_seen_at <= ?2",
-        params![now, now - SESSION_IDLE_SECONDS],
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn verifies_hashes_made_by_the_python_app() {
-        let db = crate::db::Db::open_in_memory().unwrap();
-        let conn = db.lock();
-        let python_standard = "$argon2id$v=19$m=65536,t=3,p=4$OHAqpN2S8c4i1Af7aUvD/w$CojUzSnycSLE8is18+Fo5CpR9JdSF+zfrpeS/q4zM9g";
-        set_password_hash(&conn, python_standard, 0.0).unwrap();
-        assert!(
-            verify_password(&conn, "correct horse battery staple", HashCost::standard()).unwrap()
-        );
-        assert!(
-            !verify_password(&conn, "wrong horse battery staple", HashCost::standard()).unwrap()
-        );
-        assert_eq!(
-            owner(&conn).unwrap()["password_hash"],
-            python_standard,
-            "same cost: no rehash"
-        );
-
-        let python_cheapest = "$argon2id$v=19$m=8,t=1,p=1$RVVu42Um648$/g/+Hw";
-        set_password_hash(&conn, python_cheapest, 0.0).unwrap();
-        assert!(
-            verify_password(&conn, "correct horse battery staple", HashCost::cheapest()).unwrap()
-        );
-        assert_eq!(owner(&conn).unwrap()["password_hash"], python_cheapest);
-        assert!(
-            verify_password(&conn, "correct horse battery staple", HashCost::standard()).unwrap()
-        );
-        let rehashed = owner(&conn).unwrap()["password_hash"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        assert!(
-            rehashed.starts_with("$argon2id$v=19$m=65536,t=3,p=4$"),
-            "{rehashed}"
-        );
-    }
-
-    #[test]
-    fn throttle_backs_off_after_five_failures() {
-        let db = crate::db::Db::open_in_memory().unwrap();
-        let conn = db.lock();
-        set_password_hash(
-            &conn,
-            &hash_password("correct horse battery staple", HashCost::cheapest()).unwrap(),
-            0.0,
-        )
-        .unwrap();
-        for _ in 0..4 {
-            assert_eq!(
-                check_password(&conn, "nope", 100.0, None, HashCost::cheapest())
-                    .unwrap()
-                    .retry_after,
-                0
-            );
-        }
-        assert_eq!(
-            check_password(&conn, "nope", 100.0, None, HashCost::cheapest())
-                .unwrap()
-                .retry_after,
-            0
-        );
-        let blocked = check_password(
-            &conn,
-            "correct horse battery staple",
-            100.5,
-            None,
-            HashCost::cheapest(),
-        )
-        .unwrap();
-        assert_eq!(
-            blocked,
-            PasswordCheck {
-                verified: false,
-                retry_after: 1
-            }
-        );
-        let ok = check_password(
-            &conn,
-            "correct horse battery staple",
-            102.0,
-            None,
-            HashCost::cheapest(),
-        )
-        .unwrap();
-        assert!(ok.verified);
-        assert_eq!(
-            db::get_config_value(&conn, THROTTLE_KEY).unwrap().unwrap()["failures"],
-            0
-        );
-    }
-
-    #[test]
-    fn trusted_device_is_throttled_on_its_own() {
-        let db = crate::db::Db::open_in_memory().unwrap();
-        let conn = db.lock();
-        set_password_hash(
-            &conn,
-            &hash_password("correct horse battery staple", HashCost::cheapest()).unwrap(),
-            0.0,
-        )
-        .unwrap();
-        let device = trust_device(&conn, 0.0, None).unwrap();
-        for _ in 0..8 {
-            check_password(&conn, "nope", 10.0, None, HashCost::cheapest()).unwrap();
-        }
-        assert!(
-            check_password(&conn, "nope", 10.0, None, HashCost::cheapest())
-                .unwrap()
-                .retry_after
-                > 0
-        );
-        assert!(
-            check_password(
-                &conn,
-                "correct horse battery staple",
-                10.0,
-                Some(&device),
-                HashCost::cheapest()
-            )
-            .unwrap()
-            .verified
-        );
-    }
-
-    #[test]
-    fn limiter_allows_ten_a_minute_per_client() {
-        let limiter = AttemptLimiter::default();
-        for _ in 0..10 {
-            assert_eq!(limiter.retry_after("1.2.3.4", 0.0), 0);
-        }
-        assert_eq!(limiter.retry_after("1.2.3.4", 1.0), 59);
-        assert_eq!(limiter.retry_after("5.6.7.8", 1.0), 0);
-        assert_eq!(limiter.retry_after("1.2.3.4", 61.0), 0);
-    }
-
-    #[test]
-    fn setup_code_ignores_case_and_dashes() {
-        let code = SetupCode::default();
-        let issued = code.reissue();
-        assert_eq!(issued.len(), 19);
-        assert!(code.check(&issued.to_lowercase().replace('-', " ")));
-        assert!(!code.check("AAAA-BBBB-CCCC-DDDD"));
-        code.discard();
-        assert!(!code.check(&issued));
-    }
-
-    #[test]
-    fn idle_sessions_expire() {
-        let db = crate::db::Db::open_in_memory().unwrap();
-        let conn = db.lock();
-        let token = create_session(&conn, "password", "1.2.3.4", "ua", 1000.0).unwrap();
-        assert!(
-            resolve_session(&conn, &token, 1000.0 + 400.0)
-                .unwrap()
-                .is_some()
-        );
-        let later = 1400.0 + SESSION_IDLE_SECONDS as f64;
-        assert!(resolve_session(&conn, &token, later).unwrap().is_none());
-        assert!(list_sessions(&conn).unwrap().is_empty());
     }
 }

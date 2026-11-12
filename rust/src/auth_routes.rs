@@ -39,12 +39,11 @@ fn status_for(state: &AppState, auth: Option<&AuthState>) -> Result<AuthStatus, 
         }),
         None => Value::Null,
     };
-    drop(conn);
     Ok(AuthStatus {
         authenticated: auth.is_some(),
         method: auth.map(|a| a.method.clone()),
         user: auth.and_then(|a| a.user.clone()),
-        owner_claimed: auth_core::owner_claimed(&state.db.lock())?,
+        owner_claimed: auth_core::owner_claimed(&conn)?,
         auth_disabled: state.auth.disabled,
         login: json!({ "oidc": oidc }),
     })
@@ -63,7 +62,7 @@ pub(crate) fn body<T>(payload: Result<Json<T>, JsonRejection>) -> Result<T, ApiE
         .map_err(|rejection| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, rejection.body_text()))
 }
 
-pub(crate) fn too_long(fields: &[&str]) -> Result<(), ApiError> {
+fn too_long(fields: &[&str]) -> Result<(), ApiError> {
     if fields.iter().any(|f| f.chars().count() > MAX_FIELD) {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -95,9 +94,10 @@ pub(crate) fn trusted_device(
     state: &AppState,
     headers: &HeaderMap,
     ctx: &RequestContext,
-) -> Result<Option<String>, ApiError> {
-    let device = cookie(headers, ctx.device_cookie()).map(str::to_string);
-    Ok(device.filter(|d| auth_core::is_trusted(&state.db.lock(), Some(d)).unwrap_or(false)))
+) -> Option<String> {
+    cookie(headers, ctx.device_cookie())
+        .filter(|d| auth_core::is_trusted(&state.db.lock(), d).unwrap_or(false))
+        .map(str::to_string)
 }
 
 pub(crate) async fn require_password(
@@ -146,7 +146,7 @@ pub(crate) fn set_cookie(name: &str, value: &str, max_age: i64, https: bool) -> 
     .expect("cookie is ASCII")
 }
 
-pub(crate) fn clear_cookie(name: &str, https: bool) -> HeaderValue {
+fn clear_cookie(name: &str, https: bool) -> HeaderValue {
     let secure = if https { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
         "{name}=\"\"; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Max-Age=0; Path=/; SameSite=lax{secure}"
@@ -234,7 +234,7 @@ pub async fn claim(
             "That setup code is incorrect. Check the server log for the current code.",
         ));
     }
-    let hash = auth_core::hash_password_blocking(payload.password.clone(), state.auth.cost)
+    let hash = auth_core::hash_password_blocking(payload.password, state.auth.cost)
         .await
         .map_err(|problem| ApiError::new(StatusCode::BAD_REQUEST, problem))?;
     if !auth_core::claim_owner(&state.db.lock(), &hash, state.scheduler.now())? {
@@ -270,7 +270,7 @@ pub async fn login(
             "ActivSync is not claimed yet.",
         ));
     }
-    let device = trusted_device(&state, &headers, &ctx)?;
+    let device = trusted_device(&state, &headers, &ctx);
     if device.is_none() {
         limit_client(&state, &ctx)?;
     }
@@ -365,7 +365,7 @@ pub async fn revoke_others(
     headers: HeaderMap,
 ) -> ApiResult<Value> {
     let auth = require_session(&ctx)?;
-    let device = trusted_device(&state, &headers, &ctx)?;
+    let device = trusted_device(&state, &headers, &ctx);
     let conn = state.db.lock();
     let revoked = auth_core::revoke_all(&conn, auth.token_hash.as_deref())?;
     auth_core::clear_trusted_devices(&conn, device.as_deref())?;
@@ -389,7 +389,7 @@ pub async fn change_password(
     let payload = body(payload)?;
     too_long(&[&payload.current, &payload.new])?;
     let auth = require_session(&ctx)?;
-    let device = trusted_device(&state, &headers, &ctx)?;
+    let device = trusted_device(&state, &headers, &ctx);
     require_password(
         &state,
         &payload.current,
@@ -397,7 +397,7 @@ pub async fn change_password(
         device.as_deref(),
     )
     .await?;
-    let hash = auth_core::hash_password_blocking(payload.new.clone(), state.auth.cost)
+    let hash = auth_core::hash_password_blocking(payload.new, state.auth.cost)
         .await
         .map_err(|problem| ApiError::new(StatusCode::BAD_REQUEST, problem))?;
     let conn = state.db.lock();

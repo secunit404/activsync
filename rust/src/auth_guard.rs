@@ -1,8 +1,10 @@
-//! The request pipeline in front of every route, as in the Python app's
-//! `auth_middleware.py`: trusted proxy headers, the Host check, sign-in,
-//! the body cap for anonymous writes, CSRF, and security headers.
+//! The request pipeline in front of every route: trusted proxy headers, the
+//! Host check, sign-in, the body cap for anonymous writes, CSRF, and security
+//! headers.
 
-use std::net::{IpAddr, SocketAddr};
+mod proxy_auth;
+
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -14,18 +16,21 @@ use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::Engine;
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::AppState;
 use crate::auth_core::{self, HashCost};
 use crate::logging::ClientAddr;
-pub use crate::proxy_headers::{Forwarded, ForwardedTrust, Network, WarnLimits, latin1, py_repr};
+use crate::proxy_headers::{ForwardedTrust, WarnLimits, latin1, py_repr};
 
-pub const SESSION_COOKIE: &str = "activsync_session";
-pub const SECURE_SESSION_COOKIE: &str = "__Host-activsync_session";
-pub const DEVICE_COOKIE: &str = "activsync_device";
-pub const SECURE_DEVICE_COOKIE: &str = "__Host-activsync_device";
+pub use proxy_auth::ProxyAuth;
+
+const SESSION_COOKIE: &str = "activsync_session";
+const SECURE_SESSION_COOKIE: &str = "__Host-activsync_session";
+const DEVICE_COOKIE: &str = "activsync_device";
+const SECURE_DEVICE_COOKIE: &str = "__Host-activsync_device";
 
 const PUBLIC_BODY_LIMIT: usize = 16 * 1024;
 const TOO_LARGE: &str = "That request is too large.";
@@ -33,7 +38,6 @@ const UNKNOWN_HOST_MESSAGE: &str =
     "Unknown host — set ACTIVSYNC_PUBLIC_URL or add it to ACTIVSYNC_ALLOWED_HOSTS";
 const PUBLIC_HOST_MESSAGE: &str =
     "Unknown host — ActivSync answers only on the host in ACTIVSYNC_PUBLIC_URL";
-const TRUST_GATEWAY_VARIABLE: &str = "ACTIVSYNC_AUTH_PROXY_TRUST_GATEWAY";
 
 const PUBLIC_ROUTES: &[(&str, &str)] = &[
     ("GET", "/health"),
@@ -48,123 +52,15 @@ const PUBLIC_ROUTES: &[(&str, &str)] = &[
 ];
 const SPA_RESERVED_PREFIXES: &[&str] = &["api", "assets", "strava", "auth"];
 
-/// Sign-in through an authenticating reverse proxy.
-#[derive(Clone, Debug)]
-pub struct ProxyAuth {
-    pub header: String,
-    pub trusted: Vec<Network>,
-    pub user: String,
-    pub trusted_gateways: Vec<IpAddr>,
-}
+/// `urllib.parse.quote(value, safe="")`.
+const QUOTED: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'_')
+    .remove(b'.')
+    .remove(b'~');
 
-impl ProxyAuth {
-    /// Refuses a trusted range that holds the container's default gateway:
-    /// Docker relays outside connections from that address, so anyone who can
-    /// reach the port could send the header and be signed in as the owner.
-    pub fn from_env(
-        get: impl Fn(&str) -> Option<String>,
-        gateways: &[IpAddr],
-    ) -> Result<Option<Self>, String> {
-        let var = |name: &str| get(name).map(|v| v.trim().to_string()).unwrap_or_default();
-        let header = var("ACTIVSYNC_AUTH_PROXY_HEADER");
-        if header.is_empty() {
-            return Ok(None);
-        }
-        let trusted_raw = var("ACTIVSYNC_AUTH_PROXY_TRUSTED");
-        let user = var("ACTIVSYNC_AUTH_PROXY_USER");
-        if trusted_raw.is_empty() {
-            return Err("ACTIVSYNC_AUTH_PROXY_HEADER is set, so ACTIVSYNC_AUTH_PROXY_TRUSTED must list the proxy's address range (for example 172.18.0.0/16).".into());
-        }
-        if user.is_empty() {
-            return Err("ACTIVSYNC_AUTH_PROXY_HEADER is set, so ACTIVSYNC_AUTH_PROXY_USER must name the user the proxy signs in as.".into());
-        }
-        let mut trusted = Vec::new();
-        for item in trusted_raw
-            .split(',')
-            .map(str::trim)
-            .filter(|i| !i.is_empty())
-        {
-            let network = Network::parse(item).ok_or_else(|| {
-                format!("ACTIVSYNC_AUTH_PROXY_TRUSTED has an invalid address range: {item}")
-            })?;
-            if network.prefix == 0 {
-                return Err(format!(
-                    "ACTIVSYNC_AUTH_PROXY_TRUSTED must not trust every address ({item})."
-                ));
-            }
-            trusted.push(network);
-        }
-        let in_range: Vec<IpAddr> = gateways
-            .iter()
-            .copied()
-            .filter(|g| trusted.iter().any(|n| n.contains(*g)))
-            .collect();
-        let trust_gateway = matches!(
-            var(TRUST_GATEWAY_VARIABLE).to_lowercase().as_str(),
-            "1" | "true" | "yes"
-        );
-        if !in_range.is_empty() && !trust_gateway {
-            let listed: Vec<String> = in_range.iter().map(IpAddr::to_string).collect();
-            return Err(format!(
-                "ACTIVSYNC_AUTH_PROXY_TRUSTED must not include this container's default gateway ({}). \
-                 Docker's gateway relays connections that come from outside the Docker network, so anyone \
-                 who can reach the published port could send the proxy header and be signed in as you. \
-                 Trust only the reverse proxy's own address: give it a fixed IP and trust its /32. If the \
-                 proxy runs on the Docker host itself, set {TRUST_GATEWAY_VARIABLE}=1 and keep the port \
-                 reachable from that host alone.",
-                listed.join(", ")
-            ));
-        }
-        Ok(Some(Self {
-            header,
-            trusted,
-            user,
-            trusted_gateways: if trust_gateway { in_range } else { Vec::new() },
-        }))
-    }
-
-    pub fn trusts(&self, peer: Option<IpAddr>) -> bool {
-        peer.is_some_and(|ip| self.trusted.iter().any(|n| n.contains(ip)))
-    }
-}
-
-/// Gateways of default routes from the Linux routing tables; empty where
-/// they do not exist, such as on a Mac.
-pub fn read_default_gateways() -> Vec<IpAddr> {
-    let mut found = Vec::new();
-    if let Ok(text) = std::fs::read_to_string("/proc/net/route") {
-        for fields in text
-            .lines()
-            .map(|l| l.split_whitespace().collect::<Vec<_>>())
-        {
-            if fields.len() < 3 || fields[1] != "00000000" {
-                continue;
-            }
-            if let Ok(word) = u32::from_str_radix(fields[2], 16) {
-                let ip = std::net::Ipv4Addr::from(word.to_le_bytes());
-                if !ip.is_unspecified() {
-                    found.push(IpAddr::V4(ip));
-                }
-            }
-        }
-    }
-    if let Ok(text) = std::fs::read_to_string("/proc/net/ipv6_route") {
-        for fields in text
-            .lines()
-            .map(|l| l.split_whitespace().collect::<Vec<_>>())
-        {
-            if fields.len() < 5 || fields[0] != "0".repeat(32) || fields[1] != "00" {
-                continue;
-            }
-            if let Ok(value) = u128::from_str_radix(fields[4], 16) {
-                let ip = std::net::Ipv6Addr::from(value);
-                if !ip.is_unspecified() {
-                    found.push(IpAddr::V6(ip));
-                }
-            }
-        }
-    }
-    found
+fn is_on(value: &str) -> bool {
+    matches!(value.to_lowercase().as_str(), "1" | "true" | "yes")
 }
 
 #[derive(Clone)]
@@ -183,12 +79,7 @@ impl AuthConfig {
     /// Reads the same environment variables as the Python app.
     pub fn from_env() -> Result<Self, String> {
         let get = |name: &str| std::env::var(name).ok();
-        let enabled = |name: &str| {
-            matches!(
-                get(name).unwrap_or_default().to_lowercase().as_str(),
-                "1" | "true" | "yes"
-            )
-        };
+        let enabled = |name: &str| is_on(&get(name).unwrap_or_default());
         let public_url = get("ACTIVSYNC_PUBLIC_URL")
             .map(|v| v.trim().trim_end_matches('/').to_string())
             .filter(|v| !v.is_empty());
@@ -202,7 +93,7 @@ impl AuthConfig {
                 .filter(|s| !s.is_empty())
                 .map(str::to_string)
                 .collect(),
-            proxy: ProxyAuth::from_env(get, &read_default_gateways())?,
+            proxy: ProxyAuth::from_env(get, &proxy_auth::read_default_gateways())?,
             forwarded: ForwardedTrust::parse(
                 &get("FORWARDED_ALLOW_IPS").unwrap_or_else(|| "127.0.0.1".into()),
             ),
@@ -240,11 +131,10 @@ impl AuthConfig {
     fn public_origin(&self) -> Option<(String, String)> {
         let url = self.public_url.as_deref()?;
         let (scheme, rest) = url.split_once("://")?;
+        let scheme = scheme.to_lowercase();
         let netloc = rest.split('/').next().unwrap_or_default();
-        Some((
-            scheme.to_lowercase(),
-            normalize_host(netloc, Some(&scheme.to_lowercase())),
-        ))
+        let host = normalize_host(netloc, Some(&scheme));
+        Some((scheme, host))
     }
 
     fn force_https(&self) -> bool {
@@ -253,37 +143,33 @@ impl AuthConfig {
     }
 }
 
-pub fn normalize_host(host: &str, scheme: Option<&str>) -> String {
+fn normalize_host(host: &str, scheme: Option<&str>) -> String {
     let host = host.trim().to_lowercase();
-    let (name, port) = if let Some(rest) = host.strip_prefix('[') {
-        match rest.split_once(']') {
-            Some((inner, after)) => {
-                let port = match after.strip_prefix(':') {
-                    Some(p) => p,
-                    None if after.is_empty() => "",
-                    None => return host,
-                };
-                (format!("[{inner}]"), port.to_string())
-            }
+    let (name, port) = if host.starts_with('[') {
+        let Some(end) = host.find(']') else {
+            return host;
+        };
+        let (name, after) = host.split_at(end + 1);
+        match after.strip_prefix(':') {
+            Some(port) => (name, port),
+            None if after.is_empty() => (name, ""),
             None => return host,
         }
     } else {
-        let mut parts = host.splitn(2, ':');
-        let name = parts.next().unwrap_or_default().to_string();
-        let port = parts.next().unwrap_or_default().to_string();
+        let (name, port) = host.split_once(':').unwrap_or((&host, ""));
         if port.contains(':') || name.contains(['[', ']']) || port.contains(['[', ']']) {
             return host;
         }
         (name, port)
     };
-    let name = name.strip_suffix('.').map(str::to_string).unwrap_or(name);
+    let name = name.strip_suffix('.').unwrap_or(name);
     let is_default = match scheme {
         Some("http") => port == "80",
         Some("https") => port == "443",
         _ => port == "80" || port == "443",
     };
     if port.is_empty() || is_default {
-        name
+        name.to_string()
     } else {
         format!("{name}:{port}")
     }
@@ -291,7 +177,7 @@ pub fn normalize_host(host: &str, scheme: Option<&str>) -> String {
 
 /// Without a public URL, a DNS-rebinding attacker's domain makes Origin equal
 /// Host, so the CSRF check alone would pass; only known names get in.
-pub fn host_is_allowed(host: Option<&str>, allowed: &[String]) -> bool {
+fn host_is_allowed(host: Option<&str>, allowed: &[String]) -> bool {
     let Some(host) = host.filter(|h| !h.is_empty()) else {
         return false;
     };
@@ -300,14 +186,10 @@ pub fn host_is_allowed(host: Option<&str>, allowed: &[String]) -> bool {
         let Some((literal, after)) = rest.split_once(']') else {
             return false;
         };
-        return (after.is_empty() || after.starts_with(':'))
-            && literal.parse::<std::net::Ipv6Addr>().is_ok();
+        return (after.is_empty() || after.starts_with(':')) && literal.parse::<Ipv6Addr>().is_ok();
     }
     let name = host.split(':').next().unwrap_or_default();
-    if name.parse::<std::net::Ipv4Addr>().is_ok()
-        || name == "localhost"
-        || name.ends_with(".localhost")
-    {
+    if name.parse::<Ipv4Addr>().is_ok() || name == "localhost" || name.ends_with(".localhost") {
         return true;
     }
     allowed
@@ -353,7 +235,7 @@ pub fn content_security_policy(index_html: Option<&Path>) -> String {
     .join("; ")
 }
 
-pub fn is_public(method: &Method, path: &str) -> bool {
+fn is_public(method: &Method, path: &str) -> bool {
     let method = if method == Method::HEAD {
         "GET"
     } else {
@@ -378,7 +260,7 @@ fn is_unsafe(method: &Method) -> bool {
     )
 }
 
-pub fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+pub(crate) fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers
         .get_all(header::COOKIE)
         .iter()
@@ -389,17 +271,15 @@ pub fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
         .map(|(_, value)| value.trim_matches('"'))
 }
 
-/// `urllib.parse.quote(value, safe="")`.
-pub fn quote(value: &str) -> String {
-    value
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (b as char).to_string()
-            }
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
+pub(crate) fn declared_length(headers: &HeaderMap) -> Option<usize> {
+    headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+}
+
+pub(crate) fn quote(value: &str) -> String {
+    utf8_percent_encode(value, QUOTED).to_string()
 }
 
 /// How the current request reached the app and who sent it.
@@ -521,7 +401,7 @@ fn origin_of(url: &str) -> String {
     }
 }
 
-pub fn csrf_problem(headers: &HeaderMap, expected_origin: &str) -> Option<String> {
+fn csrf_problem(headers: &HeaderMap, expected_origin: &str) -> Option<String> {
     let get = |name: &str| headers.get(name).map(latin1);
     let expected = origin_of(expected_origin);
     if get("x-activsync-request").as_deref() != Some("1") {
@@ -654,17 +534,14 @@ async fn guarded(
         https,
         auth: None,
     };
-    let auth = match authenticate(&state, &headers, &ctx) {
-        Ok(auth) => auth,
+    ctx.auth = match authenticate(&state, &headers, &ctx) {
+        Ok(Authenticated::Yes(auth)) => Some(auth),
+        Ok(Authenticated::No) => None,
+        Ok(Authenticated::Rejected) => return detail(StatusCode::UNAUTHORIZED, "Not signed in"),
         Err(err) => {
             crate::log_error!("auth", "database error while signing in: {err}");
             return detail(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error");
         }
-    };
-    ctx.auth = match auth {
-        Authenticated::Rejected => return detail(StatusCode::UNAUTHORIZED, "Not signed in"),
-        Authenticated::Yes(auth) => Some(auth),
-        Authenticated::No => None,
     };
 
     if ctx.auth.is_none() && !is_public(&method, &path) {
@@ -679,11 +556,7 @@ async fn guarded(
     }
 
     if ctx.auth.is_none() && is_unsafe(&method) {
-        let declared = headers
-            .get(header::CONTENT_LENGTH)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<usize>().ok());
-        if declared.is_some_and(|n| n > PUBLIC_BODY_LIMIT) {
+        if declared_length(&headers).is_some_and(|n| n > PUBLIC_BODY_LIMIT) {
             return detail(StatusCode::PAYLOAD_TOO_LARGE, TOO_LARGE);
         }
         let (parts, body) = request.into_parts();
@@ -769,45 +642,5 @@ mod tests {
             problem.as_deref(),
             Some("Origin http://\u{e9}vil.example does not match")
         );
-    }
-
-    #[test]
-    fn proxy_config_errors_match_python() {
-        let env = |pairs: &'static [(&'static str, &'static str)]| {
-            move |name: &str| {
-                pairs
-                    .iter()
-                    .find(|(k, _)| *k == name)
-                    .map(|(_, v)| v.to_string())
-            }
-        };
-        assert!(ProxyAuth::from_env(env(&[]), &[]).unwrap().is_none());
-        let err = ProxyAuth::from_env(env(&[("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User")]), &[])
-            .unwrap_err();
-        assert!(err.contains("must list the proxy's address range"));
-        let wide = &[
-            ("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User"),
-            ("ACTIVSYNC_AUTH_PROXY_TRUSTED", "0.0.0.0/0"),
-            ("ACTIVSYNC_AUTH_PROXY_USER", "me"),
-        ];
-        assert_eq!(
-            ProxyAuth::from_env(env(wide), &[]).unwrap_err(),
-            "ACTIVSYNC_AUTH_PROXY_TRUSTED must not trust every address (0.0.0.0/0)."
-        );
-        let docker = &[
-            ("ACTIVSYNC_AUTH_PROXY_HEADER", "Remote-User"),
-            ("ACTIVSYNC_AUTH_PROXY_TRUSTED", "172.18.0.0/16"),
-            ("ACTIVSYNC_AUTH_PROXY_USER", "me"),
-        ];
-        let gateway: IpAddr = "172.18.0.1".parse().unwrap();
-        assert!(
-            ProxyAuth::from_env(env(docker), &[gateway])
-                .unwrap_err()
-                .contains("default gateway (172.18.0.1)")
-        );
-        let proxy = ProxyAuth::from_env(env(docker), &[]).unwrap().unwrap();
-        assert!(proxy.trusts(Some("172.18.4.2".parse().unwrap())));
-        assert!(!proxy.trusts(Some("172.19.0.2".parse().unwrap())));
-        assert_eq!(proxy.trusted[0].to_string(), "172.18.0.0/16");
     }
 }

@@ -7,12 +7,12 @@ use axum::response::{IntoResponse, Redirect, Response};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::auth_guard::{RequestContext, cookie, quote};
+use crate::auth_guard::{RequestContext, cookie, declared_length, quote};
 use crate::auth_routes::{
     ApiResult, body, require_password, require_session, set_cookie, start_session, trusted_device,
     with_cookies,
 };
-use crate::oidc_config::{self, DEFAULT_SCOPES, Linked, NewConfig, OIDC_METHOD};
+use crate::oidc_config::{self, DEFAULT_SCOPES, Linked, NewConfig, OIDC_METHOD, default_scopes};
 use crate::oidc_flow::{self, Callback, OidcError};
 use crate::oidc_logo;
 use crate::routes::ApiError;
@@ -122,10 +122,6 @@ pub struct OidcConfigRequest {
     current_password: String,
 }
 
-fn default_scopes() -> String {
-    DEFAULT_SCOPES.into()
-}
-
 fn length(value: &str, min: usize, max: usize, field: &str) -> Result<(), ApiError> {
     let n = value.chars().count();
     if n < min || n > max {
@@ -153,15 +149,7 @@ pub async fn save_oidc(
         "clientSecret",
     )?;
     length(&request.scopes, 0, 512, "scopes")?;
-    length(&request.current_password, 0, 1024, "currentPassword")?;
-    let device = trusted_device(&state, &headers, &ctx)?;
-    require_password(
-        &state,
-        &request.current_password,
-        StatusCode::BAD_REQUEST,
-        device.as_deref(),
-    )
-    .await?;
+    confirm_password(&state, &headers, &ctx, &request.current_password).await?;
     let config = oidc_config::save(
         &state.db.lock(),
         &NewConfig {
@@ -192,14 +180,13 @@ async fn confirm_password(
     state: &AppState,
     headers: &HeaderMap,
     ctx: &RequestContext,
-    payload: Result<Json<CurrentPasswordRequest>, JsonRejection>,
+    current_password: &str,
 ) -> Result<(), ApiError> {
-    let request = body(payload)?;
-    length(&request.current_password, 0, 1024, "currentPassword")?;
-    let device = trusted_device(state, headers, ctx)?;
+    length(current_password, 0, 1024, "currentPassword")?;
+    let device = trusted_device(state, headers, ctx);
     require_password(
         state,
-        &request.current_password,
+        current_password,
         StatusCode::BAD_REQUEST,
         device.as_deref(),
     )
@@ -212,7 +199,7 @@ pub async fn delete_oidc(
     Extension(ctx): Extension<RequestContext>,
     payload: Result<Json<CurrentPasswordRequest>, JsonRejection>,
 ) -> ApiResult<AuthActionResult> {
-    confirm_password(&state, &headers, &ctx, payload).await?;
+    confirm_password(&state, &headers, &ctx, &body(payload)?.current_password).await?;
     oidc_config::delete(&state.db.lock())?;
     state.oidc_sessions.forget_provider();
     Ok(message("Single sign-on removed."))
@@ -235,7 +222,7 @@ pub async fn start_link(
     if oidc_config::load(&state.db.lock())?.is_none() {
         return Err(ApiError::conflict("Set up single sign-on first."));
     }
-    confirm_password(&state, &headers, &ctx, payload).await?;
+    confirm_password(&state, &headers, &ctx, &body(payload)?.current_password).await?;
     let key = state
         .oidc_sessions
         .grant_link(cookie(&headers, oidc_cookie(&ctx)), state.scheduler.now());
@@ -282,11 +269,7 @@ pub async fn upload_logo(
         return Err(ApiError::conflict("Set up single sign-on first."));
     }
     let too_large = || ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, oidc_logo::TOO_LARGE);
-    let declared = headers
-        .get(header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<usize>().ok());
-    if declared.is_some_and(|n| n > oidc_logo::MAX_UPLOAD_BYTES) {
+    if declared_length(&headers).is_some_and(|n| n > oidc_logo::MAX_UPLOAD_BYTES) {
         return Err(too_large());
     }
     let data = axum::body::to_bytes(upload, oidc_logo::MAX_UPLOAD_BYTES)
@@ -336,7 +319,7 @@ fn resolved_path(path: &str) -> String {
 
 /// A same-site path to land on after signing in; anything that could leave
 /// the site becomes `/`.
-pub fn safe_next(value: Option<&str>) -> String {
+fn safe_next(value: Option<&str>) -> String {
     let Some(value) = value.filter(|v| !v.is_empty()) else {
         return "/".into();
     };
