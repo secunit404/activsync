@@ -20,6 +20,8 @@ export const test = base.extend<{ seeded: void }>({
     );
     await Promise.all([appStateResponse, activitiesResponse, page.goto("/?status=all")]);
     await use();
+    // A route handler still fetching when the test ends would fail the run.
+    if (!page.isClosed()) await page.unrouteAll({ behavior: "ignoreErrors" });
   }, { auto: true }],
 });
 
