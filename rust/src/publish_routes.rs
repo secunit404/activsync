@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::HashSet;
 
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
@@ -33,17 +33,61 @@ pub struct ActivityIdsRequest {
 }
 
 fn unique_ids(payload: ActivityIdsRequest) -> Result<Vec<i64>, ApiError> {
-    if payload.activity_ids.is_empty() {
+    let mut ids = payload.activity_ids;
+    if ids.is_empty() {
         return Err(ApiError::invalid(
             "activityIds must list at least one activity",
         ));
     }
-    Ok(payload
-        .activity_ids
-        .into_iter()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect())
+    ids.sort_unstable();
+    ids.dedup();
+    Ok(ids)
+}
+
+fn published_message(prior_status: &str, title: &str) -> String {
+    let verb = if prior_status == "missing" {
+        "Republished"
+    } else {
+        "Published"
+    };
+    format!("{verb} {title} to Strava")
+}
+
+fn publish_summary(published: i64, failed: i64, blocked: i64, skipped: i64) -> ActionResult {
+    if failed + blocked + skipped > 0 {
+        let mut parts = vec![format!("Published {published}")];
+        if failed > 0 {
+            parts.push(format!("{failed} failed and can be retried"));
+        }
+        if blocked > 0 {
+            parts.push(format!("{blocked} blocked by Hevy sync"));
+        }
+        if skipped > 0 {
+            parts.push(format!("{skipped} no longer publishable"));
+        }
+        return ActionResult {
+            message: parts.join("; "),
+            severity: "warning",
+            published_count: published,
+            failed_count: failed,
+            blocked_count: blocked,
+        };
+    }
+    let noun = if published == 1 {
+        "activity"
+    } else {
+        "activities"
+    };
+    ActionResult {
+        published_count: published,
+        ..ActionResult::success(format!("Published {published} {noun} to Strava"))
+    }
+}
+
+fn remaining_ms(state: &AppState, deadline: f64) -> i64 {
+    ((deadline - state.scheduler.now()) * 1000.0)
+        .round()
+        .max(0.0) as i64
 }
 
 fn schedule_publish(state: &AppState, ids: &[i64], kind: &str) -> ApiResult<PublishScheduled> {
@@ -57,11 +101,10 @@ fn schedule_publish(state: &AppState, ids: &[i64], kind: &str) -> ApiResult<Publ
             ),
             ScheduleError::Db(err) => err.into(),
         })?;
-    let remaining = batch.deadline - state.scheduler.now();
     Ok(Json(PublishScheduled {
         publish_scheduled_at: schedule::deadline_iso(batch.deadline),
+        remaining_ms: remaining_ms(state, batch.deadline),
         batch_id: batch.batch_id,
-        remaining_ms: (remaining * 1000.0).round().max(0.0) as i64,
         undo_window_ms: (batch.window_seconds * 1000.0).round() as i64,
     }))
 }
@@ -137,14 +180,9 @@ pub async fn publish_activity(
         ),
     })?;
     state.events.publish("refresh");
-    let verb = if activity.publish_status == "missing" {
-        "Republished"
-    } else {
-        "Published"
-    };
-    Ok(Json(ActionResult::success(format!(
-        "{verb} {} to Strava",
-        activity.title
+    Ok(Json(ActionResult::success(published_message(
+        &activity.publish_status,
+        &activity.title,
     ))))
 }
 
@@ -180,31 +218,12 @@ pub async fn publish_activities(
         err => internal("publish", err),
     })?;
     state.events.publish("refresh");
-    if stats.failed + stats.blocked > 0 {
-        let mut parts = vec![format!("Published {}", stats.published)];
-        if stats.failed > 0 {
-            parts.push(format!("{} failed and can be retried", stats.failed));
-        }
-        if stats.blocked > 0 {
-            parts.push(format!("{} blocked by Hevy sync", stats.blocked));
-        }
-        return Ok(Json(ActionResult {
-            message: parts.join("; "),
-            severity: "warning",
-            published_count: stats.published,
-            failed_count: stats.failed,
-            blocked_count: stats.blocked,
-        }));
-    }
-    let noun = if stats.published == 1 {
-        "activity"
-    } else {
-        "activities"
-    };
-    Ok(Json(ActionResult {
-        published_count: stats.published,
-        ..ActionResult::success(format!("Published {} {noun} to Strava", stats.published))
-    }))
+    Ok(Json(publish_summary(
+        stats.published,
+        stats.failed,
+        stats.blocked,
+        0,
+    )))
 }
 
 fn cancel_publish(state: &AppState, ids: &[i64]) -> ApiResult<ActionResult> {
@@ -248,85 +267,32 @@ pub struct PublishBatch {
 }
 
 /// The same toast an immediate publish would return, built from what the
-/// scheduler recorded.
-fn batch_outcome(
-    rows: &[schedule::ScheduleRow],
-    titles: &HashMap<i64, String>,
-) -> (Option<ActionResult>, Option<String>) {
-    if rows[0].batch_kind == "single" {
-        let row = &rows[0];
-        let title = titles
-            .get(&row.garmin_activity_id)
-            .map_or("Activity", String::as_str);
-        return match row.state.as_str() {
-            schedule::PUBLISHED => {
-                let verb = if row.prior_status == "missing" {
-                    "Republished"
-                } else {
-                    "Published"
-                };
-                (
-                    Some(ActionResult::success(format!("{verb} {title} to Strava"))),
-                    None,
-                )
-            }
-            schedule::SKIPPED => (
-                None,
-                Some(format!(
-                    "{title} was no longer publishable, so nothing was sent."
-                )),
-            ),
-            _ => (
-                None,
-                Some(
-                    row.message
-                        .clone()
-                        .unwrap_or_else(|| "Could not publish activity".into()),
-                ),
-            ),
-        };
+/// scheduler recorded: the result, or the error to show instead. `title`
+/// names a single activity.
+fn batch_outcome(rows: &[schedule::ScheduleRow], title: &str) -> Result<ActionResult, String> {
+    let first = &rows[0];
+    if first.batch_kind != "single" {
+        let count = |state: &str| rows.iter().filter(|r| r.state == state).count() as i64;
+        return Ok(publish_summary(
+            count(schedule::PUBLISHED),
+            count(schedule::FAILED),
+            count(schedule::BLOCKED),
+            count(schedule::SKIPPED),
+        ));
     }
-    let count = |state: &str| rows.iter().filter(|r| r.state == state).count() as i64;
-    let (published, failed, blocked, skipped) = (
-        count(schedule::PUBLISHED),
-        count(schedule::FAILED),
-        count(schedule::BLOCKED),
-        count(schedule::SKIPPED),
-    );
-    if failed + blocked + skipped > 0 {
-        let mut parts = vec![format!("Published {published}")];
-        if failed > 0 {
-            parts.push(format!("{failed} failed and can be retried"));
-        }
-        if blocked > 0 {
-            parts.push(format!("{blocked} blocked by Hevy sync"));
-        }
-        if skipped > 0 {
-            parts.push(format!("{skipped} no longer publishable"));
-        }
-        return (
-            Some(ActionResult {
-                message: parts.join("; "),
-                severity: "warning",
-                published_count: published,
-                failed_count: failed,
-                blocked_count: blocked,
-            }),
-            None,
-        );
+    match first.state.as_str() {
+        schedule::PUBLISHED => Ok(ActionResult::success(published_message(
+            &first.prior_status,
+            title,
+        ))),
+        schedule::SKIPPED => Err(format!(
+            "{title} was no longer publishable, so nothing was sent."
+        )),
+        _ => Err(first
+            .message
+            .clone()
+            .unwrap_or_else(|| "Could not publish activity".into())),
     }
-    let noun = if published == 1 {
-        "activity"
-    } else {
-        "activities"
-    };
-    (
-        Some(ActionResult {
-            published_count: published,
-            ..ActionResult::success(format!("Published {published} {noun} to Strava"))
-        }),
-        None,
-    )
 }
 
 pub async fn publish_batch(
@@ -341,25 +307,20 @@ pub async fn publish_batch(
             "Nothing is publishing under that id.",
         ));
     }
-    let remaining_ms = ((rows[0].deadline - state.scheduler.now()) * 1000.0)
-        .round()
-        .max(0.0) as i64;
     let pending = |s: &str| rows.iter().any(|r| r.state == s);
     let (batch_state, remaining_ms) = if pending(schedule::WAITING) {
-        ("waiting", remaining_ms)
+        ("waiting", remaining_ms(&state, rows[0].deadline))
     } else if pending(schedule::SENDING) {
         ("sending", 0)
     } else {
         ("done", 0)
     };
     let (result, error) = if batch_state == "done" {
-        let mut titles = HashMap::new();
-        for row in &rows {
-            if let Some(activity) = db::get_activity(&conn, row.garmin_activity_id)? {
-                titles.insert(row.garmin_activity_id, activity.title);
-            }
+        let title = db::get_activity(&conn, rows[0].garmin_activity_id)?.map(|a| a.title);
+        match batch_outcome(&rows, title.as_deref().unwrap_or("Activity")) {
+            Ok(result) => (Some(result), None),
+            Err(error) => (None, Some(error)),
         }
-        batch_outcome(&rows, &titles)
     } else {
         (None, None)
     };

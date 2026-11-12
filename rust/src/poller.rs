@@ -1,6 +1,6 @@
-//! The background poller, as the Python app's `poller.py`: Garmin fetch,
-//! Strava publish and status check, and the Hevy leg each run on their own
-//! interval, checked on a short shared tick.
+//! The background poller: Garmin fetch, Strava publish and status check, and
+//! the Hevy leg each run on their own interval, checked on a short shared
+//! tick.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -19,13 +19,13 @@ use crate::schedule::Clock;
 use crate::strava_client::{StravaClient, StravaError};
 use crate::sync::{self, GarminSyncStats, PublishStats, Services, StatusCheckStats, SyncError};
 
-pub const DEFAULT_TICK_SECONDS: u64 = 60;
+const DEFAULT_TICK_SECONDS: u64 = 60;
 const SESSION_PRUNE_SECONDS: f64 = 3600.0;
 const HEVY_UPLOAD_RECHECK_SECONDS: f64 = 60.0;
 /// Right after a session the watch syncs and a Hevy workout often follows,
 /// so Garmin is polled this often for a while instead of the configured
 /// (slower) interval.
-pub const ACTIVE_GARMIN_INTERVAL_SECONDS: f64 = 5.0 * 60.0;
+const ACTIVE_GARMIN_INTERVAL_SECONDS: f64 = 5.0 * 60.0;
 const ACTIVE_WINDOW_HOURS: i64 = 2;
 const MAX_SESSION_HOURS: i64 = 24;
 
@@ -161,23 +161,15 @@ fn has_unresolved_upload(conn: &rusqlite::Connection) -> rusqlite::Result<bool> 
 /// The duration in `garmin_data`, 0 when absent or unreadable: it only
 /// widens a time window, so a bad blob reads as "unknown", never an error.
 fn activity_duration_seconds(garmin_data: &str) -> f64 {
-    let data: Value = serde_json::from_str(if garmin_data.is_empty() {
-        "{}"
-    } else {
-        garmin_data
-    })
-    .unwrap_or(Value::Null);
-    match data.get("duration") {
-        Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0),
-        Some(Value::String(s)) => s.trim().parse().unwrap_or(0.0),
-        Some(Value::Bool(b)) => f64::from(u8::from(*b)),
-        _ => 0.0,
-    }
+    serde_json::from_str::<Value>(garmin_data)
+        .ok()
+        .and_then(|data| data.get("duration").and_then(sync::as_python_float))
+        .unwrap_or(0.0)
 }
 
 /// Whether the user has just trained: an activity or Hevy workout ended in
 /// the last two hours, or a workout is still waiting for its watch activity.
-pub fn recently_active(conn: &rusqlite::Connection, now: DateTime<Utc>) -> rusqlite::Result<bool> {
+fn recently_active(conn: &rusqlite::Connection, now: DateTime<Utc>) -> rusqlite::Result<bool> {
     let window_start = now - Duration::hours(ACTIVE_WINDOW_HOURS);
     let scan_from = now - Duration::hours(MAX_SESSION_HOURS);
 
@@ -249,13 +241,13 @@ impl Poller {
         open_garmin(&self.db, &self.events, self.clients.as_ref(), now).await
     }
 
-    pub async fn run_garmin_once(&self, now: DateTime<Utc>) -> Result<GarminSyncStats, PollError> {
+    async fn run_garmin_once(&self, now: DateTime<Utc>) -> Result<GarminSyncStats, PollError> {
         let cfg = self.config()?;
         let garmin = self.garmin(now).await?;
         Ok(sync::sync_garmin(&self.db, &garmin, &cfg, now, None, None).await?)
     }
 
-    pub async fn run_strava_once(
+    async fn run_strava_once(
         &self,
         now: DateTime<Utc>,
     ) -> Result<(PublishStats, StatusCheckStats), PollError> {
@@ -272,7 +264,7 @@ impl Poller {
         Ok((published, status))
     }
 
-    pub async fn run_hevy_once(&self, now: DateTime<Utc>) -> Result<bool, HevyLegError> {
+    async fn run_hevy_once(&self, now: DateTime<Utc>) -> Result<bool, HevyLegError> {
         let Some(leg) = self.hevy.clone() else {
             return Ok(false);
         };
@@ -304,13 +296,10 @@ impl Poller {
     }
 
     fn strava_interval_seconds(&self) -> Result<f64, PollError> {
-        match self.options.strava_interval_override {
-            Some(seconds) => Ok(seconds),
-            None => Ok(minutes_setting(
-                &self.config()?,
-                "strava_poll_interval_minutes",
-            )),
-        }
+        Ok(match self.options.strava_interval_override {
+            Some(seconds) => seconds,
+            None => minutes_setting(&self.config()?, "strava_poll_interval_minutes"),
+        })
     }
 
     fn hevy_interval_seconds(&self) -> Result<f64, PollError> {
@@ -505,8 +494,6 @@ impl Poller {
     }
 }
 
-/// The real clients: Garmin from the token directory, Strava from the
-/// stored tokens and the app's client credentials.
 /// A signed-in Garmin client. An expired session pauses Garmin durably: the
 /// Settings page shows it and the poller stops trying until the user
 /// reconnects. An outage is shown as a failed attempt and retried.
@@ -529,6 +516,8 @@ pub async fn open_garmin(
     }
 }
 
+/// The real clients: Garmin from the token directory, Strava from the
+/// stored tokens and the app's client credentials.
 pub struct RealClients {
     pub db: Db,
     pub clock: Clock,

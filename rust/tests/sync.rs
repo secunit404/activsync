@@ -826,7 +826,7 @@ fn holds_follow_the_category_rules() {
     db::set_publish_status(&db.lock(), 3, "held", Some(sync::HOLD_BACKLOG)).unwrap();
     let conn = db.lock();
     assert_eq!(
-        sync::reconcile_held_activities(&conn, &["yoga".to_string()]).unwrap(),
+        activsync::onboarding::reconcile_held_activities(&conn, &["yoga".to_string()]).unwrap(),
         1
     );
     let status = |id| {
@@ -841,26 +841,6 @@ fn holds_follow_the_category_rules() {
         Some(("held".into(), Some("backlog".into()))),
         "only the user lifts a backlog hold"
     );
-
-    sync::exclude(&conn, 3).unwrap();
-    assert_eq!(status(3), Some(("excluded".into(), None)));
-    sync::restore_status(&conn, 3, "held", Some(sync::HOLD_BACKLOG)).unwrap();
-    assert_eq!(status(3), Some(("held".into(), Some("backlog".into()))));
-    sync::exclude(&conn, 2).unwrap();
-    drop(conn);
-    settings(&db, json!({"held_activity_types": ["yoga"]}));
-    let cfg = config(&db);
-    let conn = db.lock();
-    sync::unexclude(&conn, 2, &cfg).unwrap();
-    sync::exclude(&conn, 1).unwrap();
-    sync::unexclude(&conn, 1, &cfg).unwrap();
-    let status = |id| {
-        db::get_activity(&conn, id)
-            .unwrap()
-            .map(|r| (r.publish_status, r.hold_reason))
-    };
-    assert_eq!(status(2), Some(("held".into(), Some("category".into()))));
-    assert_eq!(status(1), Some(("pending".into(), None)));
 }
 
 #[tokio::test]

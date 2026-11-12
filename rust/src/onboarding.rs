@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use crate::config;
 use crate::db::{self, DbResult};
 use crate::mock;
+use crate::sync::HOLD_BACKLOG;
 use crate::view::Connections;
 
 /// The first-run step still to do, or `None` once onboarded. The claim
@@ -58,18 +59,21 @@ pub fn save_garmin_categories(
     hold_all: bool,
     now: DateTime<Utc>,
 ) -> DbResult<()> {
-    db::set_config_value(conn, "garmin_activity_types", &Value::Array(types.clone()))?;
+    let held = hold_all.then(|| {
+        let mut keys: Vec<String> = types
+            .iter()
+            .filter_map(|t| t["type_key"].as_str().map(str::to_string))
+            .collect();
+        keys.sort_unstable();
+        keys
+    });
+    db::set_config_value(conn, "garmin_activity_types", &Value::Array(types))?;
     db::set_config_value(
         conn,
         "garmin_activity_types_fetched_at",
         &json!(db::iso(now)),
     )?;
-    if hold_all {
-        let mut keys: Vec<&str> = types
-            .iter()
-            .filter_map(|t| t["type_key"].as_str())
-            .collect();
-        keys.sort_unstable();
+    if let Some(keys) = held {
         config::edit(conn, development, |cfg| {
             cfg.set("held_activity_types", json!(keys))
         })?;
@@ -112,8 +116,8 @@ pub fn persist_strava_credentials(
 /// a new autosync category says nothing about publishing an outage backlog.
 pub fn reconcile_held_activities(conn: &Connection, held_types: &[String]) -> DbResult<usize> {
     let mut flipped = 0;
-    for row in db::list_activities(conn, false)? {
-        if row.publish_status != "held" || row.hold_reason.as_deref() == Some("backlog") {
+    for row in db::list_activities_with_status(conn, "held")? {
+        if row.hold_reason.as_deref() == Some(HOLD_BACKLOG) {
             continue;
         }
         if !held_types.contains(&row.activity_type) {

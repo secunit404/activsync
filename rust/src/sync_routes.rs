@@ -46,15 +46,19 @@ pub(crate) async fn fetch_categories(
         .map_err(|err| err.to_string())
 }
 
+fn has_activity_types(state: &AppState) -> Result<bool, String> {
+    let types = db::get_config_value(&state.db.lock(), "garmin_activity_types")
+        .map_err(|e| e.to_string())?;
+    Ok(matches!(types, Some(Value::Array(types)) if !types.is_empty()))
+}
+
 async fn first_sync(
     state: &AppState,
     clients: &dyn Clients,
     now: DateTime<Utc>,
 ) -> Result<(), String> {
     let garmin = open_garmin(clients).await?;
-    let has_types = matches!(db::get_config_value(&state.db.lock(), "garmin_activity_types").map_err(|e| e.to_string())?,
-        Some(Value::Array(types)) if !types.is_empty());
-    if !has_types {
+    if !has_activity_types(state)? {
         fetch_categories(state, &garmin, true, now).await?;
     }
     let cfg =
@@ -69,9 +73,7 @@ async fn first_sync(
 }
 
 fn mock_first_sync(state: &AppState, now: DateTime<Utc>) -> Result<(), String> {
-    let has_types = matches!(db::get_config_value(&state.db.lock(), "garmin_activity_types").map_err(|e| e.to_string())?,
-        Some(Value::Array(types)) if !types.is_empty());
-    if !has_types {
+    if !has_activity_types(state)? {
         onboarding::store_garmin_categories(&state.db.lock(), development(state), true, now)
             .map_err(|e| e.to_string())?;
     }
@@ -93,15 +95,10 @@ pub async fn initial_sync(State(state): State<AppState>) -> ApiResult<ActionResu
         }
     }
     match state.clients.clone() {
-        Some(clients) => first_sync(&state, clients.as_ref(), now)
-            .await
-            .map_err(|err| {
-                ApiError::new(StatusCode::BAD_GATEWAY, format!("First sync failed: {err}"))
-            })?,
-        None => mock_first_sync(&state, now).map_err(|err| {
-            ApiError::new(StatusCode::BAD_GATEWAY, format!("First sync failed: {err}"))
-        })?,
+        Some(clients) => first_sync(&state, clients.as_ref(), now).await,
+        None => mock_first_sync(&state, now),
     }
+    .map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("First sync failed: {err}")))?;
     let conn = state.db.lock();
     db::set_config_value(&conn, "initial_sync_done", &json!(true))?;
     state.events.publish("refresh");

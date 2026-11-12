@@ -1,13 +1,12 @@
-//! Server-side undo window for publishing, as in the Python app's
-//! `publish_schedule.py`. Each state change is one guarded statement under the
-//! connection lock, so the scheduler's claim and an undo can never both match.
+//! Server-side undo window for publishing. Each state change is one guarded
+//! statement under the connection lock, so the scheduler's claim and an undo
+//! can never both match.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use base64::Engine;
 use chrono::{DateTime, Utc};
-use rand::RngCore;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use tokio::sync::Notify;
 
@@ -19,10 +18,6 @@ use crate::strava_client::{StravaClient, StravaError};
 use crate::sync::{self, Services, SyncError};
 
 pub const UNDO_WINDOW_SECONDS: f64 = 5.0;
-
-pub fn configured_window_seconds(conn: &Connection) -> DbResult<f64> {
-    Ok(crate::config::load_config(conn, false)?.int("undo_delay_seconds") as f64)
-}
 pub const PUBLISHABLE_STATUSES: [&str; 3] = ["held", "pending", "missing"];
 
 pub const WAITING: &str = "waiting";
@@ -34,6 +29,10 @@ pub const SKIPPED: &str = "skipped";
 
 const RESULT_RETENTION_SECONDS: f64 = 3600.0;
 const MAX_SLEEP_SECONDS: f64 = 30.0;
+
+pub fn configured_window_seconds(conn: &Connection) -> DbResult<f64> {
+    Ok(crate::config::load_config(conn, false)?.int("undo_delay_seconds") as f64)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScheduleRow {
@@ -83,13 +82,7 @@ fn placeholders(n: usize) -> String {
     vec!["?"; n].join(", ")
 }
 
-fn new_batch_id() -> String {
-    let mut bytes = [0u8; 9];
-    rand::rng().fill_bytes(&mut bytes);
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
-}
-
-pub fn schedule(
+fn schedule(
     conn: &mut Connection,
     activities: &[ActivityRow],
     now: f64,
@@ -98,7 +91,7 @@ pub fn schedule(
 ) -> Result<Scheduled, ScheduleError> {
     let ids: Vec<i64> = activities.iter().map(|a| a.garmin_activity_id).collect();
     let batch = Scheduled {
-        batch_id: new_batch_id(),
+        batch_id: crate::auth_core::random_token(9),
         deadline: now + window_seconds,
         window_seconds,
     };
@@ -145,7 +138,7 @@ pub fn schedule(
 }
 
 /// Drops every listed activity still waiting; one already being sent stays.
-pub fn cancel(conn: &Connection, ids: &[i64]) -> DbResult<usize> {
+fn cancel(conn: &Connection, ids: &[i64]) -> DbResult<usize> {
     conn.execute(
         &format!(
             "DELETE FROM publish_schedule WHERE garmin_activity_id IN ({}) AND state = '{WAITING}'",
@@ -155,7 +148,7 @@ pub fn cancel(conn: &Connection, ids: &[i64]) -> DbResult<usize> {
     )
 }
 
-pub fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(i64, f64)>> {
+fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(i64, f64)>> {
     let mut stmt = conn.prepare(&format!(
         "UPDATE publish_schedule SET state = '{SENDING}' \
          WHERE state = '{WAITING}' AND deadline <= ?1 \
@@ -168,7 +161,7 @@ pub fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(i64, f64)>> {
     Ok(rows)
 }
 
-pub fn finish(
+fn finish(
     conn: &Connection,
     id: i64,
     state: &str,
@@ -187,14 +180,14 @@ pub fn finish(
 
 /// Rows a previous process was sending go back to the queue; their deadline
 /// has passed, so they go out on the next pass.
-pub fn recover(conn: &Connection) -> DbResult<usize> {
+fn recover(conn: &Connection) -> DbResult<usize> {
     conn.execute(
         &format!("UPDATE publish_schedule SET state = '{WAITING}' WHERE state = '{SENDING}'"),
         [],
     )
 }
 
-pub fn prune(conn: &Connection, now: f64) -> DbResult<()> {
+fn prune(conn: &Connection, now: f64) -> DbResult<()> {
     conn.execute(
         "DELETE FROM publish_schedule WHERE finished_at IS NOT NULL AND finished_at < ?1",
         [now - RESULT_RETENTION_SECONDS],
@@ -202,7 +195,7 @@ pub fn prune(conn: &Connection, now: f64) -> DbResult<()> {
     Ok(())
 }
 
-pub fn next_deadline(conn: &Connection) -> DbResult<Option<f64>> {
+fn next_deadline(conn: &Connection) -> DbResult<Option<f64>> {
     conn.query_row(
         &format!("SELECT MIN(deadline) FROM publish_schedule WHERE state = '{WAITING}'"),
         [],
@@ -210,9 +203,7 @@ pub fn next_deadline(conn: &Connection) -> DbResult<Option<f64>> {
     )
 }
 
-pub fn active_by_activity(
-    conn: &Connection,
-) -> DbResult<std::collections::HashMap<i64, (f64, String)>> {
+pub fn active_by_activity(conn: &Connection) -> DbResult<HashMap<i64, (f64, String)>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT garmin_activity_id, deadline, state FROM publish_schedule \
          WHERE state IN ('{WAITING}', '{SENDING}')"
@@ -289,13 +280,6 @@ impl PublishScheduler {
         }
     }
 
-    pub fn window_seconds(&self) -> DbResult<f64> {
-        match self.window_override {
-            Some(window) => Ok(window),
-            None => configured_window_seconds(&self.db.lock()),
-        }
-    }
-
     pub fn now(&self) -> f64 {
         (self.clock)()
     }
@@ -362,19 +346,14 @@ impl PublishScheduler {
         Ok(claimed.len())
     }
 
-    /// The owner's later decision wins: an activity excluded from another
-    /// device, or removed on Garmin, during the window is skipped.
     async fn send(
         &self,
         id: i64,
         garmin: &GarminClient,
         strava: &StravaClient,
     ) -> DbResult<(&'static str, Option<String>)> {
-        let activity = db::get_activity(&self.db.lock(), id)?;
-        match activity {
-            Some(activity) if activity.is_published() => return Ok((PUBLISHED, None)),
-            Some(activity) if PUBLISHABLE_STATUSES.contains(&activity.publish_status.as_str()) => {}
-            _ => return Ok((SKIPPED, None)),
+        if let Some(state) = settled_state(db::get_activity(&self.db.lock(), id)?.as_ref()) {
+            return Ok((state, None));
         }
         let services = Services {
             db: &self.db,
@@ -435,17 +414,22 @@ impl PublishScheduler {
     }
 }
 
-/// Mock-mode stand-in for the Garmin download and Strava upload: the owner's
-/// later decision wins, Hevy work still blocks, and anything else publishes.
-fn mock_send(conn: &Connection, id: i64) -> DbResult<(&'static str, Option<String>)> {
-    let Some(activity) = db::get_activity(conn, id)? else {
-        return Ok((SKIPPED, None));
-    };
-    if activity.is_published() {
-        return Ok((PUBLISHED, None));
+/// The outcome when there is nothing left to send. The owner's later
+/// decision wins: an activity excluded from another device, or removed on
+/// Garmin, during the window is skipped.
+fn settled_state(activity: Option<&ActivityRow>) -> Option<&'static str> {
+    match activity {
+        Some(activity) if activity.is_published() => Some(PUBLISHED),
+        Some(activity) if PUBLISHABLE_STATUSES.contains(&activity.publish_status.as_str()) => None,
+        _ => Some(SKIPPED),
     }
-    if !PUBLISHABLE_STATUSES.contains(&activity.publish_status.as_str()) {
-        return Ok((SKIPPED, None));
+}
+
+/// Mock-mode stand-in for the Garmin download and Strava upload: Hevy work
+/// still blocks, and anything else publishes.
+fn mock_send(conn: &Connection, id: i64) -> DbResult<(&'static str, Option<String>)> {
+    if let Some(state) = settled_state(db::get_activity(conn, id)?.as_ref()) {
+        return Ok((state, None));
     }
     if let Some((hevy_id, status)) = db::blocking_workout_for_activity(conn, id)? {
         return Ok((

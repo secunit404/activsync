@@ -6,9 +6,7 @@ use axum::Json;
 use axum::extract::{Extension, Query, State};
 use axum::http::HeaderMap;
 use axum::response::Redirect;
-use base64::Engine;
 use chrono::Utc;
-use rand::RngCore;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -17,12 +15,6 @@ use crate::routes::ApiError;
 use crate::settings_routes::{conflict, onboarded};
 use crate::sync_routes::run_catch_up;
 use crate::{AppState, db, mock, oidc_routes, onboarding, view};
-
-fn new_state_token() -> String {
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
-}
 
 pub async fn strava_authorize(
     State(state): State<AppState>,
@@ -40,7 +32,7 @@ pub async fn strava_authorize(
         "{}/strava/callback",
         oidc_routes::origin(&state, &headers, &ctx)
     );
-    let token = new_state_token();
+    let token = crate::auth_core::random_token(32);
     db::set_config_value(&conn, "strava_oauth_state", &json!(token))?;
     drop(conn);
     let url = match &state.clients {
@@ -128,12 +120,10 @@ pub async fn strava_callback(
              API application.",
         );
     }
-    let state_matches = match (&expected, &query.state) {
-        (Some(expected), Some(got)) if !expected.is_empty() && !got.is_empty() => {
-            constant_time_eq(expected, got)
-        }
-        _ => false,
-    };
+    let state_matches = expected
+        .as_deref()
+        .zip(query.state.as_deref())
+        .is_some_and(|(expected, got)| !expected.is_empty() && constant_time_eq(expected, got));
     if !state_matches {
         return fail(
             "That Strava response did not match the connection request, so it \

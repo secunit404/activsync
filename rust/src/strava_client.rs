@@ -1,9 +1,10 @@
-//! Strava v3 client, as the Python app's `strava_client.py`: OAuth tokens
-//! kept in `strava_tokens`, activity upload with the upload-status poll,
-//! metadata edits, and window reads for duplicate detection.
+//! Strava v3 client: OAuth tokens kept in `strava_tokens`, activity upload
+//! with the upload-status poll, metadata edits, and window reads for
+//! duplicate detection.
 
 use std::time::Duration;
 
+use base64::Engine;
 use chrono::{DateTime, Timelike, Utc};
 use openidconnect::{HttpResponse, http};
 use serde_json::{Value, json};
@@ -12,12 +13,12 @@ use crate::db::{self, Db};
 use crate::net::{self, Http, Part};
 use crate::schedule::Clock;
 
-pub const AUTHORIZE_URL: &str = "https://www.strava.com/oauth/authorize";
-pub const TOKEN_URL: &str = "https://www.strava.com/oauth/token";
-pub const UPLOAD_URL: &str = "https://www.strava.com/api/v3/uploads";
-pub const ACTIVITIES_URL: &str = "https://www.strava.com/api/v3/athlete/activities";
-pub const ACTIVITY_URL: &str = "https://www.strava.com/api/v3/activities";
-pub const REVOKE_URL: &str = "https://www.strava.com/oauth/revoke";
+const AUTHORIZE_URL: &str = "https://www.strava.com/oauth/authorize";
+const TOKEN_URL: &str = "https://www.strava.com/oauth/token";
+const UPLOAD_URL: &str = "https://www.strava.com/api/v3/uploads";
+const ACTIVITIES_URL: &str = "https://www.strava.com/api/v3/athlete/activities";
+const ACTIVITY_URL: &str = "https://www.strava.com/api/v3/activities";
+const REVOKE_URL: &str = "https://www.strava.com/oauth/revoke";
 
 /// `read` is listed because Strava skips the consent screen on a repeat
 /// authorization only when every granted scope is named; `read_all` so
@@ -107,6 +108,15 @@ fn json_of(response: &HttpResponse) -> Result<Value, StravaError> {
     serde_json::from_slice(response.body()).map_err(|e| StravaError::Malformed(e.to_string()))
 }
 
+fn field<'a>(name: &'a str, value: &'a str) -> Part<'a> {
+    Part {
+        name,
+        filename: None,
+        content_type: None,
+        data: value.as_bytes(),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct StravaActivity {
     pub id: i64,
@@ -121,14 +131,15 @@ pub fn match_closest_activity(
     tolerance_minutes: i64,
 ) -> Option<i64> {
     let tolerance = (tolerance_minutes * 60) as f64;
-    let mut best: Option<(i64, f64)> = None;
-    for activity in activities {
-        let delta = ((activity.start_date - start).num_milliseconds() as f64 / 1000.0).abs();
-        if delta <= tolerance && best.is_none_or(|(_, d)| delta < d) {
-            best = Some((activity.id, delta));
-        }
-    }
-    best.map(|(id, _)| id)
+    activities
+        .iter()
+        .map(|a| {
+            let delta = ((a.start_date - start).num_milliseconds() as f64 / 1000.0).abs();
+            (a.id, delta)
+        })
+        .filter(|(_, delta)| *delta <= tolerance)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(id, _)| id)
 }
 
 #[derive(Clone)]
@@ -245,11 +256,11 @@ impl StravaClient {
     }
 
     async fn access_token(&self) -> Result<String, StravaError> {
-        let tokens = db::get_config_value(&self.db.lock(), "strava_tokens")
+        let Some(tokens) = db::get_config_value(&self.db.lock(), "strava_tokens")
             .ok()
             .flatten()
-            .filter(|t| db::truthy(Some(t)));
-        let Some(tokens) = tokens else {
+            .filter(|t| db::truthy(Some(t)))
+        else {
             return Err(StravaError::Auth("Strava is not connected".into()));
         };
         let expires_at = tokens["expires_at"].as_f64().unwrap_or(0.0);
@@ -259,10 +270,7 @@ impl StravaClient {
                 .unwrap_or_default()
                 .to_string());
         }
-        let refresh = tokens["refresh_token"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
+        let refresh = tokens["refresh_token"].as_str().unwrap_or_default();
         let response = self
             .post_form(
                 TOKEN_URL,
@@ -270,7 +278,7 @@ impl StravaClient {
                     ("client_id", &self.client_id),
                     ("client_secret", &self.client_secret),
                     ("grant_type", "refresh_token"),
-                    ("refresh_token", &refresh),
+                    ("refresh_token", refresh),
                 ],
             )
             .await?;
@@ -279,7 +287,7 @@ impl StravaClient {
         }
         check_status(&response)?;
         let payload = json_of(&response)?;
-        let mut refreshed = tokens.clone();
+        let mut refreshed = tokens;
         for key in ["access_token", "refresh_token", "expires_at"] {
             refreshed[key] = payload[key].clone();
         }
@@ -289,6 +297,10 @@ impl StravaClient {
             .as_str()
             .unwrap_or_default()
             .to_string())
+    }
+
+    async fn bearer(&self) -> Result<String, StravaError> {
+        Ok(format!("Bearer {}", self.access_token().await?))
     }
 
     /// Forgets the connection here and on Strava. The revoke is best-effort:
@@ -302,7 +314,6 @@ impl StravaClient {
             .and_then(|t| t["access_token"].as_str())
             .filter(|a| !a.is_empty())
         {
-            use base64::Engine;
             let basic = base64::engine::general_purpose::STANDARD
                 .encode(format!("{}:{}", self.client_id, self.client_secret));
             let auth = format!("Basic {basic}");
@@ -331,7 +342,7 @@ impl StravaClient {
         name: &str,
         description: &str,
     ) -> Result<(), StravaError> {
-        let bearer = format!("Bearer {}", self.access_token().await?);
+        let bearer = self.bearer().await?;
         let body = net::json_body(&json!({"name": name, "description": description}));
         let url = format!("{ACTIVITY_URL}/{strava_activity_id}");
         let response = self
@@ -414,7 +425,7 @@ impl StravaClient {
         after: DateTime<Utc>,
         before: DateTime<Utc>,
     ) -> Result<Vec<StravaActivity>, StravaError> {
-        let bearer = format!("Bearer {}", self.access_token().await?);
+        let bearer = self.bearer().await?;
         let mut activities = Vec::new();
         for page in 1..=MAX_ACTIVITY_PAGES {
             let batch = self
@@ -442,7 +453,7 @@ impl StravaClient {
         start: DateTime<Utc>,
         tolerance_minutes: i64,
     ) -> Result<Option<i64>, StravaError> {
-        let bearer = format!("Bearer {}", self.access_token().await?);
+        let bearer = self.bearer().await?;
         let window = chrono::Duration::minutes(tolerance_minutes);
         let activities = self
             .activities_page(&bearer, start - window, start + window, 30, 1)
@@ -502,38 +513,17 @@ impl StravaClient {
         name: Option<&str>,
         description: Option<&str>,
     ) -> Result<i64, StravaError> {
-        let token = self.access_token().await?;
-        let bearer = format!("Bearer {token}");
+        let bearer = self.bearer().await?;
         let external_id = format!("garmin-{garmin_activity_id}");
         let mut parts = vec![
-            Part {
-                name: "data_type",
-                filename: None,
-                content_type: None,
-                data: data_type.as_bytes(),
-            },
-            Part {
-                name: "external_id",
-                filename: None,
-                content_type: None,
-                data: external_id.as_bytes(),
-            },
+            field("data_type", data_type),
+            field("external_id", &external_id),
         ];
         if let Some(name) = name.filter(|n| !n.is_empty()) {
-            parts.push(Part {
-                name: "name",
-                filename: None,
-                content_type: None,
-                data: name.as_bytes(),
-            });
+            parts.push(field("name", name));
         }
         if let Some(description) = description.filter(|d| !d.is_empty()) {
-            parts.push(Part {
-                name: "description",
-                filename: None,
-                content_type: None,
-                data: description.as_bytes(),
-            });
+            parts.push(field("description", description));
         }
         parts.push(file);
         let (content_type, body) = net::multipart(&parts);
