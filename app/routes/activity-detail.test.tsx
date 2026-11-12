@@ -5,10 +5,11 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import { PUBLISH_UNDO_WINDOW_MS } from "@/hooks/use-publish-queue";
 import type { Activity, AppState } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import ActivityDetail from "./activity-detail";
+
+const PUBLISH_UNDO_WINDOW_MS = 5000;
 
 const {
   editActivity,
@@ -433,7 +434,7 @@ test("a publish waiting on the server, started elsewhere, shows PUBLISHING… an
   renderDetail(waiting);
 
   expect(screen.getByTestId("activity-status-line")).toHaveTextContent("PUBLISHING…");
-  expect(screen.getByRole("status")).toHaveTextContent(/Publishing to Strava in 5 seconds/);
+  expect(screen.getByRole("status")).toHaveTextContent(/Publishing to Strava shortly/);
   await userEvent.click(screen.getAllByRole("button", { name: "Undo publish" })[0]);
 
   expect(cancelPublish).toHaveBeenCalledWith([12345]);

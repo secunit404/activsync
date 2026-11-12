@@ -103,7 +103,8 @@ function preferencesEqual(a: PreferencesDraft, b: PreferencesDraft): boolean {
     a.displayTimezone === b.displayTimezone &&
     a.garminPollIntervalMinutes === b.garminPollIntervalMinutes &&
     a.stravaPollIntervalMinutes === b.stravaPollIntervalMinutes &&
-    a.lookbackDays === b.lookbackDays
+    a.lookbackDays === b.lookbackDays &&
+    a.undoDelaySeconds === b.undoDelaySeconds
   );
 }
 

@@ -1,13 +1,11 @@
-import re
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 
 from auth_helpers import owner_client
 
-from activsync import db, hevy_db, hevy_match_schedule, hevy_sync
+from activsync import config, db, hevy_db, hevy_match_schedule, hevy_sync
 from activsync.hevy_client import HevyAuthError
 from activsync.server import create_app
 
@@ -91,6 +89,27 @@ def test_choosing_a_match_schedules_it_and_applies_nothing_yet(env):
     assert scheduler.run_due() == 0
     assert apply.calls == []
     assert _state(conn) == "waiting"
+
+
+@pytest.mark.parametrize("delay", [0, 3, 5, 10])
+def test_the_configured_undo_delay_sets_the_window_and_deadline(env, delay):
+    conn, client, scheduler, clock, apply = env
+    config.save_config(conn, {**config.load_config(conn), "undo_delay_seconds": delay})
+
+    body = _choose(client).json()
+
+    assert body["undoWindowMs"] == delay * 1000
+    assert body["remainingMs"] == delay * 1000
+    assert body["deadline"] == hevy_match_schedule.deadline_iso(clock.value + delay)
+
+
+def test_a_zero_undo_delay_applies_on_the_next_pass(env):
+    conn, client, scheduler, clock, apply = env
+    config.save_config(conn, {**config.load_config(conn), "undo_delay_seconds": 0})
+    _choose(client)
+
+    assert scheduler.run_due() == 1
+    assert apply.calls == [("hevy-1", "merge")]
 
 
 def test_the_queue_reports_the_waiting_and_applying_phases(env):
@@ -475,12 +494,3 @@ def test_the_table_is_created_with_the_rest_of_the_schema(tmp_path):
 
     assert columns == {"hevy_id", "strategy", "deadline", "state", "message", "finished_at"}
 
-
-def test_the_frontend_undo_window_matches_the_server():
-    source = (
-        Path(__file__).resolve().parents[1] / "app" / "hooks" / "use-hevy-match-queue.tsx"
-    ).read_text()
-    match = re.search(r"export const HEVY_MATCH_UNDO_WINDOW_MS = (\d+);", source)
-
-    assert match is not None
-    assert int(match.group(1)) == round(hevy_match_schedule.UNDO_WINDOW_SECONDS * 1000)

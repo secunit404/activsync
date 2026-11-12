@@ -4,9 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import { PUBLISH_UNDO_WINDOW_MS } from "@/hooks/use-publish-queue";
 import type { Activity, ActivitiesPage, AppState } from "@/lib/api";
 import { ActivitiesView } from "./activities";
+
+const PUBLISH_UNDO_WINDOW_MS = 5000;
 
 const { schedulePublishActivities, getPublishBatch, excludeActivity, dismissCatchUpReport } =
   vi.hoisted(() => ({

@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
     "garmin_poll_interval_minutes": 20,
     "strava_poll_interval_minutes": 5,
     "lookback_days": 7,
+    "undo_delay_seconds": 5,
     "display_timezone": "Europe/Stockholm",
     "hevy_enabled": False,
     "hevy_match_mode": "automatic",

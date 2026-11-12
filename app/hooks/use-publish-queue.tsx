@@ -18,8 +18,6 @@ import {
   type PublishScheduled,
 } from "@/lib/api";
 
-/** Mirrors `publish_schedule.UNDO_WINDOW_SECONDS`; a pytest holds the two equal. */
-export const PUBLISH_UNDO_WINDOW_MS = 5000;
 const BATCH_POLL_MS = 1000;
 
 export type { PublishPhase };
@@ -28,11 +26,13 @@ type QueuedPublish = {
   key: number;
   activityIds: readonly number[];
   phase: PublishPhase;
+  undoWindowMs: number | null;
   cancel: () => void;
 };
 
 let queue: readonly QueuedPublish[] = [];
 let phases: ReadonlyMap<number, PublishPhase> = new Map();
+let windows: ReadonlyMap<number, number> = new Map();
 let nextKey = 0;
 const listeners = new Set<() => void>();
 
@@ -40,6 +40,13 @@ function setQueue(next: readonly QueuedPublish[]) {
   queue = next;
   phases = new Map(
     next.flatMap((entry) => entry.activityIds.map((id) => [id, entry.phase] as const)),
+  );
+  windows = new Map(
+    next.flatMap((entry) =>
+      entry.undoWindowMs === null
+        ? []
+        : entry.activityIds.map((id) => [id, entry.undoWindowMs as number] as const),
+    ),
   );
   for (const listener of listeners) {
     listener();
@@ -55,6 +62,10 @@ function subscribe(listener: () => void) {
 
 function getPhases() {
   return phases;
+}
+
+function getWindows() {
+  return windows;
 }
 
 function toastNotPublished() {
@@ -89,8 +100,8 @@ async function queuePublish(
   let sendTimer: number | undefined = undefined;
   let pollTimer: number | undefined;
 
-  const setPhase = (phase: PublishPhase) =>
-    setQueue(queue.map((entry) => (entry.key === key ? { ...entry, phase } : entry)));
+  const patchEntry = (patch: Partial<QueuedPublish>) =>
+    setQueue(queue.map((entry) => (entry.key === key ? { ...entry, ...patch } : entry)));
 
   // The refetch lands before the entry goes, so the rows never fall back to
   // the server state this page last read (still "waiting") in between.
@@ -142,7 +153,7 @@ async function queuePublish(
       description: undefined,
       action: undefined,
     });
-    setPhase("sending");
+    patchEntry({ phase: "sending" });
     void poll(batchId);
   };
 
@@ -167,7 +178,7 @@ async function queuePublish(
     }
   };
 
-  setQueue([...queue, { key, activityIds, phase: "waiting", cancel: () => void cancel() }]);
+  setQueue([...queue, { key, activityIds, phase: "waiting", undoWindowMs: null, cancel: () => void cancel() }]);
 
   try {
     scheduled = await schedule();
@@ -181,6 +192,11 @@ async function queuePublish(
   }
 
   const { batchId, remainingMs, undoWindowMs } = scheduled;
+  if (undoWindowMs === 0) {
+    startSending(batchId);
+    return;
+  }
+  patchEntry({ undoWindowMs });
   const deadline = Date.now() + remainingMs;
   sendTimer = window.setTimeout(() => startSending(batchId), remainingMs);
   toast(publishingLabel(activityIds.length), {
@@ -224,6 +240,7 @@ function publishingLabel(count: number) {
 export function usePublishQueue() {
   const queryClient = useQueryClient();
   const queued = useSyncExternalStore(subscribe, getPhases, getPhases);
+  const undoWindows = useSyncExternalStore(subscribe, getWindows, getWindows);
   const publishOne = useCallback(
     (activityId: number) =>
       void queuePublish(queryClient, [activityId], () => schedulePublishActivity(activityId)),
@@ -245,5 +262,5 @@ export function usePublishQueue() {
     },
     [queryClient],
   );
-  return { queued, publishOne, publishMany, undo };
+  return { queued, undoWindows, publishOne, publishMany, undo };
 }

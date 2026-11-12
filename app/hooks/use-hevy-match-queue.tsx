@@ -15,8 +15,6 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { ERROR_TOAST_DURATION_MS } from "@/lib/toast-duration";
 
-/** Mirrors `hevy_match_schedule.UNDO_WINDOW_SECONDS`; a pytest holds the two equal. */
-export const HEVY_MATCH_UNDO_WINDOW_MS = 5000;
 const STATUS_POLL_MS = 1000;
 
 export type { HevyMatchPhase };
@@ -197,6 +195,10 @@ async function queueMatch(
   }
 
   const { remainingMs, undoWindowMs } = scheduled;
+  if (undoWindowMs === 0) {
+    startApplying();
+    return;
+  }
   const deadline = Date.now() + remainingMs;
   applyTimer = window.setTimeout(startApplying, remainingMs);
   toast(label, {

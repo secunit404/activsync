@@ -176,6 +176,7 @@ def test_preferences_and_categories_save_through_json_api(tmp_path, monkeypatch)
             "garminPollIntervalMinutes": 30,
             "stravaPollIntervalMinutes": 8,
             "lookbackDays": 14,
+            "undoDelaySeconds": 10,
         },
     )
     categories = client.put(
@@ -190,8 +191,37 @@ def test_preferences_and_categories_save_through_json_api(tmp_path, monkeypatch)
     cfg = config.load_config(conn)
     assert cfg["display_timezone"] == "Europe/Oslo"
     assert cfg["lookback_days"] == 14
+    assert cfg["undo_delay_seconds"] == 10
+    assert state["preferences"]["undoDelaySeconds"] == 10
     assert cfg["held_activity_types"] == ["cycling"]
     assert timezone_updates == ["Europe/Oslo"]
+
+
+def test_undo_delay_defaults_to_five_and_rejects_other_values(tmp_path, monkeypatch):
+    conn, client = _client(tmp_path, monkeypatch)
+    _complete_setup(conn)
+    assert client.get("/api/v1/settings").json()["preferences"]["undoDelaySeconds"] == 5
+    payload = {
+        "displayTimezone": "Europe/Oslo",
+        "garminPollIntervalMinutes": 30,
+        "stravaPollIntervalMinutes": 8,
+        "lookbackDays": 14,
+    }
+
+    for bad in (1, -1, 60, "5"):
+        response = client.put(
+            "/api/v1/settings/preferences", json={**payload, "undoDelaySeconds": bad}
+        )
+        assert response.status_code == 422
+    assert client.put("/api/v1/settings/preferences", json=payload).status_code == 422
+    assert client.get("/api/v1/settings").json()["preferences"]["undoDelaySeconds"] == 5
+
+    for good in (0, 3, 5, 10):
+        response = client.put(
+            "/api/v1/settings/preferences", json={**payload, "undoDelaySeconds": good}
+        )
+        assert response.status_code == 200
+        assert config.load_config(conn)["undo_delay_seconds"] == good
 
 
 def test_dev_hevy_matching_defaults_to_review_but_can_be_saved_as_automatic(

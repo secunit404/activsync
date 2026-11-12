@@ -6,7 +6,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { Toaster } from "@/components/ui/sonner";
 import { ApiError, type PublishBatch, type PublishScheduled } from "@/lib/api";
-import { PUBLISH_UNDO_WINDOW_MS, usePublishQueue } from "./use-publish-queue";
+import { usePublishQueue } from "./use-publish-queue";
+
+const PUBLISH_UNDO_WINDOW_MS = 5000;
 
 const { schedulePublishActivity, schedulePublishActivities, cancelPublish, getPublishBatch } =
   vi.hoisted(() => ({
@@ -87,6 +89,34 @@ test("a bulk publish is scheduled on the server at once and reports the outcome 
   expect(getPublishBatch).toHaveBeenCalledWith("many");
   expect(await screen.findByText("Published 2 activities to Strava")).toBeInTheDocument();
   expect(result.current.queued.size).toBe(0);
+});
+
+test("a zero undo window skips the Undo toast and goes straight to sending", async () => {
+  schedulePublishActivity.mockResolvedValue({
+    ...scheduled("one"),
+    remainingMs: 0,
+    undoWindowMs: 0,
+  });
+  const { result } = renderQueue();
+
+  act(() => result.current.publishOne(7));
+  await act(() => vi.advanceTimersByTimeAsync(0));
+
+  expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  expect(getPublishBatch).toHaveBeenCalledWith("one");
+  expect(await screen.findByText("Published 2 activities to Strava")).toBeInTheDocument();
+  expect(result.current.queued.size).toBe(0);
+});
+
+test("the queue exposes the undo window the server applied", async () => {
+  schedulePublishActivity.mockResolvedValue({ ...scheduled("one"), undoWindowMs: 10000 });
+  const { result } = renderQueue();
+
+  act(() => result.current.publishOne(7));
+  await screen.findByRole("button", { name: "Undo" });
+
+  expect(result.current.undoWindows.get(7)).toBe(10000);
+  expect(screen.getByText("Sends in 10 seconds unless you undo.")).toBeInTheDocument();
 });
 
 test("a single publish schedules through the single-activity endpoint", async () => {

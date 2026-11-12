@@ -50,6 +50,10 @@ def test_legacy_default_description_moves_title_to_its_own_template(conn):
     assert cfg["hevy_description_template"] == DEFAULT_TEMPLATE
 
 
+def test_default_undo_delay_is_five_seconds(conn):
+    assert config.load_config(conn)["undo_delay_seconds"] == 5
+
+
 def test_default_lookback_days_is_seven(tmp_path):
     from activsync import config, db
     conn = db.connect(str(tmp_path / "test.db"))

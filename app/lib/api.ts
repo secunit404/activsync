@@ -199,6 +199,7 @@ export type SettingsState = {
     garminPollIntervalMinutes: number;
     stravaPollIntervalMinutes: number;
     lookbackDays: number;
+    undoDelaySeconds: 0 | 3 | 5 | 10;
   };
   timezones: string[];
   activityTypes: Array<{

@@ -91,6 +91,7 @@ const connectedState: SettingsState = {
     garminPollIntervalMinutes: 20,
     stravaPollIntervalMinutes: 5,
     lookbackDays: 7,
+    undoDelaySeconds: 5,
   },
   timezones: ["Europe/Stockholm", "Europe/Oslo"],
   activityTypes,
@@ -253,6 +254,25 @@ test("discard reverts a pending preference edit and re-disables Save", async () 
 
   expect(timezone).toHaveValue("Europe/Stockholm");
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+});
+
+test("the undo delay offers Off, 3, 5 and 10 seconds and edits mark the form dirty", async () => {
+  renderSettings();
+  const delay = screen.getByLabelText("Undo delay");
+  expect(delay).toHaveValue("5");
+  expect(within(delay).getAllByRole("option").map((option) => option.textContent)).toEqual([
+    "Off",
+    "3 seconds",
+    "5 seconds",
+    "10 seconds",
+  ]);
+
+  await userEvent.selectOptions(delay, "Off");
+
+  expect(delay).toHaveValue("0");
+  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  await userEvent.click(screen.getByRole("button", { name: "Discard" }));
+  expect(delay).toHaveValue("5");
 });
 
 test("discard also clears the auto-sync search and any toggles it drove", async () => {

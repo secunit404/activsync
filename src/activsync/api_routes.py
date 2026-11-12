@@ -543,7 +543,7 @@ def create_router(
             batch_id=batch.batch_id,
             publish_scheduled_at=publish_schedule.deadline_iso(batch.deadline),
             remaining_ms=max(0, round(remaining * 1000)),
-            undo_window_ms=round(publish_scheduler.window_seconds * 1000),
+            undo_window_ms=round(batch.window_seconds * 1000),
         )
 
     @router.post(

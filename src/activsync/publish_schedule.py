@@ -22,12 +22,11 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from activsync import db, events, sync
+from activsync import config, db, events, sync
 from activsync.strava_client import StravaAuthError
 
 logger = logging.getLogger("activsync.publish")
 
-UNDO_WINDOW_SECONDS = 5.0
 PUBLISHABLE_STATUSES = ("held", "pending", "missing")
 
 WAITING = "waiting"
@@ -51,6 +50,7 @@ class AlreadyScheduled(Exception):
 class Scheduled:
     batch_id: str
     deadline: float
+    window_seconds: float
 
 
 def _placeholders(values: list) -> str:
@@ -63,11 +63,15 @@ def schedule(
     now: float,
     *,
     kind: str,
-    window_seconds: float = UNDO_WINDOW_SECONDS,
+    window_seconds: float = config.DEFAULT_CONFIG["undo_delay_seconds"],
 ) -> Scheduled:
     rows = list(activities)
     ids = [row["garmin_activity_id"] for row in rows]
-    batch = Scheduled(batch_id=secrets.token_urlsafe(9), deadline=now + window_seconds)
+    batch = Scheduled(
+        batch_id=secrets.token_urlsafe(9),
+        deadline=now + window_seconds,
+        window_seconds=window_seconds,
+    )
     with db.transaction(conn):
         active = conn.execute(
             f"SELECT 1 FROM publish_schedule WHERE garmin_activity_id IN ({_placeholders(ids)}) "
@@ -210,19 +214,25 @@ class PublishScheduler:
         build_garmin_client: Callable[[sqlite3.Connection], object],
         build_strava_client: Callable[[sqlite3.Connection], object],
         clock: Callable[[], float] = time.time,
-        window_seconds: float = UNDO_WINDOW_SECONDS,
+        window_seconds: float | None = None,
     ):
         self._conn = conn
         self._build_garmin_client = build_garmin_client
         self._build_strava_client = build_strava_client
         self._clock = clock
-        self.window_seconds = window_seconds
+        self._window_seconds = window_seconds
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
     def now(self) -> float:
         return self._clock()
+
+    @property
+    def window_seconds(self) -> float:
+        if self._window_seconds is not None:
+            return self._window_seconds
+        return float(config.load_config(self._conn)["undo_delay_seconds"])
 
     def schedule(self, activities: Iterable[dict], *, kind: str) -> Scheduled:
         batch = schedule(

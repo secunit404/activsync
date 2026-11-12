@@ -240,6 +240,7 @@ export default function ActivityDetail() {
             connectionsBroken={connectionsBroken}
             busy={busy}
             publishPhase={publishPhase}
+            undoWindowMs={publishQueue.undoWindows.get(activity.garminActivityId)}
             isPublishing={publishPhase === "sending"}
             isExcluding={isPending("exclude")}
             isRestoring={isPending("restore")}

@@ -35,7 +35,7 @@ export function PreferencesSettings({
       description="Control polling, history, and display timezone."
     >
       <div className="grid gap-6">
-        <FieldGroup className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <FieldGroup className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           <NumberField
             id="garmin-poll"
             label="Garmin sync interval (min)"
@@ -57,6 +57,29 @@ export function PreferencesSettings({
             value={draft.lookbackDays}
             onChange={(value) => update({ lookbackDays: value })}
           />
+          <Field>
+            <div className="flex items-center gap-0.5">
+              <FieldLabel htmlFor="undo-delay">Undo delay</FieldLabel>
+              <Hint label="Undo delay">
+                How long you have to undo a publish or a Hevy match before it is sent.
+              </Hint>
+            </div>
+            <NativeSelect
+              id="undo-delay"
+              className="w-full"
+              value={draft.undoDelaySeconds}
+              onChange={(event) =>
+                update({
+                  undoDelaySeconds: Number(event.target.value) as PreferencesDraft["undoDelaySeconds"],
+                })
+              }
+            >
+              <NativeSelectOption value={0}>Off</NativeSelectOption>
+              <NativeSelectOption value={3}>3 seconds</NativeSelectOption>
+              <NativeSelectOption value={5}>5 seconds</NativeSelectOption>
+              <NativeSelectOption value={10}>10 seconds</NativeSelectOption>
+            </NativeSelect>
+          </Field>
           <Field>
             <FieldLabel htmlFor="display-timezone">Display timezone</FieldLabel>
             <NativeSelect

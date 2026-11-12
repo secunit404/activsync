@@ -1,15 +1,13 @@
-import re
 import threading
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from auth_helpers import owner_client
 
-from activsync import db, hevy_db, publish_schedule, sync
+from activsync import config, db, hevy_db, publish_schedule, sync
 from activsync.server import create_app
 
 NOW = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
@@ -85,6 +83,32 @@ def test_scheduling_returns_the_deadline_and_sends_nothing_yet(env):
     assert scheduler.run_due() == 0
     strava.publish.assert_not_called()
     assert db.get_activity(conn, 1)["publish_status"] == "pending"
+
+
+@pytest.mark.parametrize("delay", [0, 3, 5, 10])
+def test_the_configured_undo_delay_sets_the_window_and_deadline(env, delay):
+    conn, client, scheduler, clock, strava = env
+    _insert(conn, 1)
+    cfg = config.load_config(conn)
+    config.save_config(conn, {**cfg, "undo_delay_seconds": delay})
+
+    body = client.post("/api/v1/activities/1/publish/schedule").json()
+
+    assert body["undoWindowMs"] == delay * 1000
+    assert body["remainingMs"] == delay * 1000
+    assert body["publishScheduledAt"] == publish_schedule.deadline_iso(clock.value + delay)
+
+
+def test_a_zero_undo_delay_sends_on_the_next_pass(env):
+    conn, client, scheduler, clock, strava = env
+    _insert(conn, 1)
+    config.save_config(conn, {**config.load_config(conn), "undo_delay_seconds": 0})
+
+    client.post("/api/v1/activities/1/publish/schedule")
+
+    assert scheduler.run_due() == 1
+    strava.publish.assert_called_once()
+    assert db.get_activity(conn, 1)["publish_status"] == "published"
 
 
 def test_an_unscheduled_activity_reports_no_publish_state(env):
@@ -418,12 +442,3 @@ def test_finished_outcomes_are_pruned_after_an_hour(tmp_path):
     publish_schedule.prune(conn, 10.0 + 3601)
     assert publish_schedule.get(conn, 1) is None
 
-
-def test_the_frontend_undo_window_matches_the_server():
-    source = (
-        Path(__file__).resolve().parents[1] / "app" / "hooks" / "use-publish-queue.tsx"
-    ).read_text()
-    match = re.search(r"export const PUBLISH_UNDO_WINDOW_MS = (\d+);", source)
-
-    assert match is not None
-    assert int(match.group(1)) == round(publish_schedule.UNDO_WINDOW_SECONDS * 1000)
