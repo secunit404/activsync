@@ -1,37 +1,19 @@
+mod support;
+
 use activsync::auth_guard::AuthConfig;
 use activsync::db::{self, Db};
 use activsync::{AppState, build_app, schedule, seed};
 use axum::Router;
-use axum::body::Body;
-use axum::http::{Method, Request, StatusCode, header};
+use axum::http::{Method, StatusCode};
 use chrono::Utc;
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use tower::ServiceExt;
+use support::{connect_services, send};
 
 fn app(onboarded: bool) -> (AppState, Router) {
     let db = Db::open_in_memory().unwrap();
     seed::seed(&mut db.lock(), Utc::now(), onboarded).unwrap();
     if onboarded {
-        for (key, value) in [
-            (
-                "garmin_credentials",
-                json!({"email": "dev@example.com", "password": "dev-password"}),
-            ),
-            ("garmin_credentials_verified", json!(true)),
-            ("garmin_last_sync_at", json!(db::iso(Utc::now()))),
-            ("garmin_last_sync_ok", json!(true)),
-            (
-                "strava_credentials",
-                json!({"client_id": "12345", "client_secret": "dev-secret"}),
-            ),
-            (
-                "strava_tokens",
-                json!({"refresh_token": "dev-refresh-token"}),
-            ),
-        ] {
-            db::set_config_value(&db.lock(), key, &value).unwrap();
-        }
+        connect_services(&db.lock());
     }
     let state = AppState::new(
         db,
@@ -42,44 +24,6 @@ fn app(onboarded: bool) -> (AppState, Router) {
     );
     let app = build_app(state.clone(), None);
     (state, app)
-}
-
-async fn send(
-    app: &Router,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value, Option<String>) {
-    let mut request = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::HOST, "127.0.0.1:8382")
-        .header("x-activsync-request", "1")
-        .header("sec-fetch-site", "same-origin");
-    let body = match body {
-        Some(value) => {
-            request = request.header(header::CONTENT_TYPE, "application/json");
-            Body::from(value.to_string())
-        }
-        None => Body::empty(),
-    };
-    let response = app
-        .clone()
-        .oneshot(request.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let location = response
-        .headers()
-        .get(header::LOCATION)
-        .map(|v| v.to_str().unwrap().to_string());
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let json = if bytes.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&bytes).unwrap()
-    };
-    (status, json, location)
 }
 
 async fn ok(app: &Router, method: Method, uri: &str, body: Option<Value>) -> Value {

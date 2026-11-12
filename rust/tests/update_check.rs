@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use activsync::auth_guard::AuthConfig;
@@ -5,12 +7,10 @@ use activsync::db::Db;
 use activsync::net::{Http, HttpError};
 use activsync::update_check::{self, UpdateCache, UpdateStatus, is_newer};
 use activsync::{AppState, build_app, schedule};
-use axum::body::Body;
-use axum::http::{Request, header};
-use http_body_util::BodyExt;
+use axum::http::Method;
 use openidconnect::HttpRequest;
 use serde_json::{Value, json};
-use tower::ServiceExt;
+use support::call;
 
 fn github(answer: Arc<Mutex<(u16, Value)>>) -> Http {
     Arc::new(move |request: HttpRequest| {
@@ -65,17 +65,7 @@ async fn the_app_state_reports_the_last_answer() {
     );
     let http = github(Arc::new(Mutex::new((200, json!({"tag_name": "v99.0.0"})))));
     let read = |state: AppState| async move {
-        let request = Request::builder()
-            .uri("/api/v1/app")
-            .header(header::HOST, "127.0.0.1:8381")
-            .header("x-activsync-request", "1")
-            .header("sec-fetch-site", "same-origin")
-            .body(Body::empty())
-            .unwrap();
-        let response = build_app(state, None).oneshot(request).await.unwrap();
-        let body: Value =
-            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
-                .unwrap();
+        let (_, body) = call(&build_app(state, None), Method::GET, "/api/v1/app", None).await;
         body["update"].clone()
     };
     assert_eq!(

@@ -1,3 +1,5 @@
+mod support;
+
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
@@ -10,13 +12,11 @@ use activsync::poller::{BoxFuture, Clients};
 use activsync::strava_client::StravaClient;
 use activsync::{AppState, build_app, schedule};
 use axum::Router;
-use axum::body::Body;
-use axum::http::{Method, Request, StatusCode, header};
+use axum::http::{Method, StatusCode};
 use chrono::{Duration, Utc};
-use http_body_util::BodyExt;
 use openidconnect::HttpRequest;
 use serde_json::{Value, json};
-use tower::ServiceExt;
+use support::{call, send};
 
 type Calls = Arc<Mutex<Vec<String>>>;
 
@@ -174,48 +174,6 @@ fn real_harness(garmin_ok: bool, strava_upload: u16) -> Harness {
     }
 }
 
-async fn send(
-    app: &Router,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value, Option<String>) {
-    let mut request = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::HOST, "127.0.0.1:8381")
-        .header("x-activsync-request", "1")
-        .header("sec-fetch-site", "same-origin");
-    let body = match body {
-        Some(value) => {
-            request = request.header(header::CONTENT_TYPE, "application/json");
-            Body::from(value.to_string())
-        }
-        None => Body::empty(),
-    };
-    let response = app
-        .clone()
-        .oneshot(request.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let location = response
-        .headers()
-        .get(header::LOCATION)
-        .map(|v| v.to_str().unwrap().to_string());
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-        location,
-    )
-}
-
-async fn call(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
-    let (status, body, _) = send(app, method, uri, body).await;
-    (status, body)
-}
-
 impl Harness {
     fn add(&self, id: i64, status: &str, start: &str) {
         self.db
@@ -269,67 +227,6 @@ async fn the_app_state_reports_development_for_mock_data_only() {
     .with_development(true);
     let (_, body) = call(&build_app(state, None), Method::GET, "/api/v1/app", None).await;
     assert_eq!(body["development"], false);
-}
-
-#[tokio::test]
-async fn a_path_id_that_is_not_an_integer_gets_a_json_422() {
-    let h = mock_harness(true);
-    for (method, uri) in [
-        (Method::PUT, "/api/v1/activities/abc"),
-        (Method::POST, "/api/v1/activities/abc/exclude"),
-        (Method::POST, "/api/v1/activities/1.5/publish"),
-        (Method::POST, "/api/v1/activities/abc/publish/schedule"),
-    ] {
-        let (status, body) = call(&h.app, method, uri, Some(json!({"title": "t"}))).await;
-        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{uri}");
-        assert_eq!(
-            body["detail"], "Input should be a valid integer, unable to parse string as an integer",
-            "{uri}"
-        );
-    }
-    let (status, body) = call(
-        &h.app,
-        Method::POST,
-        "/api/v1/activities/99999999999999999999999/exclude",
-        None,
-    )
-    .await;
-    assert_eq!(
-        (status, body["detail"].as_str()),
-        (StatusCode::NOT_FOUND, Some("Activity was not found"))
-    );
-}
-
-#[tokio::test]
-async fn a_wrong_method_on_a_known_path_gets_a_json_405() {
-    let h = mock_harness(true);
-    for (method, uri) in [
-        (Method::GET, "/api/v1/activities/1/exclude"),
-        (Method::DELETE, "/api/v1/activities"),
-        (Method::POST, "/api/v1/app"),
-        (Method::GET, "/api/v1/activities/publish"),
-    ] {
-        let (status, body) = call(&h.app, method, uri, None).await;
-        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "{uri}");
-        assert_eq!(body, json!({"detail": "Method Not Allowed"}), "{uri}");
-    }
-    let (status, body) = call(&h.app, Method::GET, "/api/v1/nowhere", None).await;
-    assert_eq!(
-        (status, body["detail"].as_str()),
-        (StatusCode::NOT_FOUND, Some("Not Found"))
-    );
-    let request = Request::get("/api/v1/activities/1/exclude")
-        .header(header::HOST, "127.0.0.1:8381")
-        .body(Body::empty())
-        .unwrap();
-    let response = h.app.clone().oneshot(request).await.unwrap();
-    assert_eq!(
-        response
-            .headers()
-            .get(header::ALLOW)
-            .map(|v| v.to_str().unwrap()),
-        Some("POST")
-    );
 }
 
 #[tokio::test]

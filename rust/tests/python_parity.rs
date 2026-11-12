@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use activsync::db::{self, Db};
-use activsync::seed;
+use activsync::db::{self, Db, NewActivity};
+use activsync::{routes, schedule, seed, view};
 use chrono::Utc;
 use serde_json::{Value, json};
 
@@ -155,4 +155,68 @@ fn reseeding_wipes_the_merge_backups_and_seen_events() {
             .unwrap();
         assert_eq!(rows, 0, "{table}");
     }
+}
+
+#[test]
+fn coarse_duration_and_content_hash_match_python() {
+    assert_eq!(view::fmt_duration_coarse(27720.9), "7h 42m");
+    assert_eq!(view::fmt_duration_coarse(59.0), "0m");
+    assert_eq!(
+        routes::content_hash(
+            "Morning run",
+            "Easy loop",
+            "running",
+            r#"{"duration": 2520}"#
+        ),
+        "2789c07ea16f8a14772618696976c4b9c96dce2ac55906a97dadd8f128f124b1"
+    );
+}
+
+#[test]
+fn seed_refuses_a_database_with_real_activities() {
+    let db = Db::open_in_memory().unwrap();
+    db::insert_activity(
+        &db.lock(),
+        &NewActivity {
+            garmin_activity_id: 123,
+            activity_type: "running",
+            title: "T",
+            description: "",
+            start_time: "2026-07-09 09:00:00",
+            content_hash: "h",
+            publish_status: "pending",
+            garmin_data: "{}",
+            hold_reason: None,
+        },
+        Utc::now(),
+    )
+    .unwrap();
+    assert!(!seed::seed(&mut db.lock(), Utc::now(), true).unwrap());
+    let rows = db::list_activities(&db.lock(), false).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].garmin_activity_id, 123);
+}
+
+#[test]
+fn reseeding_the_same_version_keeps_edits() {
+    let db = Db::open_in_memory().unwrap();
+    seed::seed(&mut db.lock(), Utc::now(), true).unwrap();
+    db::update_activity_metadata(&db.lock(), 900001, "Kept", "", "dev-900001").unwrap();
+    seed::seed(&mut db.lock(), Utc::now(), true).unwrap();
+    assert_eq!(
+        db::get_activity(&db.lock(), 900001).unwrap().unwrap().title,
+        "Kept"
+    );
+}
+
+#[test]
+fn deadline_iso_matches_python_isoformat() {
+    assert_eq!(
+        schedule::deadline_iso(1_800_000_005.0),
+        "2027-01-15T08:00:05+00:00"
+    );
+    assert_eq!(
+        schedule::deadline_iso(1_800_000_005.25),
+        "2027-01-15T08:00:05.250000+00:00"
+    );
 }

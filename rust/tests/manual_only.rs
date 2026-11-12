@@ -1,11 +1,11 @@
+mod support;
+
 use activsync::auth_guard::AuthConfig;
 use activsync::db::Db;
 use activsync::{AppState, build_app, schedule};
-use axum::body::Body;
-use axum::http::{Request, header};
-use http_body_util::BodyExt;
+use axum::http::Method;
 use serde_json::Value;
-use tower::ServiceExt;
+use support::call;
 
 async fn match_mode(development: bool) -> Value {
     let state = AppState::new(
@@ -16,16 +16,13 @@ async fn match_mode(development: bool) -> Value {
         AuthConfig::sign_in_off(),
     )
     .with_development(development);
-    let request = Request::builder()
-        .uri("/api/v1/settings")
-        .header(header::HOST, "127.0.0.1:8381")
-        .header("x-activsync-request", "1")
-        .header("sec-fetch-site", "same-origin")
-        .body(Body::empty())
-        .unwrap();
-    let response = build_app(state, None).oneshot(request).await.unwrap();
-    let body: Value =
-        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let (_, body) = call(
+        &build_app(state, None),
+        Method::GET,
+        "/api/v1/settings",
+        None,
+    )
+    .await;
     assert_eq!(
         body["development"], false,
         "only mock data counts as development on the settings page"

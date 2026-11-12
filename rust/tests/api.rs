@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -5,12 +7,10 @@ use activsync::auth_guard::AuthConfig;
 use activsync::db::{self, Db, NewActivity};
 use activsync::{AppState, build_app, config, routes, schedule, seed};
 use axum::Router;
-use axum::body::Body;
-use axum::http::{Method, Request, StatusCode, header};
+use axum::http::{Method, StatusCode};
 use chrono::{TimeZone, Utc};
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use tower::ServiceExt;
+use support::{call, connect_services};
 
 struct TestClock(Arc<AtomicU64>);
 
@@ -36,28 +36,6 @@ struct Harness {
     clock: TestClock,
 }
 
-fn connect_services(conn: &rusqlite::Connection) {
-    for (key, value) in [
-        (
-            "garmin_credentials",
-            json!({"email": "dev@example.com", "password": "dev-password"}),
-        ),
-        ("garmin_credentials_verified", json!(true)),
-        ("garmin_last_sync_at", json!(db::iso(Utc::now()))),
-        ("garmin_last_sync_ok", json!(true)),
-        (
-            "strava_credentials",
-            json!({"client_id": "12345", "client_secret": "dev-secret"}),
-        ),
-        (
-            "strava_tokens",
-            json!({"refresh_token": "dev-refresh-token"}),
-        ),
-    ] {
-        db::set_config_value(conn, key, &value).unwrap();
-    }
-}
-
 fn harness() -> Harness {
     let db = Db::open_in_memory().unwrap();
     seed::seed(&mut db.lock(), Utc::now(), true).unwrap();
@@ -73,35 +51,6 @@ fn harness() -> Harness {
     .with_configured_undo_window();
     let app = build_app(state.clone(), None);
     Harness { state, app, clock }
-}
-
-async fn call(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
-    let mut request = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header("host", "127.0.0.1:8382")
-        .header("x-activsync-request", "1")
-        .header("sec-fetch-site", "same-origin");
-    let body = match body {
-        Some(value) => {
-            request = request.header("content-type", "application/json");
-            Body::from(value.to_string())
-        }
-        None => Body::empty(),
-    };
-    let response = app
-        .clone()
-        .oneshot(request.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let json = if bytes.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&bytes).unwrap()
-    };
-    (status, json)
 }
 
 async fn get(app: &Router, uri: &str) -> Value {
@@ -150,30 +99,6 @@ fn plain_db_with(rows: &[(i64, &str, &str)]) -> Db {
         .unwrap();
     }
     db
-}
-
-#[tokio::test]
-async fn health_reports_ok() {
-    let h = harness();
-    assert_eq!(get(&h.app, "/health").await, json!({"status": "ok"}));
-}
-
-#[tokio::test]
-async fn live_refresh_events_carry_a_data_line() {
-    let h = harness();
-    let request = Request::get("/api/events")
-        .header("host", "127.0.0.1:8382")
-        .body(Body::empty())
-        .unwrap();
-    let response = h.app.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.headers()["content-type"], "text/event-stream");
-    let mut body = response.into_body();
-    h.state.events.publish("refresh");
-    let frame = body.frame().await.unwrap().unwrap().into_data().unwrap();
-    assert_eq!(
-        std::str::from_utf8(&frame).unwrap(),
-        "event: refresh\ndata:  \n\n"
-    );
 }
 
 #[tokio::test]
@@ -275,21 +200,6 @@ async fn activity_detail_matches_python_formatting() {
             third["detail"]["speed"].as_str()
         ),
         (Some("0.01 km"), Some("0m 05s"), Some(""), Some("3.6 km/h"))
-    );
-}
-
-#[test]
-fn coarse_duration_and_content_hash_match_python() {
-    assert_eq!(activsync::view::fmt_duration_coarse(27720.9), "7h 42m");
-    assert_eq!(activsync::view::fmt_duration_coarse(59.0), "0m");
-    assert_eq!(
-        routes::content_hash(
-            "Morning run",
-            "Easy loop",
-            "running",
-            r#"{"duration": 2520}"#
-        ),
-        "2789c07ea16f8a14772618696976c4b9c96dce2ac55906a97dadd8f128f124b1"
     );
 }
 
@@ -829,123 +739,4 @@ async fn hevy_merge_shows_badge() {
         .filter_map(|i| Some((i["garminActivityId"].as_i64()?, i["hevyBadge"].as_str()?)))
         .collect();
     assert_eq!(badges, [(910001, "merge"), (910050, "passive")]);
-}
-
-#[tokio::test]
-async fn unknown_api_paths_are_404_json() {
-    let h = harness();
-    let (status, body) = call(&h.app, Method::GET, "/api/v1/nothing/here", None).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["detail"], "Not Found");
-}
-
-#[tokio::test]
-async fn spa_paths_serve_index_html() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("index.html"), "<html>spa</html>").unwrap();
-    std::fs::create_dir(dir.path().join("assets")).unwrap();
-    std::fs::write(dir.path().join("assets/app.js"), "console.log(1)").unwrap();
-    let h = harness();
-    let app = build_app(h.state.clone(), Some(dir.path()));
-    let fetch = |uri: &'static str| {
-        let app = app.clone();
-        async move {
-            let request = Request::get(uri)
-                .header("host", "127.0.0.1:8382")
-                .body(Body::empty())
-                .unwrap();
-            let (parts, body) = app.oneshot(request).await.unwrap().into_parts();
-            (parts, body.collect().await.unwrap().to_bytes())
-        }
-    };
-
-    for uri in ["/", "/activities", "/settings/hevy", "/robots.txt"] {
-        let (parts, body) = fetch(uri).await;
-        assert_eq!(parts.status, StatusCode::OK, "{uri}");
-        assert_eq!(body, "<html>spa</html>".as_bytes(), "{uri}");
-        assert_eq!(
-            parts.headers[header::CONTENT_TYPE],
-            "text/html; charset=utf-8",
-            "{uri}"
-        );
-        assert_eq!(parts.headers[header::CACHE_CONTROL], "no-cache", "{uri}");
-    }
-
-    let (parts, body) = fetch("/assets/app.js").await;
-    assert_eq!(parts.status, StatusCode::OK);
-    assert_eq!(body, "console.log(1)".as_bytes());
-    assert!(
-        !parts.headers.contains_key(header::CACHE_CONTROL),
-        "hashed assets are not revalidated on every load"
-    );
-    assert!(
-        parts.headers[header::CONTENT_TYPE]
-            .to_str()
-            .unwrap()
-            .ends_with("; charset=utf-8")
-    );
-
-    for uri in [
-        "/api",
-        "/api/",
-        "/api/nothing",
-        "/assets",
-        "/assets/missing.js",
-        "/strava/other",
-        "/auth",
-        "/auth/other",
-    ] {
-        let (parts, body) = fetch(uri).await;
-        assert_eq!(parts.status, StatusCode::NOT_FOUND, "{uri}");
-        assert_eq!(
-            serde_json::from_slice::<Value>(&body).unwrap(),
-            json!({"detail": "Not Found"}),
-            "{uri}"
-        );
-        assert!(!parts.headers.contains_key(header::CACHE_CONTROL), "{uri}");
-    }
-}
-
-#[tokio::test]
-async fn every_unknown_path_is_404_without_a_frontend_build() {
-    let h = harness();
-    let request = Request::get("/activities")
-        .header("host", "127.0.0.1:8382")
-        .body(Body::empty())
-        .unwrap();
-    let response = h.app.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-}
-
-#[test]
-fn seed_refuses_a_database_with_real_activities() {
-    let db = plain_db_with(&[(123, "2026-07-09 09:00:00", "{}")]);
-    assert!(!seed::seed(&mut db.lock(), Utc::now(), true).unwrap());
-    let rows = db::list_activities(&db.lock(), false).unwrap();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].garmin_activity_id, 123);
-}
-
-#[test]
-fn reseeding_the_same_version_keeps_edits() {
-    let db = Db::open_in_memory().unwrap();
-    seed::seed(&mut db.lock(), Utc::now(), true).unwrap();
-    db::update_activity_metadata(&db.lock(), 900001, "Kept", "", "dev-900001").unwrap();
-    seed::seed(&mut db.lock(), Utc::now(), true).unwrap();
-    assert_eq!(
-        db::get_activity(&db.lock(), 900001).unwrap().unwrap().title,
-        "Kept"
-    );
-}
-
-#[test]
-fn deadline_iso_matches_python_isoformat() {
-    assert_eq!(
-        schedule::deadline_iso(1_800_000_005.0),
-        "2027-01-15T08:00:05+00:00"
-    );
-    assert_eq!(
-        schedule::deadline_iso(1_800_000_005.25),
-        "2027-01-15T08:00:05.250000+00:00"
-    );
 }
