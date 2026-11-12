@@ -19,9 +19,26 @@ fn requests_variables_are_read_in_the_order_requests_reads_them() {
     let (first, second) = (first.to_str().unwrap(), second.to_str().unwrap());
     let vars = ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"];
 
-    assert_eq!(extra_roots(&vars, env(&[("REQUESTS_CA_BUNDLE", first), ("CURL_CA_BUNDLE", second)])).len(), 2);
-    assert_eq!(extra_roots(&vars, env(&[("CURL_CA_BUNDLE", second)])).len(), 1);
-    assert_eq!(extra_roots(&vars, env(&[("REQUESTS_CA_BUNDLE", ""), ("CURL_CA_BUNDLE", second)])).len(), 1);
+    assert_eq!(
+        extra_roots(
+            &vars,
+            env(&[("REQUESTS_CA_BUNDLE", first), ("CURL_CA_BUNDLE", second)])
+        )
+        .len(),
+        2
+    );
+    assert_eq!(
+        extra_roots(&vars, env(&[("CURL_CA_BUNDLE", second)])).len(),
+        1
+    );
+    assert_eq!(
+        extra_roots(
+            &vars,
+            env(&[("REQUESTS_CA_BUNDLE", ""), ("CURL_CA_BUNDLE", second)])
+        )
+        .len(),
+        1
+    );
     assert!(extra_roots(&vars, env(&[])).is_empty());
 }
 
@@ -35,7 +52,14 @@ fn ssl_cert_file_wins_over_ssl_cert_dir_and_a_directory_is_read_whole() {
     let (file, dir) = (file.to_str().unwrap(), dir.path().to_str().unwrap());
     let vars = ["SSL_CERT_FILE", "SSL_CERT_DIR"];
 
-    assert_eq!(extra_roots(&vars, env(&[("SSL_CERT_FILE", file), ("SSL_CERT_DIR", dir)])).len(), 1);
+    assert_eq!(
+        extra_roots(
+            &vars,
+            env(&[("SSL_CERT_FILE", file), ("SSL_CERT_DIR", dir)])
+        )
+        .len(),
+        1
+    );
     assert_eq!(extra_roots(&vars, env(&[("SSL_CERT_DIR", dir)])).len(), 2);
     assert!(extra_roots(&vars, env(&[("SSL_CERT_FILE", "/nonexistent/bundle.pem")])).is_empty());
 }

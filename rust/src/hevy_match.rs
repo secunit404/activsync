@@ -22,7 +22,8 @@ pub const DONE: &str = "done";
 pub const FAILED: &str = "failed";
 pub const SKIPPED: &str = "skipped";
 
-pub const FAILURE_MESSAGE: &str = "Could not apply that Hevy match. Check the server log for details.";
+pub const FAILURE_MESSAGE: &str =
+    "Could not apply that Hevy match. Check the server log for details.";
 pub const AUTH_MESSAGE: &str = "Hevy rejected the saved API key. Reconnect Hevy in Settings.";
 pub const MAPPING_MESSAGE: &str = "Map the missing exercises before choosing Merge or Replace.";
 
@@ -63,7 +64,11 @@ pub fn schedule(
     now: f64,
     window_seconds: f64,
 ) -> Result<Scheduled, MatchError> {
-    let scheduled = Scheduled { strategy: strategy.into(), deadline: now + window_seconds, window_seconds };
+    let scheduled = Scheduled {
+        strategy: strategy.into(),
+        deadline: now + window_seconds,
+        window_seconds,
+    };
     let tx = conn.transaction()?;
     if is_active(&tx, hevy_id)? {
         return Err(MatchError::AlreadyScheduled);
@@ -103,7 +108,13 @@ pub fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(String, String, f
     Ok(rows)
 }
 
-pub fn finish(conn: &Connection, hevy_id: &str, state: &str, message: Option<&str>, now: f64) -> DbResult<()> {
+pub fn finish(
+    conn: &Connection,
+    hevy_id: &str,
+    state: &str,
+    message: Option<&str>,
+    now: f64,
+) -> DbResult<()> {
     conn.execute(
         &format!(
             "UPDATE hevy_match_schedule SET state = ?1, message = ?2, finished_at = ?3 \
@@ -164,7 +175,14 @@ pub fn get(conn: &Connection, hevy_id: &str) -> DbResult<Option<Decision>> {
     conn.query_row(
         "SELECT strategy, deadline, state, message FROM hevy_match_schedule WHERE hevy_id = ?1",
         [hevy_id],
-        |row| Ok(Decision { strategy: row.get(0)?, deadline: row.get(1)?, state: row.get(2)?, message: row.get(3)? }),
+        |row| {
+            Ok(Decision {
+                strategy: row.get(0)?,
+                deadline: row.get(1)?,
+                state: row.get(2)?,
+                message: row.get(3)?,
+            })
+        },
     )
     .optional()
 }
@@ -179,7 +197,11 @@ pub enum ApplyFailure {
 /// Applies one owner's choice once its undo window has passed; returns the
 /// workout's new status.
 pub trait MatchApplier: Send + Sync {
-    fn apply<'a>(&'a self, hevy_id: &'a str, strategy: &'a str) -> BoxFuture<'a, Result<String, ApplyFailure>>;
+    fn apply<'a>(
+        &'a self,
+        hevy_id: &'a str,
+        strategy: &'a str,
+    ) -> BoxFuture<'a, Result<String, ApplyFailure>>;
 }
 
 pub struct MockApplier {
@@ -187,7 +209,11 @@ pub struct MockApplier {
 }
 
 impl MatchApplier for MockApplier {
-    fn apply<'a>(&'a self, hevy_id: &'a str, strategy: &'a str) -> BoxFuture<'a, Result<String, ApplyFailure>> {
+    fn apply<'a>(
+        &'a self,
+        hevy_id: &'a str,
+        strategy: &'a str,
+    ) -> BoxFuture<'a, Result<String, ApplyFailure>> {
         let outcome = match mock_apply(&self.db.lock(), hevy_id, strategy) {
             Ok(Some(status)) => Ok(status.to_string()),
             Ok(None) => Err(ApplyFailure::Failed("no claimed watch activity".into())),
@@ -199,7 +225,11 @@ impl MatchApplier for MockApplier {
 
 /// Mock-mode stand-in for applying the choice to Garmin: records it on the
 /// workout and its claimed watch activity without any network call.
-pub fn mock_apply(conn: &Connection, hevy_id: &str, strategy: &str) -> DbResult<Option<&'static str>> {
+pub fn mock_apply(
+    conn: &Connection,
+    hevy_id: &str,
+    strategy: &str,
+) -> DbResult<Option<&'static str>> {
     let Some(workout) = hevy_db::get_workout(conn, hevy_id)? else {
         return Ok(None);
     };
@@ -242,7 +272,14 @@ pub struct HevyMatchScheduler {
 impl HevyMatchScheduler {
     pub fn new(db: Db, events: EventBus, clock: Clock, window_seconds: f64) -> Self {
         let applier = Arc::new(MockApplier { db: db.clone() });
-        Self { db, events, clock, window_override: Some(window_seconds), wake: Arc::new(Notify::new()), applier }
+        Self {
+            db,
+            events,
+            clock,
+            window_override: Some(window_seconds),
+            wake: Arc::new(Notify::new()),
+            applier,
+        }
     }
 
     pub fn with_applier(self, applier: Arc<dyn MatchApplier>) -> Self {
@@ -250,7 +287,10 @@ impl HevyMatchScheduler {
     }
 
     pub fn with_configured_window(self) -> Self {
-        Self { window_override: None, ..self }
+        Self {
+            window_override: None,
+            ..self
+        }
     }
 
     pub fn now(&self) -> f64 {
@@ -286,7 +326,13 @@ impl HevyMatchScheduler {
         self.events.publish("refresh");
         for (hevy_id, strategy, _) in &claimed {
             let (state, message) = self.run(hevy_id, strategy).await?;
-            finish(&self.db.lock(), hevy_id, state, message.as_deref(), self.now())?;
+            finish(
+                &self.db.lock(),
+                hevy_id,
+                state,
+                message.as_deref(),
+                self.now(),
+            )?;
             self.events.publish("refresh");
         }
         prune(&self.db.lock(), self.now())?;
@@ -304,13 +350,23 @@ impl HevyMatchScheduler {
         }
         Ok(match self.applier.apply(hevy_id, strategy).await {
             Ok(status) if status == "needs_mapping" => (FAILED, Some(MAPPING_MESSAGE.into())),
-            Ok(status) => (DONE, Some(format!("{} {}.", label(&status), workout.display_title()))),
+            Ok(status) => (
+                DONE,
+                Some(format!("{} {}.", label(&status), workout.display_title())),
+            ),
             Err(ApplyFailure::HevyAuth) => {
-                crate::db::set_config_value(&self.db.lock(), "hevy_auth_ok", &serde_json::json!(false))?;
+                crate::db::set_config_value(
+                    &self.db.lock(),
+                    "hevy_auth_ok",
+                    &serde_json::json!(false),
+                )?;
                 (FAILED, Some(AUTH_MESSAGE.into()))
             }
             Err(ApplyFailure::Failed(err)) => {
-                crate::log_warn!("hevy_match", "Hevy match decision failed for {hevy_id}: {err}");
+                crate::log_warn!(
+                    "hevy_match",
+                    "Hevy match decision failed for {hevy_id}: {err}"
+                );
                 (FAILED, Some(FAILURE_MESSAGE.into()))
             }
         })
@@ -328,9 +384,15 @@ impl HevyMatchScheduler {
             match recover(&self.db.lock()) {
                 Ok(0) => {}
                 Ok(recovered) => {
-                    crate::log_warn!("hevy_match", "resuming {recovered} Hevy match decision(s) interrupted by a restart");
+                    crate::log_warn!(
+                        "hevy_match",
+                        "resuming {recovered} Hevy match decision(s) interrupted by a restart"
+                    );
                 }
-                Err(err) => crate::log_error!("hevy_match", "recovering interrupted Hevy match decisions failed: {err}"),
+                Err(err) => crate::log_error!(
+                    "hevy_match",
+                    "recovering interrupted Hevy match decisions failed: {err}"
+                ),
             }
             loop {
                 let timeout = match self.run_due().await.and_then(|_| self.sleep_seconds()) {
@@ -348,4 +410,3 @@ impl HevyMatchScheduler {
         })
     }
 }
-

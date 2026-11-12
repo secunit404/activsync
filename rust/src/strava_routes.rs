@@ -2,10 +2,10 @@
 //! real accounts the code is exchanged with Strava; the mock accounts hand
 //! out stand-in tokens.
 
+use axum::Json;
 use axum::extract::{Extension, Query, State};
 use axum::http::HeaderMap;
 use axum::response::Redirect;
-use axum::Json;
 use base64::Engine;
 use chrono::Utc;
 use rand::RngCore;
@@ -16,7 +16,7 @@ use crate::auth_guard::RequestContext;
 use crate::routes::ApiError;
 use crate::settings_routes::{conflict, onboarded};
 use crate::sync_routes::run_catch_up;
-use crate::{AppState, db, mock, onboarding, oidc_routes, view};
+use crate::{AppState, db, mock, oidc_routes, onboarding, view};
 
 fn new_state_token() -> String {
     let mut bytes = [0u8; 32];
@@ -32,9 +32,14 @@ pub async fn strava_authorize(
     let conn = state.db.lock();
     let credentials = db::get_config_value(&conn, "strava_credentials")?.unwrap_or(Value::Null);
     if !db::truthy(credentials.get("client_id")) || !db::truthy(credentials.get("client_secret")) {
-        return Err(conflict("Save your Strava client ID and client secret before connecting."));
+        return Err(conflict(
+            "Save your Strava client ID and client secret before connecting.",
+        ));
     }
-    let callback = format!("{}/strava/callback", oidc_routes::origin(&state, &headers, &ctx));
+    let callback = format!(
+        "{}/strava/callback",
+        oidc_routes::origin(&state, &headers, &ctx)
+    );
     let token = new_state_token();
     db::set_config_value(&conn, "strava_oauth_state", &json!(token))?;
     drop(conn);
@@ -54,7 +59,11 @@ pub struct StravaCallback {
 }
 
 fn constant_time_eq(a: &str, b: &str) -> bool {
-    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.len() == b.len()
+        && a.bytes()
+            .zip(b.bytes())
+            .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+            == 0
 }
 
 /// `urllib.parse.urlencode`'s quoting: spaces become `+`.
@@ -62,21 +71,39 @@ fn urlencode(value: &str) -> String {
     value
         .bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
             b' ' => "+".into(),
             _ => format!("%{b:02X}"),
         })
         .collect()
 }
 
-pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<StravaCallback>) -> Result<Redirect, ApiError> {
+pub async fn strava_callback(
+    State(state): State<AppState>,
+    Query(query): Query<StravaCallback>,
+) -> Result<Redirect, ApiError> {
     let (expected, landing) = {
         let conn = state.db.lock();
-        let expected = db::get_config_value(&conn, "strava_oauth_state")?.and_then(|v| v.as_str().map(str::to_string));
+        let expected = db::get_config_value(&conn, "strava_oauth_state")?
+            .and_then(|v| v.as_str().map(str::to_string));
         db::set_config_value(&conn, "strava_oauth_state", &Value::Null)?;
-        (expected, if onboarded(&conn)? { "/settings" } else { "/setup" })
+        (
+            expected,
+            if onboarded(&conn)? {
+                "/settings"
+            } else {
+                "/setup"
+            },
+        )
     };
-    let fail = |message: &str| Ok(Redirect::to(&format!("{landing}?stravaError={}", urlencode(message))));
+    let fail = |message: &str| {
+        Ok(Redirect::to(&format!(
+            "{landing}?stravaError={}",
+            urlencode(message)
+        )))
+    };
     if query.error.as_deref() == Some("access_denied") {
         return fail(
             "Strava authorization was declined, so nothing was connected. \
@@ -84,8 +111,17 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
         );
     }
     let code = query.code.as_deref().unwrap_or_default();
-    if query.error.as_deref().is_some_and(|error| !error.is_empty()) || code.is_empty() {
-        crate::log_warn!("strava_routes", "strava authorization did not complete: error={:?}", query.error);
+    if query
+        .error
+        .as_deref()
+        .is_some_and(|error| !error.is_empty())
+        || code.is_empty()
+    {
+        crate::log_warn!(
+            "strava_routes",
+            "strava authorization did not complete: error={:?}",
+            query.error
+        );
         return fail(
             "Strava did not return an authorization. Try again. If the problem \
              continues, check the Authorization Callback Domain of your Strava \
@@ -93,7 +129,9 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
         );
     }
     let state_matches = match (&expected, &query.state) {
-        (Some(expected), Some(got)) if !expected.is_empty() && !got.is_empty() => constant_time_eq(expected, got),
+        (Some(expected), Some(got)) if !expected.is_empty() && !got.is_empty() => {
+            constant_time_eq(expected, got)
+        }
         _ => false,
     };
     if !state_matches {
@@ -104,7 +142,11 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
     }
     match &state.clients {
         Some(clients) => {
-            if let Err(err) = clients.strava().exchange_code(code, query.scope.as_deref()).await {
+            if let Err(err) = clients
+                .strava()
+                .exchange_code(code, query.scope.as_deref())
+                .await
+            {
                 crate::log_warn!("strava_routes", "strava code exchange failed: {err}");
                 return fail(
                     "Could not complete the Strava connection. Check your client ID \

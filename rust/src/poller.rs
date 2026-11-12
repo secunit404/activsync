@@ -136,21 +136,37 @@ fn due(last_run: Option<DateTime<Utc>>, now: DateTime<Utc>, interval_seconds: f6
 
 fn minutes_setting(cfg: &Config, key: &str) -> f64 {
     let value = cfg.get(key).and_then(Value::as_f64);
-    value.or_else(|| config::defaults()[key].as_f64()).unwrap_or_default() * 60.0
+    value
+        .or_else(|| config::defaults()[key].as_f64())
+        .unwrap_or_default()
+        * 60.0
 }
 
 fn has_workouts_with_status(conn: &rusqlite::Connection, status: &str) -> rusqlite::Result<bool> {
-    conn.query_row("SELECT EXISTS(SELECT 1 FROM hevy_workouts WHERE status = ?1)", [status], |row| row.get(0))
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM hevy_workouts WHERE status = ?1)",
+        [status],
+        |row| row.get(0),
+    )
 }
 
 fn has_unresolved_upload(conn: &rusqlite::Connection) -> rusqlite::Result<bool> {
-    conn.query_row("SELECT EXISTS(SELECT 1 FROM hevy_operations WHERE phase = 'submission_unknown')", [], |row| row.get(0))
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM hevy_operations WHERE phase = 'submission_unknown')",
+        [],
+        |row| row.get(0),
+    )
 }
 
 /// The duration in `garmin_data`, 0 when absent or unreadable: it only
 /// widens a time window, so a bad blob reads as "unknown", never an error.
 fn activity_duration_seconds(garmin_data: &str) -> f64 {
-    let data: Value = serde_json::from_str(if garmin_data.is_empty() { "{}" } else { garmin_data }).unwrap_or(Value::Null);
+    let data: Value = serde_json::from_str(if garmin_data.is_empty() {
+        "{}"
+    } else {
+        garmin_data
+    })
+    .unwrap_or(Value::Null);
     match data.get("duration") {
         Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0),
         Some(Value::String(s)) => s.trim().parse().unwrap_or(0.0),
@@ -165,33 +181,45 @@ pub fn recently_active(conn: &rusqlite::Connection, now: DateTime<Utc>) -> rusql
     let window_start = now - Duration::hours(ACTIVE_WINDOW_HOURS);
     let scan_from = now - Duration::hours(MAX_SESSION_HOURS);
 
-    let mut stmt = conn.prepare("SELECT start_time, garmin_data FROM activities WHERE start_time >= ?1")?;
-    let activities = stmt.query_map([scan_from.format("%Y-%m-%d %H:%M:%S").to_string()], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
+    let mut stmt =
+        conn.prepare("SELECT start_time, garmin_data FROM activities WHERE start_time >= ?1")?;
+    let activities = stmt
+        .query_map([scan_from.format("%Y-%m-%d %H:%M:%S").to_string()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
     for activity in activities {
         let (start, garmin_data) = activity?;
         let Some(start) = crate::timefmt::parse_timestamp(&start) else {
             continue;
         };
-        let end = start + Duration::milliseconds((activity_duration_seconds(&garmin_data) * 1000.0) as i64);
+        let end = start
+            + Duration::milliseconds((activity_duration_seconds(&garmin_data) * 1000.0) as i64);
         if end >= window_start {
             return Ok(true);
         }
     }
 
     let mut stmt = conn.prepare("SELECT end_time FROM hevy_workouts WHERE start_time >= ?1")?;
-    let workouts = stmt.query_map([scan_from.format("%Y-%m-%d").to_string()], |row| row.get::<_, String>(0))?;
+    let workouts = stmt.query_map([scan_from.format("%Y-%m-%d").to_string()], |row| {
+        row.get::<_, String>(0)
+    })?;
     for end in workouts {
         if crate::timefmt::parse_timestamp(&end?).is_some_and(|end| end >= window_start) {
             return Ok(true);
         }
     }
-    Ok(has_workouts_with_status(conn, "waiting_watch")? || has_workouts_with_status(conn, "syncing")?)
+    Ok(has_workouts_with_status(conn, "waiting_watch")?
+        || has_workouts_with_status(conn, "syncing")?)
 }
 
 impl Poller {
-    pub fn new(db: Db, events: EventBus, clients: Arc<dyn Clients>, hevy: Option<Arc<dyn HevyLeg>>, options: Options) -> Self {
+    pub fn new(
+        db: Db,
+        events: EventBus,
+        clients: Arc<dyn Clients>,
+        hevy: Option<Arc<dyn HevyLeg>>,
+        options: Options,
+    ) -> Self {
         Self {
             db,
             events,
@@ -207,7 +235,10 @@ impl Poller {
     }
 
     fn config(&self) -> Result<Config, PollError> {
-        Ok(config::load_config(&self.db.lock(), self.options.development)?)
+        Ok(config::load_config(
+            &self.db.lock(),
+            self.options.development,
+        )?)
     }
 
     fn config_value(&self, key: &str) -> Option<Value> {
@@ -224,11 +255,18 @@ impl Poller {
         Ok(sync::sync_garmin(&self.db, &garmin, &cfg, now, None, None).await?)
     }
 
-    pub async fn run_strava_once(&self, now: DateTime<Utc>) -> Result<(PublishStats, StatusCheckStats), PollError> {
+    pub async fn run_strava_once(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<(PublishStats, StatusCheckStats), PollError> {
         let cfg = self.config()?;
         let garmin = self.garmin(now).await?;
         let strava = self.clients.strava();
-        let services = Services { db: &self.db, garmin: &garmin, strava: &strava };
+        let services = Services {
+            db: &self.db,
+            garmin: &garmin,
+            strava: &strava,
+        };
         let published = sync::publish_pending(&services, now, None).await?;
         let status = sync::check_strava_status(&self.db, &strava, &cfg, now, None).await?;
         Ok((published, status))
@@ -238,12 +276,19 @@ impl Poller {
         let Some(leg) = self.hevy.clone() else {
             return Ok(false);
         };
-        let garmin = self.garmin(now).await.map_err(|e| HevyLegError::Failed(e.to_string()))?;
+        let garmin = self
+            .garmin(now)
+            .await
+            .map_err(|e| HevyLegError::Failed(e.to_string()))?;
         let strava = self.strava_ready().then(|| self.clients.strava());
         let changed = leg.run(&self.db, &garmin, strava.as_ref(), now).await?;
         // A top-level key, not a setting: it drives the publish path's
         // settlement hold.
-        let _ = db::set_config_value(&self.db.lock(), "hevy_last_success_at", &json!(db::iso(now)));
+        let _ = db::set_config_value(
+            &self.db.lock(),
+            "hevy_last_success_at",
+            &json!(db::iso(now)),
+        );
         Ok(changed)
     }
 
@@ -261,7 +306,10 @@ impl Poller {
     fn strava_interval_seconds(&self) -> Result<f64, PollError> {
         match self.options.strava_interval_override {
             Some(seconds) => Ok(seconds),
-            None => Ok(minutes_setting(&self.config()?, "strava_poll_interval_minutes")),
+            None => Ok(minutes_setting(
+                &self.config()?,
+                "strava_poll_interval_minutes",
+            )),
         }
     }
 
@@ -285,7 +333,8 @@ impl Poller {
     }
 
     fn strava_ready(&self) -> bool {
-        self.config_value("strava_tokens").is_some_and(|tokens| db::truthy(tokens.get("refresh_token")))
+        self.config_value("strava_tokens")
+            .is_some_and(|tokens| db::truthy(tokens.get("refresh_token")))
     }
 
     fn hevy_ready(&self) -> Result<bool, PollError> {
@@ -310,11 +359,18 @@ impl Poller {
         match self.run_strava_once(now).await {
             Ok((published, status)) => {
                 self.strava_backoff_until = None;
-                published.published > 0 || published.failed > 0 || status.flagged_missing > 0 || status.linked_existing > 0
+                published.published > 0
+                    || published.failed > 0
+                    || status.flagged_missing > 0
+                    || status.linked_existing > 0
             }
             Err(PollError::Sync(SyncError::Strava(StravaError::RateLimited(retry_at)))) => {
                 self.strava_backoff_until = Some(retry_at);
-                crate::log_warn!("poller", "strava rate limit reached; pausing strava sync until {}", crate::logging::format_time(retry_at));
+                crate::log_warn!(
+                    "poller",
+                    "strava rate limit reached; pausing strava sync until {}",
+                    crate::logging::format_time(retry_at)
+                );
                 false
             }
             Err(err) => {
@@ -351,26 +407,43 @@ impl Poller {
         // Hevy runs first: when it changed Garmin, or a workout still waits
         // for its watch activity, the Garmin leg is made due this very tick
         // so the result reaches Strava now rather than an interval later.
-        if self.options.hevy_polling && self.hevy_ready()? && due(self.last_hevy_run, now, self.hevy_interval_seconds()?) {
+        if self.options.hevy_polling
+            && self.hevy_ready()?
+            && due(self.last_hevy_run, now, self.hevy_interval_seconds()?)
+        {
             match self.run_hevy_once(now).await {
                 Ok(hevy_changed) => {
                     changed |= hevy_changed;
-                    if self.options.garmin_polling && (hevy_changed || self.hevy_waiting_for_watch()) {
+                    if self.options.garmin_polling
+                        && (hevy_changed || self.hevy_waiting_for_watch())
+                    {
                         self.last_garmin_run = None;
                     }
                 }
                 Err(HevyLegError::Auth) => {
                     db::set_config_value(&self.db.lock(), "hevy_auth_ok", &json!(false))?;
-                    crate::log_warn!("poller", "hevy auth failed; pausing hevy sync until the key is updated");
+                    crate::log_warn!(
+                        "poller",
+                        "hevy auth failed; pausing hevy sync until the key is updated"
+                    );
                 }
-                Err(HevyLegError::Failed(err)) => crate::log_warn!("poller", "hevy sync failed: {err}"),
+                Err(HevyLegError::Failed(err)) => {
+                    crate::log_warn!("poller", "hevy sync failed: {err}")
+                }
             }
             self.last_hevy_run = Some(now);
         }
 
         // A side that is not ready keeps its stale last run, so the tick
         // after a reconnect is due at once instead of an interval later.
-        if self.options.garmin_polling && self.garmin_ready() && due(self.last_garmin_run, now, self.garmin_interval_seconds(now)?) {
+        if self.options.garmin_polling
+            && self.garmin_ready()
+            && due(
+                self.last_garmin_run,
+                now,
+                self.garmin_interval_seconds(now)?,
+            )
+        {
             match self.run_garmin_once(now).await {
                 Ok(stats) => {
                     // Only new activities: "updated" can recur every poll and
@@ -380,8 +453,16 @@ impl Poller {
                     }
                     if stats.new > 0 || stats.updated > 0 || stats.removed > 0 {
                         changed = true;
-                        if self.options.strava_polling && self.strava_ready() && !self.strava_rate_limited(now) {
-                            changed |= self.run_strava_guarded(now, "strava status check after garmin sync failed").await;
+                        if self.options.strava_polling
+                            && self.strava_ready()
+                            && !self.strava_rate_limited(now)
+                        {
+                            changed |= self
+                                .run_strava_guarded(
+                                    now,
+                                    "strava status check after garmin sync failed",
+                                )
+                                .await;
                             self.last_strava_run = Some(now);
                             strava_ran_this_tick = true;
                         }
@@ -413,7 +494,8 @@ impl Poller {
     pub fn spawn(mut self, clock: Clock) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             loop {
-                let now = DateTime::from_timestamp_micros((clock() * 1_000_000.0) as i64).unwrap_or_default();
+                let now = DateTime::from_timestamp_micros((clock() * 1_000_000.0) as i64)
+                    .unwrap_or_default();
                 if let Err(err) = self.loop_once(now).await {
                     crate::log_warn!("poller", "poll tick failed: {err}");
                 }
@@ -428,7 +510,12 @@ impl Poller {
 /// A signed-in Garmin client. An expired session pauses Garmin durably: the
 /// Settings page shows it and the poller stops trying until the user
 /// reconnects. An outage is shown as a failed attempt and retried.
-pub async fn open_garmin(db: &Db, events: &EventBus, clients: &dyn Clients, now: DateTime<Utc>) -> Result<GarminClient, PollError> {
+pub async fn open_garmin(
+    db: &Db,
+    events: &EventBus,
+    clients: &dyn Clients,
+    now: DateTime<Utc>,
+) -> Result<GarminClient, PollError> {
     match clients.garmin().await {
         Ok(garmin) => Ok(garmin),
         Err(err) => {
@@ -452,14 +539,33 @@ pub struct RealClients {
 
 impl Clients for RealClients {
     fn garmin(&self) -> BoxFuture<'_, Result<GarminClient, GarminError>> {
-        Box::pin(GarminClient::open(self.garmin_http.clone(), self.clock.clone(), &self.garmin_token_dir))
+        Box::pin(GarminClient::open(
+            self.garmin_http.clone(),
+            self.clock.clone(),
+            &self.garmin_token_dir,
+        ))
     }
 
     /// The app credentials are read each time, so saving new ones applies
     /// without a restart.
     fn strava(&self) -> StravaClient {
-        let credentials = db::get_config_value(&self.db.lock(), "strava_credentials").ok().flatten().unwrap_or(Value::Null);
-        let field = |key: &str| credentials.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-        StravaClient::new(self.strava_http.clone(), self.db.clone(), self.clock.clone(), &field("client_id"), &field("client_secret"))
+        let credentials = db::get_config_value(&self.db.lock(), "strava_credentials")
+            .ok()
+            .flatten()
+            .unwrap_or(Value::Null);
+        let field = |key: &str| {
+            credentials
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        StravaClient::new(
+            self.strava_http.clone(),
+            self.db.clone(),
+            self.clock.clone(),
+            &field("client_id"),
+            &field("client_secret"),
+        )
     }
 }

@@ -15,7 +15,9 @@ fn templates_are_judged_as_python_judges_them() {
             ("title", validate_title_template(input)),
             ("description", validate_description_template(input)),
         ] {
-            let expected = row[kind].as_str().map_or(Ok(()), |message| Err(message.to_string()));
+            let expected = row[kind]
+                .as_str()
+                .map_or(Ok(()), |message| Err(message.to_string()));
             assert_eq!(actual, expected, "{kind} template {input:?}");
         }
     }
@@ -24,5 +26,8 @@ fn templates_are_judged_as_python_judges_them() {
 #[test]
 fn an_empty_format_spec_is_accepted_and_a_stray_brace_after_an_unknown_name_is_not_reached() {
     assert_eq!(validate_title_template("{title:}"), Ok(()));
-    assert_eq!(validate_title_template("{name} }"), Err("Unknown title placeholder: {name}.".into()));
+    assert_eq!(
+        validate_title_template("{name} }"),
+        Err("Unknown title placeholder: {name}.".into())
+    );
 }

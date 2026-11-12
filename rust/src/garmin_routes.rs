@@ -14,7 +14,10 @@ use serde_json::{Value, json};
 use crate::garmin_login::Login;
 use crate::mock::{self, GarminLogin};
 use crate::routes::{ApiError, development};
-use crate::settings_routes::{ActionResult, action, bad_request, body, conflict, invalid, onboarded, require_not_onboarded, text};
+use crate::settings_routes::{
+    ActionResult, action, bad_request, body, conflict, invalid, onboarded, require_not_onboarded,
+    text,
+};
 use crate::sync_routes::{fetch_categories, run_catch_up};
 use crate::{AppState, GarminCredentials, PendingMfa, config, db, onboarding, timefmt};
 
@@ -44,7 +47,10 @@ async fn finalize_garmin_connect(state: &AppState) -> Result<(), ApiError> {
         Err(err) => Err(err.to_string()),
     };
     if let Err(err) = fetched {
-        crate::log_warn!("garmin_routes", "Garmin category prefetch after connect failed: {err}");
+        crate::log_warn!(
+            "garmin_routes",
+            "Garmin category prefetch after connect failed: {err}"
+        );
     }
     Ok(())
 }
@@ -57,14 +63,23 @@ fn save_credentials(state: &AppState, credentials: &GarminCredentials) -> Result
 
 /// Starts a Garmin sign-in. A pending verification from an earlier attempt is
 /// dropped first, so a code can only ever finish the latest attempt.
-async fn save_and_verify_garmin(state: &AppState, email: &str, password: &str) -> Result<GarminOutcome, ApiError> {
+async fn save_and_verify_garmin(
+    state: &AppState,
+    email: &str,
+    password: &str,
+) -> Result<GarminOutcome, ApiError> {
     state.set_pending_mfa(None);
-    let credentials = GarminCredentials { email: email.into(), password: password.into() };
+    let credentials = GarminCredentials {
+        email: email.into(),
+        password: password.into(),
+    };
     let login = match &state.garmin_sign_in {
-        Some(sign_in) => sign_in
-            .begin(email, password)
-            .await
-            .map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("Could not connect to Garmin: {err}")))?,
+        Some(sign_in) => sign_in.begin(email, password).await.map_err(|err| {
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                format!("Could not connect to Garmin: {err}"),
+            )
+        })?,
         None => match mock::begin_garmin_login(email, password) {
             GarminLogin::MfaRequired => Login::MfaRequired(Default::default()),
             GarminLogin::Connected => Login::Connected,
@@ -72,7 +87,10 @@ async fn save_and_verify_garmin(state: &AppState, email: &str, password: &str) -
     };
     match login {
         Login::MfaRequired(pending) => {
-            state.set_pending_mfa(Some(PendingMfa { credentials, login: pending }));
+            state.set_pending_mfa(Some(PendingMfa {
+                credentials,
+                login: pending,
+            }));
             Ok(GarminOutcome::Mfa)
         }
         Login::Connected => {
@@ -83,11 +101,23 @@ async fn save_and_verify_garmin(state: &AppState, email: &str, password: &str) -
     }
 }
 
-fn garmin_login_fields(conn: &Connection, email: &str, password: &str) -> Result<(String, String), ApiError> {
+fn garmin_login_fields(
+    conn: &Connection,
+    email: &str,
+    password: &str,
+) -> Result<(String, String), ApiError> {
     let existing = db::get_config_value(conn, "garmin_credentials")?.unwrap_or(Value::Null);
-    let email = if email.is_empty() { text(&existing, "email") } else { email.to_string() };
+    let email = if email.is_empty() {
+        text(&existing, "email")
+    } else {
+        email.to_string()
+    };
     let email = email.trim().to_string();
-    let password = if password.is_empty() { text(&existing, "password") } else { password.to_string() };
+    let password = if password.is_empty() {
+        text(&existing, "password")
+    } else {
+        password.to_string()
+    };
     if email.is_empty() || password.is_empty() {
         return Err(bad_request("Enter your Garmin email and password."));
     }
@@ -136,7 +166,12 @@ pub async fn setup_garmin(
         fields
     };
     if let GarminOutcome::Mfa = save_and_verify_garmin(&state, &email, &password).await? {
-        return action(&state, &state.db.lock(), "Garmin sent a verification code.", true);
+        return action(
+            &state,
+            &state.db.lock(),
+            "Garmin sent a verification code.",
+            true,
+        );
     }
     state.events.publish("refresh");
     action(&state, &state.db.lock(), "Garmin connected.", false)
@@ -154,13 +189,24 @@ pub async fn reconnect_garmin(
     payload: Result<Json<GarminReconnectRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
     let payload = body(payload)?;
-    let (email, password) = garmin_login_fields(&state.db.lock(), &payload.email, &payload.password)?;
+    let (email, password) =
+        garmin_login_fields(&state.db.lock(), &payload.email, &payload.password)?;
     let last_ok = last_sync_ok_at(&state)?;
     if let GarminOutcome::Mfa = save_and_verify_garmin(&state, &email, &password).await? {
-        return action(&state, &state.db.lock(), "Garmin sent a verification code.", true);
+        return action(
+            &state,
+            &state.db.lock(),
+            "Garmin sent a verification code.",
+            true,
+        );
     }
     run_catch_up(&state, Some(last_ok)).await?;
-    action(&state, &state.db.lock(), "Garmin reconnected and catch-up sync started.", false)
+    action(
+        &state,
+        &state.db.lock(),
+        "Garmin reconnected and catch-up sync started.",
+        false,
+    )
 }
 
 #[derive(Deserialize)]
@@ -175,11 +221,16 @@ pub async fn complete_mfa(
 ) -> ApiResult<ActionResult> {
     let payload = body(payload)?;
     let Some(pending) = state.pending_mfa() else {
-        return Err(conflict("The Garmin verification session expired. Sign in to Garmin again to get a new code."));
+        return Err(conflict(
+            "The Garmin verification session expired. Sign in to Garmin again to get a new code.",
+        ));
     };
     let last_ok = last_sync_ok_at(&state)?;
     let completed = match &state.garmin_sign_in {
-        Some(sign_in) => sign_in.complete(&pending.login, &payload.code).await.map_err(|err| err.to_string()),
+        Some(sign_in) => sign_in
+            .complete(&pending.login, &payload.code)
+            .await
+            .map_err(|err| err.to_string()),
         None => mock::complete_garmin_login(&payload.code),
     };
     completed.map_err(|err| ApiError::new(StatusCode::UNAUTHORIZED, err))?;
@@ -191,10 +242,20 @@ pub async fn complete_mfa(
     } else {
         state.events.publish("refresh");
     }
-    action(&state, &state.db.lock(), "Garmin verified and connected.", false)
+    action(
+        &state,
+        &state.db.lock(),
+        "Garmin verified and connected.",
+        false,
+    )
 }
 
 pub async fn cancel_mfa(State(state): State<AppState>) -> ApiResult<ActionResult> {
     state.set_pending_mfa(None);
-    action(&state, &state.db.lock(), "Garmin verification cancelled.", false)
+    action(
+        &state,
+        &state.db.lock(),
+        "Garmin verification cancelled.",
+        false,
+    )
 }

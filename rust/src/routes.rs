@@ -34,11 +34,18 @@ pub struct ApiError {
 
 impl ApiError {
     pub fn new(status: StatusCode, detail: impl Into<String>) -> Self {
-        Self { status, detail: detail.into(), header: None }
+        Self {
+            status,
+            detail: detail.into(),
+            header: None,
+        }
     }
 
     pub fn with_header(self, name: axum::http::HeaderName, value: String) -> Self {
-        Self { header: Some((name, value)), ..self }
+        Self {
+            header: Some((name, value)),
+            ..self
+        }
     }
 
     pub(crate) fn conflict(detail: impl Into<String>) -> Self {
@@ -155,7 +162,10 @@ pub async fn app_state(State(state): State<AppState>) -> ApiResult<AppStateRespo
         release: display == *version::VERSION,
         version: display,
         development: state.mock_mode,
-        setup: SetupState { complete: step.is_none(), step },
+        setup: SetupState {
+            complete: step.is_none(),
+            step,
+        },
         connections,
         hevy: HevyState {
             enabled: db::truthy(cfg.get("hevy_enabled")),
@@ -172,7 +182,9 @@ pub async fn app_state(State(state): State<AppState>) -> ApiResult<AppStateRespo
     }))
 }
 
-pub async fn dismiss_catch_up_report(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+pub async fn dismiss_catch_up_report(
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
     db::set_config_value(&state.db.lock(), "catch_up_report", &Value::Null)?;
     state.events.publish("refresh");
     Ok(StatusCode::NO_CONTENT)
@@ -267,13 +279,18 @@ fn saturating_int(text: &str) -> Option<i64> {
     if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
-    Some(text.parse().unwrap_or(if text.starts_with('-') { i64::MIN } else { i64::MAX }))
+    Some(text.parse().unwrap_or(if text.starts_with('-') {
+        i64::MIN
+    } else {
+        i64::MAX
+    }))
 }
 
 fn parse_int(raw: Option<&str>, default: i64, name: &str) -> Result<i64, ApiError> {
     match raw {
         None => Ok(default),
-        Some(text) => saturating_int(text).ok_or_else(|| ApiError::invalid(format!("{name} must be an integer"))),
+        Some(text) => saturating_int(text)
+            .ok_or_else(|| ApiError::invalid(format!("{name} must be an integer"))),
     }
 }
 
@@ -289,7 +306,9 @@ impl<S: Send + Sync> FromRequestParts<S> for ActivityId {
             .await
             .map_err(|rejection| ApiError::new(rejection.status(), rejection.body_text()))?;
         saturating_int(&raw).map(Self).ok_or_else(|| {
-            ApiError::invalid("Input should be a valid integer, unable to parse string as an integer")
+            ApiError::invalid(
+                "Input should be a valid integer, unable to parse string as an integer",
+            )
         })
     }
 }
@@ -325,7 +344,9 @@ pub async fn activities_page(
     }
     let page_size = parse_int(query.page_size.as_deref(), 20, "pageSize")?;
     if !PAGE_SIZES.contains(&page_size) {
-        return Err(ApiError::invalid("pageSize must be one of 10, 20, 50, or 100"));
+        return Err(ApiError::invalid(
+            "pageSize must be one of 10, 20, 50, or 100",
+        ));
     }
 
     let conn = state.db.lock();
@@ -423,12 +444,22 @@ pub struct ActionResult {
 
 impl ActionResult {
     pub(crate) fn success(message: impl Into<String>) -> Self {
-        Self { message: message.into(), severity: "success", published_count: 0, failed_count: 0, blocked_count: 0 }
+        Self {
+            message: message.into(),
+            severity: "success",
+            published_count: 0,
+            failed_count: 0,
+            blocked_count: 0,
+        }
     }
 }
 
-pub(crate) fn require_activity(conn: &rusqlite::Connection, id: i64) -> Result<ActivityRow, ApiError> {
-    db::get_activity(conn, id)?.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Activity was not found"))
+pub(crate) fn require_activity(
+    conn: &rusqlite::Connection,
+    id: i64,
+) -> Result<ActivityRow, ApiError> {
+    db::get_activity(conn, id)?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Activity was not found"))
 }
 
 pub(crate) fn is_publishable(row: &ActivityRow) -> bool {
@@ -454,19 +485,41 @@ pub struct EditActivityRequest {
 
 /// SHA-256 over the same NUL-joined fields as the Python app, so a row edited
 /// by either server hashes the same.
-pub fn content_hash(title: &str, description: &str, activity_type: &str, garmin_data: &str) -> String {
+pub fn content_hash(
+    title: &str,
+    description: &str,
+    activity_type: &str,
+    garmin_data: &str,
+) -> String {
     use sha2::{Digest, Sha256};
-    let digest = Sha256::digest(format!("{title}\0{description}\0{activity_type}\0{garmin_data}"));
+    let digest = Sha256::digest(format!(
+        "{title}\0{description}\0{activity_type}\0{garmin_data}"
+    ));
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-async fn save_metadata(state: &AppState, id: i64, title: &str, description: &str) -> SyncResult<()> {
+async fn save_metadata(
+    state: &AppState,
+    id: i64,
+    title: &str,
+    description: &str,
+) -> SyncResult<()> {
     let Some(clients) = state.clients.clone() else {
         return mock::edit_activity_metadata(&state.db, id, title, description);
     };
     let garmin = clients.garmin().await?;
     let strava = clients.strava();
-    sync::edit_activity_metadata(&Services { db: &state.db, garmin: &garmin, strava: &strava }, id, title, description).await
+    sync::edit_activity_metadata(
+        &Services {
+            db: &state.db,
+            garmin: &garmin,
+            strava: &strava,
+        },
+        id,
+        title,
+        description,
+    )
+    .await
 }
 
 pub async fn edit_activity(
@@ -481,24 +534,42 @@ pub async fn edit_activity(
     }
     save_metadata(&state, id, &payload.title, &payload.description)
         .await
-        .map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("Could not save activity: {err}")))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                format!("Could not save activity: {err}"),
+            )
+        })?;
     state.events.publish("refresh");
-    Ok(Json(ActionResult::success(format!("Saved changes to {}", activity.title))))
+    Ok(Json(ActionResult::success(format!(
+        "Saved changes to {}",
+        activity.title
+    ))))
 }
 
-pub async fn exclude_activity(State(state): State<AppState>, ActivityId(id): ActivityId) -> ApiResult<ActionResult> {
+pub async fn exclude_activity(
+    State(state): State<AppState>,
+    ActivityId(id): ActivityId,
+) -> ApiResult<ActionResult> {
     let conn = state.db.lock();
     let activity = require_activity(&conn, id)?;
     if !is_publishable(&activity) {
-        return Err(ApiError::conflict("Only pending, held, or missing activities can be excluded"));
+        return Err(ApiError::conflict(
+            "Only pending, held, or missing activities can be excluded",
+        ));
     }
     db::set_publish_status(&conn, id, "excluded", None)?;
     drop(conn);
     state.events.publish("refresh");
-    Ok(Json(ActionResult::success(format!("Excluded {}", activity.title))))
+    Ok(Json(ActionResult::success(format!(
+        "Excluded {}",
+        activity.title
+    ))))
 }
 
-fn present<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Option<String>>, D::Error> {
+fn present<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error> {
     Option::<String>::deserialize(deserializer).map(Some)
 }
 
@@ -515,7 +586,10 @@ pub struct RestoreActivityRequest {
 impl RestoreActivityRequest {
     /// The camelCase key wins when both are sent, as pydantic reads an alias.
     fn hold_reason(&self) -> Option<&str> {
-        self.hold_reason.as_ref().or(self.hold_reason_snake.as_ref()).and_then(|r| r.as_deref())
+        self.hold_reason
+            .as_ref()
+            .or(self.hold_reason_snake.as_ref())
+            .and_then(|r| r.as_deref())
     }
 }
 
@@ -529,15 +603,21 @@ pub async fn restore_activity(
     } else {
         match serde_json::from_slice::<Value>(&body) {
             Ok(Value::Null) => None,
-            Ok(value) => Some(serde_json::from_value(value).map_err(|e| ApiError::invalid(e.to_string()))?),
+            Ok(value) => {
+                Some(serde_json::from_value(value).map_err(|e| ApiError::invalid(e.to_string()))?)
+            }
             Err(err) => return Err(ApiError::invalid(err.to_string())),
         }
     };
     if let Some(p) = &payload {
         if !["pending", "held", "missing"].contains(&p.status.as_str()) {
-            return Err(ApiError::invalid("status must be pending, held, or missing"));
+            return Err(ApiError::invalid(
+                "status must be pending, held, or missing",
+            ));
         }
-        if p.hold_reason().is_some_and(|r| r != "category" && r != "backlog") {
+        if p.hold_reason()
+            .is_some_and(|r| r != "category" && r != "backlog")
+        {
             return Err(ApiError::invalid("holdReason must be category or backlog"));
         }
     }
@@ -559,9 +639,11 @@ pub async fn restore_activity(
     }
     drop(conn);
     state.events.publish("refresh");
-    Ok(Json(ActionResult::success(format!("Restored {}", activity.title))))
+    Ok(Json(ActionResult::success(format!(
+        "Restored {}",
+        activity.title
+    ))))
 }
-
 
 pub fn icon(png: &'static [u8]) -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/png")], png)
@@ -571,13 +653,19 @@ pub async fn health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
-pub async fn sse_events(State(state): State<AppState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+pub async fn sse_events(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let stream = BroadcastStream::new(state.events.subscribe())
         .filter_map(|event| event.ok())
         // Not `data("")`: axum then omits the data line, and browsers drop
         // an event that has none, so `refresh` would never fire.
         .map(|name| Ok(Event::default().event(name).data(" ")));
-    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive"))
+    Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keepalive"),
+    )
 }
 
 pub async fn not_found() -> ApiError {

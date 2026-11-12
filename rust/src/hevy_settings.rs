@@ -76,7 +76,12 @@ fn identity_display(detected: &Map<String, Value>) -> String {
         Some(Value::String(s)) => s.clone(),
         Some(other) => other.to_string(),
     };
-    let numbers = format!("{}/{}/{}", part("manufacturer"), part("product"), part("serial"));
+    let numbers = format!(
+        "{}/{}/{}",
+        part("manufacturer"),
+        part("product"),
+        part("serial")
+    );
     if db::truthy(detected.get("product")) {
         format!("detected from your watch: {numbers}")
     } else {
@@ -93,14 +98,25 @@ pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySett
 
     let cache = object(db::get_config_value(conn, PROFILE_CACHE_KEY)?);
     let cached = |key: &str| cache.get(key).filter(|v| !v.is_null());
-    let profile_from_garmin = ["weight_kg", "birth_year", "vo2max", "sex"].iter().any(|k| cached(k).is_some());
+    let profile_from_garmin = ["weight_kg", "birth_year", "vo2max", "sex"]
+        .iter()
+        .any(|k| cached(k).is_some());
     let baseline = ProfileBaseline {
         weight_kg: cached("weight_kg").and_then(Value::as_f64).unwrap_or(80.0),
         birth_year: cached("birth_year").and_then(Value::as_i64).unwrap_or(1990),
         vo2max: cached("vo2max").and_then(Value::as_f64).unwrap_or(45.0),
-        sex: cached("sex").and_then(Value::as_str).unwrap_or("male").to_string(),
+        sex: cached("sex")
+            .and_then(Value::as_str)
+            .unwrap_or("male")
+            .to_string(),
     };
-    let parse = |key: &str| settings.get(key).cloned().filter(|v| !v.is_null()).unwrap_or(json!({}));
+    let parse = |key: &str| {
+        settings
+            .get(key)
+            .cloned()
+            .filter(|v| !v.is_null())
+            .unwrap_or(json!({}))
+    };
 
     Ok(HevySettingsState {
         connected,
@@ -114,7 +130,8 @@ pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySett
         summary_on_structured: db::truthy(cfg.get("hevy_summary_on_structured")),
         grace_minutes: cfg.int("hevy_grace_minutes"),
         poll_interval_minutes: cfg.int("hevy_poll_interval_minutes"),
-        identity: serde_json::from_value(parse("hevy_device_identity_override")).unwrap_or_default(),
+        identity: serde_json::from_value(parse("hevy_device_identity_override"))
+            .unwrap_or_default(),
         identity_display: identity_display(&object(settings.get("hevy_device_identity").cloned())),
         profile_override: serde_json::from_value(parse(PROFILE_OVERRIDE_KEY)).unwrap_or_default(),
         profile_baseline: baseline,
@@ -190,7 +207,10 @@ impl Markup {
         }
         let name: String = self.chars[start..self.pos - 1].iter().collect();
         if last == '}' {
-            return Ok(Field { name, has_options: false });
+            return Ok(Field {
+                name,
+                has_options: false,
+            });
         }
         let mut has_conversion = false;
         if last == '!' {
@@ -202,7 +222,10 @@ impl Markup {
             if let Some(&next) = self.chars.get(self.pos) {
                 self.pos += 1;
                 if next == '}' {
-                    return Ok(Field { name, has_options: has_conversion });
+                    return Ok(Field {
+                        name,
+                        has_options: has_conversion,
+                    });
                 }
                 if next != ':' {
                     return Err("expected ':' after conversion specifier".into());
@@ -218,7 +241,10 @@ impl Markup {
                 '}' => {
                     depth -= 1;
                     if depth == 0 {
-                        return Ok(Field { name, has_options: has_conversion || self.pos - 1 > spec_start });
+                        return Ok(Field {
+                            name,
+                            has_options: has_conversion || self.pos - 1 > spec_start,
+                        });
                     }
                 }
                 _ => {}
@@ -229,7 +255,9 @@ impl Markup {
 }
 
 fn is_blank(template: &str) -> bool {
-    template.chars().all(|c| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
+    template
+        .chars()
+        .all(|c| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
 }
 
 fn validate(template: &str, allowed: &[&str], label: &str) -> Result<(), String> {
@@ -237,7 +265,10 @@ fn validate(template: &str, allowed: &[&str], label: &str) -> Result<(), String>
         return Err(format!("{label} template cannot be empty."));
     }
     let lower = label.to_lowercase();
-    let mut markup = Markup { chars: template.chars().collect(), pos: 0 };
+    let mut markup = Markup {
+        chars: template.chars().collect(),
+        pos: 0,
+    };
     while let Some(piece) = markup.next_field() {
         let Some(field) = piece.map_err(|err| format!("Invalid {lower} template: {err}"))? else {
             continue;
@@ -246,7 +277,9 @@ fn validate(template: &str, allowed: &[&str], label: &str) -> Result<(), String>
             return Err(format!("Unknown {lower} placeholder: {{{}}}.", field.name));
         }
         if field.has_options {
-            return Err(format!("{label} placeholders cannot use formatting options."));
+            return Err(format!(
+                "{label} placeholders cannot use formatting options."
+            ));
         }
     }
     Ok(())
@@ -268,8 +301,14 @@ mod tests {
     fn templates_follow_python_format_rules() {
         assert_eq!(validate_title_template("{clean_title} at the gym"), Ok(()));
         assert_eq!(validate_title_template("{{literal}} {title}"), Ok(()));
-        assert_eq!(validate_title_template(" "), Err("Title template cannot be empty.".into()));
-        assert_eq!(validate_title_template("{name}"), Err("Unknown title placeholder: {name}.".into()));
+        assert_eq!(
+            validate_title_template(" "),
+            Err("Title template cannot be empty.".into())
+        );
+        assert_eq!(
+            validate_title_template("{name}"),
+            Err("Unknown title placeholder: {name}.".into())
+        );
         assert_eq!(
             validate_description_template("{duration:>10}"),
             Err("Description placeholders cannot use formatting options.".into())

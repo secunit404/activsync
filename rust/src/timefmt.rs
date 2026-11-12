@@ -27,12 +27,21 @@ pub fn parse_timestamp(value: &str) -> Option<DateTime<Utc>> {
     if let Ok(aware) = DateTime::parse_from_rfc3339(&cleaned) {
         return Some(aware.with_timezone(&Utc));
     }
-    for format in ["%Y-%m-%dT%H:%M:%S%.f%:z", "%Y-%m-%d %H:%M:%S%.f%:z", "%Y-%m-%dT%H:%M%:z"] {
+    for format in [
+        "%Y-%m-%dT%H:%M:%S%.f%:z",
+        "%Y-%m-%d %H:%M:%S%.f%:z",
+        "%Y-%m-%dT%H:%M%:z",
+    ] {
         if let Ok(aware) = DateTime::parse_from_str(&cleaned, format) {
             return Some(aware.with_timezone(&Utc));
         }
     }
-    for format in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"] {
+    for format in [
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M",
+    ] {
         if let Ok(naive) = NaiveDateTime::parse_from_str(&cleaned, format) {
             return Some(naive.and_utc());
         }
@@ -72,12 +81,16 @@ pub fn format_local_clock(start_time: &str, tz: Tz) -> String {
 /// Python's aware-datetime arithmetic counts them across a DST change.
 pub fn current_week(now: DateTime<Utc>, tz: Tz) -> (DateTime<Tz>, DateTime<Tz>) {
     let local = now.with_timezone(&tz);
-    let monday = local.date_naive() - Duration::days(i64::from(local.weekday().num_days_from_monday()));
+    let monday =
+        local.date_naive() - Duration::days(i64::from(local.weekday().num_days_from_monday()));
     let start_naive = monday.and_hms_opt(0, 0, 0).expect("midnight exists");
     let resolve = |naive: NaiveDateTime| {
         tz.from_local_datetime(&naive)
             .earliest()
             .unwrap_or_else(|| tz.from_utc_datetime(&naive))
     };
-    (resolve(start_naive), resolve(start_naive + Duration::days(7)))
+    (
+        resolve(start_naive),
+        resolve(start_naive + Duration::days(7)),
+    )
 }

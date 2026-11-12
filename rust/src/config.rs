@@ -5,7 +5,8 @@ use crate::db::{self, DbResult};
 
 pub const DEFAULT_TITLE_TEMPLATE: &str = "{clean_title}";
 pub const DEFAULT_TEMPLATE: &str = "{duration}\n{calories}\n{avg_hr}\n\n{exercises}\n\n{marker}";
-const LEGACY_DEFAULT_TEMPLATE: &str = "🏋️ {title}\n{duration}\n{calories}\n{avg_hr}\n\n{exercises}\n\n{marker}";
+const LEGACY_DEFAULT_TEMPLATE: &str =
+    "🏋️ {title}\n{duration}\n{calories}\n{avg_hr}\n\n{exercises}\n\n{marker}";
 
 pub fn defaults() -> Map<String, Value> {
     let Value::Object(map) = json!({
@@ -47,7 +48,11 @@ impl Config {
     }
 
     pub fn str(&self, key: &str) -> String {
-        self.0.get(key).and_then(Value::as_str).unwrap_or_default().to_string()
+        self.0
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
     }
 
     pub fn display_timezone(&self) -> String {
@@ -69,7 +74,12 @@ impl Config {
         self.0
             .get("held_activity_types")
             .and_then(Value::as_array)
-            .map(|items| items.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }
@@ -86,7 +96,8 @@ pub fn load_config(conn: &Connection, development: bool) -> DbResult<Config> {
         cfg.insert("hevy_match_mode".into(), json!("review"));
     }
     cfg.extend(stored);
-    if cfg.get("hevy_description_template").and_then(Value::as_str) == Some(LEGACY_DEFAULT_TEMPLATE) {
+    if cfg.get("hevy_description_template").and_then(Value::as_str) == Some(LEGACY_DEFAULT_TEMPLATE)
+    {
         cfg.insert("hevy_description_template".into(), json!(DEFAULT_TEMPLATE));
     }
     Ok(Config(cfg))
@@ -94,7 +105,11 @@ pub fn load_config(conn: &Connection, development: bool) -> DbResult<Config> {
 
 /// Load, change and save the settings blob as one unit. The caller holds the
 /// connection lock for the whole call, so no other writer can interleave.
-pub fn edit(conn: &Connection, development: bool, change: impl FnOnce(&mut Config)) -> DbResult<()> {
+pub fn edit(
+    conn: &Connection,
+    development: bool,
+    change: impl FnOnce(&mut Config),
+) -> DbResult<()> {
     let mut cfg = load_config(conn, development)?;
     change(&mut cfg);
     db::set_config_value(conn, "settings", &Value::Object(cfg.0))

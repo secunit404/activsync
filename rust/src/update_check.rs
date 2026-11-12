@@ -56,20 +56,33 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 async fn latest_tag(http: &Http) -> Result<String, String> {
-    let headers = [("User-Agent", "ActivSync-update-check"), ("Accept", "application/vnd.github+json")];
-    let request = net::request(http::Method::GET, RELEASES_API, &headers, Vec::new()).map_err(|e| e.0)?;
-    let response = tokio::time::timeout(REQUEST_TIMEOUT, http(request)).await.map_err(|_| "timed out".to_string())?.map_err(|e| e.0)?;
+    let headers = [
+        ("User-Agent", "ActivSync-update-check"),
+        ("Accept", "application/vnd.github+json"),
+    ];
+    let request =
+        net::request(http::Method::GET, RELEASES_API, &headers, Vec::new()).map_err(|e| e.0)?;
+    let response = tokio::time::timeout(REQUEST_TIMEOUT, http(request))
+        .await
+        .map_err(|_| "timed out".to_string())?
+        .map_err(|e| e.0)?;
     if !response.status().is_success() {
         return Err(format!("GitHub answered {}", response.status().as_u16()));
     }
     let data: Value = serde_json::from_slice(response.body()).map_err(|e| e.to_string())?;
-    data.get("tag_name").and_then(Value::as_str).map(|tag| tag.trim().to_string()).ok_or_else(|| "no tag_name".into())
+    data.get("tag_name")
+        .and_then(Value::as_str)
+        .map(|tag| tag.trim().to_string())
+        .ok_or_else(|| "no tag_name".into())
 }
 
 /// Asks GitHub once and keeps the answer; a failure keeps the last one.
 pub async fn refresh(http: &Http, cache: &UpdateCache, current: &str) {
     match latest_tag(http).await {
-        Ok(latest) => cache.set(UpdateStatus { available: is_newer(&latest, current), latest }),
+        Ok(latest) => cache.set(UpdateStatus {
+            available: is_newer(&latest, current),
+            latest,
+        }),
         Err(err) => crate::log_debug!("update_check", "update check failed: {err}"),
     }
 }

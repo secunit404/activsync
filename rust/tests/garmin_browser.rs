@@ -13,7 +13,10 @@ async fn one_request(listener: TcpListener) -> String {
         assert!(read > 0, "the request ended before its headers did");
         seen.extend_from_slice(&chunk[..read]);
     }
-    socket.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n").await.unwrap();
+    socket
+        .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+        .await
+        .unwrap();
     String::from_utf8_lossy(&seen).to_lowercase()
 }
 
@@ -27,7 +30,10 @@ async fn user_agents_sent_as(browser: Browser, own: Option<&str>) -> Vec<String>
     let response = net::garmin_sign_in_http()(request).await.unwrap();
     assert_eq!(response.status().as_u16(), 200);
     let head = server.await.unwrap();
-    head.lines().filter_map(|line| line.strip_prefix("user-agent:")).map(|value| value.trim().to_string()).collect()
+    head.lines()
+        .filter_map(|line| line.strip_prefix("user-agent:"))
+        .map(|value| value.trim().to_string())
+        .collect()
 }
 
 #[tokio::test]
@@ -42,7 +48,10 @@ async fn a_request_without_a_user_agent_gets_its_browsers_own() {
     for (browser, first, second) in expected {
         let sent = user_agents_sent_as(browser, None).await;
         assert_eq!(sent.len(), 1, "{browser:?} sent {sent:?}");
-        assert!(sent[0].contains(first) && sent[0].contains(second), "{browser:?} sent {sent:?}");
+        assert!(
+            sent[0].contains(first) && sent[0].contains(second),
+            "{browser:?} sent {sent:?}"
+        );
     }
     for safari in [Browser::SafariIos, Browser::Safari] {
         let sent = user_agents_sent_as(safari, None).await;

@@ -17,7 +17,12 @@ const FIT_EPOCH_S: i64 = 631_065_600;
 /// back the raw wall-clock seconds whatever zone the server runs in.
 fn local_reference() -> Option<i64> {
     let epoch = chrono::NaiveDate::from_ymd_opt(1989, 12, 31)?.and_hms_opt(0, 0, 0)?;
-    Some(chrono::Local.from_local_datetime(&epoch).single()?.timestamp())
+    Some(
+        chrono::Local
+            .from_local_datetime(&epoch)
+            .single()?
+            .timestamp(),
+    )
 }
 
 struct Recording {
@@ -37,23 +42,49 @@ fn py_round(value: f64) -> i64 {
 }
 
 fn py_quote(text: &str) -> String {
-    if text.contains('\'') && !text.contains('"') { format!("\"{text}\"") } else { format!("'{}'", text.replace('\'', "\\'")) }
+    if text.contains('\'') && !text.contains('"') {
+        format!("\"{text}\"")
+    } else {
+        format!("'{}'", text.replace('\'', "\\'"))
+    }
 }
 
 /// The upload document for a Hevy workout recorded as `fit`. The error is
 /// the reason to upload the FIT instead: an exercise with no Strava
 /// exercise, no sets, or no usable time window.
-pub fn build_strength_upload(conn: &Connection, workout: &Value, fit: &[u8], tz_name: Option<&str>) -> Result<Value, String> {
+pub fn build_strength_upload(
+    conn: &Connection,
+    workout: &Value,
+    fit: &[u8],
+    tz_name: Option<&str>,
+) -> Result<Value, String> {
     let mut hevy_sets: Vec<(String, &Value)> = Vec::new();
-    for exercise in workout.get("exercises").and_then(Value::as_array).into_iter().flatten() {
-        let title = exercise.get("title").and_then(Value::as_str).unwrap_or_default();
+    for exercise in workout
+        .get("exercises")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let title = exercise
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let template_id = exercise.get("exercise_template_id").and_then(Value::as_str);
-        let found = crate::exercise_tables::lookup_strava_exercise(conn, title, template_id).map_err(|e| e.to_string())?;
+        let found = crate::exercise_tables::lookup_strava_exercise(conn, title, template_id)
+            .map_err(|e| e.to_string())?;
         let Some((exercise_type, _)) = found else {
             let template = template_id.map_or_else(|| "None".to_string(), str::to_string);
-            return Err(format!("no Strava exercise for {} (template {template})", py_quote(title)));
+            return Err(format!(
+                "no Strava exercise for {} (template {template})",
+                py_quote(title)
+            ));
         };
-        for set in exercise.get("sets").and_then(Value::as_array).into_iter().flatten() {
+        for set in exercise
+            .get("sets")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             hevy_sets.push((exercise_type.clone(), set));
         }
     }
@@ -71,10 +102,19 @@ pub fn build_strength_upload(conn: &Connection, workout: &Value, fit: &[u8], tz_
     for (index, (exercise_type, hevy_set)) in hevy_sets.iter().enumerate() {
         let mut entry = Map::new();
         entry.insert("exercise_type".into(), json!(exercise_type));
-        if let Some(reps) = hevy_set.get("reps").filter(|r| r.is_i64() || r.is_u64()).and_then(Value::as_i64).filter(|r| *r >= 0) {
+        if let Some(reps) = hevy_set
+            .get("reps")
+            .filter(|r| r.is_i64() || r.is_u64())
+            .and_then(Value::as_i64)
+            .filter(|r| *r >= 0)
+        {
             entry.insert("repetitions".into(), json!(reps));
         }
-        if let Some(weight) = hevy_set.get("weight_kg").and_then(Value::as_f64).filter(|w| *w > 0.0) {
+        if let Some(weight) = hevy_set
+            .get("weight_kg")
+            .and_then(Value::as_f64)
+            .filter(|w| *w > 0.0)
+        {
             entry.insert("weight".into(), json!(weight));
         }
         if let Some(timing) = timing {
@@ -87,7 +127,9 @@ pub fn build_strength_upload(conn: &Connection, workout: &Value, fit: &[u8], tz_
         sets.push(Value::Object(entry));
     }
 
-    let offset = recording.utc_offset_s.unwrap_or_else(|| zone_offset(recording.start, tz_name));
+    let offset = recording
+        .utc_offset_s
+        .unwrap_or_else(|| zone_offset(recording.start, tz_name));
     let mut document = json!({
         "version": "1.0",
         "start_time": iso(recording.start),
@@ -114,7 +156,11 @@ pub fn build_strength_upload(conn: &Connection, workout: &Value, fit: &[u8], tz_
 }
 
 fn field<'a>(record: &'a FitDataRecord, name: &str) -> Option<&'a Fit> {
-    record.fields().iter().find(|f| f.name() == name).map(|f| f.value())
+    record
+        .fields()
+        .iter()
+        .find(|f| f.name() == name)
+        .map(|f| f.value())
 }
 
 fn timestamp(value: Option<&Fit>) -> Option<DateTime<Utc>> {
@@ -180,7 +226,10 @@ fn read_fit(fit: &[u8]) -> Option<Recording> {
 
     let mut heartrate: Vec<(i64, i64)> = Vec::new();
     for record in of(MesgNum::Record) {
-        let (Some(bpm), Some(stamp)) = (integer(field(record, "heart_rate")), timestamp(field(record, "timestamp"))) else {
+        let (Some(bpm), Some(stamp)) = (
+            integer(field(record, "heart_rate")),
+            timestamp(field(record, "timestamp")),
+        ) else {
             continue;
         };
         let second = (stamp - start).num_milliseconds() / 1000;
@@ -191,7 +240,12 @@ fn read_fit(fit: &[u8]) -> Option<Recording> {
 
     let set_timing = of(MesgNum::Set)
         .filter(|set| text(field(set, "set_type")) == Some("active"))
-        .filter_map(|set| Some((timestamp(field(set, "start_time"))?, number(field(set, "duration"))?)))
+        .filter_map(|set| {
+            Some((
+                timestamp(field(set, "start_time"))?,
+                number(field(set, "duration"))?,
+            ))
+        })
         .collect();
 
     let file_id = of(MesgNum::FileId).next();
@@ -199,7 +253,8 @@ fn read_fit(fit: &[u8]) -> Option<Recording> {
         if text(field(file_id, "manufacturer")) != Some("garmin") {
             return None;
         }
-        text(field(file_id, "garmin_product")).map(|product| format!("Garmin {}", product.replace('_', " ")))
+        text(field(file_id, "garmin_product"))
+            .map(|product| format!("Garmin {}", product.replace('_', " ")))
     });
 
     Some(Recording {
@@ -215,7 +270,12 @@ fn read_fit(fit: &[u8]) -> Option<Recording> {
 }
 
 fn from_workout(workout: &Value) -> Result<Recording, String> {
-    let at = |key: &str| workout.get(key).and_then(Value::as_str).and_then(crate::timefmt::parse_timestamp);
+    let at = |key: &str| {
+        workout
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(crate::timefmt::parse_timestamp)
+    };
     let (Some(start), Some(end)) = (at("start_time"), at("end_time")) else {
         return Err("workout has no usable time window".into());
     };
@@ -236,7 +296,12 @@ fn from_workout(workout: &Value) -> Result<Recording, String> {
 
 fn zone_offset(moment: DateTime<Utc>, tz_name: Option<&str>) -> i64 {
     match tz_name.filter(|tz| crate::timefmt::is_valid_timezone(tz)) {
-        Some(tz) => i64::from(crate::timefmt::parse_tz(tz).offset_from_utc_datetime(&moment.naive_utc()).fix().local_minus_utc()),
+        Some(tz) => i64::from(
+            crate::timefmt::parse_tz(tz)
+                .offset_from_utc_datetime(&moment.naive_utc())
+                .fix()
+                .local_minus_utc(),
+        ),
         None => 0,
     }
 }

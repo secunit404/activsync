@@ -15,8 +15,8 @@ use openidconnect::http;
 use serde_json::{Number, Value, json};
 
 pub use crate::garmin_errors::GarminError;
-use crate::garmin_retry::{Request, Waits};
 use crate::garmin_errors::{py_repr, py_str, truthy};
+use crate::garmin_retry::{Request, Waits};
 use crate::net::{self, Http, Part};
 use crate::schedule::Clock;
 
@@ -25,8 +25,7 @@ pub const DI_TOKEN_URL: &str = "https://diauth.garmin.com/di-oauth2-service/oaut
 pub const TOKEN_FILE_NAME: &str = "garmin_tokens.json";
 
 const NATIVE_API_USER_AGENT: &str = "GCM-Android-5.23";
-const NATIVE_X_GARMIN_USER_AGENT: &str =
-    "com.garmin.android.apps.connectmobile/5.23; ; Google/sdk_gphone64_arm64/google; Android/33; Dalvik/2.1.0";
+const NATIVE_X_GARMIN_USER_AGENT: &str = "com.garmin.android.apps.connectmobile/5.23; ; Google/sdk_gphone64_arm64/google; Android/33; Dalvik/2.1.0";
 /// Refresh this long before the token's `exp`, as the library does.
 const REFRESH_MARGIN_SECONDS: f64 = 900.0;
 const PAGE_SIZE: usize = 20;
@@ -116,8 +115,16 @@ impl Tokens {
     fn from_json(text: &str) -> Option<Self> {
         let data: Value = serde_json::from_str(text).ok()?;
         let text_of = |key: &str| data.get(key).and_then(Value::as_str).map(str::to_string);
-        let tokens = Self { di_token: text_of("di_token"), di_refresh_token: text_of("di_refresh_token"), di_client_id: text_of("di_client_id") };
-        tokens.di_token.as_deref().is_some_and(|t| !t.is_empty()).then_some(tokens)
+        let tokens = Self {
+            di_token: text_of("di_token"),
+            di_refresh_token: text_of("di_refresh_token"),
+            di_client_id: text_of("di_client_id"),
+        };
+        tokens
+            .di_token
+            .as_deref()
+            .is_some_and(|t| !t.is_empty())
+            .then_some(tokens)
     }
 }
 
@@ -127,7 +134,9 @@ impl Tokens {
 pub fn token_file_path(path: &str) -> Result<PathBuf, GarminError> {
     let mut chars = path.chars();
     if chars.next() == Some('~') && chars.next().is_some_and(|c| c != '/' && c != '\\') {
-        return Err(GarminError::Invalid(format!("Token path must not reference another user's home directory: {path:?}")));
+        return Err(GarminError::Invalid(format!(
+            "Token path must not reference another user's home directory: {path:?}"
+        )));
     }
     let expanded = match (path.strip_prefix('~'), std::env::var_os("HOME")) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest.trim_start_matches('/')),
@@ -135,11 +144,19 @@ pub fn token_file_path(path: &str) -> Result<PathBuf, GarminError> {
     };
     for check in expanded.ancestors().filter(|p| !p.as_os_str().is_empty()) {
         if std::fs::symlink_metadata(check).is_ok_and(|m| m.file_type().is_symlink()) {
-            return Err(GarminError::Invalid(format!("Token path must not be a symlink: {path:?}")));
+            return Err(GarminError::Invalid(format!(
+                "Token path must not be a symlink: {path:?}"
+            )));
         }
     }
-    let is_json = expanded.extension().is_some_and(|e| e.to_string_lossy().to_lowercase() == "json");
-    Ok(if expanded.is_dir() || !is_json { expanded.join(TOKEN_FILE_NAME) } else { expanded })
+    let is_json = expanded
+        .extension()
+        .is_some_and(|e| e.to_string_lossy().to_lowercase() == "json");
+    Ok(if expanded.is_dir() || !is_json {
+        expanded.join(TOKEN_FILE_NAME)
+    } else {
+        expanded
+    })
 }
 
 fn load_tokens(path: &str) -> Option<Tokens> {
@@ -154,13 +171,20 @@ pub fn save_tokens(path: &str, tokens: &Tokens) -> std::io::Result<()> {
     let dir = target.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
     let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
-    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let mut suffix = [0u8; 8];
     rand::fill(&mut suffix);
     let hex: String = suffix.iter().map(|b| format!("{b:02x}")).collect();
     let tmp = dir.join(format!(".{name}.{hex}.tmp"));
     let written = (|| {
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&tmp)?;
         file.write_all(tokens.to_json().as_bytes())?;
         drop(file);
         std::fs::rename(&tmp, &target)
@@ -176,7 +200,8 @@ pub fn save_tokens(path: &str, tokens: &Tokens) -> std::io::Result<()> {
 fn jwt_claims(token: &str) -> Option<serde_json::Map<String, Value>> {
     let engine = base64::engine::GeneralPurpose::new(
         &base64::alphabet::URL_SAFE,
-        base64::engine::GeneralPurposeConfig::new().with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
+        base64::engine::GeneralPurposeConfig::new()
+            .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
     );
     let mut parts = token.split('.');
     let decode = |part: &str| serde_json::from_slice::<Value>(&engine.decode(part).ok()?).ok();
@@ -230,14 +255,19 @@ pub(crate) fn native_headers(extra: &[(&str, String)]) -> Vec<(String, String)> 
 }
 
 pub(crate) fn basic_auth(client_id: &str) -> String {
-    format!("Basic {}", base64::engine::general_purpose::STANDARD.encode(format!("{client_id}:")))
+    format!(
+        "Basic {}",
+        base64::engine::general_purpose::STANDARD.encode(format!("{client_id}:"))
+    )
 }
 
 /// Paths are built here, but a `..` segment, query or fragment smuggled in
 /// through an id or display name must never reach the request.
 pub(crate) fn check_path(path: &str) -> Result<(), GarminError> {
     let decoded = percent_encoding::percent_decode_str(path).decode_utf8_lossy();
-    let traversal = decoded.split('/').any(|segment| segment.split(';').next() == Some(".."));
+    let traversal = decoded
+        .split('/')
+        .any(|segment| segment.split(';').next() == Some(".."));
     if traversal || decoded.contains(['?', '#', '\\']) {
         return Err(GarminError::Invalid(format!("Invalid API path: {path:?}")));
     }
@@ -246,8 +276,11 @@ pub(crate) fn check_path(path: &str) -> Result<(), GarminError> {
 
 /// `quote(value, safe="")`: everything but letters, digits and `_.-~`.
 fn quote_segment(value: &str) -> String {
-    const RESERVED: &percent_encoding::AsciiSet =
-        &percent_encoding::NON_ALPHANUMERIC.remove(b'_').remove(b'.').remove(b'-').remove(b'~');
+    const RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
+        .remove(b'_')
+        .remove(b'.')
+        .remove(b'-')
+        .remove(b'~');
     percent_encoding::utf8_percent_encode(value, RESERVED).to_string()
 }
 
@@ -258,24 +291,39 @@ fn sanitize_activity_id(raw: Option<&Value>) -> Option<i64> {
         Value::Number(n) => n.as_i64(),
         Value::String(s) => s.trim().trim_matches(['\'', '"']).trim().parse().ok(),
         Value::Null => None,
-        other => py_str(other).trim().trim_matches(['\'', '"']).trim().parse().ok(),
+        other => py_str(other)
+            .trim()
+            .trim_matches(['\'', '"'])
+            .trim()
+            .parse()
+            .ok(),
     }
 }
 
 fn is_subcategory_rejection(err: &GarminError) -> bool {
     let message = err.to_string().to_lowercase();
-    message.contains("sub-category") || message.contains("subcategory") || message.contains("invalid sub")
+    message.contains("sub-category")
+        || message.contains("subcategory")
+        || message.contains("invalid sub")
 }
 
 fn positive_id(activity_id: i64) -> Result<i64, GarminError> {
-    if activity_id > 0 { Ok(activity_id) } else { Err(GarminError::Invalid(format!("activity_id must be a positive integer, got {activity_id}"))) }
+    if activity_id > 0 {
+        Ok(activity_id)
+    } else {
+        Err(GarminError::Invalid(format!(
+            "activity_id must be a positive integer, got {activity_id}"
+        )))
+    }
 }
 
 fn date_param(value: &str) -> Result<String, GarminError> {
     let value = value.trim();
     let shaped = value.len() == 10 && value.as_bytes()[4] == b'-' && value.as_bytes()[7] == b'-';
     if !shaped || NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err() {
-        return Err(GarminError::Invalid(format!("date must be in format 'YYYY-MM-DD', got: {value}")));
+        return Err(GarminError::Invalid(format!(
+            "date must be in format 'YYYY-MM-DD', got: {value}"
+        )));
     }
     Ok(value.to_string())
 }
@@ -287,11 +335,23 @@ fn number(act: &Value, key: &str) -> Option<Number> {
 }
 
 fn record_of(act: &Value) -> Result<ActivityRecord, GarminError> {
-    let id = act.get("activityId").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())));
-    let text = |key: &str| act.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
+    let id = act.get("activityId").and_then(|v| {
+        v.as_i64()
+            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
+    });
+    let text = |key: &str| {
+        act.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
     Ok(ActivityRecord {
-        garmin_activity_id: id.ok_or_else(|| GarminError::Malformed("activity without activityId".into()))?,
-        activity_type: act["activityType"]["typeKey"].as_str().unwrap_or("unknown").to_string(),
+        garmin_activity_id: id
+            .ok_or_else(|| GarminError::Malformed("activity without activityId".into()))?,
+        activity_type: act["activityType"]["typeKey"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string(),
         title: text("activityName"),
         description: text("description"),
         start_time: text("startTimeGMT"),
@@ -324,29 +384,48 @@ pub fn fit_from_zip(zip_bytes: &[u8], activity_id: i64) -> Result<Vec<u8>, Garmi
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).map_err(malformed)?;
     for index in 0..archive.len() {
         let mut member = archive.by_index(index).map_err(malformed)?;
-        if member.name().map_err(malformed)?.to_lowercase().ends_with(".fit") {
+        if member
+            .name()
+            .map_err(malformed)?
+            .to_lowercase()
+            .ends_with(".fit")
+        {
             let mut fit = Vec::new();
-            member.read_to_end(&mut fit).map_err(|e| GarminError::Malformed(e.to_string()))?;
+            member
+                .read_to_end(&mut fit)
+                .map_err(|e| GarminError::Malformed(e.to_string()))?;
             return Ok(fit);
         }
     }
-    Err(GarminError::Malformed(format!("no .fit file in original download for activity {activity_id}")))
+    Err(GarminError::Malformed(format!(
+        "no .fit file in original download for activity {activity_id}"
+    )))
 }
 
 pub fn activity_types_of(raw: &Value) -> Vec<Value> {
     let mut seen = std::collections::HashSet::new();
     let mut types: Vec<(String, String)> = Vec::new();
     for entry in raw.as_array().into_iter().flatten() {
-        let Some(key) = entry.get("typeKey").and_then(Value::as_str).filter(|k| !k.is_empty()) else {
+        let Some(key) = entry
+            .get("typeKey")
+            .and_then(Value::as_str)
+            .filter(|k| !k.is_empty())
+        else {
             continue;
         };
         if key == "all" || !seen.insert(key.to_string()) {
             continue;
         }
-        types.push((key.to_string(), crate::mock::python_title(&key.replace('_', " "))));
+        types.push((
+            key.to_string(),
+            crate::mock::python_title(&key.replace('_', " ")),
+        ));
     }
     types.sort_by(|a, b| a.1.cmp(&b.1));
-    types.into_iter().map(|(key, label)| json!({"type_key": key, "label": label})).collect()
+    types
+        .into_iter()
+        .map(|(key, label)| json!({"type_key": key, "label": label}))
+        .collect()
 }
 
 #[derive(Clone)]
@@ -378,19 +457,32 @@ impl GarminClient {
     /// The account's display name, which `open` reads from the profile;
     /// for a client built from tokens directly.
     pub fn with_display_name(self, name: &str) -> Self {
-        Self { display_name: Some(name.to_string()), ..self }
+        Self {
+            display_name: Some(name.to_string()),
+            ..self
+        }
     }
 
     /// No pause after calls, between profile retries or before a retry, for
     /// tests.
     pub fn without_waits(self) -> Self {
-        Self { waits: Waits::from_pause(Duration::ZERO), ..self }
+        Self {
+            waits: Waits::from_pause(Duration::ZERO),
+            ..self
+        }
     }
 
     /// The pause after each call, the rate-limit wait's unit and the first
     /// backoff, each of which defaults to what the Python app waits.
     pub fn with_waits(self, pause: Duration, rate_limit: Duration, backoff: Duration) -> Self {
-        Self { waits: Waits { pause, rate_limit, backoff }, ..self }
+        Self {
+            waits: Waits {
+                pause,
+                rate_limit,
+                backoff,
+            },
+            ..self
+        }
     }
 
     /// Opens the saved session without ever starting a password login, so
@@ -400,12 +492,24 @@ impl GarminClient {
         Self::open_with(http, clock, token_dir, CALL_PAUSE).await
     }
 
-    pub async fn open_with(http: Http, clock: Clock, token_dir: &str, pause: Duration) -> Result<Self, GarminError> {
+    pub async fn open_with(
+        http: Http,
+        clock: Clock,
+        token_dir: &str,
+        pause: Duration,
+    ) -> Result<Self, GarminError> {
         let tokens = load_tokens(token_dir).ok_or(GarminError::SessionExpired)?;
-        let mut client = Self { waits: Waits::from_pause(pause), ..Self::new(http, clock, tokens, Some(token_dir)) };
+        let mut client = Self {
+            waits: Waits::from_pause(pause),
+            ..Self::new(http, clock, tokens, Some(token_dir))
+        };
         let proactive = {
             let tokens = client.tokens();
-            tokens.di_refresh_token.is_some() && tokens.di_token.as_deref().is_some_and(|t| expires_soon(t, (client.clock)()))
+            tokens.di_refresh_token.is_some()
+                && tokens
+                    .di_token
+                    .as_deref()
+                    .is_some_and(|t| expires_soon(t, (client.clock)()))
         };
         if proactive {
             client.refresh_session().await;
@@ -416,14 +520,25 @@ impl GarminClient {
 
     /// A session fresh from a password sign-in; Garmin must accept the token
     /// for the profile reads.
-    pub async fn signed_in(http: Http, clock: Clock, tokens: Tokens, pause: Duration) -> Result<Self, GarminError> {
-        let mut client = Self { waits: Waits::from_pause(pause), ..Self::new(http, clock, tokens, None) };
+    pub async fn signed_in(
+        http: Http,
+        clock: Clock,
+        tokens: Tokens,
+        pause: Duration,
+    ) -> Result<Self, GarminError> {
+        let mut client = Self {
+            waits: Waits::from_pause(pause),
+            ..Self::new(http, clock, tokens, None)
+        };
         client.load_profile_and_settings().await?;
         Ok(client)
     }
 
     pub fn tokens(&self) -> Tokens {
-        self.tokens.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.tokens
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn display_name(&self) -> Option<&str> {
@@ -448,7 +563,11 @@ impl GarminClient {
         for attempt in 0..3 {
             match self.raw_json(SOCIAL_PROFILE_PATH, &[]).await {
                 Ok(data) => {
-                    name = data.get("displayName").and_then(Value::as_str).filter(|n| !n.trim().is_empty()).map(str::to_string);
+                    name = data
+                        .get("displayName")
+                        .and_then(Value::as_str)
+                        .filter(|n| !n.trim().is_empty())
+                        .map(str::to_string);
                     profile = Some(data);
                     if name.is_some() {
                         break;
@@ -479,12 +598,18 @@ impl GarminClient {
     /// The Python library words every failed profile read at sign-in as an
     /// auth error; here an outage stays an outage.
     fn open_failure(err: &GarminError) -> GarminError {
-        if err.is_transient() { GarminError::Unavailable } else { GarminError::SessionExpired }
+        if err.is_transient() {
+            GarminError::Unavailable
+        } else {
+            GarminError::SessionExpired
+        }
     }
 
     async fn refresh_di_token(&self) -> Result<(), GarminError> {
         let tokens = self.tokens();
-        let (Some(refresh), Some(client_id)) = (tokens.di_refresh_token.clone(), tokens.di_client_id.clone()) else {
+        let (Some(refresh), Some(client_id)) =
+            (tokens.di_refresh_token.clone(), tokens.di_client_id.clone())
+        else {
             return Err(GarminError::SessionExpired);
         };
         let headers = native_headers(&[
@@ -493,19 +618,40 @@ impl GarminClient {
             ("Content-Type", "application/x-www-form-urlencoded".into()),
             ("Cache-Control", "no-cache".into()),
         ]);
-        let headers: Vec<(&str, &str)> = headers.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-        let body = net::form(&[("grant_type", "refresh_token"), ("client_id", &client_id), ("refresh_token", &refresh)]);
-        let request = net::request(http::Method::POST, DI_TOKEN_URL, &headers, body).map_err(|e| GarminError::Network(e.0))?;
+        let headers: Vec<(&str, &str)> = headers
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let body = net::form(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", &client_id),
+            ("refresh_token", &refresh),
+        ]);
+        let request = net::request(http::Method::POST, DI_TOKEN_URL, &headers, body)
+            .map_err(|e| GarminError::Network(e.0))?;
         let request = net::with_timeout(request, TOKEN_TIMEOUT);
-        let response = (self.http)(request).await.map_err(|e| GarminError::Network(e.0))?;
+        let response = (self.http)(request)
+            .await
+            .map_err(|e| GarminError::Network(e.0))?;
         if !(200..300).contains(&response.status().as_u16()) {
-            return Err(GarminError::Api(format!("DI token refresh failed: {}", response.status().as_u16())));
+            return Err(GarminError::Api(format!(
+                "DI token refresh failed: {}",
+                response.status().as_u16()
+            )));
         }
-        let data: Value = serde_json::from_slice(response.body()).map_err(|e| GarminError::Malformed(e.to_string()))?;
-        let access = data.get("access_token").and_then(Value::as_str).ok_or_else(|| GarminError::Malformed("no access_token".into()))?;
+        let data: Value = serde_json::from_slice(response.body())
+            .map_err(|e| GarminError::Malformed(e.to_string()))?;
+        let access = data
+            .get("access_token")
+            .and_then(Value::as_str)
+            .ok_or_else(|| GarminError::Malformed("no access_token".into()))?;
         let refreshed = Tokens {
             di_token: Some(access.to_string()),
-            di_refresh_token: data.get("refresh_token").and_then(Value::as_str).map(str::to_string).or(tokens.di_refresh_token),
+            di_refresh_token: data
+                .get("refresh_token")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or(tokens.di_refresh_token),
             di_client_id: client_id_of(access).or(Some(client_id)),
         };
         *self.tokens.lock().unwrap_or_else(|e| e.into_inner()) = refreshed;
@@ -532,23 +678,40 @@ impl GarminClient {
     /// A definitive 404 on an activity becomes `ActivityGone`; an outage
     /// never does, whatever its text says.
     fn gone(activity_id: i64) -> impl Fn(GarminError) -> GarminError {
-        move |err| if matches!(err, GarminError::NotFound(_)) { GarminError::ActivityGone(activity_id) } else { err }
+        move |err| {
+            if matches!(err, GarminError::NotFound(_)) {
+                GarminError::ActivityGone(activity_id)
+            } else {
+                err
+            }
+        }
     }
 
     /// Newest first, 20 a page, until one older than the lookback.
-    pub async fn fetch_recent_activities(&self, lookback_days: i64) -> Result<Vec<ActivityRecord>, GarminError> {
+    pub async fn fetch_recent_activities(
+        &self,
+        lookback_days: i64,
+    ) -> Result<Vec<ActivityRecord>, GarminError> {
         let cutoff = self.now() - chrono::Duration::days(lookback_days);
         let mut records = Vec::new();
         let mut start = 0;
         loop {
-            let query = [("start", start.to_string()), ("limit", PAGE_SIZE.to_string())];
-            let batch = self.limited(|| self.get_json(ACTIVITIES_PATH, &query)).await?;
+            let query = [
+                ("start", start.to_string()),
+                ("limit", PAGE_SIZE.to_string()),
+            ];
+            let batch = self
+                .limited(|| self.get_json(ACTIVITIES_PATH, &query))
+                .await?;
             let Some(batch) = batch.as_array().filter(|b| !b.is_empty()) else {
                 break;
             };
             let mut reached_cutoff = false;
             for act in batch {
-                let started = act.get("startTimeGMT").and_then(Value::as_str).and_then(crate::timefmt::parse_timestamp);
+                let started = act
+                    .get("startTimeGMT")
+                    .and_then(Value::as_str)
+                    .and_then(crate::timefmt::parse_timestamp);
                 if started.is_some_and(|s| s < cutoff) {
                     reached_cutoff = true;
                     break;
@@ -565,74 +728,158 @@ impl GarminClient {
 
     pub async fn download_fit(&self, garmin_activity_id: i64) -> Result<Vec<u8>, GarminError> {
         let path = format!("{FIT_DOWNLOAD_PATH}/{}", positive_id(garmin_activity_id)?);
-        let request = Request { headers: vec![("Accept", "*/*".into())], ..Request::get(&path) };
+        let request = Request {
+            headers: vec![("Accept", "*/*".into())],
+            ..Request::get(&path)
+        };
         let zip_bytes = self.limited(|| self.call(DOWNLOAD_LABEL, &request)).await?;
         fit_from_zip(&zip_bytes, garmin_activity_id)
     }
 
     async fn put_activity(&self, activity_id: i64, payload: Value) -> Result<(), GarminError> {
         let path = format!("{ACTIVITY_PATH}/{activity_id}");
-        self.paced(self.run_json(&Request::json(http::Method::PUT, &path, &payload)).await.map(drop)).await
+        self.paced(
+            self.run_json(&Request::json(http::Method::PUT, &path, &payload))
+                .await
+                .map(drop),
+        )
+        .await
     }
 
-    pub async fn update_activity_metadata(&self, garmin_activity_id: i64, title: &str, description: &str) -> Result<(), GarminError> {
+    pub async fn update_activity_metadata(
+        &self,
+        garmin_activity_id: i64,
+        title: &str,
+        description: &str,
+    ) -> Result<(), GarminError> {
         let id = positive_id(garmin_activity_id)?;
-        self.put_activity(id, json!({"activityId": id.to_string(), "activityName": title})).await?;
-        self.put_activity(id, json!({"activityId": id.to_string(), "description": description})).await
+        self.put_activity(
+            id,
+            json!({"activityId": id.to_string(), "activityName": title}),
+        )
+        .await?;
+        self.put_activity(
+            id,
+            json!({"activityId": id.to_string(), "description": description}),
+        )
+        .await
     }
 
     pub async fn set_title(&self, activity_id: i64, title: &str) -> Result<(), GarminError> {
         let id = positive_id(activity_id)?;
-        self.put_activity(id, json!({"activityId": id.to_string(), "activityName": title})).await.map_err(Self::gone(id))
+        self.put_activity(
+            id,
+            json!({"activityId": id.to_string(), "activityName": title}),
+        )
+        .await
+        .map_err(Self::gone(id))
     }
 
-    pub async fn set_description(&self, activity_id: i64, description: &str) -> Result<(), GarminError> {
+    pub async fn set_description(
+        &self,
+        activity_id: i64,
+        description: &str,
+    ) -> Result<(), GarminError> {
         let id = positive_id(activity_id)?;
-        self.put_activity(id, json!({"activityId": id.to_string(), "description": description})).await.map_err(Self::gone(id))
+        self.put_activity(
+            id,
+            json!({"activityId": id.to_string(), "description": description}),
+        )
+        .await
+        .map_err(Self::gone(id))
     }
 
     /// Uploads a FIT (or GPX/TCX) file. A 409 or "duplicate activity", or
     /// failures with no success, is a definite non-import.
     pub async fn upload_fit(&self, fit_path: &Path) -> Result<UploadResult, GarminError> {
-        let data = std::fs::read(fit_path).map_err(|_| GarminError::Invalid(format!("FIT file not found: {}", fit_path.display())))?;
-        let filename = fit_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let data = std::fs::read(fit_path).map_err(|_| {
+            GarminError::Invalid(format!("FIT file not found: {}", fit_path.display()))
+        })?;
+        let filename = fit_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let extension = filename.rsplit_once('.').map(|(_, ext)| ext.to_uppercase());
-        if !extension.as_deref().is_some_and(|ext| UPLOAD_FORMATS.contains(&ext)) {
-            return Err(GarminError::Invalid(format!("Invalid file format for upload: {filename}")));
+        if !extension
+            .as_deref()
+            .is_some_and(|ext| UPLOAD_FORMATS.contains(&ext))
+        {
+            return Err(GarminError::Invalid(format!(
+                "Invalid file format for upload: {filename}"
+            )));
         }
-        let (content_type, body) = net::multipart(&[Part { name: "file", filename: Some(&filename), content_type: None, data: &data }]);
-        let request = Request { method: http::Method::POST, headers: vec![("Content-Type", content_type)], body, ..Request::get(UPLOAD_PATH) };
+        let (content_type, body) = net::multipart(&[Part {
+            name: "file",
+            filename: Some(&filename),
+            content_type: None,
+            data: &data,
+        }]);
+        let request = Request {
+            method: http::Method::POST,
+            headers: vec![("Content-Type", content_type)],
+            body,
+            ..Request::get(UPLOAD_PATH)
+        };
         let response = match self.paced(self.run_json(&request).await).await {
             Ok(response) => response,
             Err(err) => {
-                let duplicate = err.to_string().to_lowercase().contains("duplicate activity");
+                let duplicate = err
+                    .to_string()
+                    .to_lowercase()
+                    .contains("duplicate activity");
                 if duplicate || err.to_string().starts_with("API Error 409") {
-                    return Err(GarminError::UploadRejected(format!("Garmin rejected upload: {err}")));
+                    return Err(GarminError::UploadRejected(format!(
+                        "Garmin rejected upload: {err}"
+                    )));
                 }
                 return Err(err);
             }
         };
-        let detail = response.get("detailedImportResult").cloned().unwrap_or(json!({}));
+        let detail = response
+            .get("detailedImportResult")
+            .cloned()
+            .unwrap_or(json!({}));
         let upload_id = detail.get("uploadId").cloned().filter(|v| !v.is_null());
         let successes = detail.get("successes").cloned().unwrap_or(json!([]));
-        let activity_id = successes.as_array().and_then(|s| s.first()).and_then(|first| sanitize_activity_id(first.get("internalId")));
+        let activity_id = successes
+            .as_array()
+            .and_then(|s| s.first())
+            .and_then(|first| sanitize_activity_id(first.get("internalId")));
         let failures = detail.get("failures").cloned().unwrap_or(json!([]));
         if truthy(&failures) && activity_id.is_none() && !truthy(&successes) {
-            return Err(GarminError::UploadRejected(format!("Garmin rejected upload: {}", py_repr(&failures))));
+            return Err(GarminError::UploadRejected(format!(
+                "Garmin rejected upload: {}",
+                py_repr(&failures)
+            )));
         }
-        crate::log_info!("garmin_client", "fit upload: upload_id={upload_id:?} activity_id={activity_id:?}");
-        Ok(UploadResult { upload_id, activity_id })
+        crate::log_info!(
+            "garmin_client",
+            "fit upload: upload_id={upload_id:?} activity_id={activity_id:?}"
+        );
+        Ok(UploadResult {
+            upload_id,
+            activity_id,
+        })
     }
 
     pub async fn get_exercise_sets(&self, activity_id: i64) -> Result<Value, GarminError> {
         let path = format!("{ACTIVITY_PATH}/{}/exerciseSets", positive_id(activity_id)?);
-        self.limited(|| self.get_json(&path, &[])).await.map_err(Self::gone(activity_id))
+        self.limited(|| self.get_json(&path, &[]))
+            .await
+            .map_err(Self::gone(activity_id))
     }
 
     /// Replaces every exercise set on the activity at once.
-    pub async fn put_exercise_sets(&self, activity_id: i64, payload: &Value) -> Result<(), GarminError> {
+    pub async fn put_exercise_sets(
+        &self,
+        activity_id: i64,
+        payload: &Value,
+    ) -> Result<(), GarminError> {
         let path = format!("{ACTIVITY_PATH}/{}/exerciseSets", positive_id(activity_id)?);
-        let result = self.run_json(&Request::json(http::Method::PUT, &path, payload)).await.map(drop);
+        let result = self
+            .run_json(&Request::json(http::Method::PUT, &path, payload))
+            .await
+            .map(drop);
         self.paced(result).await.map_err(|err| {
             if is_subcategory_rejection(&err) {
                 GarminError::SubcategoryRejected(err.to_string())
@@ -644,7 +891,10 @@ impl GarminClient {
 
     pub async fn delete_activity(&self, activity_id: i64) -> Result<(), GarminError> {
         let path = format!("{ACTIVITY_PATH}/{}", positive_id(activity_id)?);
-        let request = Request { method: http::Method::DELETE, ..Request::get(&path) };
+        let request = Request {
+            method: http::Method::DELETE,
+            ..Request::get(&path)
+        };
         self.paced(self.run(&request).await.map(drop)).await?;
         crate::log_info!("garmin_client", "deleted garmin activity {activity_id}");
         Ok(())
@@ -667,48 +917,93 @@ impl GarminClient {
     /// Physiology for calorie estimates. A missing piece comes back as
     /// `None` for the profile defaults to fill; a failed read is not fatal.
     pub async fn fetch_user_profile(&self) -> UserProfile {
-        let user_data = match self.limited(|| self.get_json(USER_SETTINGS_PATH, &[])).await {
-            Ok(settings) => settings.get("userData").filter(|d| truthy(d)).cloned().unwrap_or(json!({})),
+        let user_data = match self
+            .limited(|| self.get_json(USER_SETTINGS_PATH, &[]))
+            .await
+        {
+            Ok(settings) => settings
+                .get("userData")
+                .filter(|d| truthy(d))
+                .cloned()
+                .unwrap_or(json!({})),
             Err(err) => {
                 crate::log_warn!("garmin_client", "user profile fetch failed: {err}");
                 json!({})
             }
         };
-        let weight = user_data.get("weight").filter(|w| truthy(w)).and_then(|w| w.as_f64().or_else(|| w.as_str()?.trim().parse().ok()));
+        let weight = user_data
+            .get("weight")
+            .filter(|w| truthy(w))
+            .and_then(|w| w.as_f64().or_else(|| w.as_str()?.trim().parse().ok()));
         let weight_kg = weight.and_then(|w| format!("{:.1}", w / 1000.0).parse().ok());
         let birth = user_data.get("birthDate").filter(|b| truthy(b)).map(py_str);
-        let birth_year = birth.and_then(|b| b.chars().take(4).collect::<String>().trim().parse().ok());
-        let sex = user_data.get("gender").filter(|g| truthy(g)).map(|g| py_str(g).to_lowercase());
+        let birth_year =
+            birth.and_then(|b| b.chars().take(4).collect::<String>().trim().parse().ok());
+        let sex = user_data
+            .get("gender")
+            .filter(|g| truthy(g))
+            .map(|g| py_str(g).to_lowercase());
 
         let today = self.now().format("%Y-%m-%d").to_string();
         let path = format!("{MAX_METRICS_PATH}/{today}/{today}");
         let mut vo2max = None;
         if let Ok(metrics) = self.limited(|| self.get_json(&path, &[])).await {
-            let entries = if metrics.is_array() { metrics } else { json!([metrics]) };
+            let entries = if metrics.is_array() {
+                metrics
+            } else {
+                json!([metrics])
+            };
             for entry in entries.as_array().into_iter().flatten() {
-                let generic = entry.get("generic").filter(|g| truthy(g)).cloned().unwrap_or(json!({}));
-                let value = [generic.get("vo2MaxPreciseValue"), generic.get("vo2MaxValue")].into_iter().flatten().find(|v| truthy(v));
+                let generic = entry
+                    .get("generic")
+                    .filter(|g| truthy(g))
+                    .cloned()
+                    .unwrap_or(json!({}));
+                let value = [
+                    generic.get("vo2MaxPreciseValue"),
+                    generic.get("vo2MaxValue"),
+                ]
+                .into_iter()
+                .flatten()
+                .find(|v| truthy(v));
                 if let Some(value) = value {
-                    vo2max = value.as_f64().or_else(|| value.as_str()?.trim().parse().ok());
+                    vo2max = value
+                        .as_f64()
+                        .or_else(|| value.as_str()?.trim().parse().ok());
                     break;
                 }
             }
         }
-        UserProfile { weight_kg, birth_year, sex, vo2max }
+        UserProfile {
+            weight_kg,
+            birth_year,
+            sex,
+            vo2max,
+        }
     }
 
     /// Every activity of any type from the day before `start_time`'s date to
     /// the day after. A failure is an error, never an empty list: the
     /// operation journal diffs these snapshots.
     pub async fn list_activities_near(&self, start_time: &str) -> Result<Vec<Value>, GarminError> {
-        let target = crate::timefmt::parse_timestamp(start_time)
-            .ok_or_else(|| GarminError::Invalid(format!("unparseable start_time: {start_time:?}")))?;
-        let date_from = (target - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
-        let date_to = (target + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
-        self.limited(|| self.activities_between(&date_from, &date_to)).await
+        let target = crate::timefmt::parse_timestamp(start_time).ok_or_else(|| {
+            GarminError::Invalid(format!("unparseable start_time: {start_time:?}"))
+        })?;
+        let date_from = (target - chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        let date_to = (target + chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        self.limited(|| self.activities_between(&date_from, &date_to))
+            .await
     }
 
-    async fn activities_between(&self, date_from: &str, date_to: &str) -> Result<Vec<Value>, GarminError> {
+    async fn activities_between(
+        &self,
+        date_from: &str,
+        date_to: &str,
+    ) -> Result<Vec<Value>, GarminError> {
         let mut activities = Vec::new();
         let mut start = 0;
         for _ in 0..MAX_PAGINATED_REQUESTS {
@@ -722,11 +1017,15 @@ impl GarminClient {
             if !truthy(&page) {
                 return Ok(activities);
             }
-            let page = page.as_array().ok_or_else(|| GarminError::Malformed("activities is not a list".into()))?;
+            let page = page
+                .as_array()
+                .ok_or_else(|| GarminError::Malformed("activities is not a list".into()))?;
             activities.extend(page.iter().cloned());
             start += PAGE_SIZE;
         }
-        Err(GarminError::Api(format!("Pagination exceeded {MAX_PAGINATED_REQUESTS} requests; aborting")))
+        Err(GarminError::Api(format!(
+            "Pagination exceeded {MAX_PAGINATED_REQUESTS} requests; aborting"
+        )))
     }
 
     pub async fn list_activity_ids_near(&self, start_time: &str) -> Result<Vec<i64>, GarminError> {
@@ -737,7 +1036,9 @@ impl GarminClient {
             .map(|id| {
                 id.as_i64()
                     .or_else(|| id.as_str().and_then(|s| s.trim().parse().ok()))
-                    .ok_or_else(|| GarminError::Malformed(format!("activity id {id} is not a number")))
+                    .ok_or_else(|| {
+                        GarminError::Malformed(format!("activity id {id} is not a number"))
+                    })
             })
             .collect()
     }
@@ -745,6 +1046,8 @@ impl GarminClient {
     /// Garmin's type taxonomy for the autosync checklist, without Garmin's
     /// own "all" pseudo-type.
     pub async fn fetch_activity_types(&self) -> Result<Vec<Value>, GarminError> {
-        Ok(activity_types_of(&self.get_json(ACTIVITY_TYPES_PATH, &[]).await?))
+        Ok(activity_types_of(
+            &self.get_json(ACTIVITY_TYPES_PATH, &[]).await?,
+        ))
     }
 }

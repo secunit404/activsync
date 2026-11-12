@@ -25,7 +25,10 @@ pub enum HevyError {
     /// Hevy rejected the API key (401/403).
     Auth,
     /// Hevy answered 400 or above; `message` is `raise_for_status`'s text.
-    Status { code: u16, message: String },
+    Status {
+        code: u16,
+        message: String,
+    },
     Network(String),
     Malformed(String),
 }
@@ -47,10 +50,21 @@ impl std::error::Error for HevyError {}
 /// asks for more than nothing is obeyed, up to six hours, whatever the
 /// status; otherwise no wait before the first retry, then the factor doubled
 /// each time.
-pub fn retry_delay(retry: u32, backoff_factor: f64, retry_after: Option<&str>, now: DateTime<Utc>) -> Duration {
-    let told = retry_after.and_then(|value| retry_after_seconds(value, now)).filter(|seconds| *seconds > 0.0);
+pub fn retry_delay(
+    retry: u32,
+    backoff_factor: f64,
+    retry_after: Option<&str>,
+    now: DateTime<Utc>,
+) -> Duration {
+    let told = retry_after
+        .and_then(|value| retry_after_seconds(value, now))
+        .filter(|seconds| *seconds > 0.0);
     let seconds = told.unwrap_or_else(|| {
-        let backoff = if retry <= 1 { 0.0 } else { backoff_factor * 2f64.powi(retry as i32 - 1) };
+        let backoff = if retry <= 1 {
+            0.0
+        } else {
+            backoff_factor * 2f64.powi(retry as i32 - 1)
+        };
         backoff.clamp(0.0, MAX_BACKOFF_SECONDS)
     });
     Duration::from_secs_f64(seconds)
@@ -72,9 +86,9 @@ fn retry_after_seconds(value: &str, now: DateTime<Utc>) -> Option<f64> {
 fn valid_event(event: &Value) -> bool {
     let present = |v: &Value, key: &str| crate::db::truthy(v.get(key));
     match event.get("type").and_then(Value::as_str) {
-        Some("updated") => {
-            event.get("workout").is_some_and(|w| w.is_object() && present(w, "id") && present(w, "updated_at"))
-        }
+        Some("updated") => event
+            .get("workout")
+            .is_some_and(|w| w.is_object() && present(w, "id") && present(w, "updated_at")),
         Some("deleted") => present(event, "id") && present(event, "deleted_at"),
         _ => false,
     }
@@ -83,14 +97,24 @@ fn valid_event(event: &Value) -> bool {
 /// A missing or non-integer `page_count` stops the walk: trusting it would
 /// page forever against a malformed response.
 fn more_pages(data: &Value, page: i64) -> bool {
-    data.get("page_count").and_then(Value::as_i64).is_some_and(|count| page < count)
+    data.get("page_count")
+        .and_then(Value::as_i64)
+        .is_some_and(|count| page < count)
 }
 
 /// `Response.raise_for_status()`'s text.
 fn status_message(response: &HttpResponse, url: &str) -> String {
     let status = response.status();
-    let kind = if status.is_client_error() { "Client" } else { "Server" };
-    format!("{} {kind} Error: {} for url: {url}", status.as_u16(), status.canonical_reason().unwrap_or_default())
+    let kind = if status.is_client_error() {
+        "Client"
+    } else {
+        "Server"
+    };
+    format!(
+        "{} {kind} Error: {} for url: {url}",
+        status.as_u16(),
+        status.canonical_reason().unwrap_or_default()
+    )
 }
 
 /// The `ConnectionError` text `requests` gives once urllib3 has run out of
@@ -99,9 +123,19 @@ fn connection_error(url: &str, cause: &str) -> String {
     let uri = url.parse::<http::Uri>().ok();
     let secure = uri.as_ref().and_then(|u| u.scheme_str()) != Some("http");
     let host = uri.as_ref().and_then(|u| u.host()).unwrap_or_default();
-    let port = uri.as_ref().and_then(|u| u.port_u16()).unwrap_or(if secure { 443 } else { 80 });
-    let pool = format!("HTTP{}ConnectionPool(host='{host}', port={port})", if secure { "S" } else { "" });
-    let target = uri.as_ref().and_then(|u| u.path_and_query()).map(|p| p.as_str()).unwrap_or_default();
+    let port = uri
+        .as_ref()
+        .and_then(|u| u.port_u16())
+        .unwrap_or(if secure { 443 } else { 80 });
+    let pool = format!(
+        "HTTP{}ConnectionPool(host='{host}', port={port})",
+        if secure { "S" } else { "" }
+    );
+    let target = uri
+        .as_ref()
+        .and_then(|u| u.path_and_query())
+        .map(|p| p.as_str())
+        .unwrap_or_default();
     let cause = if cause.contains("timed out") {
         format!("ReadTimeoutError(\"{pool}: Read timed out. (read timeout=30)\")")
     } else {
@@ -117,9 +151,17 @@ fn json_message(body: &[u8], error: &serde_json::Error) -> String {
         return error.to_string();
     }
     let text = String::from_utf8_lossy(body);
-    let before: usize = text.split('\n').take(error.line().saturating_sub(1)).map(|l| l.chars().count() + 1).sum();
+    let before: usize = text
+        .split('\n')
+        .take(error.line().saturating_sub(1))
+        .map(|l| l.chars().count() + 1)
+        .sum();
     let offset = before + error.column().saturating_sub(1);
-    format!("Expecting value: line {} column {} (char {offset})", error.line(), error.column())
+    format!(
+        "Expecting value: line {} column {} (char {offset})",
+        error.line(),
+        error.column()
+    )
 }
 
 #[derive(Clone)]
@@ -139,16 +181,28 @@ impl HevyClient {
         if api_key.is_empty() {
             return Err("Hevy API key required");
         }
-        Ok(Self { http, base_url: base_url.trim_end_matches('/').into(), api_key: api_key.into(), backoff_factor: 2.0 })
+        Ok(Self {
+            http,
+            base_url: base_url.trim_end_matches('/').into(),
+            api_key: api_key.into(),
+            backoff_factor: 2.0,
+        })
     }
 
     /// No waiting between retries, for tests.
     pub fn without_backoff(self) -> Self {
-        Self { backoff_factor: 0.0, ..self }
+        Self {
+            backoff_factor: 0.0,
+            ..self
+        }
     }
 
     fn wait(&self, retry: u32, retry_after: Option<&str>) -> Duration {
-        if self.backoff_factor == 0.0 { Duration::ZERO } else { retry_delay(retry, self.backoff_factor, retry_after, Utc::now()) }
+        if self.backoff_factor == 0.0 {
+            Duration::ZERO
+        } else {
+            retry_delay(retry, self.backoff_factor, retry_after, Utc::now())
+        }
     }
 
     async fn get(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, HevyError> {
@@ -173,7 +227,8 @@ impl HevyClient {
             };
             let status = response.status().as_u16();
             let retry_after = net::header(&response, "retry-after").filter(|v| !v.is_empty());
-            let retryable = RETRY_STATUSES.contains(&status) || (RETRY_AFTER_STATUSES.contains(&status) && retry_after.is_some());
+            let retryable = RETRY_STATUSES.contains(&status)
+                || (RETRY_AFTER_STATUSES.contains(&status) && retry_after.is_some());
             if retryable && retry < MAX_RETRIES {
                 retry += 1;
                 tokio::time::sleep(self.wait(retry, retry_after)).await;
@@ -186,14 +241,23 @@ impl HevyClient {
             return Err(HevyError::Auth);
         }
         if status >= 400 {
-            return Err(HevyError::Status { code: status, message: status_message(&response, &url) });
+            return Err(HevyError::Status {
+                code: status,
+                message: status_message(&response, &url),
+            });
         }
-        if let Some(remaining) = net::header(&response, "x-ratelimit-remaining").and_then(|v| v.parse::<i64>().ok()) {
+        if let Some(remaining) =
+            net::header(&response, "x-ratelimit-remaining").and_then(|v| v.parse::<i64>().ok())
+        {
             if remaining < 10 {
-                crate::log_warn!("hevy_client", "Hevy API rate limit low: {remaining} requests remaining");
+                crate::log_warn!(
+                    "hevy_client",
+                    "Hevy API rate limit low: {remaining} requests remaining"
+                );
             }
         }
-        serde_json::from_slice(response.body()).map_err(|e| HevyError::Malformed(json_message(response.body(), &e)))
+        serde_json::from_slice(response.body())
+            .map_err(|e| HevyError::Malformed(json_message(response.body(), &e)))
     }
 
     /// Used to check an API key when Hevy is connected.
@@ -221,7 +285,10 @@ impl HevyClient {
     /// `None` means unknown, never zero: it only bounds a scan.
     pub async fn get_workout_count(&self) -> Result<Option<i64>, HevyError> {
         let data = self.get("/workouts/count", &[]).await?;
-        let count = data.get("workout_count").filter(|c| c.is_i64() || c.is_u64()).and_then(Value::as_i64);
+        let count = data
+            .get("workout_count")
+            .filter(|c| c.is_i64() || c.is_u64())
+            .and_then(Value::as_i64);
         if count.is_none_or(|c| c < 0) {
             crate::log_warn!("hevy_client", "unusable workout_count from Hevy");
             return Ok(None);
@@ -230,12 +297,28 @@ impl HevyClient {
     }
 
     pub async fn get_workouts_page(&self, page: i64, page_size: i64) -> Result<Value, HevyError> {
-        self.get("/workouts", &[("page", &page.to_string()), ("pageSize", &page_size.to_string())]).await
+        self.get(
+            "/workouts",
+            &[
+                ("page", &page.to_string()),
+                ("pageSize", &page_size.to_string()),
+            ],
+        )
+        .await
     }
 
-    pub async fn get_events(&self, since: &str, page: i64, page_size: i64) -> Result<Value, HevyError> {
+    pub async fn get_events(
+        &self,
+        since: &str,
+        page: i64,
+        page_size: i64,
+    ) -> Result<Value, HevyError> {
         let (page, size) = (page.to_string(), page_size.to_string());
-        self.get("/workouts/events", &[("since", since), ("page", &page), ("pageSize", &size)]).await
+        self.get(
+            "/workouts/events",
+            &[("since", since), ("page", &page), ("pageSize", &size)],
+        )
+        .await
     }
 
     /// Every event newer than `since` across all pages. A malformed entry is
@@ -245,7 +328,12 @@ impl HevyClient {
         let mut page = 1;
         loop {
             let data = self.get_events(since, page, 10).await?;
-            for event in data.get("events").and_then(Value::as_array).into_iter().flatten() {
+            for event in data
+                .get("events")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
                 if valid_event(event) {
                     events.push(event.clone());
                 } else {
@@ -259,8 +347,14 @@ impl HevyClient {
         }
     }
 
-    pub async fn get_exercise_template(&self, template_id: &str) -> Result<Option<Value>, HevyError> {
-        match self.get(&format!("/exercise_templates/{template_id}"), &[]).await {
+    pub async fn get_exercise_template(
+        &self,
+        template_id: &str,
+    ) -> Result<Option<Value>, HevyError> {
+        match self
+            .get(&format!("/exercise_templates/{template_id}"), &[])
+            .await
+        {
             Err(HevyError::Status { code: 404, .. }) => Ok(None),
             Ok(data) => Ok(data.is_object().then_some(data)),
             Err(err) => Err(err),
@@ -268,9 +362,21 @@ impl HevyClient {
     }
 
     /// One page of exercise templates, and whether another follows.
-    pub async fn get_exercise_templates_page(&self, page: i64) -> Result<(Vec<Value>, bool), HevyError> {
-        let data = self.get("/exercise_templates", &[("page", &page.to_string()), ("pageSize", "100")]).await?;
-        let templates = data.get("exercise_templates").and_then(Value::as_array).cloned().unwrap_or_default();
+    pub async fn get_exercise_templates_page(
+        &self,
+        page: i64,
+    ) -> Result<(Vec<Value>, bool), HevyError> {
+        let data = self
+            .get(
+                "/exercise_templates",
+                &[("page", &page.to_string()), ("pageSize", "100")],
+            )
+            .await?;
+        let templates = data
+            .get("exercise_templates")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         Ok((templates, more_pages(&data, page)))
     }
 

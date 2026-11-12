@@ -11,8 +11,12 @@ pub const STRAVA_ACTIVITY_URL: &str = "https://www.strava.com/activities/";
 const REQUIRED_STRAVA_SCOPES: [&str; 2] = ["activity:read_all", "activity:write"];
 
 pub fn strava_url_for(row: &ActivityRow) -> Option<String> {
-    row.is_published()
-        .then(|| format!("{STRAVA_ACTIVITY_URL}{}", row.strava_activity_id.unwrap_or_default()))
+    row.is_published().then(|| {
+        format!(
+            "{STRAVA_ACTIVITY_URL}{}",
+            row.strava_activity_id.unwrap_or_default()
+        )
+    })
 }
 
 /// `None` means the grant was never reported (tokens stored before scopes
@@ -53,15 +57,24 @@ fn fmt_duration(seconds: Option<f64>) -> String {
 pub fn fmt_duration_coarse(seconds: f64) -> String {
     let minutes = (seconds.trunc() as i64).div_euclid(60);
     let (h, m) = (minutes.div_euclid(60), minutes.rem_euclid(60));
-    if h != 0 { format!("{h}h {m:02}m") } else { format!("{m}m") }
+    if h != 0 {
+        format!("{h}h {m:02}m")
+    } else {
+        format!("{m}m")
+    }
 }
 
 fn fmt_distance(metres: Option<f64>) -> String {
-    metres.map(|m| format!("{:.2} km", m / 1000.0)).unwrap_or_default()
+    metres
+        .map(|m| format!("{:.2} km", m / 1000.0))
+        .unwrap_or_default()
 }
 
 fn fmt_pace(distance: Option<f64>, duration: Option<f64>) -> String {
-    let (Some(distance), Some(duration)) = (distance.filter(|d| *d != 0.0), duration.filter(|d| *d != 0.0)) else {
+    let (Some(distance), Some(duration)) = (
+        distance.filter(|d| *d != 0.0),
+        duration.filter(|d| *d != 0.0),
+    ) else {
         return String::new();
     };
     let km = distance / 1000.0;
@@ -73,7 +86,10 @@ fn fmt_pace(distance: Option<f64>, duration: Option<f64>) -> String {
 }
 
 fn fmt_speed(distance: Option<f64>, duration: Option<f64>) -> String {
-    let (Some(distance), Some(duration)) = (distance.filter(|d| *d != 0.0), duration.filter(|d| *d != 0.0)) else {
+    let (Some(distance), Some(duration)) = (
+        distance.filter(|d| *d != 0.0),
+        duration.filter(|d| *d != 0.0),
+    ) else {
         return String::new();
     };
     let hours = duration / 3600.0;
@@ -84,7 +100,9 @@ fn fmt_speed(distance: Option<f64>, duration: Option<f64>) -> String {
 }
 
 fn with_unit(value: Option<f64>, unit: &str) -> String {
-    value.map(|v| format!("{}{unit}", v.trunc() as i64)).unwrap_or_default()
+    value
+        .map(|v| format!("{}{unit}", v.trunc() as i64))
+        .unwrap_or_default()
 }
 
 /// Python's `str()` of a JSON number: ints stay ints, floats keep ".0".
@@ -94,7 +112,11 @@ fn python_str(data: &Map<String, Value>, key: &str) -> String {
             Some(i) => i.to_string(),
             None => {
                 let f = n.as_f64().unwrap_or_default();
-                if f.fract() == 0.0 { format!("{f:.1}") } else { f.to_string() }
+                if f.fract() == 0.0 {
+                    format!("{f:.1}")
+                } else {
+                    f.to_string()
+                }
             }
         },
         _ => String::new(),
@@ -168,19 +190,31 @@ pub fn detail_for(row: &ActivityRow) -> (Option<f64>, ActivityDetail) {
         avg_power: with_unit(present(&gd, "avg_power"), " W"),
         max_power: with_unit(present(&gd, "max_power"), " W"),
         norm_power: with_unit(present(&gd, "norm_power"), " W"),
-        aerobic_te: present(&gd, "aerobic_te").map(|v| format!("{v:.1}")).unwrap_or_default(),
-        anaerobic_te: present(&gd, "anaerobic_te").map(|v| format!("{v:.1}")).unwrap_or_default(),
-        training_load: present(&gd, "training_load").map(|v| format!("{v:.0}")).unwrap_or_default(),
+        aerobic_te: present(&gd, "aerobic_te")
+            .map(|v| format!("{v:.1}"))
+            .unwrap_or_default(),
+        anaerobic_te: present(&gd, "anaerobic_te")
+            .map(|v| format!("{v:.1}"))
+            .unwrap_or_default(),
+        training_load: present(&gd, "training_load")
+            .map(|v| format!("{v:.0}"))
+            .unwrap_or_default(),
         avg_cadence: with_unit(present(&gd, "avg_cadence"), " spm"),
         max_cadence: with_unit(present(&gd, "max_cadence"), " spm"),
         total_sets: python_str(&gd, "total_sets"),
         total_reps: python_str(&gd, "total_reps"),
-        total_volume: present(&gd, "total_volume").map(|v| format!("{v:.0} kg")).unwrap_or_default(),
+        total_volume: present(&gd, "total_volume")
+            .map(|v| format!("{v:.0} kg"))
+            .unwrap_or_default(),
     };
     (duration, detail)
 }
 
-pub fn activities_view(conn: &Connection, oldest_first: bool, tz_name: &str) -> DbResult<Vec<ActivityView>> {
+pub fn activities_view(
+    conn: &Connection,
+    oldest_first: bool,
+    tz_name: &str,
+) -> DbResult<Vec<ActivityView>> {
     let tz = timefmt::parse_tz(tz_name);
     let badges = db::hevy_badges(conn)?;
     let rows = db::list_activities(conn, oldest_first)?;
@@ -248,7 +282,10 @@ fn garmin_status(conn: &Connection, now: DateTime<Utc>) -> DbResult<(String, Str
         .unwrap_or_else(|| "unknown error".into());
     Ok((
         "Needs attention".into(),
-        format!("last attempt at {} failed: {error}", synced_at.format("%H:%M")),
+        format!(
+            "last attempt at {} failed: {error}",
+            synced_at.format("%H:%M")
+        ),
     ))
 }
 
@@ -256,7 +293,8 @@ fn garmin_status(conn: &Connection, now: DateTime<Utc>) -> DbResult<(String, Str
 /// verdict; the sync status only adds detail.
 pub fn connection_status(conn: &Connection, now: DateTime<Utc>) -> DbResult<Connections> {
     let creds = db::get_config_value(conn, "garmin_credentials")?.unwrap_or(Value::Null);
-    let garmin_connected = db::truthy(db::get_config_value(conn, "garmin_credentials_verified")?.as_ref());
+    let garmin_connected =
+        db::truthy(db::get_config_value(conn, "garmin_credentials_verified")?.as_ref());
     let tokens = db::get_config_value(conn, "strava_tokens")?.unwrap_or(Value::Null);
     let strava_connected = db::truthy(tokens.get("refresh_token"));
     let strava_scope_ok = scope_is_sufficient(tokens.get("scope").and_then(Value::as_str));
@@ -285,7 +323,11 @@ pub fn connection_status(conn: &Connection, now: DateTime<Utc>) -> DbResult<Conn
             connected: garmin_connected,
             status: garmin_line,
             meta: garmin_meta,
-            email: creds.get("email").and_then(Value::as_str).unwrap_or_default().to_string(),
+            email: creds
+                .get("email")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
         },
         strava: ServiceConnection {
             connected: strava_connected,

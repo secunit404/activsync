@@ -14,7 +14,10 @@ use tower::ServiceExt;
 
 fn github(answer: Arc<Mutex<(u16, Value)>>) -> Http {
     Arc::new(move |request: HttpRequest| {
-        assert_eq!(request.uri().path(), "/repos/secunit404/activsync/releases/latest");
+        assert_eq!(
+            request.uri().path(),
+            "/repos/secunit404/activsync/releases/latest"
+        );
         assert_eq!(request.headers()["user-agent"], "ActivSync-update-check");
         let (status, body) = answer.lock().unwrap().clone();
         let response = openidconnect::http::Response::builder()
@@ -41,7 +44,10 @@ async fn a_failed_check_keeps_the_last_answer() {
     let answer = Arc::new(Mutex::new((200, json!({"tag_name": " v2.0.0 "}))));
     let (http, cache) = (github(answer.clone()), UpdateCache::default());
     update_check::refresh(&http, &cache, "1.4.0").await;
-    let expected = Some(UpdateStatus { latest: "v2.0.0".into(), available: true });
+    let expected = Some(UpdateStatus {
+        latest: "v2.0.0".into(),
+        available: true,
+    });
     assert_eq!(cache.get(), expected);
     *answer.lock().unwrap() = (503, json!({}));
     update_check::refresh(&http, &cache, "1.4.0").await;
@@ -50,7 +56,13 @@ async fn a_failed_check_keeps_the_last_answer() {
 
 #[tokio::test]
 async fn the_app_state_reports_the_last_answer() {
-    let state = AppState::new(Db::open_in_memory().unwrap(), false, schedule::system_clock(), 0.0, AuthConfig::sign_in_off());
+    let state = AppState::new(
+        Db::open_in_memory().unwrap(),
+        false,
+        schedule::system_clock(),
+        0.0,
+        AuthConfig::sign_in_off(),
+    );
     let http = github(Arc::new(Mutex::new((200, json!({"tag_name": "v99.0.0"})))));
     let read = |state: AppState| async move {
         let request = Request::builder()
@@ -61,12 +73,26 @@ async fn the_app_state_reports_the_last_answer() {
             .body(Body::empty())
             .unwrap();
         let response = build_app(state, None).oneshot(request).await.unwrap();
-        let body: Value = serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        let body: Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
         body["update"].clone()
     };
-    assert_eq!((read(state.clone()).await["available"].clone(), read(state.clone()).await["latest"].clone()), (json!(false), Value::Null));
+    assert_eq!(
+        (
+            read(state.clone()).await["available"].clone(),
+            read(state.clone()).await["latest"].clone()
+        ),
+        (json!(false), Value::Null)
+    );
     update_check::refresh(&http, &state.update, "1.0.0").await;
     let update = read(state).await;
-    assert_eq!((update["available"].clone(), update["latest"].clone()), (json!(true), json!("v99.0.0")));
-    assert_eq!(update["releaseUrl"], "https://github.com/secunit404/activsync/releases/latest");
+    assert_eq!(
+        (update["available"].clone(), update["latest"].clone()),
+        (json!(true), json!("v99.0.0"))
+    );
+    assert_eq!(
+        update["releaseUrl"],
+        "https://github.com/secunit404/activsync/releases/latest"
+    );
 }

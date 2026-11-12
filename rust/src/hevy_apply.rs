@@ -13,8 +13,8 @@ use crate::config::Config;
 use crate::db::{self, Db};
 use crate::exercise_tables::{self, TABLES, UNKNOWN_CATEGORY};
 use crate::fit_builder::{
-    self, DeviceIdentity, MAX_SCALE, MIN_SCALE, Profile, REST_BETWEEN_EXERCISES_S, REST_BETWEEN_SETS_S,
-    ResolvedExercise, WARMUP_SET_S, WORKING_SET_S,
+    self, DeviceIdentity, MAX_SCALE, MIN_SCALE, Profile, REST_BETWEEN_EXERCISES_S,
+    REST_BETWEEN_SETS_S, ResolvedExercise, WARMUP_SET_S, WORKING_SET_S,
 };
 use crate::garmin_client::{GarminClient, GarminError};
 use crate::hevy_db::{self, OpField, Operation, Workout};
@@ -32,7 +32,10 @@ const GONE_ON_GARMIN: &str = "watch activity deleted on Garmin";
 #[derive(Debug)]
 pub enum ApplyError {
     /// An exercise with no Garmin mapping; routes to the mapping gate.
-    MappingMiss { title: String, template_id: Option<String> },
+    MappingMiss {
+        title: String,
+        template_id: Option<String>,
+    },
     Garmin(GarminError),
     Db(rusqlite::Error),
     Invalid(String),
@@ -43,7 +46,10 @@ impl std::fmt::Display for ApplyError {
         match self {
             Self::MappingMiss { title, template_id } => {
                 let template = template_id.as_deref().unwrap_or("None");
-                write!(f, "no Garmin mapping for exercise '{title}' (template {template})")
+                write!(
+                    f,
+                    "no Garmin mapping for exercise '{title}' (template {template})"
+                )
             }
             Self::Garmin(err) => err.fmt(f),
             Self::Db(err) => err.fmt(f),
@@ -67,18 +73,41 @@ impl From<rusqlite::Error> for ApplyError {
 }
 
 /// Every exercise resolved, or the first unmapped one as a miss.
-pub fn resolve_exercises(conn: &Connection, workout: &Value) -> Result<Vec<ResolvedExercise>, ApplyError> {
+pub fn resolve_exercises(
+    conn: &Connection,
+    workout: &Value,
+) -> Result<Vec<ResolvedExercise>, ApplyError> {
     let empty = Vec::new();
-    let exercises = workout.get("exercises").and_then(Value::as_array).unwrap_or(&empty);
+    let exercises = workout
+        .get("exercises")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
     let mut resolved = Vec::new();
     for exercise in exercises {
-        let title = exercise.get("title").and_then(Value::as_str).unwrap_or_default();
+        let title = exercise
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let template_id = exercise.get("exercise_template_id").and_then(Value::as_str);
-        let Some((category, subcategory)) = exercise_tables::lookup_exercise(conn, title, template_id)? else {
-            return Err(ApplyError::MappingMiss { title: title.into(), template_id: template_id.map(Into::into) });
+        let Some((category, subcategory)) =
+            exercise_tables::lookup_exercise(conn, title, template_id)?
+        else {
+            return Err(ApplyError::MappingMiss {
+                title: title.into(),
+                template_id: template_id.map(Into::into),
+            });
         };
-        let sets = exercise.get("sets").and_then(Value::as_array).cloned().unwrap_or_default();
-        resolved.push(ResolvedExercise { title: title.into(), category, subcategory, sets });
+        let sets = exercise
+            .get("sets")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        resolved.push(ResolvedExercise {
+            title: title.into(),
+            category,
+            subcategory,
+            sets,
+        });
     }
     Ok(resolved)
 }
@@ -99,8 +128,13 @@ pub(crate) fn number(value: Option<&Value>) -> Option<f64> {
 
 /// The exerciseSets PUT payload, the synthetic set timing spread across the
 /// real activity window.
-pub fn build_exercise_sets_payload(resolved: &[ResolvedExercise], start: &str, duration_s: f64) -> Result<Value, String> {
-    let act_start = parse_timestamp(start).ok_or_else(|| format!("unparseable activity start: '{start}'"))?;
+pub fn build_exercise_sets_payload(
+    resolved: &[ResolvedExercise],
+    start: &str,
+    duration_s: f64,
+) -> Result<Value, String> {
+    let act_start =
+        parse_timestamp(start).ok_or_else(|| format!("unparseable activity start: '{start}'"))?;
     if let Some(exercise) = resolved.iter().find(|e| e.category == UNKNOWN_CATEGORY) {
         return Err(format!("exercise '{}' resolved to UNKNOWN", exercise.title));
     }
@@ -126,7 +160,12 @@ pub fn build_exercise_sets_payload(resolved: &[ResolvedExercise], start: &str, d
                 (true, false) => REST_BETWEEN_EXERCISES_S,
                 _ => REST_BETWEEN_SETS_S,
             };
-            slots.push(Slot { ex_idx, set, set_dur, rest_dur });
+            slots.push(Slot {
+                ex_idx,
+                set,
+                set_dur,
+                rest_dur,
+            });
         }
     }
 
@@ -134,7 +173,11 @@ pub fn build_exercise_sets_payload(resolved: &[ResolvedExercise], start: &str, d
     let scale = if ideal > 0.0 { duration_s / ideal } else { 1.0 };
     let scale = scale.min(MAX_SCALE).max(MIN_SCALE);
 
-    let stamp = |cursor: f64| (act_start + seconds(cursor)).format("%Y-%m-%dT%H:%M:%S.0").to_string();
+    let stamp = |cursor: f64| {
+        (act_start + seconds(cursor))
+            .format("%Y-%m-%dT%H:%M:%S.0")
+            .to_string()
+    };
     let mut sets = Vec::new();
     let mut cursor = 0.0;
     for slot in &slots {
@@ -148,7 +191,9 @@ pub fn build_exercise_sets_payload(resolved: &[ResolvedExercise], start: &str, d
         let name = TABLES.subcategory_name(exercise.category, exercise.subcategory);
         let scaled = slot.set_dur * scale;
         let reps = number(slot.set.get("reps")).map_or(0, |r| r.trunc() as i64);
-        let weight = number(slot.set.get("weight_kg")).filter(|w| *w != 0.0).map_or(0.0, |kg| (kg * 1000.0).round_ties_even());
+        let weight = number(slot.set.get("weight_kg"))
+            .filter(|w| *w != 0.0)
+            .map_or(0.0, |kg| (kg * 1000.0).round_ties_even());
         sets.push(json!({
             "exercises": [{"category": category, "name": name, "probability": null}],
             "duration": round3(scaled),
@@ -193,15 +238,23 @@ pub(crate) fn float(value: Option<&Value>) -> Option<f64> {
 }
 
 pub(crate) fn workout_window(row: &Workout) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
-    Some((parse_timestamp(&row.start_time)?, parse_timestamp(&row.end_time)?))
+    Some((
+        parse_timestamp(&row.start_time)?,
+        parse_timestamp(&row.end_time)?,
+    ))
 }
 
 pub(crate) fn total_seconds(span: Duration) -> f64 {
-    span.num_microseconds().map_or(span.num_seconds() as f64, |us| us as f64 / 1e6)
+    span.num_microseconds()
+        .map_or(span.num_seconds() as f64, |us| us as f64 / 1e6)
 }
 
 /// The linked activity's start and duration, else the workout's own window.
-pub(crate) fn activity_window(conn: &Connection, activity_id: i64, row: &Workout) -> Result<(String, f64), ApplyError> {
+pub(crate) fn activity_window(
+    conn: &Connection,
+    activity_id: i64,
+    row: &Workout,
+) -> Result<(String, f64), ApplyError> {
     if let Some(activity) = db::get_activity(conn, activity_id)? {
         let duration = activity_duration_seconds(&activity);
         if duration > 0.0 {
@@ -221,10 +274,19 @@ pub(crate) fn activity_metrics(
     target: i64,
     generated: (Option<f64>, Option<f64>),
 ) -> Result<(Option<i64>, Option<i64>), ApplyError> {
-    let rounded = |value: Option<f64>| value.filter(|v| v.is_finite()).map(|v| v.round_ties_even() as i64);
+    let rounded = |value: Option<f64>| {
+        value
+            .filter(|v| v.is_finite())
+            .map(|v| v.round_ties_even() as i64)
+    };
     let (mut calories, mut avg_hr) = (None, None);
-    for activity_id in [Some(target), row.source_garmin_activity_id].into_iter().flatten() {
-        let Some(activity) = db::get_activity(conn, activity_id)? else { continue };
+    for activity_id in [Some(target), row.source_garmin_activity_id]
+        .into_iter()
+        .flatten()
+    {
+        let Some(activity) = db::get_activity(conn, activity_id)? else {
+            continue;
+        };
         let metrics: Value = serde_json::from_str(&activity.garmin_data).unwrap_or(Value::Null);
         calories = calories.or_else(|| rounded(float(metrics.get("calories"))));
         avg_hr = avg_hr.or_else(|| rounded(float(metrics.get("avg_hr"))));
@@ -232,7 +294,10 @@ pub(crate) fn activity_metrics(
             return Ok((calories, avg_hr));
         }
     }
-    Ok((calories.or_else(|| rounded(generated.0)), avg_hr.or_else(|| rounded(generated.1))))
+    Ok((
+        calories.or_else(|| rounded(generated.0)),
+        avg_hr.or_else(|| rounded(generated.1)),
+    ))
 }
 
 fn persist_identity(conn: &Connection, identity: DeviceIdentity) -> Result<(), ApplyError> {
@@ -268,9 +333,13 @@ fn identity_for_build(conn: &Connection, cfg: &Config) -> Result<DeviceIdentity,
 /// guard, since a blind upload would duplicate a session recorded under
 /// another type.
 fn overlapping_any_type(conn: &Connection, row: &Workout) -> Result<Option<String>, ApplyError> {
-    let Some((start, end)) = workout_window(row) else { return Ok(None) };
+    let Some((start, end)) = workout_window(row) else {
+        return Ok(None);
+    };
     for activity in db::list_activities(conn, false)? {
-        let Some(act_start) = parse_timestamp(&activity.start_time) else { continue };
+        let Some(act_start) = parse_timestamp(&activity.start_time) else {
+            continue;
+        };
         let act_end = act_start + seconds(activity_duration_seconds(&activity));
         if act_start < end && act_end > start {
             return Ok(Some(activity.activity_type));
@@ -283,27 +352,48 @@ fn overlapping_any_type(conn: &Connection, row: &Workout) -> Result<Option<Strin
 /// strength or other activity starting near the workout with a plausible
 /// duration may be adopted. A new run in the window must never be renamed
 /// and have the watch activity deleted under it.
-pub fn resolution_candidates(activities: &[Value], row: &Workout, pre_upload_ids: &[i64], source: Option<i64>) -> BTreeSet<i64> {
-    let Some((hevy_start, hevy_end)) = workout_window(row) else { return BTreeSet::new() };
+pub fn resolution_candidates(
+    activities: &[Value],
+    row: &Workout,
+    pre_upload_ids: &[i64],
+    source: Option<i64>,
+) -> BTreeSet<i64> {
+    let Some((hevy_start, hevy_end)) = workout_window(row) else {
+        return BTreeSet::new();
+    };
     let hevy_duration = total_seconds(hevy_end - hevy_start);
     if hevy_duration <= 0.0 {
         return BTreeSet::new();
     }
     let mut candidates = BTreeSet::new();
     for act in activities {
-        let Some(activity_id) = act.get("activityId").and_then(hevy_db::id_of) else { continue };
+        let Some(activity_id) = act.get("activityId").and_then(hevy_db::id_of) else {
+            continue;
+        };
         if pre_upload_ids.contains(&activity_id) || Some(activity_id) == source {
             continue;
         }
-        let kind = act.get("activityType").and_then(|t| t.get("typeKey")).and_then(Value::as_str).unwrap_or_default();
+        let kind = act
+            .get("activityType")
+            .and_then(|t| t.get("typeKey"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if !RESOLUTION_TYPES.contains(&kind) {
             continue;
         }
-        let Some(act_start) = act.get("startTimeGMT").and_then(Value::as_str).and_then(parse_timestamp) else { continue };
+        let Some(act_start) = act
+            .get("startTimeGMT")
+            .and_then(Value::as_str)
+            .and_then(parse_timestamp)
+        else {
+            continue;
+        };
         if total_seconds(act_start - hevy_start).abs() > RESOLUTION_DRIFT_S {
             continue;
         }
-        let Some(duration) = float(act.get("duration")).filter(|d| *d > 0.0) else { continue };
+        let Some(duration) = float(act.get("duration")).filter(|d| *d > 0.0) else {
+            continue;
+        };
         let ratio = duration / hevy_duration;
         if (0.25..=4.0).contains(&ratio) {
             candidates.insert(activity_id);
@@ -351,7 +441,9 @@ enum Prepared {
 
 impl Apply<'_> {
     pub(crate) fn summary_on_structured(&self) -> bool {
-        self.cfg.get("hevy_summary_on_structured").is_none_or(|v| db::truthy(Some(v)))
+        self.cfg
+            .get("hevy_summary_on_structured")
+            .is_none_or(|v| db::truthy(Some(v)))
     }
 
     pub(crate) fn template(&self, key: &str) -> Option<&str> {
@@ -366,23 +458,40 @@ impl Apply<'_> {
         generated: (Option<f64>, Option<f64>),
     ) -> Result<(), ApplyError> {
         let payload = row.payload_json();
-        let title = generate_title(&payload, self.template("hevy_title_template")).map_err(ApplyError::Invalid)?;
+        let title = generate_title(&payload, self.template("hevy_title_template"))
+            .map_err(ApplyError::Invalid)?;
         self.garmin.set_title(activity_id, &title).await?;
         if write_summary {
-            let (calories, avg_hr) = activity_metrics(&self.db.lock(), row, activity_id, generated)?;
-            let description = generate_description(&payload, calories, avg_hr, self.template("hevy_description_template"))
-                .map_err(ApplyError::Invalid)?;
-            self.garmin.set_description(activity_id, &description).await?;
+            let (calories, avg_hr) =
+                activity_metrics(&self.db.lock(), row, activity_id, generated)?;
+            let description = generate_description(
+                &payload,
+                calories,
+                avg_hr,
+                self.template("hevy_description_template"),
+            )
+            .map_err(ApplyError::Invalid)?;
+            self.garmin
+                .set_description(activity_id, &description)
+                .await?;
         }
         Ok(())
     }
 
     fn source_of(row: &Workout) -> Result<i64, ApplyError> {
-        row.source_garmin_activity_id.ok_or_else(|| ApplyError::Invalid(format!("workout {} has no watch activity", row.hevy_id)))
+        row.source_garmin_activity_id.ok_or_else(|| {
+            ApplyError::Invalid(format!("workout {} has no watch activity", row.hevy_id))
+        })
     }
 
     /// Mark the applied revision so an unchanged workout is not reapplied.
-    fn finish(&self, row: &Workout, target: i64, strategy: &str, status: &str) -> Result<(), ApplyError> {
+    fn finish(
+        &self,
+        row: &Workout,
+        target: i64,
+        strategy: &str,
+        status: &str,
+    ) -> Result<(), ApplyError> {
         let conn = self.db.lock();
         hevy_db::link_target(&conn, &row.hevy_id, target, strategy)?;
         hevy_db::set_workout_status(&conn, &row.hevy_id, status, None)?;
@@ -399,26 +508,44 @@ impl Apply<'_> {
             hevy_db::save_backup(&conn, source, &row.hevy_id, &existing, None)?;
             activity_window(&conn, source, row)?
         };
-        let mut payload = build_exercise_sets_payload(&resolved, &start, duration).map_err(ApplyError::Invalid)?;
+        let mut payload = build_exercise_sets_payload(&resolved, &start, duration)
+            .map_err(ApplyError::Invalid)?;
         payload["activityId"] = json!(source);
         match self.garmin.put_exercise_sets(source, &payload).await {
             Ok(()) => {}
             Err(GarminError::SubcategoryRejected(_)) => {
                 // The 400 does not say which pair was refused: list the
                 // specific ones as candidates, never blame one.
-                let candidates: Vec<&str> =
-                    resolved.iter().filter(|r| !matches!(r.subcategory, 0 | 65535)).map(|r| r.title.as_str()).collect();
-                let error = format!("Garmin rejected an exercise pair; adjust one of: {}", candidates.join(", "));
-                hevy_db::set_workout_status(&self.db.lock(), &row.hevy_id, "needs_mapping", Some(&error))?;
+                let candidates: Vec<&str> = resolved
+                    .iter()
+                    .filter(|r| !matches!(r.subcategory, 0 | 65535))
+                    .map(|r| r.title.as_str())
+                    .collect();
+                let error = format!(
+                    "Garmin rejected an exercise pair; adjust one of: {}",
+                    candidates.join(", ")
+                );
+                hevy_db::set_workout_status(
+                    &self.db.lock(),
+                    &row.hevy_id,
+                    "needs_mapping",
+                    Some(&error),
+                )?;
                 return Ok(());
             }
             Err(GarminError::ActivityGone(_)) => {
-                hevy_db::set_workout_status(&self.db.lock(), &row.hevy_id, "needs_review", Some(GONE_ON_GARMIN))?;
+                hevy_db::set_workout_status(
+                    &self.db.lock(),
+                    &row.hevy_id,
+                    "needs_review",
+                    Some(GONE_ON_GARMIN),
+                )?;
                 return Ok(());
             }
             Err(err) => return Err(err.into()),
         }
-        self.apply_metadata(source, row, self.summary_on_structured(), (None, None)).await?;
+        self.apply_metadata(source, row, self.summary_on_structured(), (None, None))
+            .await?;
         self.finish(row, source, "merge", "merged")
     }
 
@@ -426,7 +553,12 @@ impl Apply<'_> {
         let source = Self::source_of(row)?;
         match self.apply_metadata(source, row, true, (None, None)).await {
             Err(ApplyError::Garmin(GarminError::ActivityGone(_))) => {
-                hevy_db::set_workout_status(&self.db.lock(), &row.hevy_id, "needs_review", Some(GONE_ON_GARMIN))?;
+                hevy_db::set_workout_status(
+                    &self.db.lock(),
+                    &row.hevy_id,
+                    "needs_review",
+                    Some(GONE_ON_GARMIN),
+                )?;
                 Ok(())
             }
             Err(err) => Err(err),
@@ -435,14 +567,20 @@ impl Apply<'_> {
     }
 
     pub async fn execute_replace(&self, row: &Workout) -> Result<(), ApplyError> {
-        self.open_and_advance(row, "replace", row.source_garmin_activity_id).await
+        self.open_and_advance(row, "replace", row.source_garmin_activity_id)
+            .await
     }
 
     pub async fn execute_passive(&self, row: &Workout) -> Result<(), ApplyError> {
         self.open_and_advance(row, "upload_passive", None).await
     }
 
-    async fn open_and_advance(&self, row: &Workout, kind: &str, source: Option<i64>) -> Result<(), ApplyError> {
+    async fn open_and_advance(
+        &self,
+        row: &Workout,
+        kind: &str,
+        source: Option<i64>,
+    ) -> Result<(), ApplyError> {
         {
             let conn = self.db.lock();
             hevy_db::set_workout_status(&conn, &row.hevy_id, "syncing", None)?;
@@ -457,7 +595,14 @@ impl Apply<'_> {
     }
 
     fn park(&self, op: &Operation, row: &Workout, error: &str) -> Result<(), ApplyError> {
-        hevy_db::set_operation_outcome(&self.db.lock(), op.id, &row.hevy_id, "needs_review", "needs_review", Some(error))?;
+        hevy_db::set_operation_outcome(
+            &self.db.lock(),
+            op.id,
+            &row.hevy_id,
+            "needs_review",
+            "needs_review",
+            Some(error),
+        )?;
         Ok(())
     }
 
@@ -472,7 +617,9 @@ impl Apply<'_> {
     /// itself and is never resubmitted.
     pub async fn advance_operation(&self, row: &Workout) -> Result<(), ApplyError> {
         loop {
-            let Some(op) = hevy_db::get_open_operation(&self.db.lock(), &row.hevy_id)? else { return Ok(()) };
+            let Some(op) = hevy_db::get_open_operation(&self.db.lock(), &row.hevy_id)? else {
+                return Ok(());
+            };
             match op.phase.as_str() {
                 "preparing" => {
                     if !self.prepare(&op, row).await? {
@@ -498,22 +645,30 @@ impl Apply<'_> {
     /// Returns whether the operation moved on to the next phase.
     async fn prepare(&self, op: &Operation, row: &Workout) -> Result<bool, ApplyError> {
         if op.kind == "replace" {
-            let source = op.source_activity_id.ok_or_else(|| ApplyError::Invalid("replace without a source".into()))?;
+            let source = op
+                .source_activity_id
+                .ok_or_else(|| ApplyError::Invalid("replace without a source".into()))?;
             let fit = self.garmin.download_fit(source).await?;
             let existing = self.garmin.get_exercise_sets(source).await?;
             let conn = self.db.lock();
             hevy_db::save_backup(&conn, source, &row.hevy_id, &existing, Some(&fit))?;
             let settings = db::get_config_value(&conn, "settings")?.unwrap_or(Value::Null);
-            let stored = settings.get("hevy_device_identity").filter(|v| db::truthy(Some(v)));
+            let stored = settings
+                .get("hevy_device_identity")
+                .filter(|v| db::truthy(Some(v)));
             // Product 0 is the generic no-watch fallback: upgrade it as soon
             // as a real watch FIT makes per-user detection possible.
-            let generic = stored.is_none_or(|s| s.get("product").is_some_and(|p| p.as_f64() == Some(0.0) || p == "0"));
+            let generic = stored.is_none_or(|s| {
+                s.get("product")
+                    .is_some_and(|p| p.as_f64() == Some(0.0) || p == "0")
+            });
             if generic {
                 if let Some(detected) = fit_builder::identity_from_fit(&fit) {
                     persist_identity(&conn, detected)?;
                 }
             }
-            let published = db::get_activity(&conn, source)?.is_some_and(|a| a.strava_activity_id.is_some_and(|id| id != 0));
+            let published = db::get_activity(&conn, source)?
+                .is_some_and(|a| a.strava_activity_id.is_some_and(|id| id != 0));
             drop(conn);
             if published {
                 self.park(op, row, "source activity already published to Strava")?;
@@ -522,12 +677,21 @@ impl Apply<'_> {
         } else {
             let wrong_type = overlapping_any_type(&self.db.lock(), row)?;
             if let Some(kind) = wrong_type.filter(|k| !k.is_empty()) {
-                self.park(op, row, &format!("overlapping {kind} activity exists — passive upload would duplicate it"))?;
+                self.park(
+                    op,
+                    row,
+                    &format!(
+                        "overlapping {kind} activity exists — passive upload would duplicate it"
+                    ),
+                )?;
                 return Ok(false);
             }
         }
         let snapshot = self.garmin.list_activity_ids_near(&row.start_time).await?;
-        self.update(op, &[OpField::Phase("uploading"), OpField::PreUploadIds(snapshot)])?;
+        self.update(
+            op,
+            &[OpField::Phase("uploading"), OpField::PreUploadIds(snapshot)],
+        )?;
         Ok(true)
     }
 
@@ -544,22 +708,30 @@ impl Apply<'_> {
             };
             match (fit, window) {
                 (Some(fit), Some((start, _))) if !fit.is_empty() => {
-                    let start_ms = (start.timestamp_micros() as f64 / 1e6 * 1000.0).round_ties_even() as i64;
+                    let start_ms =
+                        (start.timestamp_micros() as f64 / 1e6 * 1000.0).round_ties_even() as i64;
                     hr_sources::extract_fit_hr(&fit, start_ms)
                 }
                 _ => Vec::new(),
             }
         } else {
             match window {
-                Some((start, end)) => hr_sources::passive_hr_for_window(self.garmin, start, end).await,
+                Some((start, end)) => {
+                    hr_sources::passive_hr_for_window(self.garmin, start, end).await
+                }
                 None => Vec::new(),
             }
         };
         let identity = identity_for_build(&self.db.lock(), self.cfg)?;
-        let (fit, summary) = fit_builder::build_fit(&payload, &resolved, &hr, self.profile, identity).map_err(ApplyError::Invalid)?;
+        let (fit, summary) =
+            fit_builder::build_fit(&payload, &resolved, &hr, self.profile, identity)
+                .map_err(ApplyError::Invalid)?;
         self.update(
             op,
-            &[OpField::GeneratedCalories(Some(summary.calories as f64)), OpField::GeneratedAvgHr(summary.avg_hr.map(|hr| hr as f64))],
+            &[
+                OpField::GeneratedCalories(Some(summary.calories as f64)),
+                OpField::GeneratedAvgHr(summary.avg_hr.map(|hr| hr as f64)),
+            ],
         )?;
         Ok(fit)
     }
@@ -567,15 +739,26 @@ impl Apply<'_> {
     async fn upload(&self, op: &Operation, row: &Workout) -> Result<bool, ApplyError> {
         let prepared = match self.build(op, row).await {
             Ok(fit) => Prepared::Built { fit },
-            Err(ApplyError::MappingMiss { title, .. }) => {
-                Prepared::Closed { status: "needs_mapping", error: format!("unmapped exercises: {title}") }
-            }
-            Err(err) => Prepared::Closed { status: "failed", error: format!("FIT build failed: {err}") },
+            Err(ApplyError::MappingMiss { title, .. }) => Prepared::Closed {
+                status: "needs_mapping",
+                error: format!("unmapped exercises: {title}"),
+            },
+            Err(err) => Prepared::Closed {
+                status: "failed",
+                error: format!("FIT build failed: {err}"),
+            },
         };
         let fit = match prepared {
             Prepared::Built { fit } => fit,
             Prepared::Closed { status, error } => {
-                hevy_db::set_operation_outcome(&self.db.lock(), op.id, &row.hevy_id, "failed", status, Some(&error))?;
+                hevy_db::set_operation_outcome(
+                    &self.db.lock(),
+                    op.id,
+                    &row.hevy_id,
+                    "failed",
+                    status,
+                    Some(&error),
+                )?;
                 return Ok(false);
             }
         };
@@ -583,27 +766,50 @@ impl Apply<'_> {
             Ok(file) => self.garmin.upload_fit(&file.path(&row.hevy_id)).await,
             Err(err) => {
                 let error = format!("FIT build failed: {err}");
-                hevy_db::set_operation_outcome(&self.db.lock(), op.id, &row.hevy_id, "failed", "failed", Some(&error))?;
+                hevy_db::set_operation_outcome(
+                    &self.db.lock(),
+                    op.id,
+                    &row.hevy_id,
+                    "failed",
+                    "failed",
+                    Some(&error),
+                )?;
                 return Ok(false);
             }
         };
         let result = match uploaded {
             Ok(result) => result,
             Err(GarminError::UploadRejected(message)) => {
-                hevy_db::set_operation_outcome(&self.db.lock(), op.id, &row.hevy_id, "failed", "failed", Some(&message))?;
+                hevy_db::set_operation_outcome(
+                    &self.db.lock(),
+                    op.id,
+                    &row.hevy_id,
+                    "failed",
+                    "failed",
+                    Some(&message),
+                )?;
                 return Ok(false);
             }
             Err(err) => {
                 // The outcome is unknown: record it and wait, never resubmit.
                 self.update(
                     op,
-                    &[OpField::Phase("submission_unknown"), OpField::NextStep("resolve"), OpField::LastError(err.to_string())],
+                    &[
+                        OpField::Phase("submission_unknown"),
+                        OpField::NextStep("resolve"),
+                        OpField::LastError(err.to_string()),
+                    ],
                 )?;
                 return Ok(false);
             }
         };
-        let upload_id = result.upload_id.as_ref().map(|id| id.as_str().map_or_else(|| id.to_string(), str::to_string));
-        match result.activity_id.filter(|id| *id != 0 && !op.pre_upload_ids.contains(id) && Some(*id) != op.source_activity_id) {
+        let upload_id = result
+            .upload_id
+            .as_ref()
+            .map(|id| id.as_str().map_or_else(|| id.to_string(), str::to_string));
+        match result.activity_id.filter(|id| {
+            *id != 0 && !op.pre_upload_ids.contains(id) && Some(*id) != op.source_activity_id
+        }) {
             Some(new_id) => {
                 self.update(
                     op,
@@ -618,7 +824,14 @@ impl Apply<'_> {
             }
             None => {
                 // Accepted but not yet resolvable: let Garmin finish.
-                self.update(op, &[OpField::Phase("submission_unknown"), OpField::NextStep("resolve"), OpField::UploadId(upload_id)])?;
+                self.update(
+                    op,
+                    &[
+                        OpField::Phase("submission_unknown"),
+                        OpField::NextStep("resolve"),
+                        OpField::UploadId(upload_id),
+                    ],
+                )?;
                 Ok(false)
             }
         }
@@ -626,20 +839,39 @@ impl Apply<'_> {
 
     async fn resolve(&self, op: &Operation, row: &Workout) -> Result<bool, ApplyError> {
         let activities = self.garmin.list_activities_near(&row.start_time).await?;
-        let candidates = resolution_candidates(&activities, row, &op.pre_upload_ids, op.source_activity_id);
+        let candidates =
+            resolution_candidates(&activities, row, &op.pre_upload_ids, op.source_activity_id);
         if candidates.len() == 1 {
             let target = *candidates.first().expect("one candidate");
-            self.update(op, &[OpField::Phase("finalizing"), OpField::NextStep("metadata"), OpField::TargetActivityId(target)])?;
+            self.update(
+                op,
+                &[
+                    OpField::Phase("finalizing"),
+                    OpField::NextStep("metadata"),
+                    OpField::TargetActivityId(target),
+                ],
+            )?;
             return Ok(true);
         }
         if candidates.len() > 1 {
             let listed: Vec<String> = candidates.iter().map(i64::to_string).collect();
-            self.park(op, row, &format!("ambiguous upload result: candidates [{}]", listed.join(", ")))?;
+            self.park(
+                op,
+                row,
+                &format!(
+                    "ambiguous upload result: candidates [{}]",
+                    listed.join(", ")
+                ),
+            )?;
             return Ok(false);
         }
         let attempts = op.attempt_count + 1;
         if attempts >= RESOLVE_MAX_CHECKS {
-            self.park(op, row, &format!("upload outcome unresolved after {RESOLVE_MAX_CHECKS} checks"))?;
+            self.park(
+                op,
+                row,
+                &format!("upload outcome unresolved after {RESOLVE_MAX_CHECKS} checks"),
+            )?;
             return Ok(false);
         }
         self.update(op, &[OpField::AttemptCount(attempts)])?;
@@ -648,32 +880,57 @@ impl Apply<'_> {
 
     /// metadata → delete → finalize, each step saved so a crash resumes at it.
     async fn finalize(&self, op: &Operation, row: &Workout) -> Result<(), ApplyError> {
-        let target = op.target_activity_id.ok_or_else(|| ApplyError::Invalid("finalizing without a target".into()))?;
+        let target = op
+            .target_activity_id
+            .ok_or_else(|| ApplyError::Invalid("finalizing without a target".into()))?;
         let replace = op.kind == "replace";
         let mut next_step = op.next_step.clone().unwrap_or_else(|| "metadata".into());
         if next_step == "metadata" {
             let write_summary = !replace || self.summary_on_structured();
-            self.apply_metadata(target, row, write_summary, (op.generated_calories, op.generated_avg_hr)).await?;
+            self.apply_metadata(
+                target,
+                row,
+                write_summary,
+                (op.generated_calories, op.generated_avg_hr),
+            )
+            .await?;
             self.update(op, &[OpField::NextStep("delete")])?;
             next_step = "delete".into();
         }
         if next_step == "delete" {
-            if let Some(source) = op.source_activity_id.filter(|s| replace && *s != 0 && *s != target) {
+            if let Some(source) = op
+                .source_activity_id
+                .filter(|s| replace && *s != 0 && *s != target)
+            {
                 match self.garmin.delete_activity(source).await {
                     // A 404 is the success signal: a crash after a delete replays here.
                     Ok(()) | Err(GarminError::NotFound(_) | GarminError::ActivityGone(_)) => {}
                     Err(err) => {
                         let deletes = op.delete_attempt_count + 1;
                         if deletes >= 3 {
-                            return self.park(op, row, &format!("could not delete watch activity {source}: {err}"));
+                            return self.park(
+                                op,
+                                row,
+                                &format!("could not delete watch activity {source}: {err}"),
+                            );
                         }
-                        return self.update(op, &[OpField::DeleteAttemptCount(deletes), OpField::LastError(err.to_string())]);
+                        return self.update(
+                            op,
+                            &[
+                                OpField::DeleteAttemptCount(deletes),
+                                OpField::LastError(err.to_string()),
+                            ],
+                        );
                     }
                 }
             }
             self.update(op, &[OpField::NextStep("finalize")])?;
         }
-        let (strategy, status) = if replace { ("replace", "replaced") } else { ("passive", "uploaded_passive") };
+        let (strategy, status) = if replace {
+            ("replace", "replaced")
+        } else {
+            ("passive", "uploaded_passive")
+        };
         hevy_db::complete_operation(
             &self.db.lock(),
             op.id,

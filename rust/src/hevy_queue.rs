@@ -15,7 +15,13 @@ use crate::{AppState, config, db, schedule, timefmt, view};
 
 const IN_FLIGHT: [&str; 3] = ["waiting_watch", "awaiting_match", "syncing"];
 const PROBLEMS: [&str; 3] = ["needs_mapping", "failed", "needs_review"];
-const TERMINAL_STATUSES: [&str; 5] = ["merged", "described", "replaced", "uploaded_passive", "linked_existing"];
+const TERMINAL_STATUSES: [&str; 5] = [
+    "merged",
+    "described",
+    "replaced",
+    "uploaded_passive",
+    "linked_existing",
+];
 const RETRYABLE_STATUSES: [&str; 3] = ["needs_mapping", "failed", "needs_review"];
 
 #[derive(Serialize)]
@@ -60,14 +66,25 @@ pub struct HevyQueueState {
 /// through the same formatter, with the raw value when that fails.
 fn start_display(start_time: &str, tz_name: &str) -> String {
     let normalised = start_time.replace('T', " ");
-    let cleaned = normalised.split('+').next().unwrap_or_default().trim_end_matches('Z');
-    match (timefmt::parse_garmin(cleaned), tz_name.parse::<chrono_tz::Tz>()) {
+    let cleaned = normalised
+        .split('+')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('Z');
+    match (
+        timefmt::parse_garmin(cleaned),
+        tz_name.parse::<chrono_tz::Tz>(),
+    ) {
         (Some(utc), Ok(tz)) => utc.with_timezone(&tz).format("%Y-%m-%d %H:%M").to_string(),
         _ => start_time.to_string(),
     }
 }
 
-fn queue_items(conn: &Connection, statuses: &[&str], tz_name: &str) -> Result<Vec<HevyQueueItem>, ApiError> {
+fn queue_items(
+    conn: &Connection,
+    statuses: &[&str],
+    tz_name: &str,
+) -> Result<Vec<HevyQueueItem>, ApiError> {
     let decisions = hevy_match::active_by_workout(conn)?;
     let mut items = Vec::new();
     for status in statuses {
@@ -112,7 +129,11 @@ pub async fn queue_state(State(state): State<AppState>) -> ApiResult<HevyQueueSt
     let skipped = queue_items(&conn, &["skipped"], &tz_name)?;
     Ok(Json(HevyQueueState {
         enabled: db::truthy(cfg.get("hevy_enabled")),
-        counts: HevyQueueCounts { in_flight: in_flight.len(), problems: problems.len(), skipped: skipped.len() },
+        counts: HevyQueueCounts {
+            in_flight: in_flight.len(),
+            problems: problems.len(),
+            skipped: skipped.len(),
+        },
         in_flight,
         problems,
         skipped,
@@ -164,7 +185,10 @@ fn number(value: Option<&Value>) -> Option<f64> {
 }
 
 fn text(value: Option<&Value>) -> Option<String> {
-    value.and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string)
+    value
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 fn custom_metric(value: Option<&Value>) -> Option<Value> {
@@ -186,11 +210,17 @@ pub fn workout_detail(
 ) -> Result<HevyWorkoutDetail, ApiError> {
     let (hevy_id, title, start_time, end_time) = row;
     let empty = Vec::new();
-    let exercises = payload.get("exercises").and_then(Value::as_array).unwrap_or(&empty);
+    let exercises = payload
+        .get("exercises")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
     let exercises = exercises
         .iter()
         .map(|exercise| {
-            let sets = exercise.get("sets").and_then(Value::as_array).unwrap_or(&empty);
+            let sets = exercise
+                .get("sets")
+                .and_then(Value::as_array)
+                .unwrap_or(&empty);
             HevyWorkoutExerciseDetail {
                 title: text(exercise.get("title"))
                     .or_else(|| text(exercise.get("name")))
@@ -233,16 +263,29 @@ pub fn workout_detail(
 }
 
 fn require_workout(conn: &Connection, hevy_id: &str) -> Result<Workout, ApiError> {
-    hevy_db::get_workout(conn, hevy_id)?.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Unknown Hevy workout."))
+    hevy_db::get_workout(conn, hevy_id)?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Unknown Hevy workout."))
 }
 
-pub async fn workout(State(state): State<AppState>, Path(hevy_id): Path<String>) -> ApiResult<HevyWorkoutDetail> {
+pub async fn workout(
+    State(state): State<AppState>,
+    Path(hevy_id): Path<String>,
+) -> ApiResult<HevyWorkoutDetail> {
     let conn = state.db.lock();
     let workout = require_workout(&conn, &hevy_id)?;
     let cfg = config::load_config(&conn, development(&state))?;
-    let row = (workout.hevy_id.as_str(), workout.title.as_str(), workout.start_time.as_str(), workout.end_time.as_str());
+    let row = (
+        workout.hevy_id.as_str(),
+        workout.title.as_str(),
+        workout.start_time.as_str(),
+        workout.end_time.as_str(),
+    );
     let template = cfg.get("hevy_description_template").and_then(Value::as_str);
-    Ok(Json(workout_detail(&workout.payload_json(), row, template)?))
+    Ok(Json(workout_detail(
+        &workout.payload_json(),
+        row,
+        template,
+    )?))
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq)]
@@ -287,7 +330,9 @@ pub async fn choose_match(
         let conn = state.db.lock();
         let workout = require_workout(&conn, &hevy_id)?;
         if workout.status != "awaiting_match" {
-            return Err(ApiError::conflict("This workout is not waiting for a match decision."));
+            return Err(ApiError::conflict(
+                "This workout is not waiting for a match decision.",
+            ));
         }
         let source = match workout.source_garmin_activity_id {
             Some(id) => db::get_activity(&conn, id)?,
@@ -301,14 +346,20 @@ pub async fn choose_match(
         }
     }
     let scheduler = &state.match_scheduler;
-    let scheduled = scheduler.schedule(&hevy_id, strategy.as_str()).map_err(|err| match err {
-        MatchError::AlreadyScheduled => ApiError::conflict("This workout is already being matched."),
-        MatchError::Db(err) => err.into(),
-    })?;
+    let scheduled = scheduler
+        .schedule(&hevy_id, strategy.as_str())
+        .map_err(|err| match err {
+            MatchError::AlreadyScheduled => {
+                ApiError::conflict("This workout is already being matched.")
+            }
+            MatchError::Db(err) => err.into(),
+        })?;
     Ok(Json(HevyMatchScheduled {
         deadline: schedule::deadline_iso(scheduled.deadline),
         strategy,
-        remaining_ms: ((scheduled.deadline - scheduler.now()) * 1000.0).round().max(0.0) as i64,
+        remaining_ms: ((scheduled.deadline - scheduler.now()) * 1000.0)
+            .round()
+            .max(0.0) as i64,
         undo_window_ms: (scheduled.window_seconds * 1000.0).round() as i64,
     }))
 }
@@ -318,15 +369,23 @@ pub struct HevyMatchCancelled {
     cancelled: bool,
 }
 
-pub async fn cancel_match(State(state): State<AppState>, Path(hevy_id): Path<String>) -> ApiResult<HevyMatchCancelled> {
+pub async fn cancel_match(
+    State(state): State<AppState>,
+    Path(hevy_id): Path<String>,
+) -> ApiResult<HevyMatchCancelled> {
     let conn = state.db.lock();
     if state.match_scheduler.cancel(&conn, &hevy_id)? > 0 {
         return Ok(Json(HevyMatchCancelled { cancelled: true }));
     }
     if hevy_match::get(&conn, &hevy_id)?.is_some_and(|d| d.state == hevy_match::APPLYING) {
-        return Err(ApiError::conflict("Too late to undo: Garmin is already being updated."));
+        return Err(ApiError::conflict(
+            "Too late to undo: Garmin is already being updated.",
+        ));
     }
-    Err(ApiError::new(StatusCode::NOT_FOUND, "No Hevy match is waiting to be undone."))
+    Err(ApiError::new(
+        StatusCode::NOT_FOUND,
+        "No Hevy match is waiting to be undone.",
+    ))
 }
 
 #[derive(Serialize)]
@@ -335,10 +394,20 @@ pub struct HevyMatchStatus {
     message: Option<String>,
 }
 
-pub async fn match_status(State(state): State<AppState>, Path(hevy_id): Path<String>) -> ApiResult<HevyMatchStatus> {
-    let decision = hevy_match::get(&state.db.lock(), &hevy_id)?
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "No Hevy match decision for that workout."))?;
-    Ok(Json(HevyMatchStatus { state: decision.state, message: decision.message }))
+pub async fn match_status(
+    State(state): State<AppState>,
+    Path(hevy_id): Path<String>,
+) -> ApiResult<HevyMatchStatus> {
+    let decision = hevy_match::get(&state.db.lock(), &hevy_id)?.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            "No Hevy match decision for that workout.",
+        )
+    })?;
+    Ok(Json(HevyMatchStatus {
+        state: decision.state,
+        message: decision.message,
+    }))
 }
 
 #[derive(Serialize)]
@@ -357,7 +426,9 @@ fn with_lease(
         let conn = state.db.lock();
         let workout = require_workout(&conn, hevy_id)?;
         let Some(token) = hevy_db::acquire_lease(&conn, hevy_id, Utc::now())? else {
-            return Err(ApiError::conflict("This workout is being processed. Try again in a moment."));
+            return Err(ApiError::conflict(
+                "This workout is being processed. Try again in a moment.",
+            ));
         };
         let result = mutate(&conn, &workout);
         hevy_db::release_lease(&conn, hevy_id, &token)?;
@@ -367,10 +438,16 @@ fn with_lease(
     Ok(Json(HevyQueueActionResult { message: result }))
 }
 
-pub async fn retry(State(state): State<AppState>, Path(hevy_id): Path<String>) -> ApiResult<HevyQueueActionResult> {
+pub async fn retry(
+    State(state): State<AppState>,
+    Path(hevy_id): Path<String>,
+) -> ApiResult<HevyQueueActionResult> {
     with_lease(&state, &hevy_id, |conn, row| {
         if !RETRYABLE_STATUSES.contains(&row.status.as_str()) {
-            return Err(ApiError::conflict(format!("Nothing to retry — workout is {}.", row.status)));
+            return Err(ApiError::conflict(format!(
+                "Nothing to retry — workout is {}.",
+                row.status
+            )));
         }
         match hevy_db::get_open_operation(conn, &row.hevy_id)? {
             Some(operation) => {
@@ -378,7 +455,10 @@ pub async fn retry(State(state): State<AppState>, Path(hevy_id): Path<String>) -
                     let resume = if operation.target_activity_id.is_some_and(|id| id != 0) {
                         "finalizing"
                     } else if operation.next_step.as_deref() == Some("resolve")
-                        || operation.upload_id.as_deref().is_some_and(|u| !u.is_empty())
+                        || operation
+                            .upload_id
+                            .as_deref()
+                            .is_some_and(|u| !u.is_empty())
                     {
                         "submission_unknown"
                     } else {
@@ -394,11 +474,17 @@ pub async fn retry(State(state): State<AppState>, Path(hevy_id): Path<String>) -
     })
 }
 
-pub async fn skip(State(state): State<AppState>, Path(hevy_id): Path<String>) -> ApiResult<HevyQueueActionResult> {
+pub async fn skip(
+    State(state): State<AppState>,
+    Path(hevy_id): Path<String>,
+) -> ApiResult<HevyQueueActionResult> {
     let scheduler = state.match_scheduler.clone();
     with_lease(&state, &hevy_id, |conn, row| {
         if TERMINAL_STATUSES.contains(&row.status.as_str()) || row.status == "skipped" {
-            return Err(ApiError::conflict(format!("Cannot skip a {} workout.", row.status)));
+            return Err(ApiError::conflict(format!(
+                "Cannot skip a {} workout.",
+                row.status
+            )));
         }
         if hevy_db::get_open_operation(conn, &row.hevy_id)?.is_some() {
             return Err(ApiError::conflict(
@@ -407,7 +493,9 @@ pub async fn skip(State(state): State<AppState>, Path(hevy_id): Path<String>) ->
         }
         scheduler.cancel(conn, &row.hevy_id)?;
         if hevy_match::is_active(conn, &row.hevy_id)? {
-            return Err(ApiError::conflict("Garmin is already being updated for this workout."));
+            return Err(ApiError::conflict(
+                "Garmin is already being updated for this workout.",
+            ));
         }
         if row.status == "awaiting_match" {
             hevy_db::reset_links(conn, &row.hevy_id)?;
@@ -417,13 +505,22 @@ pub async fn skip(State(state): State<AppState>, Path(hevy_id): Path<String>) ->
     })
 }
 
-pub async fn unskip(State(state): State<AppState>, Path(hevy_id): Path<String>) -> ApiResult<HevyQueueActionResult> {
+pub async fn unskip(
+    State(state): State<AppState>,
+    Path(hevy_id): Path<String>,
+) -> ApiResult<HevyQueueActionResult> {
     with_lease(&state, &hevy_id, |conn, row| {
         if row.status != "skipped" {
-            return Err(ApiError::conflict(format!("Workout is {}, not skipped.", row.status)));
+            return Err(ApiError::conflict(format!(
+                "Workout is {}, not skipped.",
+                row.status
+            )));
         }
         hevy_db::set_workout_status(conn, &row.hevy_id, "waiting_watch", None)?;
-        Ok(format!("Restored {} to the sync queue.", row.display_title()))
+        Ok(format!(
+            "Restored {} to the sync queue.",
+            row.display_title()
+        ))
     })
 }
 
@@ -437,7 +534,11 @@ pub async fn resync_fresh(
                 "This workout has an operation in progress. Resolve it before you re-sync it fresh.",
             ));
         }
-        let deleted = row.error.as_deref().unwrap_or_default().contains("deleted on Garmin");
+        let deleted = row
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("deleted on Garmin");
         if row.status != "needs_review" || !deleted {
             return Err(ApiError::conflict(
                 "Re-sync as fresh is only available when the linked activity was deleted on Garmin.",

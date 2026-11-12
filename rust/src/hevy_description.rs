@@ -28,7 +28,11 @@ fn py_str(value: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Number(n) if n.is_f64() => {
             let f = n.as_f64().unwrap_or_default();
-            if f.fract() == 0.0 && f.abs() < 1e16 { format!("{f:.1}") } else { f.to_string() }
+            if f.fract() == 0.0 && f.abs() < 1e16 {
+                format!("{f:.1}")
+            } else {
+                f.to_string()
+            }
         }
         other => other.to_string(),
     }
@@ -48,30 +52,50 @@ fn sets_label(n: usize) -> &'static str {
 
 fn exercise_summary(workout: &Value) -> String {
     let empty = Vec::new();
-    let exercises = get(workout, "exercises").and_then(Value::as_array).unwrap_or(&empty);
+    let exercises = get(workout, "exercises")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
     let mut lines = Vec::new();
     for exercise in exercises {
         let name = match exercise.get("title") {
             Some(title) if truthy(Some(title)) => py_str(title),
-            _ => exercise.get("name").map(py_str).unwrap_or_else(|| "Unknown".into()),
+            _ => exercise
+                .get("name")
+                .map(py_str)
+                .unwrap_or_else(|| "Unknown".into()),
         };
-        let all_sets = get(exercise, "sets").and_then(Value::as_array).unwrap_or(&empty);
-        let is_type = |item: &Value, kind: &str| item.get("type").and_then(Value::as_str) == Some(kind);
+        let all_sets = get(exercise, "sets")
+            .and_then(Value::as_array)
+            .unwrap_or(&empty);
+        let is_type =
+            |item: &Value, kind: &str| item.get("type").and_then(Value::as_str) == Some(kind);
         let warmup: Vec<&Value> = all_sets.iter().filter(|s| is_type(s, "warmup")).collect();
         let working: Vec<&Value> = all_sets.iter().filter(|s| !is_type(s, "warmup")).collect();
         if working.is_empty() {
             if !warmup.is_empty() {
-                lines.push(format!("• {name}: {} warmup {}", warmup.len(), sets_label(warmup.len())));
+                lines.push(format!(
+                    "• {name}: {} warmup {}",
+                    warmup.len(),
+                    sets_label(warmup.len())
+                ));
             }
             continue;
         }
         let mut details = vec![format!("{} {}", working.len(), sets_label(working.len()))];
         let has_distance = working.iter().any(|s| truthy(s.get("distance_meters")));
         let has_duration = working.iter().any(|s| truthy(s.get("duration_seconds")));
-        let has_weight = working.iter().any(|s| truthy(s.get("weight_kg")) || truthy(s.get("weight")));
+        let has_weight = working
+            .iter()
+            .any(|s| truthy(s.get("weight_kg")) || truthy(s.get("weight")));
         if has_distance || (has_duration && !has_weight) {
-            let distance: f64 = working.iter().map(|s| number(s.get("distance_meters"))).sum();
-            let duration: f64 = working.iter().map(|s| number(s.get("duration_seconds"))).sum();
+            let distance: f64 = working
+                .iter()
+                .map(|s| number(s.get("distance_meters")))
+                .sum();
+            let duration: f64 = working
+                .iter()
+                .map(|s| number(s.get("duration_seconds")))
+                .sum();
             if distance > 0.0 {
                 details.push(format!("{:.1}km", distance / 1000.0));
             }
@@ -80,12 +104,24 @@ fn exercise_summary(workout: &Value) -> String {
             }
         } else {
             let weight = |s: &Value| {
-                if truthy(s.get("weight_kg")) { number(s.get("weight_kg")) } else { number(s.get("weight")) }
+                if truthy(s.get("weight_kg")) {
+                    number(s.get("weight_kg"))
+                } else {
+                    number(s.get("weight"))
+                }
             };
             let max_weight = working.iter().map(|s| weight(s)).fold(f64::MIN, f64::max);
             let zero = Value::from(0);
-            let reps = working.iter().map(|s| get(s, "reps").filter(|r| truthy(Some(r))).unwrap_or(&zero));
-            let max_reps = reps.fold(&zero, |best, r| if number(Some(r)) > number(Some(best)) { r } else { best });
+            let reps = working
+                .iter()
+                .map(|s| get(s, "reps").filter(|r| truthy(Some(r))).unwrap_or(&zero));
+            let max_reps = reps.fold(&zero, |best, r| {
+                if number(Some(r)) > number(Some(best)) {
+                    r
+                } else {
+                    best
+                }
+            });
             details.push(format!("{max_weight:.1}kg × {}", py_str(max_reps)));
         }
         if !warmup.is_empty() {
@@ -115,7 +151,12 @@ fn exercise_summary(workout: &Value) -> String {
 }
 
 fn duration_minutes(workout: &Value) -> i64 {
-    let at = |key: &str| workout.get(key).and_then(Value::as_str).and_then(parse_timestamp);
+    let at = |key: &str| {
+        workout
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(parse_timestamp)
+    };
     match (at("start_time"), at("end_time")) {
         (Some(start), Some(end)) => ((end - start).num_seconds() / 60).max(0),
         _ => 0,
@@ -154,7 +195,15 @@ fn split_lines(text: &str) -> Vec<&str> {
     while let Some((i, c)) = chars.next() {
         let boundary = matches!(
             c,
-            '\n' | '\r' | '\x0b' | '\x0c' | '\x1c' | '\x1d' | '\x1e' | '\u{85}' | '\u{2028}' | '\u{2029}'
+            '\n' | '\r'
+                | '\x0b'
+                | '\x0c'
+                | '\x1c'
+                | '\x1d'
+                | '\x1e'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
         );
         if boundary {
             lines.push(&text[start..i]);
@@ -172,8 +221,9 @@ fn split_lines(text: &str) -> Vec<&str> {
     lines
 }
 
-static EMOJI: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("[\u{1F1E6}-\u{1FAFF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}]").expect("emoji pattern"));
+static EMOJI: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new("[\u{1F1E6}-\u{1FAFF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}]").expect("emoji pattern")
+});
 
 /// Python's `str.isspace()`, which also counts the ASCII separators.
 fn is_py_space(c: char) -> bool {
@@ -182,22 +232,41 @@ fn is_py_space(c: char) -> bool {
 
 /// The title without emoji presentation characters, ordinary text kept.
 pub fn clean_title(value: &Value) -> String {
-    let title = if truthy(Some(value)) { py_str(value) } else { String::new() };
-    let title = EMOJI.replace_all(&title, "").replace(['\u{fe0e}', '\u{fe0f}', '\u{200d}', '\u{20e3}'], "");
+    let title = if truthy(Some(value)) {
+        py_str(value)
+    } else {
+        String::new()
+    };
+    let title = EMOJI
+        .replace_all(&title, "")
+        .replace(['\u{fe0e}', '\u{fe0f}', '\u{200d}', '\u{20e3}'], "");
     let words: Vec<&str> = title.split(is_py_space).filter(|w| !w.is_empty()).collect();
-    if words.is_empty() { "Workout".into() } else { words.join(" ") }
+    if words.is_empty() {
+        "Workout".into()
+    } else {
+        words.join(" ")
+    }
 }
 
 pub fn generate_title(workout: &Value, template: Option<&str>) -> Result<String, String> {
-    let chosen = template.filter(|t| !t.is_empty()).unwrap_or(DEFAULT_TITLE_TEMPLATE);
+    let chosen = template
+        .filter(|t| !t.is_empty())
+        .unwrap_or(DEFAULT_TITLE_TEMPLATE);
     validate_title_template(chosen)?;
-    let title = workout.get("title").cloned().unwrap_or_else(|| Value::from("Workout"));
+    let title = workout
+        .get("title")
+        .cloned()
+        .unwrap_or_else(|| Value::from("Workout"));
     let mut values = Map::new();
     values.insert("title".into(), Value::String(py_str(&title)));
     values.insert("clean_title".into(), Value::String(clean_title(&title)));
     let rendered = render(chosen, &values);
     let trimmed = rendered.trim_matches(is_py_space);
-    Ok(if trimmed.is_empty() { "Workout".into() } else { trimmed.into() })
+    Ok(if trimmed.is_empty() {
+        "Workout".into()
+    } else {
+        trimmed.into()
+    })
 }
 
 /// Calories and heart rate come from the Garmin activity the workout is
@@ -208,18 +277,33 @@ pub fn generate_description(
     avg_hr: Option<i64>,
     template: Option<&str>,
 ) -> Result<String, String> {
-    let chosen = template.filter(|t| !t.is_empty()).unwrap_or(DEFAULT_TEMPLATE);
+    let chosen = template
+        .filter(|t| !t.is_empty())
+        .unwrap_or(DEFAULT_TEMPLATE);
     validate_description_template(chosen)?;
     let minutes = duration_minutes(workout);
     let mut values = Map::new();
-    let duration = if minutes > 0 { format!("⏱️ {minutes} min") } else { String::new() };
-    let calories = calories.filter(|c| *c != 0).map(|c| format!("🔥 {c} kcal")).unwrap_or_default();
-    let avg_hr = avg_hr.filter(|hr| *hr != 0).map(|hr| format!("❤️ avg {hr} bpm")).unwrap_or_default();
+    let duration = if minutes > 0 {
+        format!("⏱️ {minutes} min")
+    } else {
+        String::new()
+    };
+    let calories = calories
+        .filter(|c| *c != 0)
+        .map(|c| format!("🔥 {c} kcal"))
+        .unwrap_or_default();
+    let avg_hr = avg_hr
+        .filter(|hr| *hr != 0)
+        .map(|hr| format!("❤️ avg {hr} bpm"))
+        .unwrap_or_default();
     values.insert("duration".into(), Value::String(duration));
     values.insert("calories".into(), Value::String(calories));
     values.insert("avg_hr".into(), Value::String(avg_hr));
     values.insert("exercises".into(), Value::String(exercise_summary(workout)));
-    values.insert("marker".into(), Value::String("— synced by activsync".into()));
+    values.insert(
+        "marker".into(),
+        Value::String("— synced by activsync".into()),
+    );
     let rendered = render(chosen, &values);
     let mut cleaned: Vec<&str> = Vec::new();
     for raw in split_lines(&rendered) {
@@ -267,7 +351,13 @@ mod tests {
     fn custom_template_collapses_blank_lines() {
         let workout = json!({"start_time": "bad", "exercises": []});
         assert_eq!(
-            generate_description(&workout, None, None, Some("\n\n{{Gym}} {duration}\n{calories}\n\n\n{marker}  \n\n")).unwrap(),
+            generate_description(
+                &workout,
+                None,
+                None,
+                Some("\n\n{{Gym}} {duration}\n{calories}\n\n\n{marker}  \n\n")
+            )
+            .unwrap(),
             "{Gym}\n\n— synced by activsync"
         );
     }

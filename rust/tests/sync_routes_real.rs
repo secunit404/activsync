@@ -18,7 +18,10 @@ use tower::ServiceExt;
 
 type Calls = Arc<Mutex<Vec<String>>>;
 
-fn service(calls: &Calls, route: impl Fn(&str, &str) -> (u16, Value) + Send + Sync + 'static) -> Http {
+fn service(
+    calls: &Calls,
+    route: impl Fn(&str, &str) -> (u16, Value) + Send + Sync + 'static,
+) -> Http {
     let log = calls.clone();
     Arc::new(move |request: HttpRequest| {
         let key = format!("{} {}", request.method(), request.uri().path());
@@ -44,14 +47,31 @@ impl Clients for Fake {
         let result = if self.garmin_down {
             Err(GarminError::SessionExpired)
         } else {
-            let tokens = Tokens { di_token: Some("token".into()), di_refresh_token: None, di_client_id: None };
-            Ok(GarminClient::new(self.garmin_http.clone(), Arc::new(|| Utc::now().timestamp() as f64), tokens, None).without_waits())
+            let tokens = Tokens {
+                di_token: Some("token".into()),
+                di_refresh_token: None,
+                di_client_id: None,
+            };
+            Ok(GarminClient::new(
+                self.garmin_http.clone(),
+                Arc::new(|| Utc::now().timestamp() as f64),
+                tokens,
+                None,
+            )
+            .without_waits())
         };
         Box::pin(async move { result })
     }
 
     fn strava(&self) -> StravaClient {
-        StravaClient::new(self.strava_http.clone(), self.db.clone(), Arc::new(|| Utc::now().timestamp() as f64), "1", "s").without_waits()
+        StravaClient::new(
+            self.strava_http.clone(),
+            self.db.clone(),
+            Arc::new(|| Utc::now().timestamp() as f64),
+            "1",
+            "s",
+        )
+        .without_waits()
     }
 }
 
@@ -74,7 +94,9 @@ fn harness(onboarded: bool, garmin_down: bool, strava_rejects: bool) -> Harness 
                             "scope": "read,activity:read_all,activity:write"});
         db::set_config_value(&conn, "strava_tokens", &tokens).unwrap();
     }
-    let start = (Utc::now() - Duration::hours(1)).format("%Y-%m-%d %H:%M:%S").to_string();
+    let start = (Utc::now() - Duration::hours(1))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
     let garmin_calls = Calls::default();
     let garmin_http = service(&garmin_calls, move |key, query| match key {
         k if k.starts_with("GET /activitylist-service/") && query.contains("start=0&") => (
@@ -83,20 +105,40 @@ fn harness(onboarded: bool, garmin_down: bool, strava_rejects: bool) -> Harness 
                     "startTimeGMT": start, "duration": 3600.0}]),
         ),
         k if k.starts_with("GET /activitylist-service/") => (200, json!([])),
-        "GET /activity-service/activity/activityTypes" => {
-            (200, json!([{"typeKey": "running"}, {"typeKey": "strength_training"}, {"typeKey": "all"}]))
-        }
+        "GET /activity-service/activity/activityTypes" => (
+            200,
+            json!([{"typeKey": "running"}, {"typeKey": "strength_training"}, {"typeKey": "all"}]),
+        ),
         other => panic!("unexpected Garmin call {other}"),
     });
     let strava_calls = Calls::default();
     let strava_http = service(&strava_calls, move |key, _| match key {
-        "GET /api/v3/athlete/activities" if strava_rejects => (401, json!({"message": "Authorization Error"})),
+        "GET /api/v3/athlete/activities" if strava_rejects => {
+            (401, json!({"message": "Authorization Error"}))
+        }
         "GET /api/v3/athlete/activities" => (200, json!([])),
         other => panic!("unexpected Strava call {other}"),
     });
-    let fake = Arc::new(Fake { db: db.clone(), garmin_http, strava_http, garmin_down });
-    let state = AppState::new(db.clone(), false, schedule::system_clock(), 0.0, AuthConfig::sign_in_off()).with_clients(fake);
-    Harness { db, app: build_app(state, None), garmin_calls, strava_calls }
+    let fake = Arc::new(Fake {
+        db: db.clone(),
+        garmin_http,
+        strava_http,
+        garmin_down,
+    });
+    let state = AppState::new(
+        db.clone(),
+        false,
+        schedule::system_clock(),
+        0.0,
+        AuthConfig::sign_in_off(),
+    )
+    .with_clients(fake);
+    Harness {
+        db,
+        app: build_app(state, None),
+        garmin_calls,
+        strava_calls,
+    }
 }
 
 async fn post(app: &Router, uri: &str) -> (StatusCode, Value) {
@@ -111,12 +153,23 @@ async fn post(app: &Router, uri: &str) -> (StatusCode, Value) {
     let response = app.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, if bytes.is_empty() { Value::Null } else { serde_json::from_slice(&bytes).unwrap() })
+    (
+        status,
+        if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes).unwrap()
+        },
+    )
 }
 
 impl Harness {
     fn activity_ids(&self) -> Vec<i64> {
-        db::list_activities(&self.db.lock(), false).unwrap().iter().map(|a| a.garmin_activity_id).collect()
+        db::list_activities(&self.db.lock(), false)
+            .unwrap()
+            .iter()
+            .map(|a| a.garmin_activity_id)
+            .collect()
     }
 
     fn config(&self, key: &str) -> Option<Value> {
@@ -124,7 +177,12 @@ impl Harness {
     }
 
     fn strava_reads(&self) -> usize {
-        self.strava_calls.lock().unwrap().iter().filter(|c| c.contains("athlete/activities")).count()
+        self.strava_calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|c| c.contains("athlete/activities"))
+            .count()
     }
 }
 
@@ -142,7 +200,9 @@ async fn sync_now_reads_garmin_then_checks_strava() {
 #[tokio::test]
 async fn sync_now_for_strava_reports_a_rejected_token() {
     let h = harness(true, false, true);
-    let start = (Utc::now() - Duration::hours(2)).format("%Y-%m-%d %H:%M:%S").to_string();
+    let start = (Utc::now() - Duration::hours(2))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
     h.db.lock()
         .execute(
             "INSERT INTO activities (garmin_activity_id, activity_type, title, start_time, content_hash, publish_status, first_seen_at)
@@ -152,7 +212,10 @@ async fn sync_now_for_strava_reports_a_rejected_token() {
         .unwrap();
     let (status, body) = post(&h.app, "/api/v1/settings/sync/strava").await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
-    assert!(body["detail"].as_str().unwrap().contains("Strava"), "{body}");
+    assert!(
+        body["detail"].as_str().unwrap().contains("Strava"),
+        "{body}"
+    );
     assert!(h.garmin_calls.lock().unwrap().is_empty());
 }
 
@@ -169,12 +232,21 @@ async fn the_first_sync_holds_every_category_and_finishes_setup() {
     let h = harness(false, false, false);
     let (status, body) = post(&h.app, "/api/v1/setup/initial-sync").await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["message"], "Setup complete. Your activities are ready.");
+    assert_eq!(
+        body["message"],
+        "Setup complete. Your activities are ready."
+    );
     assert_eq!(h.config("initial_sync_done"), Some(json!(true)));
     let types = h.config("garmin_activity_types").unwrap();
-    assert_eq!(types, json!([{"type_key": "running", "label": "Running"}, {"type_key": "strength_training", "label": "Strength Training"}]));
+    assert_eq!(
+        types,
+        json!([{"type_key": "running", "label": "Running"}, {"type_key": "strength_training", "label": "Strength Training"}])
+    );
     let settings = h.config("settings").unwrap();
-    assert_eq!(settings["held_activity_types"], json!(["running", "strength_training"]));
+    assert_eq!(
+        settings["held_activity_types"],
+        json!(["running", "strength_training"])
+    );
     let activity = db::get_activity(&h.db.lock(), 9001).unwrap().unwrap();
     assert_eq!(activity.publish_status, "held");
 }
@@ -184,16 +256,37 @@ async fn a_failed_first_sync_keeps_setup_open() {
     let h = harness(false, true, false);
     let (status, body) = post(&h.app, "/api/v1/setup/initial-sync").await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
-    assert!(body["detail"].as_str().unwrap().starts_with("First sync failed: "), "{body}");
+    assert!(
+        body["detail"]
+            .as_str()
+            .unwrap()
+            .starts_with("First sync failed: "),
+        "{body}"
+    );
     assert_eq!(h.config("initial_sync_done"), Some(json!(false)));
 }
 
 #[tokio::test]
 async fn refreshing_categories_keeps_the_current_choices() {
     let h = harness(true, false, false);
-    db::set_config_value(&h.db.lock(), "settings", &json!({"held_activity_types": ["running"]})).unwrap();
+    db::set_config_value(
+        &h.db.lock(),
+        "settings",
+        &json!({"held_activity_types": ["running"]}),
+    )
+    .unwrap();
     let (status, body) = post(&h.app, "/api/v1/settings/activity-types/refresh").await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(h.config("garmin_activity_types").unwrap().as_array().unwrap().len(), 2);
-    assert_eq!(h.config("settings").unwrap()["held_activity_types"], json!(["running"]));
+    assert_eq!(
+        h.config("garmin_activity_types")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        h.config("settings").unwrap()["held_activity_types"],
+        json!(["running"])
+    );
 }

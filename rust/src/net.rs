@@ -39,7 +39,9 @@ async fn execute(client: &reqwest::Client, request: HttpRequest) -> Result<HttpR
         *outgoing.timeout_mut() = Some(timeout);
     }
     let response = client.execute(outgoing).await.map_err(|e| describe(&e))?;
-    let mut builder = http::Response::builder().status(response.status()).version(response.version());
+    let mut builder = http::Response::builder()
+        .status(response.status())
+        .version(response.version());
     for (name, value) in response.headers() {
         builder = builder.header(name, value);
     }
@@ -65,13 +67,24 @@ const SSL_CERT_VARS: [&str; 2] = ["SSL_CERT_FILE", "SSL_CERT_DIR"];
 
 /// Certificates from the first of `vars` that is set: a PEM bundle, or a
 /// directory of them. Added to the built-in roots rather than replacing them.
-pub fn extra_roots(vars: &[&str], lookup: impl Fn(&str) -> Option<String>) -> Vec<reqwest::Certificate> {
-    let Some(path) = vars.iter().find_map(|var| lookup(var).filter(|value| !value.is_empty())) else {
+pub fn extra_roots(
+    vars: &[&str],
+    lookup: impl Fn(&str) -> Option<String>,
+) -> Vec<reqwest::Certificate> {
+    let Some(path) = vars
+        .iter()
+        .find_map(|var| lookup(var).filter(|value| !value.is_empty()))
+    else {
         return Vec::new();
     };
     let path = Path::new(&path);
     let files: Vec<_> = if path.is_dir() {
-        std::fs::read_dir(path).into_iter().flatten().flatten().map(|entry| entry.path()).collect()
+        std::fs::read_dir(path)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.path())
+            .collect()
     } else {
         vec![path.to_path_buf()]
     };
@@ -82,7 +95,11 @@ pub fn extra_roots(vars: &[&str], lookup: impl Fn(&str) -> Option<String>) -> Ve
         .flatten()
         .collect();
     if roots.is_empty() {
-        crate::log_warn!("net", "no CA certificates could be read from {}", path.display());
+        crate::log_warn!(
+            "net",
+            "no CA certificates could be read from {}",
+            path.display()
+        );
     }
     roots
 }
@@ -90,14 +107,19 @@ pub fn extra_roots(vars: &[&str], lookup: impl Fn(&str) -> Option<String>) -> Ve
 fn builder_with_roots(vars: &[&str]) -> reqwest::ClientBuilder {
     extra_roots(vars, |name| std::env::var(name).ok())
         .into_iter()
-        .fold(reqwest::Client::builder(), |builder, root| builder.add_root_certificate(root))
+        .fold(reqwest::Client::builder(), |builder, root| {
+            builder.add_root_certificate(root)
+        })
 }
 
 /// For Hevy and Strava: a minute per request unless the request names its
 /// own, the longest the Python app allows (a Strava upload).
 pub fn service_http() -> Http {
     static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-        builder_with_roots(&REQUESTS_CA_VARS).timeout(Duration::from_secs(60)).build().expect("HTTP client builds")
+        builder_with_roots(&REQUESTS_CA_VARS)
+            .timeout(Duration::from_secs(60))
+            .build()
+            .expect("HTTP client builds")
     });
     wrap(&CLIENT)
 }
@@ -106,7 +128,10 @@ pub fn service_http() -> Http {
 /// refresh; the requests say which, and this is the longer for any that do not.
 pub fn garmin_http() -> Http {
     static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-        builder_with_roots(&REQUESTS_CA_VARS).timeout(Duration::from_secs(30)).build().expect("HTTP client builds")
+        builder_with_roots(&REQUESTS_CA_VARS)
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("HTTP client builds")
     });
     wrap(&CLIENT)
 }
@@ -154,15 +179,21 @@ pub fn garmin_sign_in_http() -> Http {
             .expect("HTTP client builds")
     });
     let plain = wrap(&PLAIN);
-    Arc::new(move |request| match request.extensions().get::<Browser>().copied() {
-        Some(browser) => Box::pin(as_browser(&BROWSER, browser, request)),
-        None => plain(request),
-    })
+    Arc::new(
+        move |request| match request.extensions().get::<Browser>().copied() {
+            Some(browser) => Box::pin(as_browser(&BROWSER, browser, request)),
+            None => plain(request),
+        },
+    )
 }
 
 /// The request's own headers replace the profile's of the same name, so a
 /// route's User-Agent or Accept is sent once, as the route set it.
-async fn as_browser(client: &wreq::Client, browser: Browser, request: HttpRequest) -> Result<HttpResponse, HttpError> {
+async fn as_browser(
+    client: &wreq::Client,
+    browser: Browser,
+    request: HttpRequest,
+) -> Result<HttpResponse, HttpError> {
     let (parts, body) = request.into_parts();
     let response = client
         .request(parts.method, parts.uri.to_string())
@@ -172,12 +203,19 @@ async fn as_browser(client: &wreq::Client, browser: Browser, request: HttpReques
         .send()
         .await
         .map_err(|e| HttpError(e.to_string()))?;
-    let mut builder = http::Response::builder().status(response.status()).version(response.version());
+    let mut builder = http::Response::builder()
+        .status(response.status())
+        .version(response.version());
     for (name, value) in response.headers() {
         builder = builder.header(name, value);
     }
-    let bytes = response.bytes().await.map_err(|e| HttpError(e.to_string()))?;
-    builder.body(bytes.to_vec()).map_err(|e| HttpError(e.to_string()))
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| HttpError(e.to_string()))?;
+    builder
+        .body(bytes.to_vec())
+        .map_err(|e| HttpError(e.to_string()))
 }
 
 /// For an identity provider: redirects are not followed, since a provider
@@ -195,18 +233,28 @@ pub fn provider_http() -> Http {
 
 /// `application/x-www-form-urlencoded`, as `requests` encodes a `data=` dict.
 pub fn form(pairs: &[(&str, &str)]) -> Vec<u8> {
-    openidconnect::url::form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish().into_bytes()
+    openidconnect::url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(pairs)
+        .finish()
+        .into_bytes()
 }
 
 pub fn with_query(url: &str, pairs: &[(&str, &str)]) -> String {
     if pairs.is_empty() {
         return url.to_string();
     }
-    let query = openidconnect::url::form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish();
+    let query = openidconnect::url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(pairs)
+        .finish();
     format!("{url}?{query}")
 }
 
-pub fn request(method: http::Method, url: &str, headers: &[(&str, &str)], body: Vec<u8>) -> Result<HttpRequest, HttpError> {
+pub fn request(
+    method: http::Method,
+    url: &str,
+    headers: &[(&str, &str)],
+    body: Vec<u8>,
+) -> Result<HttpRequest, HttpError> {
     let mut builder = http::Request::builder().method(method).uri(url);
     for (name, value) in headers {
         builder = builder.header(*name, *value);

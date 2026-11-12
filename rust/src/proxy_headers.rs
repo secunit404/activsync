@@ -37,7 +37,10 @@ impl Network {
             prefix.parse::<u32>().ok().filter(|p| *p <= max)? as u8
         } else if address.is_ipv4() {
             let mask = u32::from(prefix.parse::<std::net::Ipv4Addr>().ok()?);
-            [mask, !mask].into_iter().find(|m| m.leading_ones() + m.trailing_zeros() == 32).map(|m| m.leading_ones() as u8)?
+            [mask, !mask]
+                .into_iter()
+                .find(|m| m.leading_ones() + m.trailing_zeros() == 32)
+                .map(|m| m.leading_ones() as u8)?
         } else {
             return None;
         };
@@ -48,11 +51,19 @@ impl Network {
     fn masked(&self) -> IpAddr {
         match self.address {
             IpAddr::V4(a) => {
-                let mask = if self.prefix == 0 { 0 } else { u32::MAX << (32 - u32::from(self.prefix)) };
+                let mask = if self.prefix == 0 {
+                    0
+                } else {
+                    u32::MAX << (32 - u32::from(self.prefix))
+                };
                 IpAddr::V4((u32::from(a) & mask).into())
             }
             IpAddr::V6(a) => {
-                let mask = if self.prefix == 0 { 0 } else { u128::MAX << (128 - u32::from(self.prefix)) };
+                let mask = if self.prefix == 0 {
+                    0
+                } else {
+                    u128::MAX << (128 - u32::from(self.prefix))
+                };
                 IpAddr::V6((u128::from(a) & mask).into())
             }
         }
@@ -61,11 +72,19 @@ impl Network {
     pub fn contains(&self, ip: IpAddr) -> bool {
         match (self.address, ip) {
             (IpAddr::V4(net), IpAddr::V4(ip)) => {
-                let mask = if self.prefix == 0 { 0 } else { u32::MAX << (32 - u32::from(self.prefix)) };
+                let mask = if self.prefix == 0 {
+                    0
+                } else {
+                    u32::MAX << (32 - u32::from(self.prefix))
+                };
                 u32::from(net) & mask == u32::from(ip) & mask
             }
             (IpAddr::V6(net), IpAddr::V6(ip)) => {
-                let mask = if self.prefix == 0 { 0 } else { u128::MAX << (128 - u32::from(self.prefix)) };
+                let mask = if self.prefix == 0 {
+                    0
+                } else {
+                    u128::MAX << (128 - u32::from(self.prefix))
+                };
                 u128::from(net) & mask == u128::from(ip) & mask
             }
             _ => false,
@@ -112,7 +131,9 @@ fn py_int(text: &str) -> Option<i64> {
         && !digits.ends_with('_')
         && !digits.contains("__")
         && digits.chars().all(|c| c.is_ascii_digit() || c == '_');
-    let value: i64 = well_formed.then(|| digits.replace('_', "").parse().ok()).flatten()?;
+    let value: i64 = well_formed
+        .then(|| digits.replace('_', "").parse().ok())
+        .flatten()?;
     Some(if negative { -value } else { value })
 }
 
@@ -145,7 +166,11 @@ fn parse_host_port(value: &str) -> (String, i64) {
 
 impl ForwardedTrust {
     pub fn parse(value: &str) -> Self {
-        let mut trust = Self { always: value == "*", networks: Vec::new(), literals: Vec::new() };
+        let mut trust = Self {
+            always: value == "*",
+            networks: Vec::new(),
+            literals: Vec::new(),
+        };
         if trust.always {
             return trust;
         }
@@ -153,7 +178,10 @@ impl ForwardedTrust {
             let network = if item.contains('/') {
                 Network::parse_strict(item)
             } else {
-                item.parse::<IpAddr>().ok().map(|address| Network { address, prefix: if address.is_ipv4() { 32 } else { 128 } })
+                item.parse::<IpAddr>().ok().map(|address| Network {
+                    address,
+                    prefix: if address.is_ipv4() { 32 } else { 128 },
+                })
             };
             match network {
                 Some(network) => trust.networks.push(network),
@@ -205,15 +233,25 @@ impl ForwardedTrust {
             .last()
             .map(|v| latin1(v).trim().to_string())
             .filter(|p| matches!(p.as_str(), "http" | "https" | "ws" | "wss"));
-        let lines: Vec<String> = headers.get_all("x-forwarded-for").iter().map(latin1).collect();
-        let client = (!lines.is_empty()).then(|| self.client_from(&lines.join(", "))).filter(|(host, _)| !host.is_empty());
+        let lines: Vec<String> = headers
+            .get_all("x-forwarded-for")
+            .iter()
+            .map(latin1)
+            .collect();
+        let client = (!lines.is_empty())
+            .then(|| self.client_from(&lines.join(", ")))
+            .filter(|(host, _)| !host.is_empty());
         Forwarded { client, scheme }
     }
 }
 
 /// Python's `repr()` of a string made of Latin-1 characters.
 pub fn py_repr(text: &str) -> String {
-    let quote = if text.contains('\'') && !text.contains('"') { '"' } else { '\'' };
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
     let mut out = String::from(quote);
     for c in text.chars() {
         match c {
@@ -269,18 +307,56 @@ mod tests {
     #[test]
     fn forwarded_trust_parses_like_uvicorn() {
         let cases: &[(&str, &[(&str, bool)])] = &[
-            ("127.0.0.1", &[("127.0.0.1", true), ("127.0.0.2", false), ("::1", false), ("", false)]),
-            ("172.18.0.5/16", &[("172.18.0.5", false), ("172.18.9.9", false), ("172.18.0.5/16", true)]),
-            ("172.18.0.0/16", &[("172.18.9.9", true), ("172.19.0.1", false), ("::ffff:172.18.0.1", false)]),
-            ("10.0.0.0/255.0.0.0", &[("10.1.2.3", true), ("11.0.0.1", false)]),
-            ("10.0.0.0/0.255.255.255", &[("10.1.2.3", true), ("11.0.0.1", false)]),
+            (
+                "127.0.0.1",
+                &[
+                    ("127.0.0.1", true),
+                    ("127.0.0.2", false),
+                    ("::1", false),
+                    ("", false),
+                ],
+            ),
+            (
+                "172.18.0.5/16",
+                &[
+                    ("172.18.0.5", false),
+                    ("172.18.9.9", false),
+                    ("172.18.0.5/16", true),
+                ],
+            ),
+            (
+                "172.18.0.0/16",
+                &[
+                    ("172.18.9.9", true),
+                    ("172.19.0.1", false),
+                    ("::ffff:172.18.0.1", false),
+                ],
+            ),
+            (
+                "10.0.0.0/255.0.0.0",
+                &[("10.1.2.3", true), ("11.0.0.1", false)],
+            ),
+            (
+                "10.0.0.0/0.255.255.255",
+                &[("10.1.2.3", true), ("11.0.0.1", false)],
+            ),
             ("10.0.0.0/+8", &[("10.1.2.3", false), ("10.0.0.0/+8", true)]),
             ("10.0.0.0/08", &[("10.1.2.3", true)]),
-            ("10.0.0.1/255.0.0.0", &[("10.0.0.1", false), ("10.0.0.1/255.0.0.0", true)]),
+            (
+                "10.0.0.1/255.0.0.0",
+                &[("10.0.0.1", false), ("10.0.0.1/255.0.0.0", true)],
+            ),
             ("*", &[("1.2.3.4", true), ("anything", true), ("", true)]),
             (" *", &[("1.2.3.4", false), ("*", true)]),
             ("127.0.0.1, *", &[("1.2.3.4", false), ("*", true)]),
-            ("::1", &[("::1", true), ("0:0:0:0:0:0:0:1", true), ("127.0.0.1", false)]),
+            (
+                "::1",
+                &[
+                    ("::1", true),
+                    ("0:0:0:0:0:0:0:1", true),
+                    ("127.0.0.1", false),
+                ],
+            ),
             ("fd00::/8", &[("fd12::1", true), ("fe80::1", false)]),
             ("fd00::1/8", &[("fd12::1", false), ("fd00::1/8", true)]),
             ("unix:", &[("unix:", true), ("1.2.3.4", false)]),
@@ -288,12 +364,19 @@ mod tests {
             ("", &[("", false), ("1.2.3.4", false)]),
             ("1.2.3.4,,5.6.7.8", &[("5.6.7.8", true), ("", false)]),
             ("10.0.0.0/33", &[("10.0.0.1", false), ("10.0.0.0/33", true)]),
-            ("10.0.0.0/8/9", &[("10.0.0.1", false), ("10.0.0.0/8/9", true)]),
+            (
+                "10.0.0.0/8/9",
+                &[("10.0.0.1", false), ("10.0.0.0/8/9", true)],
+            ),
         ];
         for (allow, hosts) in cases {
             let trust = ForwardedTrust::parse(allow);
             for (host, expected) in *hosts {
-                assert_eq!(trust.trusts(Some(host)), *expected, "{allow:?} trusts {host:?}");
+                assert_eq!(
+                    trust.trusts(Some(host)),
+                    *expected,
+                    "{allow:?} trusts {host:?}"
+                );
             }
         }
     }
@@ -309,31 +392,110 @@ mod tests {
     #[test]
     fn forwarded_for_matches_uvicorn() {
         let cases: &[(&str, &str, &[&str], Option<(&str, i64)>)] = &[
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["203.0.113.9"], Some(("203.0.113.9", 0))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["203.0.113.9:4444"], Some(("203.0.113.9", 4444))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["1.1.1.1", "203.0.113.9, 10.0.0.2"], Some(("203.0.113.9", 0))),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["203.0.113.9"],
+                Some(("203.0.113.9", 0)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["203.0.113.9:4444"],
+                Some(("203.0.113.9", 4444)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["1.1.1.1", "203.0.113.9, 10.0.0.2"],
+                Some(("203.0.113.9", 0)),
+            ),
             ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &[""], None),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["[2001:db8::1]:5000"], Some(("2001:db8::1", 5000))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["2001:db8::1"], Some(("2001:db8::1", 0))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["10.0.0.1, 127.0.0.1"], Some(("10.0.0.1", 0))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["garbage:abc"], Some(("garbage:abc", 0))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["1.2.3.4:80:90"], Some(("1.2.3.4:80:90", 0))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["1.2.3.4, , 5.6.7.8"], Some(("5.6.7.8", 0))),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["[2001:db8::1]:5000"],
+                Some(("2001:db8::1", 5000)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["2001:db8::1"],
+                Some(("2001:db8::1", 0)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["10.0.0.1, 127.0.0.1"],
+                Some(("10.0.0.1", 0)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["garbage:abc"],
+                Some(("garbage:abc", 0)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["1.2.3.4:80:90"],
+                Some(("1.2.3.4:80:90", 0)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["1.2.3.4, , 5.6.7.8"],
+                Some(("5.6.7.8", 0)),
+            ),
             ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["1.2.3.4,"], None),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["1.2.3.4:+80"], Some(("1.2.3.4", 80))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["1.2.3.4: 80"], Some(("1.2.3.4", 80))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["1.2.3.4:8_0"], Some(("1.2.3.4", 80))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["[::1]:x"], Some(("::1", 0))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["[::1]x"], Some(("[::1]x", 0))),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["[::1"], Some(("[::1", 0))),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["1.2.3.4:+80"],
+                Some(("1.2.3.4", 80)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["1.2.3.4: 80"],
+                Some(("1.2.3.4", 80)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["1.2.3.4:8_0"],
+                Some(("1.2.3.4", 80)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["[::1]:x"],
+                Some(("::1", 0)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["[::1]x"],
+                Some(("[::1]x", 0)),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["[::1"],
+                Some(("[::1", 0)),
+            ),
             ("127.0.0.1, 10.0.0.0/8", "8.8.8.8", &["203.0.113.9"], None),
             ("*", "9.9.9.9", &["1.1.1.1, 2.2.2.2"], Some(("1.1.1.1", 0))),
             ("172.18.0.5/16", "172.18.0.5", &["203.0.113.9"], None),
         ];
         for (allow, peer, header_lines, expected) in cases {
-            let applied = ForwardedTrust::parse(allow).apply(Some(peer), &lines("x-forwarded-for", header_lines));
+            let applied = ForwardedTrust::parse(allow)
+                .apply(Some(peer), &lines("x-forwarded-for", header_lines));
             let expected = expected.map(|(host, port)| (host.to_string(), port));
-            assert_eq!(applied.client, expected, "{allow:?} from {peer} sending {header_lines:?}");
+            assert_eq!(
+                applied.client, expected,
+                "{allow:?} from {peer} sending {header_lines:?}"
+            );
         }
     }
 
@@ -341,18 +503,38 @@ mod tests {
     fn forwarded_proto_matches_uvicorn() {
         let cases: &[(&str, &str, &[&str], Option<&str>)] = &[
             ("127.0.0.1, 10.0.0.0/8", "8.8.8.8", &["https"], None),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["https"], Some("https")),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["https"],
+                Some("https"),
+            ),
             ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &[" HTTPS "], None),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &[" https "], Some("https")),
-            ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["https", "http"], Some("http")),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &[" https "],
+                Some("https"),
+            ),
+            (
+                "127.0.0.1, 10.0.0.0/8",
+                "127.0.0.1",
+                &["https", "http"],
+                Some("http"),
+            ),
             ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["wss"], Some("wss")),
             ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["ws"], Some("ws")),
             ("127.0.0.1, 10.0.0.0/8", "127.0.0.1", &["ftp"], None),
             ("*", "9.9.9.9", &["https"], Some("https")),
         ];
         for (allow, peer, header_lines, expected) in cases {
-            let applied = ForwardedTrust::parse(allow).apply(Some(peer), &lines("x-forwarded-proto", header_lines));
-            assert_eq!(applied.scheme.as_deref(), *expected, "{allow:?} from {peer} sending {header_lines:?}");
+            let applied = ForwardedTrust::parse(allow)
+                .apply(Some(peer), &lines("x-forwarded-proto", header_lines));
+            assert_eq!(
+                applied.scheme.as_deref(),
+                *expected,
+                "{allow:?} from {peer} sending {header_lines:?}"
+            );
         }
     }
 
@@ -361,7 +543,10 @@ mod tests {
         let limits = WarnLimits::default();
         assert!(limits.unknown_host_due(5.0));
         assert!(!limits.unknown_host_due(64.9));
-        assert!(limits.untrusted_proxy_due(10.0), "each warning has its own clock");
+        assert!(
+            limits.untrusted_proxy_due(10.0),
+            "each warning has its own clock"
+        );
         assert!(limits.unknown_host_due(65.0));
     }
 
@@ -371,6 +556,9 @@ mod tests {
         assert_eq!(py_repr("it's"), "\"it's\"");
         assert_eq!(py_repr("a\"b'c"), "'a\"b\\'c'");
         assert_eq!(py_repr("caf\u{e9}"), "'caf\u{e9}'");
-        assert_eq!(py_repr("a\u{80}b\u{a0}c\u{ad}d\x01\\"), "'a\\x80b\\xa0c\\xadd\\x01\\\\'");
+        assert_eq!(
+            py_repr("a\u{80}b\u{a0}c\u{ad}d\x01\\"),
+            "'a\\x80b\\xa0c\\xadd\\x01\\\\'"
+        );
     }
 }

@@ -10,7 +10,11 @@ use crate::view::Connections;
 /// The first-run step still to do, or `None` once onboarded. The claim
 /// ("account") step comes first even on an onboarded install: an upgrade that
 /// introduces sign-in must be claimed before anything else is reachable.
-pub fn setup_step(conn: &Connection, connections: &Connections, auth_disabled: bool) -> DbResult<Option<&'static str>> {
+pub fn setup_step(
+    conn: &Connection,
+    connections: &Connections,
+    auth_disabled: bool,
+) -> DbResult<Option<&'static str>> {
     if !auth_disabled && !crate::auth_core::owner_claimed(conn)? {
         return Ok(Some("account"));
     }
@@ -31,23 +35,53 @@ pub fn setup_step(conn: &Connection, connections: &Connections, auth_disabled: b
 
 /// Store the mock account's activity types, optionally holding every type
 /// for review.
-pub fn store_garmin_categories(conn: &Connection, development: bool, hold_all: bool, now: DateTime<Utc>) -> DbResult<()> {
-    save_garmin_categories(conn, development, mock::garmin_activity_types(), hold_all, now)
+pub fn store_garmin_categories(
+    conn: &Connection,
+    development: bool,
+    hold_all: bool,
+    now: DateTime<Utc>,
+) -> DbResult<()> {
+    save_garmin_categories(
+        conn,
+        development,
+        mock::garmin_activity_types(),
+        hold_all,
+        now,
+    )
 }
 
 /// Store Garmin's activity types, optionally holding every type for review.
-pub fn save_garmin_categories(conn: &Connection, development: bool, types: Vec<Value>, hold_all: bool, now: DateTime<Utc>) -> DbResult<()> {
+pub fn save_garmin_categories(
+    conn: &Connection,
+    development: bool,
+    types: Vec<Value>,
+    hold_all: bool,
+    now: DateTime<Utc>,
+) -> DbResult<()> {
     db::set_config_value(conn, "garmin_activity_types", &Value::Array(types.clone()))?;
-    db::set_config_value(conn, "garmin_activity_types_fetched_at", &json!(db::iso(now)))?;
+    db::set_config_value(
+        conn,
+        "garmin_activity_types_fetched_at",
+        &json!(db::iso(now)),
+    )?;
     if hold_all {
-        let mut keys: Vec<&str> = types.iter().filter_map(|t| t["type_key"].as_str()).collect();
+        let mut keys: Vec<&str> = types
+            .iter()
+            .filter_map(|t| t["type_key"].as_str())
+            .collect();
         keys.sort_unstable();
-        config::edit(conn, development, |cfg| cfg.set("held_activity_types", json!(keys)))?;
+        config::edit(conn, development, |cfg| {
+            cfg.set("held_activity_types", json!(keys))
+        })?;
     }
     Ok(())
 }
 
-pub fn finalize_garmin_connect(conn: &Connection, development: bool, now: DateTime<Utc>) -> DbResult<()> {
+pub fn finalize_garmin_connect(
+    conn: &Connection,
+    development: bool,
+    now: DateTime<Utc>,
+) -> DbResult<()> {
     db::set_config_value(conn, "garmin_credentials_verified", &json!(true))?;
     db::set_config_value(conn, "garmin_last_sync_error", &Value::Null)?;
     let first_run = !db::truthy(db::get_config_value(conn, "initial_sync_done")?.as_ref());
@@ -55,7 +89,11 @@ pub fn finalize_garmin_connect(conn: &Connection, development: bool, now: DateTi
 }
 
 /// Saving different Strava app credentials invalidates the old tokens.
-pub fn persist_strava_credentials(conn: &Connection, client_id: &str, client_secret: &str) -> DbResult<()> {
+pub fn persist_strava_credentials(
+    conn: &Connection,
+    client_id: &str,
+    client_secret: &str,
+) -> DbResult<()> {
     let existing = db::get_config_value(conn, "strava_credentials")?.unwrap_or(Value::Null);
     let changed = existing.get("client_id").and_then(Value::as_str) != Some(client_id)
         || existing.get("client_secret").and_then(Value::as_str) != Some(client_secret);

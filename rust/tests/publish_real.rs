@@ -16,12 +16,16 @@ use serde_json::json;
 type Calls = Arc<Mutex<Vec<String>>>;
 
 fn now_s() -> f64 {
-    Utc.with_ymd_and_hms(2026, 11, 10, 12, 0, 0).unwrap().timestamp() as f64
+    Utc.with_ymd_and_hms(2026, 11, 10, 12, 0, 0)
+        .unwrap()
+        .timestamp() as f64
 }
 
 fn zipped(fit: &[u8]) -> Vec<u8> {
     let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-    writer.start_file("activity.fit", zip::write::SimpleFileOptions::default()).unwrap();
+    writer
+        .start_file("activity.fit", zip::write::SimpleFileOptions::default())
+        .unwrap();
     writer.write_all(fit).unwrap();
     writer.finish().unwrap().into_inner()
 }
@@ -32,7 +36,10 @@ fn service(calls: &Calls, route: impl Fn(&str) -> (u16, Vec<u8>) + Send + Sync +
         let key = format!("{} {}", request.method(), request.uri().path());
         log.lock().unwrap().push(key.clone());
         let (status, body) = route(&key);
-        let response = openidconnect::http::Response::builder().status(status).body(body).map_err(|e| HttpError(e.to_string()));
+        let response = openidconnect::http::Response::builder()
+            .status(status)
+            .body(body)
+            .map_err(|e| HttpError(e.to_string()));
         Box::pin(async move { response })
     })
 }
@@ -49,14 +56,28 @@ impl Clients for Fake {
         let result = if self.garmin_down {
             Err(GarminError::Unavailable)
         } else {
-            let tokens = Tokens { di_token: Some("token".into()), di_refresh_token: None, di_client_id: None };
-            Ok(GarminClient::new(self.garmin_http.clone(), Arc::new(now_s), tokens, None).without_waits())
+            let tokens = Tokens {
+                di_token: Some("token".into()),
+                di_refresh_token: None,
+                di_client_id: None,
+            };
+            Ok(
+                GarminClient::new(self.garmin_http.clone(), Arc::new(now_s), tokens, None)
+                    .without_waits(),
+            )
         };
         Box::pin(async move { result })
     }
 
     fn strava(&self) -> StravaClient {
-        StravaClient::new(self.strava_http.clone(), self.db.clone(), Arc::new(now_s), "1", "s").without_waits()
+        StravaClient::new(
+            self.strava_http.clone(),
+            self.db.clone(),
+            Arc::new(now_s),
+            "1",
+            "s",
+        )
+        .without_waits()
     }
 }
 
@@ -93,14 +114,27 @@ fn case(strava_connected: bool, garmin_down: bool) -> Case {
         "GET /api/v3/uploads/9" => (200, json!({"activity_id": 555}).to_string().into_bytes()),
         other => panic!("unexpected {other}"),
     });
-    let clients = Arc::new(Fake { db: db.clone(), garmin_http, strava_http, garmin_down });
-    let scheduler = PublishScheduler::new(db.clone(), EventBus::new(), Arc::new(now_s), 0.0).with_clients(clients);
-    Case { db, scheduler, strava_calls }
+    let clients = Arc::new(Fake {
+        db: db.clone(),
+        garmin_http,
+        strava_http,
+        garmin_down,
+    });
+    let scheduler = PublishScheduler::new(db.clone(), EventBus::new(), Arc::new(now_s), 0.0)
+        .with_clients(clients);
+    Case {
+        db,
+        scheduler,
+        strava_calls,
+    }
 }
 
 impl Case {
     async fn publish(&self, ids: &[i64]) -> Vec<(String, Option<String>)> {
-        let rows: Vec<_> = ids.iter().map(|id| db::get_activity(&self.db.lock(), *id).unwrap().unwrap()).collect();
+        let rows: Vec<_> = ids
+            .iter()
+            .map(|id| db::get_activity(&self.db.lock(), *id).unwrap().unwrap())
+            .collect();
         self.scheduler.schedule(&rows, "manual").unwrap();
         assert_eq!(self.scheduler.run_due().await.unwrap(), ids.len());
         ids.iter()
@@ -112,7 +146,12 @@ impl Case {
     }
 
     fn uploads(&self) -> usize {
-        self.strava_calls.lock().unwrap().iter().filter(|c| *c == "POST /api/v3/uploads").count()
+        self.strava_calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|c| *c == "POST /api/v3/uploads")
+            .count()
     }
 }
 
@@ -122,7 +161,13 @@ async fn a_scheduled_publish_uploads_to_strava() {
     add(&case.db, 201, "held");
     assert_eq!(case.publish(&[201]).await, vec![("published".into(), None)]);
     let activity = db::get_activity(&case.db.lock(), 201).unwrap().unwrap();
-    assert_eq!((activity.publish_status.as_str(), activity.strava_activity_id), ("published", Some(555)));
+    assert_eq!(
+        (
+            activity.publish_status.as_str(),
+            activity.strava_activity_id
+        ),
+        ("published", Some(555))
+    );
     assert_eq!(case.uploads(), 1);
 }
 
@@ -133,19 +178,43 @@ async fn hevy_work_blocks_and_a_later_exclusion_skips() {
     add(&case.db, 202, "pending");
     {
         let conn = case.db.lock();
-        hevy_db::upsert_workout(&conn, "h1", "Legs", "2026-11-10T02:00:00Z", "2026-11-10T03:00:00Z", "2026-11-10T03:05:00Z", &json!({})).unwrap();
+        hevy_db::upsert_workout(
+            &conn,
+            "h1",
+            "Legs",
+            "2026-11-10T02:00:00Z",
+            "2026-11-10T03:00:00Z",
+            "2026-11-10T03:05:00Z",
+            &json!({}),
+        )
+        .unwrap();
         hevy_db::claim_source(&conn, "h1", 202).unwrap();
     }
-    let rows: Vec<_> = [201, 202].iter().map(|id| db::get_activity(&case.db.lock(), *id).unwrap().unwrap()).collect();
+    let rows: Vec<_> = [201, 202]
+        .iter()
+        .map(|id| db::get_activity(&case.db.lock(), *id).unwrap().unwrap())
+        .collect();
     case.scheduler.schedule(&rows, "manual").unwrap();
-    case.db.lock().execute("UPDATE activities SET publish_status = 'excluded' WHERE garmin_activity_id = 201", []).unwrap();
+    case.db
+        .lock()
+        .execute(
+            "UPDATE activities SET publish_status = 'excluded' WHERE garmin_activity_id = 201",
+            [],
+        )
+        .unwrap();
     assert_eq!(case.scheduler.run_due().await.unwrap(), 2);
     let state = |id| {
         let row = schedule::get(&case.db.lock(), id).unwrap().unwrap();
         (row.state, row.message)
     };
     assert_eq!(state(201), ("skipped".into(), None));
-    assert_eq!(state(202), ("blocked".into(), Some("Activity was blocked by Hevy sync: hevy workout h1 is waiting_watch.".into())));
+    assert_eq!(
+        state(202),
+        (
+            "blocked".into(),
+            Some("Activity was blocked by Hevy sync: hevy workout h1 is waiting_watch.".into())
+        )
+    );
     assert_eq!(case.uploads(), 0);
 }
 
@@ -156,7 +225,10 @@ async fn a_disconnected_strava_fails_with_its_own_words() {
     let outcome = case.publish(&[201]).await;
     assert_eq!(outcome[0].0, "failed");
     let message = outcome[0].1.clone().unwrap();
-    assert!(!message.starts_with("Could not publish activity"), "{message}");
+    assert!(
+        !message.starts_with("Could not publish activity"),
+        "{message}"
+    );
     assert!(message.contains("Strava"), "{message}");
 }
 
@@ -166,6 +238,12 @@ async fn garmin_down_fails_the_whole_batch() {
     add(&case.db, 201, "pending");
     add(&case.db, 202, "held");
     let message = format!("Could not publish activity: {}", GarminError::Unavailable);
-    assert_eq!(case.publish(&[201, 202]).await, vec![("failed".into(), Some(message.clone())), ("failed".into(), Some(message))]);
+    assert_eq!(
+        case.publish(&[201, 202]).await,
+        vec![
+            ("failed".into(), Some(message.clone())),
+            ("failed".into(), Some(message))
+        ]
+    );
     assert_eq!(case.uploads(), 0);
 }

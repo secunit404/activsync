@@ -12,7 +12,8 @@ const FIT_EPOCH_S: i64 = 631_065_600;
 const HEADER_SIZE: usize = 14;
 const MAX_FIELD_SIZE: usize = 255;
 const CRC_TABLE: [u16; 16] = [
-    0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401, 0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400,
+    0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401, 0xA001, 0x6C00, 0x7800, 0xB401,
+    0x5000, 0x9C01, 0x8801, 0x4400,
 ];
 
 #[derive(Deserialize)]
@@ -50,8 +51,10 @@ struct Profile {
     types: HashMap<String, HashMap<String, String>>,
 }
 
-static PROFILE: LazyLock<Profile> =
-    LazyLock::new(|| serde_json::from_str(include_str!("../assets/fit_profile.json")).expect("fit_profile.json parses"));
+static PROFILE: LazyLock<Profile> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("../assets/fit_profile.json"))
+        .expect("fit_profile.json parses")
+});
 
 /// A field value as the SDK accepts it: a number, a profile enum by name, a
 /// UTC instant in Unix seconds for `date_time` fields, text, or an array.
@@ -73,7 +76,13 @@ pub struct Mesg {
 }
 
 pub fn mesg(name: &'static str, fields: Vec<(&'static str, Option<FitValue>)>) -> Mesg {
-    Mesg { name, fields: fields.into_iter().filter_map(|(k, v)| v.map(|v| (k, v))).collect() }
+    Mesg {
+        name,
+        fields: fields
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k, v)))
+            .collect(),
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -95,7 +104,10 @@ impl Definition {
     fn equals(&self, other: &Self) -> bool {
         self.global == other.global
             && self.fields.len() == other.fields.len()
-            && self.fields.iter().all(|lhs| other.fields.iter().any(|rhs| lhs == rhs))
+            && self
+                .fields
+                .iter()
+                .all(|lhs| other.fields.iter().any(|rhs| lhs == rhs))
     }
 }
 
@@ -133,22 +145,41 @@ impl Default for Encoder {
 
 impl Encoder {
     pub fn new() -> Self {
-        Self { out: vec![0; HEADER_SIZE], slots: Default::default(), next_local: 0 }
+        Self {
+            out: vec![0; HEADER_SIZE],
+            slots: Default::default(),
+            next_local: 0,
+        }
     }
 
     fn transform(value: &FitValue, field: &Field, name: &str) -> Result<Raw, String> {
         let profile = &*PROFILE;
-        let fail = || format!("Could not convert \"{value:?}\" to \"{}\" for {name}", field.kind);
+        let fail = || {
+            format!(
+                "Could not convert \"{value:?}\" to \"{}\" for {name}",
+                field.kind
+            )
+        };
         if profile.numeric_types.contains(&field.kind) {
             let scaled = field.scale != 1.0 || field.offset != 0.0;
             let float_type = field.kind == "float32" || field.kind == "float64";
             return match value {
-                FitValue::Int(v) if scaled && field.scale.fract() == 0.0 && field.offset.fract() == 0.0 => {
+                FitValue::Int(v)
+                    if scaled && field.scale.fract() == 0.0 && field.offset.fract() == 0.0 =>
+                {
                     let raw = (*v + field.offset as i64) * field.scale as i64;
-                    Ok(if float_type { Raw::Float(raw as f64) } else { Raw::Int(raw) })
+                    Ok(if float_type {
+                        Raw::Float(raw as f64)
+                    } else {
+                        Raw::Int(raw)
+                    })
                 }
-                FitValue::Int(v) if scaled => Self::scaled((*v as f64 + field.offset) * field.scale, float_type),
-                FitValue::Float(v) if scaled => Self::scaled((v + field.offset) * field.scale, float_type),
+                FitValue::Int(v) if scaled => {
+                    Self::scaled((*v as f64 + field.offset) * field.scale, float_type)
+                }
+                FitValue::Float(v) if scaled => {
+                    Self::scaled((v + field.offset) * field.scale, float_type)
+                }
                 FitValue::Int(v) => Ok(Raw::Int(*v)),
                 FitValue::Float(v) => Ok(Raw::Float(*v)),
                 _ => Err(fail()),
@@ -181,7 +212,11 @@ impl Encoder {
     }
 
     fn scaled(value: f64, float_type: bool) -> Result<Raw, String> {
-        Ok(if float_type { Raw::Float(value) } else { Raw::Float(py_round(value)) })
+        Ok(if float_type {
+            Raw::Float(value)
+        } else {
+            Raw::Float(py_round(value))
+        })
     }
 
     fn write_raw(&mut self, raw: &Raw, base: &BaseType) {
@@ -214,40 +249,70 @@ impl Encoder {
         };
         let bits = base.size * 8;
         let masked = (int & ((1i128 << bits) - 1)) as u128;
-        self.out.extend_from_slice(&masked.to_le_bytes()[..base.size]);
+        self.out
+            .extend_from_slice(&masked.to_le_bytes()[..base.size]);
     }
 
     pub fn write(&mut self, message: &Mesg) -> Result<(), String> {
         let profile = &*PROFILE;
-        let definition = profile.messages.get(message.name).ok_or_else(|| format!("unknown FIT message {:?}", message.name))?;
+        let definition = profile
+            .messages
+            .get(message.name)
+            .ok_or_else(|| format!("unknown FIT message {:?}", message.name))?;
         let mut fields = Vec::new();
         let mut defs = Vec::new();
         for (name, value) in &message.fields {
-            let field =
-                definition.fields.get(*name).ok_or_else(|| format!("FIT message {:?} has no field(s) [{name:?}]", message.name))?;
+            let field = definition.fields.get(*name).ok_or_else(|| {
+                format!("FIT message {:?} has no field(s) [{name:?}]", message.name)
+            })?;
             let base = &profile.base_types[&field.base_type.to_string()];
             let values: Vec<&FitValue> = match value {
                 FitValue::List(items) => items.iter().collect(),
                 single => vec![single],
             };
             let size = if base.string {
-                values.iter().map(|v| if let FitValue::Text(t) = v { t.len() + 1 } else { 1 }).sum()
+                values
+                    .iter()
+                    .map(|v| {
+                        if let FitValue::Text(t) = v {
+                            t.len() + 1
+                        } else {
+                            1
+                        }
+                    })
+                    .sum()
             } else {
                 base.size * values.len()
             };
             if size > MAX_FIELD_SIZE {
-                return Err(format!("Some field sizes are greater than {MAX_FIELD_SIZE}"));
+                return Err(format!(
+                    "Some field sizes are greater than {MAX_FIELD_SIZE}"
+                ));
             }
-            let raws = values.iter().map(|v| Self::transform(v, field, name)).collect::<Result<Vec<_>, _>>()?;
-            defs.push(FieldDef { num: field.num, size, base_type: field.base_type });
+            let raws = values
+                .iter()
+                .map(|v| Self::transform(v, field, name))
+                .collect::<Result<Vec<_>, _>>()?;
+            defs.push(FieldDef {
+                num: field.num,
+                size,
+                base_type: field.base_type,
+            });
             fields.push((raws, base));
         }
         if defs.is_empty() {
             return Err("No valid fields were found in the message".into());
         }
-        let new = Definition { global: definition.num, fields: defs };
+        let new = Definition {
+            global: definition.num,
+            fields: defs,
+        };
 
-        let local = match self.slots.iter().position(|slot| slot.as_ref().is_some_and(|d| d.equals(&new))) {
+        let local = match self
+            .slots
+            .iter()
+            .position(|slot| slot.as_ref().is_some_and(|d| d.equals(&new)))
+        {
             Some(index) => index,
             None => {
                 let index = self.next_local & 0x0F;
@@ -261,7 +326,11 @@ impl Encoder {
             self.out.push(new.fields.len() as u8);
             for def in &new.fields {
                 let base = &profile.base_types[&def.base_type.to_string()];
-                self.out.extend_from_slice(&[def.num, def.size as u8, def.base_type | base.endian_flag]);
+                self.out.extend_from_slice(&[
+                    def.num,
+                    def.size as u8,
+                    def.base_type | base.endian_flag,
+                ]);
             }
             self.slots[local] = Some(new);
         }

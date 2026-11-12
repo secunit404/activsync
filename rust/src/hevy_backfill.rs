@@ -25,7 +25,10 @@ fn field<'a>(workout: &'a Value, key: &str) -> &'a str {
 }
 
 fn at(workout: &Value, key: &str) -> Option<DateTime<Utc>> {
-    workout.get(key).and_then(Value::as_str).and_then(timefmt::parse_timestamp)
+    workout
+        .get(key)
+        .and_then(Value::as_str)
+        .and_then(timefmt::parse_timestamp)
 }
 
 pub fn workout_id(workout: &Value) -> &str {
@@ -35,7 +38,10 @@ pub fn workout_id(workout: &Value) -> &str {
 /// The mock account serves every workout on one page, so the scan never
 /// pages; the boundary filter is the part that matters.
 pub fn workouts_since(account: Vec<Value>, since: DateTime<Utc>) -> Vec<Value> {
-    account.into_iter().filter(|w| at(w, "start_time").is_some_and(|start| start >= since)).collect()
+    account
+        .into_iter()
+        .filter(|w| at(w, "start_time").is_some_and(|start| start >= since))
+        .collect()
 }
 
 const PAGE_SIZE: i64 = 10;
@@ -52,13 +58,23 @@ pub async fn account_workout_count(client: &HevyClient) -> Option<i64> {
 /// Pages through Hevy's newest-first workouts back to `since`. The account
 /// total bounds the scan when a page omits `page_count`, which would
 /// otherwise read as the last page and cut history short.
-pub async fn fetch_since(client: &HevyClient, since: DateTime<Utc>, total_count: Option<i64>) -> Result<Vec<Value>, HevyError> {
-    let max_pages = total_count.map(|total| (total.max(0) + PAGE_SIZE - 1) / PAGE_SIZE).map(|pages| pages.max(1));
+pub async fn fetch_since(
+    client: &HevyClient,
+    since: DateTime<Utc>,
+    total_count: Option<i64>,
+) -> Result<Vec<Value>, HevyError> {
+    let max_pages = total_count
+        .map(|total| (total.max(0) + PAGE_SIZE - 1) / PAGE_SIZE)
+        .map(|pages| pages.max(1));
     let mut collected = Vec::new();
     let mut page = 1;
     loop {
         let data = client.get_workouts_page(page, PAGE_SIZE).await?;
-        let workouts = data.get("workouts").and_then(Value::as_array).cloned().unwrap_or_default();
+        let workouts = data
+            .get("workouts")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         let mut older_seen = false;
         for workout in &workouts {
             match at(workout, "start_time") {
@@ -70,7 +86,11 @@ pub async fn fetch_since(client: &HevyClient, since: DateTime<Utc>, total_count:
         if older_seen || workouts.is_empty() {
             return Ok(collected);
         }
-        let bound = data.get("page_count").filter(|c| c.is_i64() || c.is_u64()).and_then(Value::as_i64).or(max_pages);
+        let bound = data
+            .get("page_count")
+            .filter(|c| c.is_i64() || c.is_u64())
+            .and_then(Value::as_i64)
+            .or(max_pages);
         if bound.is_none_or(|bound| page >= bound) {
             return Ok(collected);
         }
@@ -83,7 +103,10 @@ pub fn account(now: DateTime<Utc>) -> Vec<Value> {
 }
 
 fn is_strength(activity: &ActivityRow) -> bool {
-    matches!(activity.activity_type.as_str(), "strength_training" | "other")
+    matches!(
+        activity.activity_type.as_str(),
+        "strength_training" | "other"
+    )
 }
 
 fn duration_seconds(activity: &ActivityRow) -> f64 {
@@ -111,7 +134,11 @@ pub enum WatchMatch {
 
 /// A local watch activity overlapping most of the workout and starting
 /// within 20 minutes of it. Activities other workouts own do not count.
-fn find_watch_match(conn: &Connection, activities: &[ActivityRow], workout: &Value) -> DbResult<WatchMatch> {
+fn find_watch_match(
+    conn: &Connection,
+    activities: &[ActivityRow],
+    workout: &Value,
+) -> DbResult<WatchMatch> {
     let (Some(start), Some(end)) = (at(workout, "start_time"), at(workout, "end_time")) else {
         return Ok(WatchMatch::None);
     };
@@ -119,9 +146,12 @@ fn find_watch_match(conn: &Connection, activities: &[ActivityRow], workout: &Val
         return Ok(WatchMatch::None);
     }
     let duration = (end - start).num_milliseconds() as f64 / 1000.0;
-    let mut stmt = conn.prepare("SELECT source_garmin_activity_id, garmin_activity_id FROM hevy_workouts")?;
+    let mut stmt =
+        conn.prepare("SELECT source_garmin_activity_id, garmin_activity_id FROM hevy_workouts")?;
     let claims: Vec<i64> = stmt
-        .query_map([], |row| Ok([row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?]))?
+        .query_map([], |row| {
+            Ok([row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?])
+        })?
         .collect::<DbResult<Vec<_>>>()?
         .into_iter()
         .flatten()
@@ -132,7 +162,8 @@ fn find_watch_match(conn: &Connection, activities: &[ActivityRow], workout: &Val
         let Some(act_start) = timefmt::parse_timestamp(&activity.start_time) else {
             continue;
         };
-        let act_end = act_start + Duration::milliseconds((duration_seconds(activity) * 1000.0) as i64);
+        let act_end =
+            act_start + Duration::milliseconds((duration_seconds(activity) * 1000.0) as i64);
         let overlap = (end.min(act_end) - start.max(act_start)).num_milliseconds() as f64 / 1000.0;
         if overlap <= 0.0 || overlap / duration < OVERLAP_MIN {
             continue;
@@ -159,7 +190,11 @@ fn find_watch_match(conn: &Connection, activities: &[ActivityRow], workout: &Val
 fn mapping_misses(conn: &Connection, workout: &Value) -> DbResult<(bool, Vec<String>)> {
     let (mut any, mut missing) = (false, Vec::new());
     let empty = Vec::new();
-    for exercise in workout.get("exercises").and_then(Value::as_array).unwrap_or(&empty) {
+    for exercise in workout
+        .get("exercises")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty)
+    {
         let template = exercise.get("exercise_template_id").and_then(Value::as_str);
         if exercise_tables::lookup_exercise(conn, field(exercise, "title"), template)?.is_none() {
             any = true;
@@ -186,14 +221,21 @@ fn owned(conn: &Connection, activity_id: i64) -> DbResult<bool> {
 
 /// The import plan, without writing anything. Workouts already in the queue
 /// are left out unless the owner skipped them there.
-pub fn preview_items(conn: &Connection, workouts: Vec<Value>, cfg: &Config, now: DateTime<Utc>) -> DbResult<Vec<Item>> {
+pub fn preview_items(
+    conn: &Connection,
+    workouts: Vec<Value>,
+    cfg: &Config,
+    now: DateTime<Utc>,
+) -> DbResult<Vec<Item>> {
     let activities = db::list_activities(conn, false)?;
     let review = cfg.get("hevy_match_mode").and_then(Value::as_str) == Some("review");
     let strategy = cfg.str("hevy_watch_strategy");
     let mut items = Vec::new();
     for workout in workouts {
         let hevy_id = workout_id(&workout);
-        if !hevy_id.is_empty() && hevy_db::get_workout(conn, hevy_id)?.is_some_and(|w| w.status != "skipped") {
+        if !hevy_id.is_empty()
+            && hevy_db::get_workout(conn, hevy_id)?.is_some_and(|w| w.status != "skipped")
+        {
             continue;
         }
         let mut missing = Vec::new();
@@ -213,14 +255,26 @@ pub fn preview_items(conn: &Connection, workouts: Vec<Value>, cfg: &Config, now:
                     if twin.as_ref().is_some_and(ActivityRow::is_published) || review {
                         "awaiting_match".to_string()
                     } else {
-                        let (miss, ids) = if strategy == "describe" { (false, Vec::new()) } else { mapping_misses(conn, &workout)? };
+                        let (miss, ids) = if strategy == "describe" {
+                            (false, Vec::new())
+                        } else {
+                            mapping_misses(conn, &workout)?
+                        };
                         missing = ids;
-                        if miss { "needs_mapping".to_string() } else { strategy.clone() }
+                        if miss {
+                            "needs_mapping".to_string()
+                        } else {
+                            strategy.clone()
+                        }
                     }
                 }
                 WatchMatch::Multiple | WatchMatch::Claimed => "needs_review".to_string(),
                 WatchMatch::None => {
-                    let (miss, ids) = if strategy == "describe" { (false, Vec::new()) } else { mapping_misses(conn, &workout)? };
+                    let (miss, ids) = if strategy == "describe" {
+                        (false, Vec::new())
+                    } else {
+                        mapping_misses(conn, &workout)?
+                    };
                     missing = ids;
                     let grace = Duration::minutes(cfg.int("hevy_grace_minutes"));
                     if miss {
@@ -237,7 +291,12 @@ pub fn preview_items(conn: &Connection, workouts: Vec<Value>, cfg: &Config, now:
                 }
             }
         };
-        items.push(Item { workout, twin, action, missing_template_ids: missing });
+        items.push(Item {
+            workout,
+            twin,
+            action,
+            missing_template_ids: missing,
+        });
     }
     Ok(items)
 }
@@ -282,8 +341,16 @@ pub fn run_items(conn: &Connection, items: &[&Item]) -> DbResult<usize> {
             continue;
         }
         if !hevy_db::claim_source(conn, hevy_id, twin.garmin_activity_id)? {
-            crate::log_warn!("hevy_backfill", "backfill twin for {hevy_id} already claimed");
-            hevy_db::set_workout_status(conn, hevy_id, "needs_review", Some("backfill match was claimed by another workout"))?;
+            crate::log_warn!(
+                "hevy_backfill",
+                "backfill twin for {hevy_id} already claimed"
+            );
+            hevy_db::set_workout_status(
+                conn,
+                hevy_id,
+                "needs_review",
+                Some("backfill match was claimed by another workout"),
+            )?;
             continue;
         }
         if item.action == "awaiting_match" {

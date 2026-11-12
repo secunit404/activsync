@@ -32,8 +32,15 @@ pub fn extract_fit_hr(fit: &[u8], workout_start_ms: i64) -> Vec<Value> {
         if record.kind() != fitparser::profile::MesgNum::Record {
             continue;
         }
-        let field = |name: &str| record.fields().iter().find(|f| f.name() == name).map(|f| f.value().clone());
-        let (Some(Fit::Timestamp(at)), Some(bpm)) = (field("timestamp"), field("heart_rate")) else {
+        let field = |name: &str| {
+            record
+                .fields()
+                .iter()
+                .find(|f| f.name() == name)
+                .map(|f| f.value().clone())
+        };
+        let (Some(Fit::Timestamp(at)), Some(bpm)) = (field("timestamp"), field("heart_rate"))
+        else {
             continue;
         };
         let bpm = match bpm {
@@ -62,7 +69,11 @@ fn dates_touched(start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<String> {
 /// Garmin's daily wrist HR within a minute either side of the workout,
 /// fetching every date it touches so a session across midnight keeps both
 /// halves.
-pub async fn passive_hr_for_window(garmin: &GarminClient, start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<Value> {
+pub async fn passive_hr_for_window(
+    garmin: &GarminClient,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> Vec<Value> {
     let ms = |at: DateTime<Utc>| (at.timestamp_micros() as f64 / 1_000_000.0 * 1000.0).trunc();
     let (start_ms, end_ms) = (ms(start), ms(end));
     let mut samples = Vec::new();
@@ -81,8 +92,13 @@ pub async fn passive_hr_for_window(garmin: &GarminClient, start: DateTime<Utc>, 
             let Some(pair) = entry.as_array().filter(|p| p.len() >= 2 && !p[1].is_null()) else {
                 continue;
             };
-            let at = pair[0].as_f64().or_else(|| pair[0].as_str()?.trim().parse().ok());
-            let bpm = pair[1].as_f64().map(|b| b.trunc() as i64).or_else(|| pair[1].as_str()?.trim().parse().ok());
+            let at = pair[0]
+                .as_f64()
+                .or_else(|| pair[0].as_str()?.trim().parse().ok());
+            let bpm = pair[1]
+                .as_f64()
+                .map(|b| b.trunc() as i64)
+                .or_else(|| pair[1].as_str()?.trim().parse().ok());
             let (Some(at), Some(bpm)) = (at, bpm) else {
                 continue;
             };

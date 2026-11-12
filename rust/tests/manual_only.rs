@@ -8,8 +8,14 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 async fn match_mode(development: bool) -> Value {
-    let state = AppState::new(Db::open_in_memory().unwrap(), false, schedule::system_clock(), 0.0, AuthConfig::sign_in_off())
-        .with_development(development);
+    let state = AppState::new(
+        Db::open_in_memory().unwrap(),
+        false,
+        schedule::system_clock(),
+        0.0,
+        AuthConfig::sign_in_off(),
+    )
+    .with_development(development);
     let request = Request::builder()
         .uri("/api/v1/settings")
         .header(header::HOST, "127.0.0.1:8381")
@@ -18,8 +24,12 @@ async fn match_mode(development: bool) -> Value {
         .body(Body::empty())
         .unwrap();
     let response = build_app(state, None).oneshot(request).await.unwrap();
-    let body: Value = serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(body["development"], false, "only mock data counts as development on the settings page");
+    let body: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(
+        body["development"], false,
+        "only mock data counts as development on the settings page"
+    );
     body["hevy"]["matchMode"].clone()
 }
 

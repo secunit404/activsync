@@ -4,7 +4,9 @@ use std::time::Duration;
 use openidconnect::{HttpResponse, http};
 use serde_json::Value;
 
-use crate::garmin_client::{API_LABEL, API_TIMEOUT, CONNECTAPI_URL, GarminClient, check_path, expires_soon, native_headers};
+use crate::garmin_client::{
+    API_LABEL, API_TIMEOUT, CONNECTAPI_URL, GarminClient, check_path, expires_soon, native_headers,
+};
 use crate::garmin_errors::{GarminError, api_error, status_of};
 use crate::net;
 
@@ -24,7 +26,13 @@ pub(crate) struct Request<'a> {
 
 impl<'a> Request<'a> {
     pub(crate) fn get(path: &'a str) -> Self {
-        Self { method: http::Method::GET, path, query: &[], headers: Vec::new(), body: Vec::new() }
+        Self {
+            method: http::Method::GET,
+            path,
+            query: &[],
+            headers: Vec::new(),
+            body: Vec::new(),
+        }
     }
 
     pub(crate) fn with_query(self, query: &'a [(&'a str, String)]) -> Self {
@@ -33,7 +41,13 @@ impl<'a> Request<'a> {
 
     pub(crate) fn json(method: http::Method, path: &'a str, payload: &Value) -> Self {
         let headers = vec![("Content-Type", "application/json".to_string())];
-        Self { method, path, query: &[], headers, body: net::json_body(payload) }
+        Self {
+            method,
+            path,
+            query: &[],
+            headers,
+            body: net::json_body(payload),
+        }
     }
 }
 
@@ -47,15 +61,24 @@ pub(crate) struct Waits {
 impl Waits {
     pub(crate) fn from_pause(pause: Duration) -> Self {
         if pause.is_zero() {
-            Self { pause, rate_limit: Duration::ZERO, backoff: Duration::ZERO }
+            Self {
+                pause,
+                rate_limit: Duration::ZERO,
+                backoff: Duration::ZERO,
+            }
         } else {
-            Self { pause, rate_limit: RATE_LIMIT_BASE_WAIT, backoff: BACKOFF_MIN }
+            Self {
+                pause,
+                rate_limit: RATE_LIMIT_BASE_WAIT,
+                backoff: BACKOFF_MIN,
+            }
         }
     }
 
     /// Exponential with 50-100% jitter, capped at ten times the first wait.
     fn backoff_for(&self, attempt: u32) -> Duration {
-        let base = (self.backoff * 2u32.saturating_pow(attempt)).min(self.backoff * BACKOFF_MAX_FACTOR);
+        let base =
+            (self.backoff * 2u32.saturating_pow(attempt)).min(self.backoff * BACKOFF_MAX_FACTOR);
         base.mul_f64(0.5 + rand::random::<f64>() * 0.5)
     }
 }
@@ -63,18 +86,38 @@ impl Waits {
 impl GarminClient {
     pub(crate) async fn send(&self, request: &Request<'_>) -> Result<HttpResponse, GarminError> {
         let token = self.tokens().di_token.ok_or(GarminError::SessionExpired)?;
-        let mut extra = vec![("Authorization", format!("Bearer {token}")), ("Accept", "application/json".to_string())];
+        let mut extra = vec![
+            ("Authorization", format!("Bearer {token}")),
+            ("Accept", "application/json".to_string()),
+        ];
         extra.extend(request.headers.iter().cloned());
         let headers = native_headers(&extra);
-        let headers: Vec<(&str, &str)> = headers.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-        let query: Vec<(&str, &str)> = request.query.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        let url = net::with_query(&format!("{CONNECTAPI_URL}/{}", request.path.trim_start_matches('/')), &query);
-        let outgoing = net::request(request.method.clone(), &url, &headers, request.body.clone()).map_err(|e| GarminError::Network(e.0))?;
-        (self.http)(net::with_timeout(outgoing, API_TIMEOUT)).await.map_err(|e| GarminError::Network(e.0))
+        let headers: Vec<(&str, &str)> = headers
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let query: Vec<(&str, &str)> = request
+            .query
+            .iter()
+            .map(|(k, v)| (*k, v.as_str()))
+            .collect();
+        let url = net::with_query(
+            &format!("{CONNECTAPI_URL}/{}", request.path.trim_start_matches('/')),
+            &query,
+        );
+        let outgoing = net::request(request.method.clone(), &url, &headers, request.body.clone())
+            .map_err(|e| GarminError::Network(e.0))?;
+        (self.http)(net::with_timeout(outgoing, API_TIMEOUT))
+            .await
+            .map_err(|e| GarminError::Network(e.0))
     }
 
     pub(crate) async fn run(&self, request: &Request<'_>) -> Result<Vec<u8>, GarminError> {
-        let soon = self.tokens().di_token.as_deref().is_some_and(|t| expires_soon(t, (self.clock)()));
+        let soon = self
+            .tokens()
+            .di_token
+            .as_deref()
+            .is_some_and(|t| expires_soon(t, (self.clock)()));
         if soon {
             self.refresh_session().await;
         }
@@ -100,7 +143,11 @@ impl GarminClient {
     /// is retried with a jittered backoff, and what finally fails is worded
     /// by status. The profile reads at sign-in and the PUT, POST and DELETE
     /// calls go through [`GarminClient::run`] alone, as the library sends them.
-    pub(crate) async fn call(&self, label: &str, request: &Request<'_>) -> Result<Vec<u8>, GarminError> {
+    pub(crate) async fn call(
+        &self,
+        label: &str,
+        request: &Request<'_>,
+    ) -> Result<Vec<u8>, GarminError> {
         let mut attempt = 0;
         loop {
             let err = match self.run(request).await {
@@ -116,7 +163,11 @@ impl GarminClient {
                 return Err(Self::worded(label, err));
             }
             if attempt >= RETRY_ATTEMPTS {
-                crate::log_error!("garmin_client", "{label} failed for path '{}': {err}", request.path);
+                crate::log_error!(
+                    "garmin_client",
+                    "{label} failed for path '{}': {err}",
+                    request.path
+                );
                 return Err(Self::worded(label, err));
             }
             let delay = self.waits.backoff_for(attempt);
@@ -138,11 +189,15 @@ impl GarminClient {
     pub(crate) fn worded(label: &str, err: GarminError) -> GarminError {
         match err {
             GarminError::Network(text) => GarminError::Network(format!("Connection error: {text}")),
-            GarminError::NotFound(message) => GarminError::NotFound(format!("{label} client error (404): {message}")),
+            GarminError::NotFound(message) => {
+                GarminError::NotFound(format!("{label} client error (404): {message}"))
+            }
             GarminError::Api(message) => match status_of(&message) {
                 Some(401) => GarminError::Api(format!("Authentication failed: {message}")),
                 Some(429) => GarminError::Api(format!("Rate limit exceeded: {message}")),
-                Some(status) if (400..500).contains(&status) => GarminError::Api(format!("{label} client error ({status}): {message}")),
+                Some(status) if (400..500).contains(&status) => {
+                    GarminError::Api(format!("{label} client error ({status}): {message}"))
+                }
                 Some(_) => GarminError::Api(format!("{label} HTTP error: {message}")),
                 None => GarminError::Api(message),
             },
@@ -155,18 +210,29 @@ impl GarminClient {
         serde_json::from_slice(&body).map_err(|e| GarminError::Malformed(e.to_string()))
     }
 
-    pub(crate) async fn get_json(&self, path: &str, query: &[(&str, String)]) -> Result<Value, GarminError> {
+    pub(crate) async fn get_json(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<Value, GarminError> {
         self.call_json(&Request::get(path).with_query(query)).await
     }
 
-    pub(crate) async fn raw_json(&self, path: &str, query: &[(&str, String)]) -> Result<Value, GarminError> {
+    pub(crate) async fn raw_json(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<Value, GarminError> {
         self.run_json(&Request::get(path).with_query(query)).await
     }
 
     /// The Python app's rate limiter: a pause after every call that works,
     /// and a rate limit the library reported is waited out (30 s, then 60 s)
     /// before the whole operation is repeated.
-    pub(crate) async fn limited<T, Fut>(&self, mut operation: impl FnMut() -> Fut) -> Result<T, GarminError>
+    pub(crate) async fn limited<T, Fut>(
+        &self,
+        mut operation: impl FnMut() -> Fut,
+    ) -> Result<T, GarminError>
     where
         Fut: Future<Output = Result<T, GarminError>>,
     {
@@ -193,7 +259,10 @@ impl GarminClient {
                 }
                 Err(err) => {
                     if err.is_rate_limited() {
-                        crate::log_error!("rate_limit", "rate limited (429): {RATE_LIMIT_ATTEMPTS} retries exhausted");
+                        crate::log_error!(
+                            "rate_limit",
+                            "rate limited (429): {RATE_LIMIT_ATTEMPTS} retries exhausted"
+                        );
                     }
                     return Err(err);
                 }

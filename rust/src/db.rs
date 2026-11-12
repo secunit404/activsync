@@ -187,7 +187,9 @@ impl Db {
     }
 
     pub fn lock(&self) -> MutexGuard<'_, Connection> {
-        self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -208,15 +210,24 @@ fn migrate(conn: &Connection) -> DbResult<()> {
     if !activity_cols.iter().any(|c| c == "hold_reason") {
         conn.execute("ALTER TABLE activities ADD COLUMN hold_reason TEXT", [])?;
     }
-    if !columns(conn, "hevy_workouts")?.iter().any(|c| c == "lease_owner") {
+    if !columns(conn, "hevy_workouts")?
+        .iter()
+        .any(|c| c == "lease_owner")
+    {
         conn.execute("ALTER TABLE hevy_workouts ADD COLUMN lease_owner TEXT", [])?;
     }
     let op_cols = columns(conn, "hevy_operations")?;
     if !op_cols.iter().any(|c| c == "generated_calories") {
-        conn.execute("ALTER TABLE hevy_operations ADD COLUMN generated_calories REAL", [])?;
+        conn.execute(
+            "ALTER TABLE hevy_operations ADD COLUMN generated_calories REAL",
+            [],
+        )?;
     }
     if !op_cols.iter().any(|c| c == "generated_avg_hr") {
-        conn.execute("ALTER TABLE hevy_operations ADD COLUMN generated_avg_hr REAL", [])?;
+        conn.execute(
+            "ALTER TABLE hevy_operations ADD COLUMN generated_avg_hr REAL",
+            [],
+        )?;
     }
     conn.execute("DROP TABLE IF EXISTS sessions", [])?;
     conn.execute("DELETE FROM app_config WHERE key = 'auth'", [])?;
@@ -283,7 +294,11 @@ pub fn iso(now: DateTime<Utc>) -> String {
     now.format(format).to_string()
 }
 
-pub fn insert_activity(conn: &Connection, new: &NewActivity<'_>, now: DateTime<Utc>) -> DbResult<()> {
+pub fn insert_activity(
+    conn: &Connection,
+    new: &NewActivity<'_>,
+    now: DateTime<Utc>,
+) -> DbResult<()> {
     let held = new.publish_status == "held";
     let now_iso = iso(now);
     conn.execute(
@@ -320,7 +335,9 @@ pub fn get_activity(conn: &Connection, garmin_activity_id: i64) -> DbResult<Opti
 
 pub fn list_activities(conn: &Connection, oldest_first: bool) -> DbResult<Vec<ActivityRow>> {
     let order = if oldest_first { "ASC" } else { "DESC" };
-    let mut stmt = conn.prepare(&format!("SELECT * FROM activities ORDER BY start_time {order}"))?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT * FROM activities ORDER BY start_time {order}"
+    ))?;
     let rows = stmt.query_map([], ActivityRow::from_row)?;
     rows.collect()
 }
@@ -383,22 +400,40 @@ pub fn set_published(
 /// Where the database lives: `configured` (`ACTIVSYNC_DB_PATH`, else
 /// `G2S_DB_PATH`), else the default for the mode. An install from before the
 /// rename keeps its old database name until a new one exists.
-pub fn resolve_path(configured: Option<String>, mock_mode: bool, exists: impl Fn(&Path) -> bool) -> PathBuf {
+pub fn resolve_path(
+    configured: Option<String>,
+    mock_mode: bool,
+    exists: impl Fn(&Path) -> bool,
+) -> PathBuf {
     if let Some(path) = configured.filter(|path| !path.is_empty()) {
         return PathBuf::from(path);
     }
     let (preferred, legacy) = if mock_mode {
-        (PathBuf::from("/config/activsync-dev.db"), PathBuf::from("/config/dev-mock.db"))
+        (
+            PathBuf::from("/config/activsync-dev.db"),
+            PathBuf::from("/config/dev-mock.db"),
+        )
     } else {
-        (PathBuf::from("/config/activsync.db"), PathBuf::from("/config/garmin2strava.db"))
+        (
+            PathBuf::from("/config/activsync.db"),
+            PathBuf::from("/config/garmin2strava.db"),
+        )
     };
-    if exists(&legacy) && !exists(&preferred) { legacy } else { preferred }
+    if exists(&legacy) && !exists(&preferred) {
+        legacy
+    } else {
+        preferred
+    }
 }
 
 /// Values are stored as JSON text, exactly as the Python app writes them.
 pub fn get_config_value(conn: &Connection, key: &str) -> DbResult<Option<Value>> {
     let raw: Option<String> = conn
-        .query_row("SELECT value FROM app_config WHERE key = ?1", [key], |row| row.get(0))
+        .query_row(
+            "SELECT value FROM app_config WHERE key = ?1",
+            [key],
+            |row| row.get(0),
+        )
         .optional()?;
     Ok(raw.and_then(|text| serde_json::from_str(&text).ok()))
 }
@@ -425,7 +460,9 @@ fn dump_value(value: &Value, out: &mut String) {
     match value {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Value::Number(n) if n.is_f64() => out.push_str(&python_float(n.as_f64().unwrap_or_default())),
+        Value::Number(n) if n.is_f64() => {
+            out.push_str(&python_float(n.as_f64().unwrap_or_default()))
+        }
         Value::Number(n) => out.push_str(&n.to_string()),
         Value::String(s) => dump_string(s, out),
         Value::Array(items) => {
@@ -489,7 +526,9 @@ fn python_float(value: f64) -> String {
     let Some((mantissa, exponent)) = text.split_once('e') else {
         return text;
     };
-    let (sign, digits) = exponent.strip_prefix('-').map_or(("+", exponent), |digits| ("-", digits));
+    let (sign, digits) = exponent
+        .strip_prefix('-')
+        .map_or(("+", exponent), |digits| ("-", digits));
     format!("{mantissa}e{sign}{digits:0>2}")
 }
 
@@ -564,7 +603,8 @@ pub fn blocking_workout_for_activity(
 }
 
 pub fn list_activities_with_status(conn: &Connection, status: &str) -> DbResult<Vec<ActivityRow>> {
-    let mut stmt = conn.prepare("SELECT * FROM activities WHERE publish_status = ?1 ORDER BY start_time DESC")?;
+    let mut stmt = conn
+        .prepare("SELECT * FROM activities WHERE publish_status = ?1 ORDER BY start_time DESC")?;
     let rows = stmt.query_map([status], ActivityRow::from_row)?;
     rows.collect()
 }
@@ -587,7 +627,15 @@ pub fn update_activity_content(
                publish_status = ?5, garmin_data = ?6,
                hold_reason = CASE WHEN ?5 = 'held' THEN hold_reason ELSE NULL END
          WHERE garmin_activity_id = ?7",
-        params![title, description, activity_type, content_hash, publish_status, garmin_data, garmin_activity_id],
+        params![
+            title,
+            description,
+            activity_type,
+            content_hash,
+            publish_status,
+            garmin_data,
+            garmin_activity_id
+        ],
     )?;
     Ok(())
 }
@@ -596,13 +644,20 @@ pub fn update_activity_content(
 /// while any Strava copy is left alone. Should the activity reappear, the
 /// publish path re-links it by start time instead of uploading again.
 pub fn mark_removed(conn: &Connection, garmin_activity_id: i64) -> DbResult<()> {
-    conn.execute("DELETE FROM activities WHERE garmin_activity_id = ?1", [garmin_activity_id])?;
+    conn.execute(
+        "DELETE FROM activities WHERE garmin_activity_id = ?1",
+        [garmin_activity_id],
+    )?;
     Ok(())
 }
 
 /// Scoped by window: a sync speaks only for the span it fetched.
-pub fn list_active_ids_since(conn: &Connection, window_start: &str) -> DbResult<std::collections::HashSet<i64>> {
-    let mut stmt = conn.prepare("SELECT garmin_activity_id FROM activities WHERE start_time >= ?1")?;
+pub fn list_active_ids_since(
+    conn: &Connection,
+    window_start: &str,
+) -> DbResult<std::collections::HashSet<i64>> {
+    let mut stmt =
+        conn.prepare("SELECT garmin_activity_id FROM activities WHERE start_time >= ?1")?;
     let ids = stmt.query_map([window_start], |row| row.get(0))?;
     ids.collect()
 }
@@ -621,7 +676,9 @@ pub fn oldest_unpublished_start_time(conn: &Connection) -> DbResult<Option<Strin
 /// Activities waiting out their undo window or being sent by the publish
 /// scheduler; nothing else may publish them meanwhile.
 pub fn scheduled_publish_ids(conn: &Connection) -> DbResult<std::collections::HashSet<i64>> {
-    let mut stmt = conn.prepare("SELECT garmin_activity_id FROM publish_schedule WHERE state IN ('waiting', 'sending')")?;
+    let mut stmt = conn.prepare(
+        "SELECT garmin_activity_id FROM publish_schedule WHERE state IN ('waiting', 'sending')",
+    )?;
     let ids = stmt.query_map([], |row| row.get(0))?;
     ids.collect()
 }
@@ -638,7 +695,10 @@ pub fn has_linked_workout(conn: &Connection, garmin_activity_id: i64) -> DbResul
 
 /// The Hevy workout whose content now lives on the activity, as
 /// (status, payload).
-pub fn applied_workout_for_activity(conn: &Connection, garmin_activity_id: i64) -> DbResult<Option<(String, String)>> {
+pub fn applied_workout_for_activity(
+    conn: &Connection,
+    garmin_activity_id: i64,
+) -> DbResult<Option<(String, String)>> {
     conn.query_row(
         "SELECT status, payload FROM hevy_workouts
          WHERE garmin_activity_id = ?1 AND status IN ('merged', 'described', 'replaced', 'uploaded_passive')",

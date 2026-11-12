@@ -15,8 +15,8 @@ pub mod fit_builder;
 pub mod fit_encode;
 pub mod garmin_client;
 pub mod garmin_errors;
-pub mod garmin_retry;
 pub mod garmin_login;
+pub mod garmin_retry;
 pub mod garmin_routes;
 pub mod hevy_apply;
 pub mod hevy_backfill;
@@ -115,10 +115,18 @@ pub struct AppState {
 impl AppState {
     /// Issues (and logs) a setup code when sign-in is on and nobody has
     /// claimed the install yet.
-    pub fn new(db: Db, mock_mode: bool, clock: schedule::Clock, window_seconds: f64, auth: AuthConfig) -> Self {
+    pub fn new(
+        db: Db,
+        mock_mode: bool,
+        clock: schedule::Clock,
+        window_seconds: f64,
+        auth: AuthConfig,
+    ) -> Self {
         let events = EventBus::new();
-        let scheduler = PublishScheduler::new(db.clone(), events.clone(), clock.clone(), window_seconds);
-        let match_scheduler = HevyMatchScheduler::new(db.clone(), events.clone(), clock, window_seconds);
+        let scheduler =
+            PublishScheduler::new(db.clone(), events.clone(), clock.clone(), window_seconds);
+        let match_scheduler =
+            HevyMatchScheduler::new(db.clone(), events.clone(), clock, window_seconds);
         let setup_code = SetupCode::default();
         if let Err(err) = setup_code.ensure(&db.lock(), auth.disabled) {
             crate::log_error!("server", "could not read the owner record: {err}");
@@ -144,17 +152,26 @@ impl AppState {
     }
 
     pub fn with_garmin_sign_in(self, sign_in: garmin_login::SignIn) -> Self {
-        Self { garmin_sign_in: Some(sign_in), ..self }
+        Self {
+            garmin_sign_in: Some(sign_in),
+            ..self
+        }
     }
 
     /// Applies the owner's Hevy match choices with `applier`.
     pub fn with_match_applier(self, applier: Arc<dyn hevy_match::MatchApplier>) -> Self {
         let match_scheduler = self.match_scheduler.clone().with_applier(applier);
-        Self { match_scheduler, ..self }
+        Self {
+            match_scheduler,
+            ..self
+        }
     }
 
     pub fn with_development(self, development: bool) -> Self {
-        Self { development, ..self }
+        Self {
+            development,
+            ..self
+        }
     }
 
     /// Makes both undo schedulers read the undo delay setting at schedule time.
@@ -167,18 +184,30 @@ impl AppState {
     }
 
     pub fn with_hevy_http(self, hevy_http: net::Http) -> Self {
-        Self { hevy_http: Some(hevy_http), ..self }
+        Self {
+            hevy_http: Some(hevy_http),
+            ..self
+        }
     }
 
     /// The real Hevy client for `api_key`, or `None` for the mock account.
-    pub fn real_hevy(&self, api_key: &str) -> Option<Result<hevy_client::HevyClient, &'static str>> {
-        self.hevy_http.as_ref().map(|http| hevy_client::HevyClient::new(http.clone(), api_key))
+    pub fn real_hevy(
+        &self,
+        api_key: &str,
+    ) -> Option<Result<hevy_client::HevyClient, &'static str>> {
+        self.hevy_http
+            .as_ref()
+            .map(|http| hevy_client::HevyClient::new(http.clone(), api_key))
     }
 
     /// Serves real accounts: syncing and publishing go to Garmin and Strava.
     pub fn with_clients(self, clients: Arc<dyn poller::Clients>) -> Self {
         let scheduler = self.scheduler.clone().with_clients(clients.clone());
-        Self { clients: Some(clients), scheduler, ..self }
+        Self {
+            clients: Some(clients),
+            scheduler,
+            ..self
+        }
     }
 
     /// Points single sign-on at a stand-in identity provider.
@@ -187,7 +216,10 @@ impl AppState {
     }
 
     pub fn pending_mfa(&self) -> Option<PendingMfa> {
-        self.pending_mfa.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.pending_mfa
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     pub fn set_pending_mfa(&self, value: Option<PendingMfa>) {
@@ -209,14 +241,26 @@ fn settings_router() -> Router<AppState> {
         .route("/settings/strava", delete(disconnect_strava))
         .route("/settings/preferences", put(save_preferences))
         .route("/settings/activity-types", put(save_activity_types))
-        .route("/settings/activity-types/refresh", post(refresh_activity_types))
+        .route(
+            "/settings/activity-types/refresh",
+            post(refresh_activity_types),
+        )
         .route("/settings/sync/{service}", post(manual_sync))
         .route("/settings/hevy/credentials", post(save_hevy_credentials))
-        .route("/settings/hevy", put(save_hevy_settings).delete(disconnect_hevy))
+        .route(
+            "/settings/hevy",
+            put(save_hevy_settings).delete(disconnect_hevy),
+        )
         .route("/settings/hevy/device-options", get(hevy_device_options))
         .route("/settings/hevy/tools", get(hevy_tools::tools_state))
-        .route("/settings/hevy/backfill/preview", post(hevy_tools::preview_backfill))
-        .route("/settings/hevy/backfill/run", post(hevy_tools::run_backfill))
+        .route(
+            "/settings/hevy/backfill/preview",
+            post(hevy_tools::preview_backfill),
+        )
+        .route(
+            "/settings/hevy/backfill/run",
+            post(hevy_tools::run_backfill),
+        )
         .route(
             "/settings/hevy/mappings/{template_id}",
             put(hevy_tools::save_mapping).delete(hevy_tools::delete_mapping),
@@ -241,18 +285,25 @@ fn auth_router() -> Router<AppState> {
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
         .route("/auth/sessions", get(list_sessions).delete(revoke_others))
-        .route("/auth/sessions/{public_id}", axum::routing::delete(revoke_one))
+        .route(
+            "/auth/sessions/{public_id}",
+            axum::routing::delete(revoke_one),
+        )
         .route("/auth/password", put(change_password))
         .route("/auth/settings", get(auth_settings))
         .route("/dev/unclaim", post(dev_unclaim))
         .route(
             "/auth/oidc",
-            get(oidc_routes::oidc_state).put(oidc_routes::save_oidc).delete(oidc_routes::delete_oidc),
+            get(oidc_routes::oidc_state)
+                .put(oidc_routes::save_oidc)
+                .delete(oidc_routes::delete_oidc),
         )
         .route("/auth/oidc/link", post(oidc_routes::start_link))
         .route(
             "/auth/oidc/logo",
-            get(oidc_routes::logo).put(oidc_routes::upload_logo).delete(oidc_routes::delete_logo),
+            get(oidc_routes::logo)
+                .put(oidc_routes::upload_logo)
+                .delete(oidc_routes::delete_logo),
         )
 }
 
@@ -278,18 +329,33 @@ fn api_router() -> Router<AppState> {
         .merge(auth_router())
         .merge(hevy_router())
         .route("/app", get(app_state))
-        .route("/catch-up-report", axum::routing::delete(dismiss_catch_up_report))
+        .route(
+            "/catch-up-report",
+            axum::routing::delete(dismiss_catch_up_report),
+        )
         .route("/activities", get(activities_page))
         .route("/activities/publish", post(publish_activities))
-        .route("/activities/publish/schedule", post(schedule_publish_activities))
-        .route("/activities/publish/cancel", post(cancel_publish_activities))
+        .route(
+            "/activities/publish/schedule",
+            post(schedule_publish_activities),
+        )
+        .route(
+            "/activities/publish/cancel",
+            post(cancel_publish_activities),
+        )
         .route("/activities/publish/batches/{batch_id}", get(publish_batch))
         .route("/activities/{id}", put(edit_activity))
         .route("/activities/{id}/exclude", post(exclude_activity))
         .route("/activities/{id}/restore", post(restore_activity))
         .route("/activities/{id}/publish", post(publish_activity))
-        .route("/activities/{id}/publish/schedule", post(schedule_publish_activity))
-        .route("/activities/{id}/publish/cancel", post(cancel_publish_activity))
+        .route(
+            "/activities/{id}/publish/schedule",
+            post(schedule_publish_activity),
+        )
+        .route(
+            "/activities/{id}/publish/cancel",
+            post(cancel_publish_activity),
+        )
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
 }
@@ -310,22 +376,34 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
         .route("/api/{*rest}", get(routes::not_found))
         .route("/health", get(routes::health))
         .route("/favicon.ico", get(|| async { routes::icon(FAVICON) }))
-        .route("/apple-touch-icon.png", get(|| async { routes::icon(APPLE_TOUCH_ICON) }))
+        .route(
+            "/apple-touch-icon.png",
+            get(|| async { routes::icon(APPLE_TOUCH_ICON) }),
+        )
         .route("/strava/callback", get(strava_routes::strava_callback))
         .route("/auth/oidc/login", get(oidc_routes::oidc_login))
         .route("/auth/oidc/callback", get(oidc_routes::oidc_callback));
     if let Some(dir) = web_dir {
-        let assets = ServeDir::new(dir.join("assets")).fallback(Router::new().fallback(routes::not_found));
+        let assets =
+            ServeDir::new(dir.join("assets")).fallback(Router::new().fallback(routes::not_found));
         app = app.nest_service(
             "/assets",
-            Router::new().fallback_service(assets).layer(axum::middleware::map_response(text_charset)),
+            Router::new()
+                .fallback_service(assets)
+                .layer(axum::middleware::map_response(text_charset)),
         );
     }
-    let index = web_dir.map(|d| d.join("index.html")).filter(|index| index.is_file()).map(Arc::new);
+    let index = web_dir
+        .map(|d| d.join("index.html"))
+        .filter(|index| index.is_file())
+        .map(Arc::new);
     app = app.fallback(get(move |uri: Uri| spa(index.clone(), uri)));
-    app.layer(axum::middleware::from_fn_with_state(state.clone(), auth_guard::guard))
-        .layer(axum::middleware::from_fn(logging::access_log))
-        .with_state(state)
+    app.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        auth_guard::guard,
+    ))
+    .layer(axum::middleware::from_fn(logging::access_log))
+    .with_state(state)
 }
 
 /// Paths under these belong to the API and the OAuth routes, so a miss is a
@@ -333,15 +411,28 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
 const SPA_RESERVED_PREFIXES: [&str; 4] = ["api", "assets", "strava", "auth"];
 
 async fn spa(index: Option<Arc<PathBuf>>, uri: Uri) -> Response {
-    let first_segment = uri.path().strip_prefix('/').unwrap_or(uri.path()).split('/').next().unwrap_or_default();
+    let first_segment = uri
+        .path()
+        .strip_prefix('/')
+        .unwrap_or(uri.path())
+        .split('/')
+        .next()
+        .unwrap_or_default();
     let body = match &index {
-        Some(index) if !SPA_RESERVED_PREFIXES.contains(&first_segment) => tokio::fs::read(index.as_path()).await.ok(),
+        Some(index) if !SPA_RESERVED_PREFIXES.contains(&first_segment) => {
+            tokio::fs::read(index.as_path()).await.ok()
+        }
         _ => None,
     };
     match body {
-        Some(body) => {
-            ([(header::CONTENT_TYPE, "text/html; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")], body).into_response()
-        }
+        Some(body) => (
+            [
+                (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                (header::CACHE_CONTROL, "no-cache"),
+            ],
+            body,
+        )
+            .into_response(),
         None => routes::not_found().await.into_response(),
     }
 }

@@ -12,9 +12,10 @@ use openidconnect::core::{
     CoreProviderMetadata, CoreUserInfoClaims,
 };
 use openidconnect::{
-    AsyncHttpClient, AuthorizationCode, ClaimsVerificationError, ClientId, ClientSecret, CsrfToken, HttpRequest,
-    JwsSigningAlgorithm, Nonce, OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
-    RequestTokenError, Scope, SignatureVerificationError, TokenResponse, http,
+    AsyncHttpClient, AuthorizationCode, ClaimsVerificationError, ClientId, ClientSecret, CsrfToken,
+    HttpRequest, JwsSigningAlgorithm, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, RequestTokenError, Scope, SignatureVerificationError,
+    TokenResponse, http,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -106,12 +107,23 @@ pub struct OidcSessions {
 }
 
 impl OidcSessions {
-    fn with<T>(&self, key: Option<&str>, now: f64, change: impl FnOnce(&mut BrowserState) -> T) -> (String, T) {
+    fn with<T>(
+        &self,
+        key: Option<&str>,
+        now: f64,
+        change: impl FnOnce(&mut BrowserState) -> T,
+    ) -> (String, T) {
         let mut map = self.browsers.lock().unwrap_or_else(|p| p.into_inner());
         map.retain(|_, s| now - s.touched < FLOW_SECONDS);
-        let key = key.filter(|k| map.contains_key(*k)).map(str::to_string).unwrap_or_else(|| random_token(32));
+        let key = key
+            .filter(|k| map.contains_key(*k))
+            .map(str::to_string)
+            .unwrap_or_else(|| random_token(32));
         if !map.contains_key(&key) && map.len() >= MAX_BROWSERS {
-            let oldest = map.iter().min_by(|a, b| a.1.touched.total_cmp(&b.1.touched)).map(|(k, _)| k.clone());
+            let oldest = map
+                .iter()
+                .min_by(|a, b| a.1.touched.total_cmp(&b.1.touched))
+                .map(|(k, _)| k.clone());
             if let Some(oldest) = oldest {
                 map.remove(&oldest);
             }
@@ -123,7 +135,10 @@ impl OidcSessions {
 
     /// Returns the cookie value to send back.
     pub fn grant_link(&self, key: Option<&str>, now: f64) -> String {
-        self.with(key, now, |s| s.link_grant_until = Some(now + LINK_GRANT_SECONDS)).0
+        self.with(key, now, |s| {
+            s.link_grant_until = Some(now + LINK_GRANT_SECONDS)
+        })
+        .0
     }
 
     pub fn consume_link_grant(&self, key: Option<&str>, now: f64) -> bool {
@@ -131,7 +146,9 @@ impl OidcSessions {
             return false;
         };
         let mut map = self.browsers.lock().unwrap_or_else(|p| p.into_inner());
-        map.get_mut(key).and_then(|s| s.link_grant_until.take()).is_some_and(|until| now < until)
+        map.get_mut(key)
+            .and_then(|s| s.link_grant_until.take())
+            .is_some_and(|until| now < until)
     }
 
     fn start_flow(&self, key: Option<&str>, now: f64, flow: Flow) -> String {
@@ -140,7 +157,11 @@ impl OidcSessions {
 
     pub fn take_flow(&self, key: Option<&str>) -> Option<Flow> {
         let key = key?;
-        self.browsers.lock().unwrap_or_else(|p| p.into_inner()).get_mut(key).and_then(|s| s.flow.take())
+        self.browsers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_mut(key)
+            .and_then(|s| s.flow.take())
     }
 
     /// Called when the sign-in settings are saved or removed.
@@ -149,7 +170,11 @@ impl OidcSessions {
     }
 
     fn cached(&self, key: &ProviderKey) -> Option<Discovered> {
-        self.provider.lock().unwrap_or_else(|p| p.into_inner()).clone().filter(|d| d.key == *key)
+        self.provider
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+            .filter(|d| d.key == *key)
     }
 
     fn store_discovery(&self, discovered: Discovered) {
@@ -171,7 +196,10 @@ pub struct OidcError {
 }
 
 fn fail(code: &'static str, intent: &str) -> OidcError {
-    OidcError { code, intent: intent.into() }
+    OidcError {
+        code,
+        intent: intent.into(),
+    }
 }
 
 pub struct OidcResult {
@@ -203,19 +231,30 @@ pub fn discovery_url(issuer: &str) -> String {
 /// Discovery is read from the configured issuer as given; the ID token's
 /// `iss` must then equal the issuer the document names, as Authlib checks.
 /// A document that omits its signing algorithms means RS256, as in Authlib.
-async fn discovered(http: &OidcHttp, sessions: &OidcSessions, config: &OidcConfig) -> Result<CoreProviderMetadata, String> {
+async fn discovered(
+    http: &OidcHttp,
+    sessions: &OidcSessions,
+    config: &OidcConfig,
+) -> Result<CoreProviderMetadata, String> {
     let key = ProviderKey::of(config);
     if let Some(found) = sessions.cached(&key) {
         return Ok(found.metadata);
     }
     let url = discovery_url(&config.issuer);
     let mut document: Value = get_json(http, &url).await?;
-    let advertised = document.get("id_token_signing_alg_values_supported").and_then(Value::as_array);
+    let advertised = document
+        .get("id_token_signing_alg_values_supported")
+        .and_then(Value::as_array);
     if advertised.is_none_or(|algs| algs.is_empty()) {
         document["id_token_signing_alg_values_supported"] = json!(["RS256"]);
     }
-    let metadata: CoreProviderMetadata = serde_json::from_value(document).map_err(|e| format!("{url}: {e}"))?;
-    sessions.store_discovery(Discovered { key, metadata: metadata.clone(), jwks: None });
+    let metadata: CoreProviderMetadata =
+        serde_json::from_value(document).map_err(|e| format!("{url}: {e}"))?;
+    sessions.store_discovery(Discovered {
+        key,
+        metadata: metadata.clone(),
+        jwks: None,
+    });
     Ok(metadata)
 }
 
@@ -254,9 +293,15 @@ fn client_for(
     >,
     String,
 > {
-    let secret = Some(config.client_secret.clone()).filter(|s| !s.is_empty()).map(ClientSecret::new);
-    Ok(CoreClient::from_provider_metadata(metadata, ClientId::new(config.client_id.clone()), secret)
-        .set_redirect_uri(RedirectUrl::new(redirect_uri.into()).map_err(|e| e.to_string())?))
+    let secret = Some(config.client_secret.clone())
+        .filter(|s| !s.is_empty())
+        .map(ClientSecret::new);
+    Ok(CoreClient::from_provider_metadata(
+        metadata,
+        ClientId::new(config.client_id.clone()),
+        secret,
+    )
+    .set_redirect_uri(RedirectUrl::new(redirect_uri.into()).map_err(|e| e.to_string())?))
 }
 
 /// The provider's sign-in page to send the browser to, and the cookie value
@@ -271,16 +316,26 @@ pub async fn begin(
     intent: &str,
     next: &str,
 ) -> Result<(String, String), OidcError> {
-    let client = match discovered(http, sessions, config).await.and_then(|m| client_for(m, config, redirect_uri)) {
+    let client = match discovered(http, sessions, config)
+        .await
+        .and_then(|m| client_for(m, config, redirect_uri))
+    {
         Ok(client) => client,
         Err(err) => {
-            crate::log_warn!("oidc_flow", "could not start OIDC sign-in with {}: {err}", config.issuer);
+            crate::log_warn!(
+                "oidc_flow",
+                "could not start OIDC sign-in with {}: {err}",
+                config.issuer
+            );
             return Err(fail("oidc_unavailable", intent));
         }
     };
     let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
-    let mut request =
-        client.authorize_url(CoreAuthenticationFlow::AuthorizationCode, CsrfToken::new_random, Nonce::new_random);
+    let mut request = client.authorize_url(
+        CoreAuthenticationFlow::AuthorizationCode,
+        CsrfToken::new_random,
+        Nonce::new_random,
+    );
     for scope in config.scopes.split_whitespace().filter(|s| *s != "openid") {
         request = request.add_scope(Scope::new(scope.into()));
     }
@@ -310,7 +365,9 @@ fn allowed_algs(metadata: &CoreProviderMetadata) -> Vec<CoreJwsSigningAlgorithm>
 
 fn decode_segment(jwt: &str, index: usize) -> Option<Value> {
     let segment = jwt.split('.').nth(index)?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(segment.trim_end_matches('=')).ok()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(segment.trim_end_matches('='))
+        .ok()?;
     serde_json::from_slice(&bytes).ok()
 }
 
@@ -350,7 +407,12 @@ struct Expected<'a> {
 /// among the audiences but others may be too; `azp` is required when the sole
 /// audience is not the client, or there are several, and must then be the
 /// client; time claims get two minutes of leeway.
-fn authlib_problem(header: &Value, claims: &Value, expected: &Expected<'_>, now: f64) -> Result<(), String> {
+fn authlib_problem(
+    header: &Value,
+    claims: &Value,
+    expected: &Expected<'_>,
+    now: f64,
+) -> Result<(), String> {
     let get = |name: &str| claims.get(name).filter(|v| !v.is_null());
     for name in ["iss", "sub", "aud", "exp", "iat"] {
         if get(name).is_none() {
@@ -367,23 +429,35 @@ fn authlib_problem(header: &Value, claims: &Value, expected: &Expected<'_>, now:
     }
     let audiences: Vec<&str> = match get("aud") {
         Some(Value::String(aud)) => vec![aud.as_str()],
-        Some(Value::Array(list)) => match list.iter().map(Value::as_str).collect::<Option<Vec<_>>>() {
-            Some(list) => list,
-            None => return invalid("aud"),
-        },
+        Some(Value::Array(list)) => {
+            match list.iter().map(Value::as_str).collect::<Option<Vec<_>>>() {
+                Some(list) => list,
+                None => return invalid("aud"),
+            }
+        }
         _ => return invalid("aud"),
     };
     if !audiences.contains(&expected.client_id) {
         return invalid("aud");
     }
-    let number = |name: &str| get(name).map(|v| v.as_f64().ok_or_else(|| format!("invalid claim: {name}")));
-    if number("exp").transpose()?.is_some_and(|exp| exp < now - LEEWAY_SECONDS) {
+    let number =
+        |name: &str| get(name).map(|v| v.as_f64().ok_or_else(|| format!("invalid claim: {name}")));
+    if number("exp")
+        .transpose()?
+        .is_some_and(|exp| exp < now - LEEWAY_SECONDS)
+    {
         return Err("expired token".into());
     }
-    if number("nbf").transpose()?.is_some_and(|nbf| nbf > now + LEEWAY_SECONDS) {
+    if number("nbf")
+        .transpose()?
+        .is_some_and(|nbf| nbf > now + LEEWAY_SECONDS)
+    {
         return Err("invalid claim: nbf".into());
     }
-    if number("iat").transpose()?.is_some_and(|iat| iat > now + LEEWAY_SECONDS) {
+    if number("iat")
+        .transpose()?
+        .is_some_and(|iat| iat > now + LEEWAY_SECONDS)
+    {
         return Err("invalid claim: iat".into());
     }
     if truthy(claims.get("auth_time")) && !claims["auth_time"].is_number() {
@@ -407,9 +481,15 @@ fn authlib_problem(header: &Value, claims: &Value, expected: &Expected<'_>, now:
     if azp.is_some_and(|azp| azp.as_str() != Some(expected.client_id)) {
         return invalid("azp");
     }
-    if let Some(at_hash) = claims.get("at_hash").filter(|_| truthy(claims.get("at_hash"))) {
+    if let Some(at_hash) = claims
+        .get("at_hash")
+        .filter(|_| truthy(claims.get("at_hash")))
+    {
         if !expected.access_token.is_empty() {
-            let alg = header.get("alg").and_then(Value::as_str).unwrap_or_default();
+            let alg = header
+                .get("alg")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if half_hash(expected.access_token, alg).as_deref() != at_hash.as_str() {
                 return invalid("at_hash");
             }
@@ -434,7 +514,9 @@ pub async fn finish(
     callback: Callback<'_>,
     now: f64,
 ) -> Result<OidcResult, OidcError> {
-    let intent = flow.as_ref().map_or("login".to_string(), |f| f.intent.clone());
+    let intent = flow
+        .as_ref()
+        .map_or("login".to_string(), |f| f.intent.clone());
     let Some(config) = config else {
         return Err(fail("oidc_unavailable", &intent));
     };
@@ -448,46 +530,92 @@ pub async fn finish(
         return Err(fail("oidc_state", &intent));
     }
     if let Some(error) = callback.error {
-        crate::log_warn!("oidc_flow", "OIDC sign-in with {} failed: {error}", config.issuer);
+        crate::log_warn!(
+            "oidc_flow",
+            "OIDC sign-in with {} failed: {error}",
+            config.issuer
+        );
         return Err(fail("oidc_unavailable", &intent));
     }
     let Some(code) = callback.code else {
-        crate::log_warn!("oidc_flow", "OIDC provider {} returned no code", config.issuer);
+        crate::log_warn!(
+            "oidc_flow",
+            "OIDC provider {} returned no code",
+            config.issuer
+        );
         return Err(fail("oidc_unavailable", &intent));
     };
     let unreachable = |err: String| {
-        crate::log_warn!("oidc_flow", "OIDC provider {} is unreachable: {err}", config.issuer);
+        crate::log_warn!(
+            "oidc_flow",
+            "OIDC provider {} is unreachable: {err}",
+            config.issuer
+        );
         fail("oidc_unavailable", &intent)
     };
-    let metadata = discovered(http, sessions, config).await.map_err(unreachable)?;
+    let metadata = discovered(http, sessions, config)
+        .await
+        .map_err(unreachable)?;
     let client = client_for(metadata.clone(), config, &flow.redirect_uri).map_err(unreachable)?;
     let caller = Caller(http);
-    let exchange = client.exchange_code(AuthorizationCode::new(code.into())).map_err(|err| {
-        crate::log_warn!("oidc_flow", "OIDC provider {} has no token endpoint: {err}", config.issuer);
-        fail("oidc_unavailable", &intent)
-    })?;
-    let token = match exchange.set_pkce_verifier(PkceCodeVerifier::new(flow.verifier.clone())).request_async(&caller).await {
+    let exchange = client
+        .exchange_code(AuthorizationCode::new(code.into()))
+        .map_err(|err| {
+            crate::log_warn!(
+                "oidc_flow",
+                "OIDC provider {} has no token endpoint: {err}",
+                config.issuer
+            );
+            fail("oidc_unavailable", &intent)
+        })?;
+    let token = match exchange
+        .set_pkce_verifier(PkceCodeVerifier::new(flow.verifier.clone()))
+        .request_async(&caller)
+        .await
+    {
         Ok(token) => token,
         Err(RequestTokenError::ServerResponse(response)) => {
-            crate::log_warn!("oidc_flow", "OIDC sign-in with {} failed: {response}", config.issuer);
+            crate::log_warn!(
+                "oidc_flow",
+                "OIDC sign-in with {} failed: {response}",
+                config.issuer
+            );
             let denied = response.error().to_string() == "access_denied";
-            return Err(fail(if denied { "oidc_denied" } else { "oidc_unavailable" }, &intent));
+            return Err(fail(
+                if denied {
+                    "oidc_denied"
+                } else {
+                    "oidc_unavailable"
+                },
+                &intent,
+            ));
         }
         Err(err) => {
-            crate::log_warn!("oidc_flow", "OIDC provider {} is unreachable: {err}", config.issuer);
+            crate::log_warn!(
+                "oidc_flow",
+                "OIDC provider {} is unreachable: {err}",
+                config.issuer
+            );
             return Err(fail("oidc_unavailable", &intent));
         }
     };
     let Some(id_token) = token.id_token() else {
-        crate::log_warn!("oidc_flow", "OIDC provider {} returned no ID token", config.issuer);
+        crate::log_warn!(
+            "oidc_flow",
+            "OIDC provider {} returned no ID token",
+            config.issuer
+        );
         return Err(fail("oidc_unavailable", &intent));
     };
     let algs = allowed_algs(&metadata);
     let nonce = Nonce::new(flow.nonce.clone());
     let mut refresh = false;
     let (client, claims) = loop {
-        let jwks = signing_keys(http, sessions, config, &metadata, refresh).await.map_err(unreachable)?;
-        let client = client_for(metadata.clone().set_jwks(jwks), config, &flow.redirect_uri).map_err(unreachable)?;
+        let jwks = signing_keys(http, sessions, config, &metadata, refresh)
+            .await
+            .map_err(unreachable)?;
+        let client = client_for(metadata.clone().set_jwks(jwks), config, &flow.redirect_uri)
+            .map_err(unreachable)?;
         let verifier = client
             .id_token_verifier()
             .set_allowed_algs(algs.clone())
@@ -497,16 +625,25 @@ pub async fn finish(
         drop(verifier);
         match verified {
             Ok(claims) => break (client, claims),
-            Err(ClaimsVerificationError::SignatureVerification(SignatureVerificationError::NoMatchingKey)) if !refresh => {
+            Err(ClaimsVerificationError::SignatureVerification(
+                SignatureVerificationError::NoMatchingKey,
+            )) if !refresh => {
                 refresh = true;
             }
             Err(err) => {
-                crate::log_warn!("oidc_flow", "rejected an OIDC ID token from {}: {err}", config.issuer);
+                crate::log_warn!(
+                    "oidc_flow",
+                    "rejected an OIDC ID token from {}: {err}",
+                    config.issuer
+                );
                 return Err(fail("oidc_state", &intent));
             }
         }
     };
-    let jwt = serde_json::to_value(id_token).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+    let jwt = serde_json::to_value(id_token)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default();
     let expected = Expected {
         issuer: metadata.issuer().as_str(),
         client_id: &config.client_id,
@@ -516,32 +653,63 @@ pub async fn finish(
     let header = decode_segment(&jwt, 0).unwrap_or(Value::Null);
     let payload = decode_segment(&jwt, 1).unwrap_or(Value::Null);
     if let Err(err) = authlib_problem(&header, &payload, &expected, now.trunc()) {
-        crate::log_warn!("oidc_flow", "rejected an OIDC ID token from {}: {err}", config.issuer);
+        crate::log_warn!(
+            "oidc_flow",
+            "rejected an OIDC ID token from {}: {err}",
+            config.issuer
+        );
         return Err(fail("oidc_state", &intent));
     }
     let iss = claims.issuer().as_str().to_string();
     let sub = claims.subject().as_str().to_string();
     if iss.is_empty() || sub.is_empty() {
-        crate::log_warn!("oidc_flow", "OIDC provider {} returned no ID token", config.issuer);
+        crate::log_warn!(
+            "oidc_flow",
+            "OIDC provider {} returned no ID token",
+            config.issuer
+        );
         return Err(fail("oidc_unavailable", &intent));
     }
-    let info: Option<CoreUserInfoClaims> = match client.user_info(token.access_token().clone(), Some(claims.subject().clone())) {
-        Ok(request) => request.request_async(&caller).await.map_err(|e| crate::log_warn!("oidc_flow", "OIDC userinfo lookup failed: {e}")).ok(),
-        Err(_) => None,
-    };
+    let info: Option<CoreUserInfoClaims> =
+        match client.user_info(token.access_token().clone(), Some(claims.subject().clone())) {
+            Ok(request) => request
+                .request_async(&caller)
+                .await
+                .map_err(|e| crate::log_warn!("oidc_flow", "OIDC userinfo lookup failed: {e}"))
+                .ok(),
+            Err(_) => None,
+        };
     let from_info = info.as_ref().and_then(|i| {
         i.preferred_username()
             .map(|v| v.as_str().to_string())
             .or_else(|| i.email().map(|v| v.as_str().to_string()))
-            .or_else(|| i.name().and_then(|n| n.get(None)).map(|v| v.as_str().to_string()))
+            .or_else(|| {
+                i.name()
+                    .and_then(|n| n.get(None))
+                    .map(|v| v.as_str().to_string())
+            })
     });
     let from_token = claims
         .preferred_username()
         .map(|v| v.as_str().to_string())
         .or_else(|| claims.email().map(|v| v.as_str().to_string()))
-        .or_else(|| claims.name().and_then(|n| n.get(None)).map(|v| v.as_str().to_string()));
-    let label = from_info.or(from_token).filter(|l| !l.is_empty()).unwrap_or_else(|| sub.clone());
-    Ok(OidcResult { intent, next: flow.next, iss, sub, label })
+        .or_else(|| {
+            claims
+                .name()
+                .and_then(|n| n.get(None))
+                .map(|v| v.as_str().to_string())
+        });
+    let label = from_info
+        .or(from_token)
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| sub.clone());
+    Ok(OidcResult {
+        intent,
+        next: flow.next,
+        iss,
+        sub,
+        label,
+    })
 }
 
 #[cfg(test)]
@@ -562,7 +730,12 @@ mod tests {
                 claims[key] = value.clone();
             }
         }
-        let expected = Expected { issuer: ISSUER, client_id: "activsync", nonce: "n1", access_token: "at" };
+        let expected = Expected {
+            issuer: ISSUER,
+            client_id: "activsync",
+            nonce: "n1",
+            access_token: "at",
+        };
         authlib_problem(&json!({"alg": "RS256"}), &claims, &expected, NOW).is_ok()
     }
 
@@ -571,11 +744,27 @@ mod tests {
         let cases = [
             ("plain", json!({}), true),
             ("aud_list_one", json!({"aud": ["activsync"]}), true),
-            ("aud_two_no_azp", json!({"aud": ["activsync", "other"]}), false),
-            ("aud_two_azp", json!({"aud": ["activsync", "other"], "azp": "activsync"}), true),
-            ("aud_two_wrong_azp", json!({"aud": ["activsync", "other"], "azp": "other"}), false),
+            (
+                "aud_two_no_azp",
+                json!({"aud": ["activsync", "other"]}),
+                false,
+            ),
+            (
+                "aud_two_azp",
+                json!({"aud": ["activsync", "other"], "azp": "activsync"}),
+                true,
+            ),
+            (
+                "aud_two_wrong_azp",
+                json!({"aud": ["activsync", "other"], "azp": "other"}),
+                false,
+            ),
             ("aud_other_only", json!({"aud": ["other"]}), false),
-            ("aud_other_azp_client", json!({"aud": ["other"], "azp": "activsync"}), false),
+            (
+                "aud_other_azp_client",
+                json!({"aud": ["other"], "azp": "activsync"}),
+                false,
+            ),
             ("azp_other_single_aud", json!({"azp": "other"}), false),
             ("azp_client", json!({"azp": "activsync"}), true),
             ("aud_empty_list", json!({"aud": []}), false),
@@ -590,7 +779,11 @@ mod tests {
             ("amr_list", json!({"amr": ["pwd"]}), true),
             ("auth_time_string", json!({"auth_time": "x"}), false),
             ("auth_time_number", json!({"auth_time": 5}), true),
-            ("at_hash_ok", json!({"at_hash": "sda5G2fCr6XjIpiNlGJjjQ"}), true),
+            (
+                "at_hash_ok",
+                json!({"at_hash": "sda5G2fCr6XjIpiNlGJjjQ"}),
+                true,
+            ),
             ("at_hash_bad", json!({"at_hash": "AAAA"}), false),
             ("nonce_wrong", json!({"nonce": "other"}), false),
             ("nonce_missing", json!({"nonce": null}), false),
@@ -604,7 +797,10 @@ mod tests {
 
     #[test]
     fn half_hash_matches_authlib() {
-        assert_eq!(half_hash("at", "RS256").as_deref(), Some("sda5G2fCr6XjIpiNlGJjjQ"));
+        assert_eq!(
+            half_hash("at", "RS256").as_deref(),
+            Some("sda5G2fCr6XjIpiNlGJjjQ")
+        );
         assert_eq!(half_hash("at", "ES256K"), None);
         assert_eq!(half_hash("at", "HS1"), None);
     }
@@ -618,6 +814,9 @@ mod tests {
         }
         let size = sessions.browsers.lock().unwrap().len();
         assert_eq!(size, MAX_BROWSERS);
-        assert!(!sessions.consume_link_grant(Some(&first), 3.0), "the oldest entry was evicted");
+        assert!(
+            !sessions.consume_link_grant(Some(&first), 3.0),
+            "the oldest entry was evicted"
+        );
     }
 }

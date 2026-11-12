@@ -44,10 +44,18 @@ pub fn load(conn: &Connection) -> DbResult<Option<OidcConfig>> {
 }
 
 fn store(conn: &Connection, config: &OidcConfig) -> DbResult<()> {
-    db::set_config_value(conn, OIDC_KEY, &serde_json::to_value(config).unwrap_or(Value::Null))
+    db::set_config_value(
+        conn,
+        OIDC_KEY,
+        &serde_json::to_value(config).unwrap_or(Value::Null),
+    )
 }
 
-pub fn revoke_method(conn: &Connection, method: &str, keep_token_hash: Option<&str>) -> DbResult<usize> {
+pub fn revoke_method(
+    conn: &Connection,
+    method: &str,
+    keep_token_hash: Option<&str>,
+) -> DbResult<usize> {
     conn.execute(
         "DELETE FROM auth_sessions WHERE method = ?1 AND token_hash != ?2",
         [method, keep_token_hash.unwrap_or_default()],
@@ -75,9 +83,13 @@ pub fn normalize_issuer(issuer: &str) -> Result<String, String> {
     let value = issuer.trim().trim_end_matches('/').to_string();
     let host = hostname(&value);
     let secure = value.starts_with("https://") && host.is_some();
-    let local = value.starts_with("http://") && host.as_deref().is_some_and(|h| LOOPBACK_HOSTS.contains(&h));
+    let local = value.starts_with("http://")
+        && host.as_deref().is_some_and(|h| LOOPBACK_HOSTS.contains(&h));
     if !(secure || local) {
-        return Err("The issuer URL must start with https:// (http:// is accepted only for localhost)".into());
+        return Err(
+            "The issuer URL must start with https:// (http:// is accepted only for localhost)"
+                .into(),
+        );
     }
     Ok(value)
 }
@@ -97,7 +109,9 @@ pub struct NewConfig<'a> {
 pub fn save(conn: &Connection, new: &NewConfig<'_>) -> Result<OidcConfig, String> {
     let issuer = normalize_issuer(new.issuer)?;
     let existing = load(conn).map_err(|e| e.to_string())?;
-    let same = existing.as_ref().is_some_and(|e| e.issuer == issuer && e.client_id == new.client_id);
+    let same = existing
+        .as_ref()
+        .is_some_and(|e| e.issuer == issuer && e.client_id == new.client_id);
     let scopes = new.scopes.split_whitespace().collect::<Vec<_>>().join(" ");
     let config = OidcConfig {
         display_name: new.display_name.into(),
@@ -105,12 +119,23 @@ pub fn save(conn: &Connection, new: &NewConfig<'_>) -> Result<OidcConfig, String
         client_id: new.client_id.into(),
         client_secret: match new.client_secret {
             Some(secret) => secret.into(),
-            None if same => existing.as_ref().map(|e| e.client_secret.clone()).unwrap_or_default(),
+            None if same => existing
+                .as_ref()
+                .map(|e| e.client_secret.clone())
+                .unwrap_or_default(),
             None => String::new(),
         },
-        scopes: if scopes.is_empty() { DEFAULT_SCOPES.into() } else { scopes },
+        scopes: if scopes.is_empty() {
+            DEFAULT_SCOPES.into()
+        } else {
+            scopes
+        },
         auto_redirect: new.auto_redirect,
-        linked: if same { existing.as_ref().and_then(|e| e.linked.clone()) } else { None },
+        linked: if same {
+            existing.as_ref().and_then(|e| e.linked.clone())
+        } else {
+            None
+        },
     };
     store(conn, &config).map_err(|e| e.to_string())?;
     if existing.is_some_and(|e| e.linked.is_some()) && config.linked.is_none() {
@@ -121,12 +146,25 @@ pub fn save(conn: &Connection, new: &NewConfig<'_>) -> Result<OidcConfig, String
 
 /// Linking a different identity signs out every sign-in made through the old
 /// one, except `keep_token_hash`, the session doing the linking.
-pub fn set_linked(conn: &Connection, linked: Linked, keep_token_hash: Option<&str>) -> DbResult<()> {
+pub fn set_linked(
+    conn: &Connection,
+    linked: Linked,
+    keep_token_hash: Option<&str>,
+) -> DbResult<()> {
     let Some(config) = load(conn)? else {
         return Ok(());
     };
-    let replaced = config.linked.as_ref().is_some_and(|old| (&old.iss, &old.sub) != (&linked.iss, &linked.sub));
-    store(conn, &OidcConfig { linked: Some(linked), ..config })?;
+    let replaced = config
+        .linked
+        .as_ref()
+        .is_some_and(|old| (&old.iss, &old.sub) != (&linked.iss, &linked.sub));
+    store(
+        conn,
+        &OidcConfig {
+            linked: Some(linked),
+            ..config
+        },
+    )?;
     if replaced {
         revoke_method(conn, OIDC_METHOD, keep_token_hash)?;
     }
@@ -146,10 +184,24 @@ mod tests {
 
     #[test]
     fn issuer_rules_match_python() {
-        assert_eq!(normalize_issuer(" https://id.example.com/ "), Ok("https://id.example.com".into()));
-        assert_eq!(normalize_issuer("http://localhost:9091"), Ok("http://localhost:9091".into()));
-        assert_eq!(normalize_issuer("http://[::1]:9091/"), Ok("http://[::1]:9091".into()));
-        for bad in ["http://id.example.com", "https://", "ftp://id.example.com", "https://[::1"] {
+        assert_eq!(
+            normalize_issuer(" https://id.example.com/ "),
+            Ok("https://id.example.com".into())
+        );
+        assert_eq!(
+            normalize_issuer("http://localhost:9091"),
+            Ok("http://localhost:9091".into())
+        );
+        assert_eq!(
+            normalize_issuer("http://[::1]:9091/"),
+            Ok("http://[::1]:9091".into())
+        );
+        for bad in [
+            "http://id.example.com",
+            "https://",
+            "ftp://id.example.com",
+            "https://[::1",
+        ] {
             assert!(normalize_issuer(bad).is_err(), "{bad}");
         }
     }

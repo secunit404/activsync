@@ -8,7 +8,10 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, ActivityRow};
-use crate::routes::{ActionResult, ActivityId, ApiError, ApiResult, internal, is_publishable, require_activity, require_publish_connections};
+use crate::routes::{
+    ActionResult, ActivityId, ApiError, ApiResult, internal, is_publishable, require_activity,
+    require_publish_connections,
+};
 use crate::schedule::{self, ScheduleError};
 use crate::strava_client::StravaError;
 use crate::sync::{self, Services, SyncError};
@@ -31,19 +34,29 @@ pub struct ActivityIdsRequest {
 
 fn unique_ids(payload: ActivityIdsRequest) -> Result<Vec<i64>, ApiError> {
     if payload.activity_ids.is_empty() {
-        return Err(ApiError::invalid("activityIds must list at least one activity"));
+        return Err(ApiError::invalid(
+            "activityIds must list at least one activity",
+        ));
     }
-    Ok(payload.activity_ids.into_iter().collect::<BTreeSet<_>>().into_iter().collect())
+    Ok(payload
+        .activity_ids
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect())
 }
 
 fn schedule_publish(state: &AppState, ids: &[i64], kind: &str) -> ApiResult<PublishScheduled> {
     let activities = publishable_activities(state, ids, kind == "single")?;
-    let batch = state.scheduler.schedule(&activities, kind).map_err(|err| match err {
-        ScheduleError::AlreadyScheduled => {
-            ApiError::conflict("This activity is already being published to Strava. Refresh to see its status.")
-        }
-        ScheduleError::Db(err) => err.into(),
-    })?;
+    let batch = state
+        .scheduler
+        .schedule(&activities, kind)
+        .map_err(|err| match err {
+            ScheduleError::AlreadyScheduled => ApiError::conflict(
+                "This activity is already being published to Strava. Refresh to see its status.",
+            ),
+            ScheduleError::Db(err) => err.into(),
+        })?;
     let remaining = batch.deadline - state.scheduler.now();
     Ok(Json(PublishScheduled {
         publish_scheduled_at: schedule::deadline_iso(batch.deadline),
@@ -68,9 +81,16 @@ pub async fn schedule_publish_activities(
     schedule_publish(&state, &ids, "bulk")
 }
 
-fn publishable_activities(state: &AppState, ids: &[i64], single: bool) -> Result<Vec<ActivityRow>, ApiError> {
+fn publishable_activities(
+    state: &AppState,
+    ids: &[i64],
+    single: bool,
+) -> Result<Vec<ActivityRow>, ApiError> {
     let conn = state.db.lock();
-    let activities = ids.iter().map(|id| require_activity(&conn, *id)).collect::<Result<Vec<_>, _>>()?;
+    let activities = ids
+        .iter()
+        .map(|id| require_activity(&conn, *id))
+        .collect::<Result<Vec<_>, _>>()?;
     if !activities.iter().all(is_publishable) {
         return Err(ApiError::conflict(if single {
             "Only pending, held, or missing activities can be published"
@@ -82,26 +102,50 @@ fn publishable_activities(state: &AppState, ids: &[i64], single: bool) -> Result
     Ok(activities)
 }
 
-pub async fn publish_activity(State(state): State<AppState>, ActivityId(id): ActivityId) -> ApiResult<ActionResult> {
+pub async fn publish_activity(
+    State(state): State<AppState>,
+    ActivityId(id): ActivityId,
+) -> ApiResult<ActionResult> {
     let activity = publishable_activities(&state, &[id], true)?.remove(0);
     let sent = match state.clients.clone() {
         Some(clients) => match clients.garmin().await {
             Ok(garmin) => {
                 let strava = clients.strava();
-                sync::publish_now(&Services { db: &state.db, garmin: &garmin, strava: &strava }, id, Utc::now()).await
+                sync::publish_now(
+                    &Services {
+                        db: &state.db,
+                        garmin: &garmin,
+                        strava: &strava,
+                    },
+                    id,
+                    Utc::now(),
+                )
+                .await
             }
             Err(err) => Err(err.into()),
         },
         None => mock::publish_now(&state.db, id, Utc::now()),
     };
     sent.map_err(|err| match err {
-        SyncError::Blocked(reason) => ApiError::conflict(format!("Activity was blocked by Hevy sync: {reason}.")),
+        SyncError::Blocked(reason) => {
+            ApiError::conflict(format!("Activity was blocked by Hevy sync: {reason}."))
+        }
         SyncError::Strava(StravaError::Auth(message)) => ApiError::conflict(message),
-        err => ApiError::new(StatusCode::BAD_GATEWAY, format!("Could not publish activity: {err}")),
+        err => ApiError::new(
+            StatusCode::BAD_GATEWAY,
+            format!("Could not publish activity: {err}"),
+        ),
     })?;
     state.events.publish("refresh");
-    let verb = if activity.publish_status == "missing" { "Republished" } else { "Published" };
-    Ok(Json(ActionResult::success(format!("{verb} {} to Strava", activity.title))))
+    let verb = if activity.publish_status == "missing" {
+        "Republished"
+    } else {
+        "Published"
+    };
+    Ok(Json(ActionResult::success(format!(
+        "{verb} {} to Strava",
+        activity.title
+    ))))
 }
 
 pub async fn publish_activities(
@@ -113,9 +157,21 @@ pub async fn publish_activities(
     let selected: HashSet<i64> = ids.into_iter().collect();
     let stats = match state.clients.clone() {
         Some(clients) => {
-            let garmin = clients.garmin().await.map_err(|err| internal("publish", err))?;
+            let garmin = clients
+                .garmin()
+                .await
+                .map_err(|err| internal("publish", err))?;
             let strava = clients.strava();
-            sync::publish_pending(&Services { db: &state.db, garmin: &garmin, strava: &strava }, Utc::now(), Some(&selected)).await
+            sync::publish_pending(
+                &Services {
+                    db: &state.db,
+                    garmin: &garmin,
+                    strava: &strava,
+                },
+                Utc::now(),
+                Some(&selected),
+            )
+            .await
         }
         None => mock::publish_selected(&state.db, &selected, Utc::now()),
     }
@@ -140,7 +196,11 @@ pub async fn publish_activities(
             blocked_count: stats.blocked,
         }));
     }
-    let noun = if stats.published == 1 { "activity" } else { "activities" };
+    let noun = if stats.published == 1 {
+        "activity"
+    } else {
+        "activities"
+    };
     Ok(Json(ActionResult {
         published_count: stats.published,
         ..ActionResult::success(format!("Published {} {noun} to Strava", stats.published))
@@ -154,13 +214,18 @@ fn cancel_publish(state: &AppState, ids: &[i64]) -> ApiResult<ActionResult> {
     let conn = state.db.lock();
     for id in ids {
         if schedule::get(&conn, *id)?.is_some() {
-            return Err(ApiError::conflict("Too late to undo: publishing to Strava has already started."));
+            return Err(ApiError::conflict(
+                "Too late to undo: publishing to Strava has already started.",
+            ));
         }
     }
     Err(ApiError::conflict("Nothing is waiting to publish."))
 }
 
-pub async fn cancel_publish_activity(State(state): State<AppState>, ActivityId(id): ActivityId) -> ApiResult<ActionResult> {
+pub async fn cancel_publish_activity(
+    State(state): State<AppState>,
+    ActivityId(id): ActivityId,
+) -> ApiResult<ActionResult> {
     cancel_publish(&state, &[id])
 }
 
@@ -184,22 +249,50 @@ pub struct PublishBatch {
 
 /// The same toast an immediate publish would return, built from what the
 /// scheduler recorded.
-fn batch_outcome(rows: &[schedule::ScheduleRow], titles: &HashMap<i64, String>) -> (Option<ActionResult>, Option<String>) {
+fn batch_outcome(
+    rows: &[schedule::ScheduleRow],
+    titles: &HashMap<i64, String>,
+) -> (Option<ActionResult>, Option<String>) {
     if rows[0].batch_kind == "single" {
         let row = &rows[0];
-        let title = titles.get(&row.garmin_activity_id).map_or("Activity", String::as_str);
+        let title = titles
+            .get(&row.garmin_activity_id)
+            .map_or("Activity", String::as_str);
         return match row.state.as_str() {
             schedule::PUBLISHED => {
-                let verb = if row.prior_status == "missing" { "Republished" } else { "Published" };
-                (Some(ActionResult::success(format!("{verb} {title} to Strava"))), None)
+                let verb = if row.prior_status == "missing" {
+                    "Republished"
+                } else {
+                    "Published"
+                };
+                (
+                    Some(ActionResult::success(format!("{verb} {title} to Strava"))),
+                    None,
+                )
             }
-            schedule::SKIPPED => (None, Some(format!("{title} was no longer publishable, so nothing was sent."))),
-            _ => (None, Some(row.message.clone().unwrap_or_else(|| "Could not publish activity".into()))),
+            schedule::SKIPPED => (
+                None,
+                Some(format!(
+                    "{title} was no longer publishable, so nothing was sent."
+                )),
+            ),
+            _ => (
+                None,
+                Some(
+                    row.message
+                        .clone()
+                        .unwrap_or_else(|| "Could not publish activity".into()),
+                ),
+            ),
         };
     }
     let count = |state: &str| rows.iter().filter(|r| r.state == state).count() as i64;
-    let (published, failed, blocked, skipped) =
-        (count(schedule::PUBLISHED), count(schedule::FAILED), count(schedule::BLOCKED), count(schedule::SKIPPED));
+    let (published, failed, blocked, skipped) = (
+        count(schedule::PUBLISHED),
+        count(schedule::FAILED),
+        count(schedule::BLOCKED),
+        count(schedule::SKIPPED),
+    );
     if failed + blocked + skipped > 0 {
         let mut parts = vec![format!("Published {published}")];
         if failed > 0 {
@@ -222,7 +315,11 @@ fn batch_outcome(rows: &[schedule::ScheduleRow], titles: &HashMap<i64, String>) 
             None,
         );
     }
-    let noun = if published == 1 { "activity" } else { "activities" };
+    let noun = if published == 1 {
+        "activity"
+    } else {
+        "activities"
+    };
     (
         Some(ActionResult {
             published_count: published,
@@ -232,13 +329,21 @@ fn batch_outcome(rows: &[schedule::ScheduleRow], titles: &HashMap<i64, String>) 
     )
 }
 
-pub async fn publish_batch(State(state): State<AppState>, Path(batch_id): Path<String>) -> ApiResult<PublishBatch> {
+pub async fn publish_batch(
+    State(state): State<AppState>,
+    Path(batch_id): Path<String>,
+) -> ApiResult<PublishBatch> {
     let conn = state.db.lock();
     let rows = schedule::batch_rows(&conn, &batch_id)?;
     if rows.is_empty() {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "Nothing is publishing under that id."));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "Nothing is publishing under that id.",
+        ));
     }
-    let remaining_ms = ((rows[0].deadline - state.scheduler.now()) * 1000.0).round().max(0.0) as i64;
+    let remaining_ms = ((rows[0].deadline - state.scheduler.now()) * 1000.0)
+        .round()
+        .max(0.0) as i64;
     let pending = |s: &str| rows.iter().any(|r| r.state == s);
     let (batch_state, remaining_ms) = if pending(schedule::WAITING) {
         ("waiting", remaining_ms)
@@ -258,5 +363,11 @@ pub async fn publish_batch(State(state): State<AppState>, Path(batch_id): Path<S
     } else {
         (None, None)
     };
-    Ok(Json(PublishBatch { batch_id, state: batch_state, remaining_ms, result, error }))
+    Ok(Json(PublishBatch {
+        batch_id,
+        state: batch_state,
+        remaining_ms,
+        result,
+        error,
+    }))
 }

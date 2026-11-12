@@ -78,16 +78,27 @@ pub fn enabled(level: Level) -> bool {
 /// An instant as log lines show their own time, for times inside a message:
 /// a raw UTC time next to a local-time prefix reads as the wrong time.
 pub fn format_time(at: DateTime<Utc>) -> String {
-    at.with_timezone(&timezone()).format(TIME_FORMAT).to_string()
+    at.with_timezone(&timezone())
+        .format(TIME_FORMAT)
+        .to_string()
 }
 
 pub fn line(level: Level, component: &str, message: std::fmt::Arguments<'_>) -> String {
-    format!("{}  {:<7} {:<8} {message}", format_time(Utc::now()), level.name(), component)
+    format!(
+        "{}  {:<7} {:<8} {message}",
+        format_time(Utc::now()),
+        level.name(),
+        component
+    )
 }
 
 pub fn write(level: Level, component: &str, message: std::fmt::Arguments<'_>) {
     if enabled(level) {
-        let _ = writeln!(std::io::stdout().lock(), "{}", line(level, component, message));
+        let _ = writeln!(
+            std::io::stdout().lock(),
+            "{}",
+            line(level, component, message)
+        );
     }
 }
 
@@ -126,16 +137,31 @@ pub struct ClientAddr(pub String);
 /// proxy headers were applied, `host:port` with no brackets around IPv6.
 /// Routine successes are only kept at DEBUG.
 pub async fn access_log(request: Request, next: Next) -> Response {
-    let socket = request.extensions().get::<ConnectInfo<SocketAddr>>().map(|c| format!("{}:{}", c.0.ip(), c.0.port()));
+    let socket = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| format!("{}:{}", c.0.ip(), c.0.port()));
     let method = request.method().clone();
-    let target = request.uri().path_and_query().map_or_else(|| request.uri().path().to_string(), |pq| pq.to_string());
+    let target = request
+        .uri()
+        .path_and_query()
+        .map_or_else(|| request.uri().path().to_string(), |pq| pq.to_string());
     let version = request.version();
     let path = request.uri().path().to_string();
     let response = next.run(request).await;
-    let peer = response.extensions().get::<ClientAddr>().map(|a| a.0.clone()).or(socket).unwrap_or_else(|| "-".into());
+    let peer = response
+        .extensions()
+        .get::<ClientAddr>()
+        .map(|a| a.0.clone())
+        .or(socket)
+        .unwrap_or_else(|| "-".into());
     let status = response.status().as_u16();
     if enabled(Level::Debug) || !routine(&path, status) {
-        write(Level::Info, "access", format_args!("{peer} - \"{method} {target} {version:?}\" {status}"));
+        write(
+            Level::Info,
+            "access",
+            format_args!("{peer} - \"{method} {target} {version:?}\" {status}"),
+        );
     }
     response
 }

@@ -23,21 +23,50 @@ pub const PASSIVE_ACTIVITY_ID: i64 = 910050;
 const RESOLVING_TEMPLATES: [(&str, &str, &str, &str); 9] = [
     ("tpl-dev-bench", "Bench Press (Barbell)", "chest", "barbell"),
     ("tpl-dev-squat", "Squat (Barbell)", "quadriceps", "barbell"),
-    ("tpl-dev-deadlift", "Deadlift (Barbell)", "hamstrings", "barbell"),
-    ("tpl-dev-curl", "Bicep Curl (Dumbbell)", "biceps", "dumbbell"),
+    (
+        "tpl-dev-deadlift",
+        "Deadlift (Barbell)",
+        "hamstrings",
+        "barbell",
+    ),
+    (
+        "tpl-dev-curl",
+        "Bicep Curl (Dumbbell)",
+        "biceps",
+        "dumbbell",
+    ),
     ("tpl-dev-pulldown", "Lat Pulldown (Cable)", "lats", "cable"),
-    ("tpl-dev-ohp", "Overhead Press (Barbell)", "shoulders", "barbell"),
+    (
+        "tpl-dev-ohp",
+        "Overhead Press (Barbell)",
+        "shoulders",
+        "barbell",
+    ),
     ("tpl-dev-plank", "Plank", "abdominals", "none"),
     ("tpl-dev-pullup", "Pull Up", "lats", "none"),
-    ("tpl-dev-rdl", "Romanian Deadlift (Barbell)", "hamstrings", "barbell"),
+    (
+        "tpl-dev-rdl",
+        "Romanian Deadlift (Barbell)",
+        "hamstrings",
+        "barbell",
+    ),
 ];
 
 fn hevy_iso(at: DateTime<Utc>) -> String {
     at.format("%Y-%m-%dT%H:%M:%S+00:00").to_string()
 }
 
-fn workout(id: &str, title: &str, start: DateTime<Utc>, end: DateTime<Utc>, exercise: &str, template: &str) -> Value {
-    let sets: Vec<Value> = (0..3).map(|_| json!({"type": "normal", "weight_kg": 80.0, "reps": 5})).collect();
+fn workout(
+    id: &str,
+    title: &str,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    exercise: &str,
+    template: &str,
+) -> Value {
+    let sets: Vec<Value> = (0..3)
+        .map(|_| json!({"type": "normal", "weight_kg": 80.0, "reps": 5}))
+        .collect();
     json!({
         "id": id,
         "title": title,
@@ -58,7 +87,14 @@ pub fn dev_workouts(now: DateTime<Utc>) -> Vec<Value> {
         .expect("23:30 exists in UTC");
     let bench = ("Bench Press (Barbell)", "tpl-dev-bench");
     vec![
-        workout(MERGED_ID, "Push day (Hevy)", now - Duration::hours(3), now - Duration::hours(2), bench.0, bench.1),
+        workout(
+            MERGED_ID,
+            "Push day (Hevy)",
+            now - Duration::hours(3),
+            now - Duration::hours(2),
+            bench.0,
+            bench.1,
+        ),
         workout(
             UNMAPPED_ID,
             "Ring circuit (Hevy)",
@@ -67,9 +103,30 @@ pub fn dev_workouts(now: DateTime<Utc>) -> Vec<Value> {
             "Bulgarian Ring Row",
             CUSTOM_TEMPLATE_ID,
         ),
-        workout(PASSIVE_ID, "Forgot the watch (Hevy)", now - Duration::hours(27), now - Duration::hours(26), bench.0, bench.1),
-        workout(MIDNIGHT_ID, "Midnight session (Hevy)", midnight, midnight + Duration::minutes(75), bench.0, bench.1),
-        workout(SYNCING_ID, "Leg day (Hevy)", now - Duration::minutes(90), now - Duration::minutes(30), bench.0, bench.1),
+        workout(
+            PASSIVE_ID,
+            "Forgot the watch (Hevy)",
+            now - Duration::hours(27),
+            now - Duration::hours(26),
+            bench.0,
+            bench.1,
+        ),
+        workout(
+            MIDNIGHT_ID,
+            "Midnight session (Hevy)",
+            midnight,
+            midnight + Duration::minutes(75),
+            bench.0,
+            bench.1,
+        ),
+        workout(
+            SYNCING_ID,
+            "Leg day (Hevy)",
+            now - Duration::minutes(90),
+            now - Duration::minutes(30),
+            bench.0,
+            bench.1,
+        ),
     ]
 }
 
@@ -81,11 +138,36 @@ pub fn account_workouts(now: DateTime<Utc>) -> Vec<Value> {
     let old = |days: i64, minutes: i64| now - Duration::days(days) - Duration::minutes(minutes);
     let mut workouts = dev_workouts(now);
     for (id, title, start, exercise, template) in [
-        ("hw-dev-backfill-importable", "Old push day (Hevy)", old(4, 41), "Bench Press (Barbell)", Some("tpl-dev-bench")),
-        ("hw-dev-backfill-unmapped", "Old ring circuit (Hevy)", old(5, 17), "Bulgarian Ring Row", Some(CUSTOM_TEMPLATE_ID)),
-        ("hw-dev-backfill-unmappable", "Old mystery session (Hevy)", old(6, 23), "Mystery Movement", None),
+        (
+            "hw-dev-backfill-importable",
+            "Old push day (Hevy)",
+            old(4, 41),
+            "Bench Press (Barbell)",
+            Some("tpl-dev-bench"),
+        ),
+        (
+            "hw-dev-backfill-unmapped",
+            "Old ring circuit (Hevy)",
+            old(5, 17),
+            "Bulgarian Ring Row",
+            Some(CUSTOM_TEMPLATE_ID),
+        ),
+        (
+            "hw-dev-backfill-unmappable",
+            "Old mystery session (Hevy)",
+            old(6, 23),
+            "Mystery Movement",
+            None,
+        ),
     ] {
-        let mut entry = workout(id, title, start, start + Duration::hours(1), exercise, template.unwrap_or_default());
+        let mut entry = workout(
+            id,
+            title,
+            start,
+            start + Duration::hours(1),
+            exercise,
+            template.unwrap_or_default(),
+        );
         if template.is_none() {
             entry["exercises"][0]["exercise_template_id"] = Value::Null;
         }
@@ -110,7 +192,13 @@ fn store(conn: &Connection, workout: &Value) -> DbResult<()> {
     )
 }
 
-fn watch_activity(conn: &Connection, id: i64, title: &str, workout: &Value, now: DateTime<Utc>) -> DbResult<()> {
+fn watch_activity(
+    conn: &Connection,
+    id: i64,
+    title: &str,
+    workout: &Value,
+    now: DateTime<Utc>,
+) -> DbResult<()> {
     let start = text(workout, "start_time").replace('T', " ");
     let start = start.split('+').next().unwrap_or_default();
     let data = json!({"duration": 3600, "avg_hr": 128, "calories": 380, "total_sets": 15, "total_reps": 75});
@@ -182,9 +270,20 @@ pub fn seed(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
     hevy_db::set_applied_garmin(conn, MERGED_ID, Some(text(merged, "updated_at")))?;
 
     store(conn, unmapped)?;
-    hevy_db::set_workout_status(conn, UNMAPPED_ID, "needs_mapping", Some("unmapped exercises: Bulgarian Ring Row"))?;
+    hevy_db::set_workout_status(
+        conn,
+        UNMAPPED_ID,
+        "needs_mapping",
+        Some("unmapped exercises: Bulgarian Ring Row"),
+    )?;
 
-    watch_activity(conn, PASSIVE_ACTIVITY_ID, "Forgot the watch (Hevy)", passive, now)?;
+    watch_activity(
+        conn,
+        PASSIVE_ACTIVITY_ID,
+        "Forgot the watch (Hevy)",
+        passive,
+        now,
+    )?;
     store(conn, passive)?;
     hevy_db::link_target(conn, PASSIVE_ID, PASSIVE_ACTIVITY_ID, "passive")?;
     hevy_db::set_workout_status(conn, PASSIVE_ID, "uploaded_passive", None)?;
@@ -195,6 +294,11 @@ pub fn seed(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
     watch_activity(conn, SYNCING_ACTIVITY_ID, "Strength (watch)", syncing, now)?;
     store(conn, syncing)?;
     hevy_db::claim_source(conn, SYNCING_ID, SYNCING_ACTIVITY_ID)?;
-    hevy_db::set_workout_status(conn, SYNCING_ID, "awaiting_match", Some("Choose how to apply this Hevy workout."))?;
+    hevy_db::set_workout_status(
+        conn,
+        SYNCING_ID,
+        "awaiting_match",
+        Some("Choose how to apply this Hevy workout."),
+    )?;
     Ok(())
 }

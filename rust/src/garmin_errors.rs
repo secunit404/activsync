@@ -31,12 +31,17 @@ pub enum GarminError {
 impl std::fmt::Display for GarminError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SessionExpired => f.write_str("Garmin session expired. Reconnect Garmin to resume syncing."),
-            Self::Unavailable => f.write_str("Garmin could not be reached. ActivSync tries again at the next check."),
-            Self::ActivityGone(id) => write!(f, "activity {id} not found"),
-            Self::NotFound(msg) | Self::UploadRejected(msg) | Self::SubcategoryRejected(msg) | Self::Api(msg) => {
-                f.write_str(msg)
+            Self::SessionExpired => {
+                f.write_str("Garmin session expired. Reconnect Garmin to resume syncing.")
             }
+            Self::Unavailable => {
+                f.write_str("Garmin could not be reached. ActivSync tries again at the next check.")
+            }
+            Self::ActivityGone(id) => write!(f, "activity {id} not found"),
+            Self::NotFound(msg)
+            | Self::UploadRejected(msg)
+            | Self::SubcategoryRejected(msg)
+            | Self::Api(msg) => f.write_str(msg),
             Self::Network(err) => f.write_str(err),
             Self::Malformed(err) => write!(f, "unreadable Garmin response: {err}"),
             Self::Invalid(msg) => f.write_str(msg),
@@ -52,7 +57,8 @@ impl GarminError {
     pub fn is_transient(&self) -> bool {
         match self {
             Self::Network(_) | Self::Unavailable => true,
-            Self::Api(message) => status_of(message).is_some_and(|status| status == 429 || (500..600).contains(&status)),
+            Self::Api(message) => status_of(message)
+                .is_some_and(|status| status == 429 || (500..600).contains(&status)),
             _ => false,
         }
     }
@@ -76,11 +82,19 @@ pub(crate) fn py_repr(value: &Value) -> String {
         Value::Bool(b) => if *b { "True" } else { "False" }.into(),
         Value::Number(n) if n.is_f64() => {
             let f = n.as_f64().unwrap_or_default();
-            if f.fract() == 0.0 && f.abs() < 1e16 { format!("{f:.1}") } else { f.to_string() }
+            if f.fract() == 0.0 && f.abs() < 1e16 {
+                format!("{f:.1}")
+            } else {
+                f.to_string()
+            }
         }
         Value::Number(n) => n.to_string(),
         Value::String(s) => {
-            let quote = if s.contains('\'') && !s.contains('"') { '"' } else { '\'' };
+            let quote = if s.contains('\'') && !s.contains('"') {
+                '"'
+            } else {
+                '\''
+            };
             let mut out = String::from(quote);
             for c in s.chars() {
                 match c {
@@ -98,15 +112,26 @@ pub(crate) fn py_repr(value: &Value) -> String {
             out.push(quote);
             out
         }
-        Value::Array(items) => format!("[{}]", items.iter().map(py_repr).collect::<Vec<_>>().join(", ")),
+        Value::Array(items) => format!(
+            "[{}]",
+            items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
+        ),
         Value::Object(map) => {
-            format!("{{{}}}", map.iter().map(|(k, v)| format!("{}: {}", py_repr(&json!(k)), py_repr(v))).collect::<Vec<_>>().join(", "))
+            format!(
+                "{{{}}}",
+                map.iter()
+                    .map(|(k, v)| format!("{}: {}", py_repr(&json!(k)), py_repr(v)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
     }
 }
 
 pub(crate) fn py_str(value: &Value) -> String {
-    value.as_str().map_or_else(|| py_repr(value), str::to_string)
+    value
+        .as_str()
+        .map_or_else(|| py_repr(value), str::to_string)
 }
 
 /// The library's error text: the status, then whatever message the body
@@ -114,23 +139,36 @@ pub(crate) fn py_str(value: &Value) -> String {
 pub(crate) fn api_error(response: &HttpResponse) -> GarminError {
     let status = response.status().as_u16();
     let mut message = format!("API Error {status}");
-    let detail = serde_json::from_slice::<Value>(response.body()).ok().filter(Value::is_object).and_then(|data| {
-        let first = |v: &Value| v.as_array().and_then(|a| a.first()).cloned();
-        let nested = || {
-            let failures = data.get("detailedImportResult").cloned().unwrap_or(json!({})).get("failures").cloned().unwrap_or(json!([{}]));
-            let failure = first(&failures)?;
-            first(&failure.get("messages").cloned().unwrap_or(json!([""])))
-        };
-        [data.get("message").cloned(), data.get("content").cloned()]
-            .into_iter()
-            .flatten()
-            .find(truthy)
-            .or_else(nested)
-            .filter(truthy)
-    });
+    let detail = serde_json::from_slice::<Value>(response.body())
+        .ok()
+        .filter(Value::is_object)
+        .and_then(|data| {
+            let first = |v: &Value| v.as_array().and_then(|a| a.first()).cloned();
+            let nested = || {
+                let failures = data
+                    .get("detailedImportResult")
+                    .cloned()
+                    .unwrap_or(json!({}))
+                    .get("failures")
+                    .cloned()
+                    .unwrap_or(json!([{}]));
+                let failure = first(&failures)?;
+                first(&failure.get("messages").cloned().unwrap_or(json!([""])))
+            };
+            [data.get("message").cloned(), data.get("content").cloned()]
+                .into_iter()
+                .flatten()
+                .find(truthy)
+                .or_else(nested)
+                .filter(truthy)
+        });
     if let Some(detail) = detail {
         message.push_str(" - ");
         message.push_str(&py_str(&detail));
     }
-    if status == 404 { GarminError::NotFound(message) } else { GarminError::Api(message) }
+    if status == 404 {
+        GarminError::NotFound(message)
+    } else {
+        GarminError::Api(message)
+    }
 }

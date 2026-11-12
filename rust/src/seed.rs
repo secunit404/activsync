@@ -2,8 +2,8 @@ use chrono::{DateTime, Datelike, Timelike, Utc};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
-use crate::{config, hevy_seed, mock};
 use crate::db::{self, DbResult, NewActivity};
+use crate::{config, hevy_seed, mock};
 
 /// Bumped whenever the generated rows change, so an older dev database is
 /// rebuilt instead of mixing two generations of sample data.
@@ -27,23 +27,121 @@ const fn sample(
     distance: Option<i64>,
     status: &'static str,
 ) -> Sample {
-    Sample { activity_type, title, description, duration, distance, status }
+    Sample {
+        activity_type,
+        title,
+        description,
+        duration,
+        distance,
+        status,
+    }
 }
 
 const SAMPLES: [Sample; 13] = [
-    sample("running", "Morning run", "Easy loop before work.", 42 * 60, Some(7_850), "pending"),
-    sample("cycling", "Saturday ride", "Longer ride with a few good climbs.", 2 * 3600 + 8 * 60, Some(52_400), "held"),
-    sample("strength_training", "Strength workout", "Upper body and core.", 54 * 60, None, "published"),
-    sample("walking", "Evening walk", "Recovery walk.", 38 * 60, Some(3_120), "excluded"),
-    sample("trail_running", "Forest trail run", "Technical trails and soft ground.", 68 * 60, Some(10_200), "pending"),
-    sample("hiking", "Mountain hike", "Weekend hike with a view.", 4 * 3600 + 12 * 60, Some(14_600), "held"),
-    sample("swimming", "Pool intervals", "Technique and steady intervals.", 47 * 60, None, "published"),
-    sample("indoor_cycling", "Indoor bike", "Tempo session indoors.", 51 * 60, Some(28_700), "pending"),
-    sample("yoga", "Yoga recovery", "Mobility and breathing session.", 36 * 60, None, "excluded"),
-    sample("rowing", "Rowing intervals", "Short, hard intervals.", 32 * 60, Some(6_400), "pending"),
-    sample("elliptical", "Cross trainer", "Low-impact aerobic session.", 44 * 60, None, "held"),
-    sample("cardio", "Cardio workout", "Mixed cardio session.", 39 * 60, None, "published"),
-    sample("backcountry_skiing_snowboarding_ws", "Backcountry day", "Skinned up, rode down.", 5 * 3600 + 20 * 60, Some(9_400), "published"),
+    sample(
+        "running",
+        "Morning run",
+        "Easy loop before work.",
+        42 * 60,
+        Some(7_850),
+        "pending",
+    ),
+    sample(
+        "cycling",
+        "Saturday ride",
+        "Longer ride with a few good climbs.",
+        2 * 3600 + 8 * 60,
+        Some(52_400),
+        "held",
+    ),
+    sample(
+        "strength_training",
+        "Strength workout",
+        "Upper body and core.",
+        54 * 60,
+        None,
+        "published",
+    ),
+    sample(
+        "walking",
+        "Evening walk",
+        "Recovery walk.",
+        38 * 60,
+        Some(3_120),
+        "excluded",
+    ),
+    sample(
+        "trail_running",
+        "Forest trail run",
+        "Technical trails and soft ground.",
+        68 * 60,
+        Some(10_200),
+        "pending",
+    ),
+    sample(
+        "hiking",
+        "Mountain hike",
+        "Weekend hike with a view.",
+        4 * 3600 + 12 * 60,
+        Some(14_600),
+        "held",
+    ),
+    sample(
+        "swimming",
+        "Pool intervals",
+        "Technique and steady intervals.",
+        47 * 60,
+        None,
+        "published",
+    ),
+    sample(
+        "indoor_cycling",
+        "Indoor bike",
+        "Tempo session indoors.",
+        51 * 60,
+        Some(28_700),
+        "pending",
+    ),
+    sample(
+        "yoga",
+        "Yoga recovery",
+        "Mobility and breathing session.",
+        36 * 60,
+        None,
+        "excluded",
+    ),
+    sample(
+        "rowing",
+        "Rowing intervals",
+        "Short, hard intervals.",
+        32 * 60,
+        Some(6_400),
+        "pending",
+    ),
+    sample(
+        "elliptical",
+        "Cross trainer",
+        "Low-impact aerobic session.",
+        44 * 60,
+        None,
+        "held",
+    ),
+    sample(
+        "cardio",
+        "Cardio workout",
+        "Mixed cardio session.",
+        39 * 60,
+        None,
+        "published",
+    ),
+    sample(
+        "backcountry_skiing_snowboarding_ws",
+        "Backcountry day",
+        "Skinned up, rode down.",
+        5 * 3600 + 20 * 60,
+        Some(9_400),
+        "published",
+    ),
 ];
 
 /// Fills a mock database with a year of sample activities. When `onboarded`,
@@ -54,7 +152,10 @@ const SAMPLES: [Sample; 13] = [
 /// pointing the mock server at a real database cannot alter it.
 pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbResult<bool> {
     let existing = db::list_activities(conn, false)?;
-    if existing.iter().any(|row| !row.content_hash.starts_with("dev-")) {
+    if existing
+        .iter()
+        .any(|row| !row.content_hash.starts_with("dev-"))
+    {
         return Ok(false);
     }
     if onboarded {
@@ -132,12 +233,20 @@ pub fn seed(conn: &mut Connection, now: DateTime<Utc>, onboarded: bool) -> DbRes
 
     let mut settings = config::defaults();
     settings.insert("hevy_match_mode".into(), json!("review"));
-    let mut held: Vec<&str> = SAMPLES.iter().filter(|s| s.status == "held").map(|s| s.activity_type).collect();
+    let mut held: Vec<&str> = SAMPLES
+        .iter()
+        .filter(|s| s.status == "held")
+        .map(|s| s.activity_type)
+        .collect();
     held.sort_unstable();
     held.dedup();
     settings.insert("held_activity_types".into(), json!(held));
     db::set_config_value(&tx, "settings", &Value::Object(settings))?;
-    db::set_config_value(&tx, "garmin_activity_types", &Value::Array(mock::garmin_activity_types()))?;
+    db::set_config_value(
+        &tx,
+        "garmin_activity_types",
+        &Value::Array(mock::garmin_activity_types()),
+    )?;
     db::set_config_value(&tx, SEED_VERSION_KEY, &json!(SEED_VERSION))?;
     tx.commit()?;
     Ok(true)

@@ -97,7 +97,11 @@ pub fn schedule(
     window_seconds: f64,
 ) -> Result<Scheduled, ScheduleError> {
     let ids: Vec<i64> = activities.iter().map(|a| a.garmin_activity_id).collect();
-    let batch = Scheduled { batch_id: new_batch_id(), deadline: now + window_seconds, window_seconds };
+    let batch = Scheduled {
+        batch_id: new_batch_id(),
+        deadline: now + window_seconds,
+        window_seconds,
+    };
     let tx = conn.transaction()?;
     let active: Option<i64> = tx
         .query_row(
@@ -164,7 +168,13 @@ pub fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(i64, f64)>> {
     Ok(rows)
 }
 
-pub fn finish(conn: &Connection, id: i64, state: &str, message: Option<&str>, now: f64) -> DbResult<()> {
+pub fn finish(
+    conn: &Connection,
+    id: i64,
+    state: &str,
+    message: Option<&str>,
+    now: f64,
+) -> DbResult<()> {
     conn.execute(
         &format!(
             "UPDATE publish_schedule SET state = ?1, message = ?2, finished_at = ?3 \
@@ -200,7 +210,9 @@ pub fn next_deadline(conn: &Connection) -> DbResult<Option<f64>> {
     )
 }
 
-pub fn active_by_activity(conn: &Connection) -> DbResult<std::collections::HashMap<i64, (f64, String)>> {
+pub fn active_by_activity(
+    conn: &Connection,
+) -> DbResult<std::collections::HashMap<i64, (f64, String)>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT garmin_activity_id, deadline, state FROM publish_schedule \
          WHERE state IN ('{WAITING}', '{SENDING}')"
@@ -253,15 +265,28 @@ pub struct PublishScheduler {
 
 impl PublishScheduler {
     pub fn new(db: Db, events: EventBus, clock: Clock, window_seconds: f64) -> Self {
-        Self { db, events, clock, window_override: Some(window_seconds), wake: Arc::new(Notify::new()), clients: None }
+        Self {
+            db,
+            events,
+            clock,
+            window_override: Some(window_seconds),
+            wake: Arc::new(Notify::new()),
+            clients: None,
+        }
     }
 
     pub fn with_clients(self, clients: Arc<dyn Clients>) -> Self {
-        Self { clients: Some(clients), ..self }
+        Self {
+            clients: Some(clients),
+            ..self
+        }
     }
 
     pub fn with_configured_window(self) -> Self {
-        Self { window_override: None, ..self }
+        Self {
+            window_override: None,
+            ..self
+        }
     }
 
     pub fn window_seconds(&self) -> DbResult<f64> {
@@ -275,7 +300,11 @@ impl PublishScheduler {
         (self.clock)()
     }
 
-    pub fn schedule(&self, activities: &[ActivityRow], kind: &str) -> Result<Scheduled, ScheduleError> {
+    pub fn schedule(
+        &self,
+        activities: &[ActivityRow],
+        kind: &str,
+    ) -> Result<Scheduled, ScheduleError> {
         let mut conn = self.db.lock();
         let window_seconds = match self.window_override {
             Some(window) => window,
@@ -308,7 +337,10 @@ impl PublishScheduler {
             Some(clients) => match clients.garmin().await {
                 Ok(garmin) => Some((garmin, clients.strava())),
                 Err(err) => {
-                    crate::log_warn!("schedule", "scheduled publish could not reach Garmin or Strava: {err}");
+                    crate::log_warn!(
+                        "schedule",
+                        "scheduled publish could not reach Garmin or Strava: {err}"
+                    );
                     let message = format!("Could not publish activity: {err}");
                     for (id, _) in &claimed {
                         finish(&self.db.lock(), *id, FAILED, Some(&message), self.now())?;
@@ -332,23 +364,38 @@ impl PublishScheduler {
 
     /// The owner's later decision wins: an activity excluded from another
     /// device, or removed on Garmin, during the window is skipped.
-    async fn send(&self, id: i64, garmin: &GarminClient, strava: &StravaClient) -> DbResult<(&'static str, Option<String>)> {
+    async fn send(
+        &self,
+        id: i64,
+        garmin: &GarminClient,
+        strava: &StravaClient,
+    ) -> DbResult<(&'static str, Option<String>)> {
         let activity = db::get_activity(&self.db.lock(), id)?;
         match activity {
             Some(activity) if activity.is_published() => return Ok((PUBLISHED, None)),
             Some(activity) if PUBLISHABLE_STATUSES.contains(&activity.publish_status.as_str()) => {}
             _ => return Ok((SKIPPED, None)),
         }
-        let services = Services { db: &self.db, garmin, strava };
+        let services = Services {
+            db: &self.db,
+            garmin,
+            strava,
+        };
         Ok(match sync::publish_now(&services, id, Utc::now()).await {
             Ok(()) => {
                 crate::log_info!("schedule", "published activity {id} to Strava");
                 (PUBLISHED, None)
             }
-            Err(SyncError::Blocked(reason)) => (BLOCKED, Some(format!("Activity was blocked by Hevy sync: {reason}."))),
+            Err(SyncError::Blocked(reason)) => (
+                BLOCKED,
+                Some(format!("Activity was blocked by Hevy sync: {reason}.")),
+            ),
             Err(SyncError::Strava(StravaError::Auth(message))) => (FAILED, Some(message)),
             Err(err) => {
-                crate::log_warn!("schedule", "scheduled publish failed for activity {id}: {err}");
+                crate::log_warn!(
+                    "schedule",
+                    "scheduled publish failed for activity {id}: {err}"
+                );
                 (FAILED, Some(format!("Could not publish activity: {err}")))
             }
         })
@@ -365,7 +412,10 @@ impl PublishScheduler {
         tokio::spawn(async move {
             if let Ok(recovered) = recover(&self.db.lock()) {
                 if recovered > 0 {
-                    crate::log_info!("schedule", "resuming {recovered} publish(es) interrupted by a restart");
+                    crate::log_info!(
+                        "schedule",
+                        "resuming {recovered} publish(es) interrupted by a restart"
+                    );
                 }
             }
             loop {
@@ -400,7 +450,9 @@ fn mock_send(conn: &Connection, id: i64) -> DbResult<(&'static str, Option<Strin
     if let Some((hevy_id, status)) = db::blocking_workout_for_activity(conn, id)? {
         return Ok((
             BLOCKED,
-            Some(format!("Activity was blocked by Hevy sync: hevy workout {hevy_id} is {status}.")),
+            Some(format!(
+                "Activity was blocked by Hevy sync: hevy workout {hevy_id} is {status}."
+            )),
         ));
     }
     db::set_published(conn, id, crate::mock::STRAVA_ID_BASE + id, Utc::now())?;

@@ -102,7 +102,12 @@ pub struct CatchUpStats {
     pub lookback_days: i64,
 }
 
-pub fn content_hash(title: &str, description: &str, activity_type: &str, garmin_data: &str) -> String {
+pub fn content_hash(
+    title: &str,
+    description: &str,
+    activity_type: &str,
+    garmin_data: &str,
+) -> String {
     crate::routes::content_hash(title, description, activity_type, garmin_data)
 }
 
@@ -131,9 +136,19 @@ pub fn garmin_data_json(act: &ActivityRecord) -> String {
         ("total_reps", &act.total_reps),
         ("total_volume", &act.total_volume),
     ];
-    let present: Vec<String> =
-        fields.iter().filter_map(|(key, value)| value.as_ref().map(|v| format!("\"{key}\": {}", py_number(v)))).collect();
-    if present.is_empty() { "{}".into() } else { format!("{{{}}}", present.join(", ")) }
+    let present: Vec<String> = fields
+        .iter()
+        .filter_map(|(key, value)| {
+            value
+                .as_ref()
+                .map(|v| format!("\"{key}\": {}", py_number(v)))
+        })
+        .collect();
+    if present.is_empty() {
+        "{}".into()
+    } else {
+        format!("{{{}}}", present.join(", "))
+    }
 }
 
 /// Python's `repr()` of a JSON number: integers as is, floats with the
@@ -144,12 +159,20 @@ fn py_number(n: &serde_json::Number) -> String {
         return n.to_string();
     };
     if !value.is_finite() {
-        return if value.is_nan() { "NaN".into() } else if value > 0.0 { "Infinity".into() } else { "-Infinity".into() };
+        return if value.is_nan() {
+            "NaN".into()
+        } else if value > 0.0 {
+            "Infinity".into()
+        } else {
+            "-Infinity".into()
+        };
     }
     let scientific = format!("{value:e}");
     let (mantissa, exponent) = scientific.split_once('e').unwrap_or((&scientific, "0"));
     let exponent: i32 = exponent.parse().unwrap_or(0);
-    let (sign, mantissa) = mantissa.strip_prefix('-').map_or(("", mantissa), |m| ("-", m));
+    let (sign, mantissa) = mantissa
+        .strip_prefix('-')
+        .map_or(("", mantissa), |m| ("-", m));
     let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
     if (-4..16).contains(&exponent) {
         let point = exponent + 1;
@@ -158,21 +181,37 @@ fn py_number(n: &serde_json::Number) -> String {
         } else if point as usize >= digits.len() {
             format!("{digits}{}.0", "0".repeat(point as usize - digits.len()))
         } else {
-            format!("{}.{}", &digits[..point as usize], &digits[point as usize..])
+            format!(
+                "{}.{}",
+                &digits[..point as usize],
+                &digits[point as usize..]
+            )
         };
         return format!("{sign}{body}");
     }
-    let mantissa = if digits.len() > 1 { format!("{}.{}", &digits[..1], &digits[1..]) } else { digits };
+    let mantissa = if digits.len() > 1 {
+        format!("{}.{}", &digits[..1], &digits[1..])
+    } else {
+        digits
+    };
     let exp_sign = if exponent < 0 { "-" } else { "+" };
     format!("{sign}{mantissa}e{exp_sign}{:02}", exponent.abs())
 }
 
 fn parse_start(row: &ActivityRow) -> SyncResult<DateTime<Utc>> {
-    crate::timefmt::parse_garmin(&row.start_time)
-        .ok_or_else(|| SyncError::Invalid(format!("time data {:?} does not match format '{GARMIN_TIME_FORMAT}'", row.start_time)))
+    crate::timefmt::parse_garmin(&row.start_time).ok_or_else(|| {
+        SyncError::Invalid(format!(
+            "time data {:?} does not match format '{GARMIN_TIME_FORMAT}'",
+            row.start_time
+        ))
+    })
 }
 
-fn rows_within(db: &Db, statuses: &[&str], cutoff: DateTime<Utc>) -> SyncResult<Vec<(ActivityRow, DateTime<Utc>)>> {
+fn rows_within(
+    db: &Db,
+    statuses: &[&str],
+    cutoff: DateTime<Utc>,
+) -> SyncResult<Vec<(ActivityRow, DateTime<Utc>)>> {
     let conn = db.lock();
     let mut rows = Vec::new();
     for status in statuses {
@@ -200,15 +239,24 @@ fn under_hevy_settlement_hold(conn: &rusqlite::Connection, row: &ActivityRow) ->
     if db::has_linked_workout(conn, row.garmin_activity_id)? {
         return Ok(false);
     }
-    let garmin_data = if row.garmin_data.is_empty() { "{}" } else { &row.garmin_data };
+    let garmin_data = if row.garmin_data.is_empty() {
+        "{}"
+    } else {
+        &row.garmin_data
+    };
     let Ok(garmin_data) = serde_json::from_str::<Value>(garmin_data) else {
         return Ok(true);
     };
-    let duration = garmin_data.get("duration").filter(|d| d.is_number()).and_then(Value::as_f64);
+    let duration = garmin_data
+        .get("duration")
+        .filter(|d| d.is_number())
+        .and_then(Value::as_f64);
     let Some(duration) = duration.filter(|d| *d >= 0.0) else {
         return Ok(true);
     };
-    let default_interval = config::defaults()["hevy_poll_interval_minutes"].as_f64().unwrap_or(5.0);
+    let default_interval = config::defaults()["hevy_poll_interval_minutes"]
+        .as_f64()
+        .unwrap_or(5.0);
     let interval = match cfg.get("hevy_poll_interval_minutes") {
         Some(Value::Number(n)) => n.as_f64().unwrap_or(default_interval),
         Some(Value::String(s)) => s.trim().parse().unwrap_or(default_interval),
@@ -225,7 +273,8 @@ fn under_hevy_settlement_hold(conn: &rusqlite::Connection, row: &ActivityRow) ->
 /// Two callers uploading the same activity at once would both miss the
 /// other in Strava's search (the first is still processing) and post a
 /// duplicate, so one activity publishes at a time.
-static PUBLISH_LOCKS: LazyLock<Mutex<HashMap<i64, Arc<tokio::sync::Mutex<()>>>>> = LazyLock::new(Mutex::default);
+static PUBLISH_LOCKS: LazyLock<Mutex<HashMap<i64, Arc<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(Mutex::default);
 
 fn publish_lock(garmin_activity_id: i64) -> Arc<tokio::sync::Mutex<()>> {
     let mut locks = PUBLISH_LOCKS.lock().unwrap_or_else(|e| e.into_inner());
@@ -238,16 +287,26 @@ pub struct Services<'a> {
     pub strava: &'a StravaClient,
 }
 
-async fn publish_row(services: &Services<'_>, garmin_activity_id: i64, now: DateTime<Utc>, manual: bool) -> SyncResult<()> {
+async fn publish_row(
+    services: &Services<'_>,
+    garmin_activity_id: i64,
+    now: DateTime<Utc>,
+    manual: bool,
+) -> SyncResult<()> {
     let lock = publish_lock(garmin_activity_id);
     let _guard = lock.lock().await;
     let row = {
         let conn = services.db.lock();
-        if let Some((hevy_id, status)) = db::blocking_workout_for_activity(&conn, garmin_activity_id)? {
-            return Err(SyncError::Blocked(format!("hevy workout {hevy_id} is {status}")));
+        if let Some((hevy_id, status)) =
+            db::blocking_workout_for_activity(&conn, garmin_activity_id)?
+        {
+            return Err(SyncError::Blocked(format!(
+                "hevy workout {hevy_id} is {status}"
+            )));
         }
-        let row = db::get_activity(&conn, garmin_activity_id)?
-            .ok_or_else(|| SyncError::Invalid(format!("Activity {garmin_activity_id} was not found")))?;
+        let row = db::get_activity(&conn, garmin_activity_id)?.ok_or_else(|| {
+            SyncError::Invalid(format!("Activity {garmin_activity_id} was not found"))
+        })?;
         if row.is_published() {
             return Ok(());
         }
@@ -257,7 +316,10 @@ async fn publish_row(services: &Services<'_>, garmin_activity_id: i64, now: Date
         row
     };
     let start = parse_start(&row)?;
-    let existing = services.strava.find_existing_activity(start, strava_client::DEFAULT_MATCH_TOLERANCE_MINUTES).await?;
+    let existing = services
+        .strava
+        .find_existing_activity(start, strava_client::DEFAULT_MATCH_TOLERANCE_MINUTES)
+        .await?;
     if let Some(strava_id) = existing {
         db::set_published(&services.db.lock(), garmin_activity_id, strava_id, now)?;
         return Ok(());
@@ -268,17 +330,29 @@ async fn publish_row(services: &Services<'_>, garmin_activity_id: i64, now: Date
     let document = strength_document(services.db, garmin_activity_id, &fit)?;
     let mut strava_id = None;
     if let Some(document) = document {
-        match services.strava.publish_strength(garmin_activity_id, &document, Some(&row.title), description).await {
+        match services
+            .strava
+            .publish_strength(garmin_activity_id, &document, Some(&row.title), description)
+            .await
+        {
             Ok(id) => strava_id = Some(id),
             Err(StravaError::Rejected(reason)) => {
-                crate::log_warn!("sync", "strava upload {garmin_activity_id}: Strava rejected Hevy's sets, uploading the FIT instead: {reason}");
+                crate::log_warn!(
+                    "sync",
+                    "strava upload {garmin_activity_id}: Strava rejected Hevy's sets, uploading the FIT instead: {reason}"
+                );
             }
             Err(err) => return Err(err.into()),
         }
     }
     let strava_id = match strava_id {
         Some(id) => id,
-        None => services.strava.publish(garmin_activity_id, &fit, Some(&row.title), description).await?,
+        None => {
+            services
+                .strava
+                .publish(garmin_activity_id, &fit, Some(&row.title), description)
+                .await?
+        }
     };
     db::set_published(&services.db.lock(), garmin_activity_id, strava_id, now)?;
     Ok(())
@@ -289,21 +363,30 @@ async fn publish_row(services: &Services<'_>, garmin_activity_id: i64, now: Date
 /// Strava should match those.
 fn strength_document(db: &Db, garmin_activity_id: i64, fit: &[u8]) -> SyncResult<Option<Value>> {
     let conn = db.lock();
-    let Some((status, payload)) = db::applied_workout_for_activity(&conn, garmin_activity_id)? else {
+    let Some((status, payload)) = db::applied_workout_for_activity(&conn, garmin_activity_id)?
+    else {
         return Ok(None);
     };
     if status == "described" {
         return Ok(None);
     }
     let payload = if payload.is_empty() { "{}" } else { &payload };
-    let tz = config::load_config(&conn, false)?.get("display_timezone").and_then(Value::as_str).map(str::to_string);
+    let tz = config::load_config(&conn, false)?
+        .get("display_timezone")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let built = serde_json::from_str::<Value>(payload)
         .map_err(|e| e.to_string())
-        .and_then(|workout| crate::strava_strength::build_strength_upload(&conn, &workout, fit, tz.as_deref()));
+        .and_then(|workout| {
+            crate::strava_strength::build_strength_upload(&conn, &workout, fit, tz.as_deref())
+        });
     match built {
         Ok(document) => Ok(Some(document)),
         Err(reason) => {
-            crate::log_warn!("sync", "strava upload {garmin_activity_id}: uploading the FIT instead of Hevy's sets: {reason}");
+            crate::log_warn!(
+                "sync",
+                "strava upload {garmin_activity_id}: uploading the FIT instead of Hevy's sets: {reason}"
+            );
             Ok(None)
         }
     }
@@ -311,7 +394,11 @@ fn strength_document(db: &Db, garmin_activity_id: i64, fit: &[u8]) -> SyncResult
 
 /// Only a rejection clears `garmin_credentials_verified`, which pauses the
 /// Garmin leg until a reconnect; an outage is retried on the next poll.
-pub fn record_sync_outcome(db: &Db, now: DateTime<Utc>, error: Option<&GarminError>) -> SyncResult<()> {
+pub fn record_sync_outcome(
+    db: &Db,
+    now: DateTime<Utc>,
+    error: Option<&GarminError>,
+) -> SyncResult<()> {
     let conn = db.lock();
     let at = json!(db::iso(now));
     db::set_config_value(&conn, "garmin_last_sync_at", &at)?;
@@ -319,9 +406,17 @@ pub fn record_sync_outcome(db: &Db, now: DateTime<Utc>, error: Option<&GarminErr
         db::set_config_value(&conn, "garmin_last_sync_ok_at", &at)?;
     }
     db::set_config_value(&conn, "garmin_last_sync_ok", &json!(error.is_none()))?;
-    db::set_config_value(&conn, "garmin_last_sync_error", &json!(error.map(ToString::to_string)))?;
+    db::set_config_value(
+        &conn,
+        "garmin_last_sync_error",
+        &json!(error.map(ToString::to_string)),
+    )?;
     if !error.is_some_and(GarminError::is_transient) {
-        db::set_config_value(&conn, "garmin_credentials_verified", &json!(error.is_none()))?;
+        db::set_config_value(
+            &conn,
+            "garmin_credentials_verified",
+            &json!(error.is_none()),
+        )?;
     }
     Ok(())
 }
@@ -357,9 +452,17 @@ pub async fn sync_garmin(
     for act in &fetched {
         fetched_ids.insert(act.garmin_activity_id);
         let garmin_data = garmin_data_json(act);
-        let new_hash = content_hash(&act.title, &act.description, &act.activity_type, &garmin_data);
+        let new_hash = content_hash(
+            &act.title,
+            &act.description,
+            &act.activity_type,
+            &garmin_data,
+        );
         let Some(existing) = db::get_activity(&conn, act.garmin_activity_id)? else {
-            let (status, hold_reason) = if hold_cutoff.as_deref().is_some_and(|cutoff| act.start_time.as_str() < cutoff) {
+            let (status, hold_reason) = if hold_cutoff
+                .as_deref()
+                .is_some_and(|cutoff| act.start_time.as_str() < cutoff)
+            {
                 stats.held_backlog += 1;
                 ("held", Some(HOLD_BACKLOG))
             } else if held_types.contains(&act.activity_type) {
@@ -401,8 +504,13 @@ pub async fn sync_garmin(
     // The fetch measured its cutoff a moment after `now`, so its span can be
     // slightly narrower; shrink the removal window so an activity in that
     // sliver is not dropped merely for missing this fetch.
-    let window_start = (now - Duration::days(lookback) + Duration::minutes(5)).format(GARMIN_TIME_FORMAT).to_string();
-    let mut gone: Vec<i64> = db::list_active_ids_since(&conn, &window_start)?.difference(&fetched_ids).copied().collect();
+    let window_start = (now - Duration::days(lookback) + Duration::minutes(5))
+        .format(GARMIN_TIME_FORMAT)
+        .to_string();
+    let mut gone: Vec<i64> = db::list_active_ids_since(&conn, &window_start)?
+        .difference(&fetched_ids)
+        .copied()
+        .collect();
     gone.sort_unstable();
     for garmin_activity_id in gone {
         db::mark_removed(&conn, garmin_activity_id)?;
@@ -410,17 +518,31 @@ pub async fn sync_garmin(
     }
     drop(conn);
     record_sync_outcome(db, now, None)?;
-    crate::log_info!("sync", "garmin sync: {} new, {} updated, {} removed", stats.new, stats.updated, stats.removed);
+    crate::log_info!(
+        "sync",
+        "garmin sync: {} new, {} updated, {} removed",
+        stats.new,
+        stats.updated,
+        stats.removed
+    );
     Ok(stats)
 }
 
 /// The poller (`selected` is `None`) publishes only pending rows: missing
 /// and held rows are the user's call. A manual bulk publish names its rows,
 /// and every status the dashboard lets the user check is publishable.
-pub async fn publish_pending(services: &Services<'_>, now: DateTime<Utc>, selected: Option<&HashSet<i64>>) -> SyncResult<PublishStats> {
+pub async fn publish_pending(
+    services: &Services<'_>,
+    now: DateTime<Utc>,
+    selected: Option<&HashSet<i64>>,
+) -> SyncResult<PublishStats> {
     let mut stats = PublishStats::default();
     let manual = selected.is_some();
-    let statuses: &[&str] = if manual { &["pending", "missing", "held"] } else { &["pending"] };
+    let statuses: &[&str] = if manual {
+        &["pending", "missing", "held"]
+    } else {
+        &["pending"]
+    };
     for status in statuses {
         let rows = db::list_activities_with_status(&services.db.lock(), status)?;
         for row in rows {
@@ -450,12 +572,22 @@ pub async fn publish_pending(services: &Services<'_>, now: DateTime<Utc>, select
         }
     }
     if stats.published > 0 || stats.failed > 0 || (manual && stats.blocked > 0) {
-        crate::log_info!("sync", "strava publish: {} published, {} failed, {} blocked", stats.published, stats.failed, stats.blocked);
+        crate::log_info!(
+            "sync",
+            "strava publish: {} published, {} failed, {} blocked",
+            stats.published,
+            stats.failed,
+            stats.blocked
+        );
     }
     Ok(stats)
 }
 
-pub async fn publish_now(services: &Services<'_>, garmin_activity_id: i64, now: DateTime<Utc>) -> SyncResult<()> {
+pub async fn publish_now(
+    services: &Services<'_>,
+    garmin_activity_id: i64,
+    now: DateTime<Utc>,
+) -> SyncResult<()> {
     publish_row(services, garmin_activity_id, now, true).await
 }
 
@@ -479,13 +611,18 @@ pub async fn check_strava_status(
         return Ok(stats);
     }
     let padding = Duration::minutes(WINDOW_PADDING_MINUTES);
-    let on_strava = strava.list_activities_between(cutoff - padding, now + padding).await?;
+    let on_strava = strava
+        .list_activities_between(cutoff - padding, now + padding)
+        .await?;
 
     let conn = db.lock();
     let mut unclaimed: Vec<StravaActivity> = on_strava.clone();
     for (row, start) in &to_link {
-        let Some(existing) = strava_client::match_closest_activity(&unclaimed, *start, strava_client::DEFAULT_MATCH_TOLERANCE_MINUTES)
-        else {
+        let Some(existing) = strava_client::match_closest_activity(
+            &unclaimed,
+            *start,
+            strava_client::DEFAULT_MATCH_TOLERANCE_MINUTES,
+        ) else {
             continue;
         };
         // Each Strava entry is the twin of one Garmin activity only, or two
@@ -502,17 +639,28 @@ pub async fn check_strava_status(
         }
     }
     if stats.flagged_missing > 0 {
-        crate::log_info!("sync", "strava status check: {} activities flagged missing", stats.flagged_missing);
+        crate::log_info!(
+            "sync",
+            "strava status check: {} activities flagged missing",
+            stats.flagged_missing
+        );
     }
     if stats.linked_existing > 0 {
-        crate::log_info!("sync", "strava status check: {} activities linked to existing Strava entries", stats.linked_existing);
+        crate::log_info!(
+            "sync",
+            "strava status check: {} activities linked to existing Strava entries",
+            stats.linked_existing
+        );
     }
     Ok(stats)
 }
 
 /// Un-holds category holds whose type became an autosync category. Backlog
 /// holds stay: an autosync rule says nothing about a three-week-old run.
-pub fn reconcile_held_activities(conn: &rusqlite::Connection, held_activity_types: &[String]) -> SyncResult<i64> {
+pub fn reconcile_held_activities(
+    conn: &rusqlite::Connection,
+    held_activity_types: &[String],
+) -> SyncResult<i64> {
     let mut flipped = 0;
     for row in db::list_activities_with_status(conn, "held")? {
         if row.hold_reason.as_deref() == Some(HOLD_BACKLOG) {
@@ -536,17 +684,34 @@ pub async fn edit_activity_metadata(
     if title.is_empty() {
         return Err(SyncError::Invalid("Activity title cannot be blank".into()));
     }
-    let row = db::get_activity(&services.db.lock(), garmin_activity_id)?
-        .ok_or_else(|| SyncError::Invalid(format!("Activity {garmin_activity_id} was not found")))?;
-    services.garmin.update_activity_metadata(garmin_activity_id, title, description).await?;
+    let row = db::get_activity(&services.db.lock(), garmin_activity_id)?.ok_or_else(|| {
+        SyncError::Invalid(format!("Activity {garmin_activity_id} was not found"))
+    })?;
+    services
+        .garmin
+        .update_activity_metadata(garmin_activity_id, title, description)
+        .await?;
     if row.publish_status == "published" {
         if let Some(strava_id) = row.strava_activity_id.filter(|id| *id != 0) {
-            services.strava.update_activity_metadata(strava_id, title, description).await?;
+            services
+                .strava
+                .update_activity_metadata(strava_id, title, description)
+                .await?;
         }
     }
-    let garmin_data = if row.garmin_data.is_empty() { "{}" } else { &row.garmin_data };
+    let garmin_data = if row.garmin_data.is_empty() {
+        "{}"
+    } else {
+        &row.garmin_data
+    };
     let hash = content_hash(title, description, &row.activity_type, garmin_data);
-    db::update_activity_metadata(&services.db.lock(), garmin_activity_id, title, description, &hash)?;
+    db::update_activity_metadata(
+        &services.db.lock(),
+        garmin_activity_id,
+        title,
+        description,
+        &hash,
+    )?;
     Ok(())
 }
 
@@ -566,7 +731,8 @@ pub fn catch_up_lookback_days(
 ) -> SyncResult<i64> {
     let last_ok = match last_sync_ok_at {
         Some(value) => value,
-        None => db::get_config_value(conn, "garmin_last_sync_ok_at")?.and_then(|v| v.as_str().map(str::to_string)),
+        None => db::get_config_value(conn, "garmin_last_sync_ok_at")?
+            .and_then(|v| v.as_str().map(str::to_string)),
     };
     let lookback = cfg.int("lookback_days");
     let Some(last_ok) = last_ok else {
@@ -583,13 +749,20 @@ pub fn catch_up_lookback_days(
 /// the Garmin outage: during a Strava-only outage pending rows pile up while
 /// Garmin syncs fine, and publishing them unchecked would duplicate whatever
 /// Garmin's own Strava sync already pushed.
-pub fn strava_status_lookback_days(conn: &rusqlite::Connection, cfg: &Config, now: DateTime<Utc>) -> SyncResult<i64> {
+pub fn strava_status_lookback_days(
+    conn: &rusqlite::Connection,
+    cfg: &Config,
+    now: DateTime<Utc>,
+) -> SyncResult<i64> {
     let lookback = cfg.int("lookback_days");
     let Some(oldest) = db::oldest_unpublished_start_time(conn)? else {
         return Ok(lookback);
     };
-    let oldest = crate::timefmt::parse_garmin(&oldest)
-        .ok_or_else(|| SyncError::Invalid(format!("time data {oldest:?} does not match format '{GARMIN_TIME_FORMAT}'")))?;
+    let oldest = crate::timefmt::parse_garmin(&oldest).ok_or_else(|| {
+        SyncError::Invalid(format!(
+            "time data {oldest:?} does not match format '{GARMIN_TIME_FORMAT}'"
+        ))
+    })?;
     let backlog_days = days_between(now, oldest) + 1;
     Ok(lookback.max(backlog_days.min(CATCH_UP_MAX_DAYS)))
 }
@@ -607,37 +780,84 @@ pub async fn catch_up_sync(
     let (lookback, garmin_connected) = {
         let conn = services.db.lock();
         let lookback = catch_up_lookback_days(&conn, cfg, now, last_sync_ok_at)?;
-        (lookback, db::truthy(db::get_config_value(&conn, "garmin_credentials_verified")?.as_ref()))
+        (
+            lookback,
+            db::truthy(db::get_config_value(&conn, "garmin_credentials_verified")?.as_ref()),
+        )
     };
     let hold_before = now - Duration::days(cfg.int("lookback_days"));
     let garmin = if garmin_connected {
-        sync_garmin(services.db, services.garmin, cfg, now, Some(lookback), Some(hold_before)).await?
+        sync_garmin(
+            services.db,
+            services.garmin,
+            cfg,
+            now,
+            Some(lookback),
+            Some(hold_before),
+        )
+        .await?
     } else {
-        crate::log_info!("sync", "catch-up: garmin is not connected, skipping the garmin fetch");
+        crate::log_info!(
+            "sync",
+            "catch-up: garmin is not connected, skipping the garmin fetch"
+        );
         GarminSyncStats::default()
     };
     let status_lookback = strava_status_lookback_days(&services.db.lock(), cfg, now)?;
-    let status = check_strava_status(services.db, services.strava, cfg, now, Some(status_lookback)).await?;
+    let status = check_strava_status(
+        services.db,
+        services.strava,
+        cfg,
+        now,
+        Some(status_lookback),
+    )
+    .await?;
     crate::log_info!(
         "sync",
         "catch-up sync over {lookback} days (status {status_lookback} days): {} new ({} held as backlog), {} linked",
-        garmin.new, garmin.held_backlog, status.linked_existing
+        garmin.new,
+        garmin.held_backlog,
+        status.linked_existing
     );
-    Ok(CatchUpStats { garmin, status, lookback_days: lookback })
+    Ok(CatchUpStats {
+        garmin,
+        status,
+        lookback_days: lookback,
+    })
 }
 
 pub fn exclude(conn: &rusqlite::Connection, garmin_activity_id: i64) -> SyncResult<()> {
-    Ok(db::set_publish_status(conn, garmin_activity_id, "excluded", None)?)
+    Ok(db::set_publish_status(
+        conn,
+        garmin_activity_id,
+        "excluded",
+        None,
+    )?)
 }
 
 /// Puts an excluded row back exactly where it was, for an undone exclude.
-pub fn restore_status(conn: &rusqlite::Connection, garmin_activity_id: i64, status: &str, hold_reason: Option<&str>) -> SyncResult<()> {
-    Ok(db::set_publish_status(conn, garmin_activity_id, status, hold_reason)?)
+pub fn restore_status(
+    conn: &rusqlite::Connection,
+    garmin_activity_id: i64,
+    status: &str,
+    hold_reason: Option<&str>,
+) -> SyncResult<()> {
+    Ok(db::set_publish_status(
+        conn,
+        garmin_activity_id,
+        status,
+        hold_reason,
+    )?)
 }
 
-pub fn unexclude(conn: &rusqlite::Connection, garmin_activity_id: i64, cfg: &Config) -> SyncResult<()> {
-    let row = db::get_activity(conn, garmin_activity_id)?
-        .ok_or_else(|| SyncError::Invalid(format!("Activity {garmin_activity_id} was not found")))?;
+pub fn unexclude(
+    conn: &rusqlite::Connection,
+    garmin_activity_id: i64,
+    cfg: &Config,
+) -> SyncResult<()> {
+    let row = db::get_activity(conn, garmin_activity_id)?.ok_or_else(|| {
+        SyncError::Invalid(format!("Activity {garmin_activity_id} was not found"))
+    })?;
     if cfg.held_activity_types().contains(&row.activity_type) {
         db::set_publish_status(conn, garmin_activity_id, "held", Some(HOLD_CATEGORY))?;
     } else {
@@ -654,9 +874,18 @@ mod tests {
     fn numbers_read_as_python_writes_them() {
         let repr = |text: &str| py_number(&serde_json::from_str(text).unwrap());
         for (input, python) in [
-            ("1e-05", "1e-05"), ("1e16", "1e+16"), ("0.0001", "0.0001"), ("123456789012345.6", "123456789012345.6"),
-            ("2990", "2990"), ("151.0", "151.0"), ("3.4", "3.4"), ("-0.5", "-0.5"), ("1.5e300", "1.5e+300"),
-            ("0.30000000000000004", "0.30000000000000004"), ("1e15", "1000000000000000.0"), ("-2.5e-07", "-2.5e-07"),
+            ("1e-05", "1e-05"),
+            ("1e16", "1e+16"),
+            ("0.0001", "0.0001"),
+            ("123456789012345.6", "123456789012345.6"),
+            ("2990", "2990"),
+            ("151.0", "151.0"),
+            ("3.4", "3.4"),
+            ("-0.5", "-0.5"),
+            ("1.5e300", "1.5e+300"),
+            ("0.30000000000000004", "0.30000000000000004"),
+            ("1e15", "1000000000000000.0"),
+            ("-2.5e-07", "-2.5e-07"),
         ] {
             assert_eq!(repr(input), python, "{input}");
         }

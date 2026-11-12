@@ -44,9 +44,21 @@ fn thumbnail_size(width: u32, height: u32) -> Option<(u32, u32)> {
     };
     let (box_w, box_h) = (f64::from(LOGO_MAX_WIDTH), f64::from(LOGO_HEIGHT));
     let (x, y) = if aspect >= box_w / box_h {
-        (LOGO_MAX_WIDTH, pick(box_w / aspect, &|n| (aspect - box_w / n).abs()))
+        (
+            LOGO_MAX_WIDTH,
+            pick(box_w / aspect, &|n| (aspect - box_w / n).abs()),
+        )
     } else {
-        (pick(box_h * aspect, &|n| if n == 0.0 { 0.0 } else { (aspect - n / box_h).abs() }), LOGO_HEIGHT)
+        (
+            pick(box_h * aspect, &|n| {
+                if n == 0.0 {
+                    0.0
+                } else {
+                    (aspect - n / box_h).abs()
+                }
+            }),
+            LOGO_HEIGHT,
+        )
     };
     (x < width || y < height).then_some((x, y))
 }
@@ -74,22 +86,35 @@ pub fn normalize(data: &[u8]) -> Result<Vec<u8>, &'static str> {
         image = image.resize_exact(w, h, image::imageops::FilterType::Lanczos3);
     }
     let mut out = Cursor::new(Vec::new());
-    image.write_to(&mut out, ImageFormat::Png).map_err(|_| UNREADABLE)?;
+    image
+        .write_to(&mut out, ImageFormat::Png)
+        .map_err(|_| UNREADABLE)?;
     Ok(out.into_inner())
 }
 
 pub fn load(conn: &Connection) -> DbResult<Option<Vec<u8>>> {
-    conn.query_row("SELECT png FROM auth_oidc_logo WHERE id = 1", [], |row| row.get(0)).optional()
+    conn.query_row("SELECT png FROM auth_oidc_logo WHERE id = 1", [], |row| {
+        row.get(0)
+    })
+    .optional()
 }
 
 pub fn current_url(conn: &Connection) -> DbResult<Option<String>> {
-    let sha: Option<String> =
-        conn.query_row("SELECT sha256 FROM auth_oidc_logo WHERE id = 1", [], |row| row.get(0)).optional()?;
+    let sha: Option<String> = conn
+        .query_row(
+            "SELECT sha256 FROM auth_oidc_logo WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
     Ok(sha.map(|sha| format!("/api/v1/auth/oidc/logo?v={}", &sha[..12.min(sha.len())])))
 }
 
 pub fn save(conn: &Connection, png: &[u8], now: f64) -> DbResult<()> {
-    let sha: String = Sha256::digest(png).iter().map(|b| format!("{b:02x}")).collect();
+    let sha: String = Sha256::digest(png)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     conn.execute(
         "INSERT INTO auth_oidc_logo (id, png, sha256, updated_at) VALUES (1, ?1, ?2, ?3)
          ON CONFLICT(id) DO UPDATE SET png = excluded.png, sha256 = excluded.sha256, updated_at = excluded.updated_at",

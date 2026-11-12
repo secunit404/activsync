@@ -41,7 +41,11 @@ pub static TABLES: LazyLock<Tables> = LazyLock::new(|| {
     let raw: Raw = serde_json::from_str(include_str!("../assets/exercise_tables.json"))
         .expect("exercise_tables.json is valid");
     let mut normalized: Vec<(String, (i64, i64))> = Vec::new();
-    for (name, pair) in raw.hevy_to_garmin.iter().filter(|(_, pair)| pair.0 != UNKNOWN_CATEGORY) {
+    for (name, pair) in raw
+        .hevy_to_garmin
+        .iter()
+        .filter(|(_, pair)| pair.0 != UNKNOWN_CATEGORY)
+    {
         let key = normalize(name);
         match normalized.iter_mut().find(|(existing, _)| *existing == key) {
             Some(entry) => entry.1 = *pair,
@@ -50,7 +54,11 @@ pub static TABLES: LazyLock<Tables> = LazyLock::new(|| {
     }
     Tables {
         categories: raw.categories.into_iter().collect(),
-        subcategories: raw.subcategories.into_iter().map(|(c, names)| (c, names.into_iter().collect())).collect(),
+        subcategories: raw
+            .subcategories
+            .into_iter()
+            .map(|(c, names)| (c, names.into_iter().collect()))
+            .collect(),
         hevy_to_garmin: raw.hevy_to_garmin.into_iter().collect(),
         normalized_names: normalized,
         template_overrides: raw.template_overrides,
@@ -63,11 +71,15 @@ pub static TABLES: LazyLock<Tables> = LazyLock::new(|| {
 
 impl Tables {
     pub fn subcategory_name(&self, category: i64, subcategory: i64) -> Option<&str> {
-        self.subcategories.get(&category)?.get(&subcategory).map(String::as_str)
+        self.subcategories
+            .get(&category)?
+            .get(&subcategory)
+            .map(String::as_str)
     }
 
     pub fn is_valid_pair(&self, category: i64, subcategory: i64) -> bool {
-        self.categories.contains_key(&category) && self.subcategory_name(category, subcategory).is_some()
+        self.categories.contains_key(&category)
+            && self.subcategory_name(category, subcategory).is_some()
     }
 }
 
@@ -78,7 +90,13 @@ const ACRONYMS: [&str; 7] = ["BOSU", "EZ", "GHD", "HIIT", "KBS", "RDL", "TRX"];
 pub fn garmin_exercise_label(enum_name: &str) -> String {
     let words: Vec<String> = enum_name
         .split('_')
-        .map(|word| if ACRONYMS.contains(&word) { word.to_string() } else { word.to_lowercase() })
+        .map(|word| {
+            if ACRONYMS.contains(&word) {
+                word.to_string()
+            } else {
+                word.to_lowercase()
+            }
+        })
         .collect();
     let label = words.join(" ");
     let mut chars = label.chars();
@@ -97,7 +115,10 @@ pub fn strava_exercise_label(exercise_type: &str) -> String {
 
 fn normalize(title: &str) -> String {
     let lower = title.to_lowercase();
-    let kept: String = lower.chars().filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == ' ').collect();
+    let kept: String = lower
+        .chars()
+        .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == ' ')
+        .collect();
     kept.trim_matches(' ').to_string()
 }
 
@@ -121,7 +142,12 @@ fn sequence_ratio(a: &[char], b: &[char]) -> f64 {
                 if j >= bhi {
                     break;
                 }
-                let k = j.checked_sub(1).and_then(|p| j2len.get(&p)).copied().unwrap_or(0) + 1;
+                let k = j
+                    .checked_sub(1)
+                    .and_then(|p| j2len.get(&p))
+                    .copied()
+                    .unwrap_or(0)
+                    + 1;
                 next.insert(j, k);
                 if k > best_size {
                     (best_i, best_j, best_size) = (i + 1 - k, j + 1 - k, k);
@@ -146,7 +172,11 @@ fn sequence_ratio(a: &[char], b: &[char]) -> f64 {
         }
     }
     let total = a.len() + b.len();
-    if total == 0 { 1.0 } else { 2.0 * matches as f64 / total as f64 }
+    if total == 0 {
+        1.0
+    } else {
+        2.0 * matches as f64 / total as f64
+    }
 }
 
 /// `difflib.get_close_matches(word, possibilities, n=1, cutoff=0.6)`.
@@ -184,17 +214,28 @@ pub fn user_mapping(conn: &Connection, template_id: &str) -> DbResult<Option<(i6
 pub fn standard_mapping(title: &str, template_id: Option<&str>) -> Option<(i64, i64)> {
     let tables = &*TABLES;
     if let Some(id) = template_id.filter(|id| !id.is_empty()) {
-        let pair = tables.template_overrides.get(id).or_else(|| tables.template_to_garmin.get(id));
+        let pair = tables
+            .template_overrides
+            .get(id)
+            .or_else(|| tables.template_to_garmin.get(id));
         if let Some(pair) = pair.filter(|p| p.0 != UNKNOWN_CATEGORY) {
             return Some(*pair);
         }
     }
-    tables.hevy_to_garmin.get(title).filter(|p| p.0 != UNKNOWN_CATEGORY).copied()
+    tables
+        .hevy_to_garmin
+        .get(title)
+        .filter(|p| p.0 != UNKNOWN_CATEGORY)
+        .copied()
 }
 
 /// Saved mapping, then the template tables, then the name table; `None` is
 /// a miss that parks the workout for mapping.
-pub fn lookup_exercise(conn: &Connection, title: &str, template_id: Option<&str>) -> DbResult<Option<(i64, i64)>> {
+pub fn lookup_exercise(
+    conn: &Connection,
+    title: &str,
+    template_id: Option<&str>,
+) -> DbResult<Option<(i64, i64)>> {
     if let Some(id) = template_id.filter(|id| !id.is_empty()) {
         if let Some(pair) = user_mapping(conn, id)?.filter(|p| p.0 != UNKNOWN_CATEGORY) {
             return Ok(Some(pair));
@@ -260,11 +301,24 @@ pub fn default_strava_exercise(
     let Some((category, subcategory)) = lookup_exercise(conn, title, template_id)? else {
         return Ok(None);
     };
-    if let Some(name) = tables.subcategory_name(category, subcategory).filter(|n| tables.strava_types.contains(*n)) {
+    if let Some(name) = tables
+        .subcategory_name(category, subcategory)
+        .filter(|n| tables.strava_types.contains(*n))
+    {
         return Ok(Some((name.to_string(), "garmin")));
     }
-    let generic = format!("{}_GENERIC", tables.categories.get(&category).map(String::as_str).unwrap_or("None"));
-    Ok(tables.strava_types.contains(&generic).then_some((generic, "garmin")))
+    let generic = format!(
+        "{}_GENERIC",
+        tables
+            .categories
+            .get(&category)
+            .map(String::as_str)
+            .unwrap_or("None")
+    );
+    Ok(tables
+        .strava_types
+        .contains(&generic)
+        .then_some((generic, "garmin")))
 }
 
 pub fn lookup_strava_exercise(
@@ -273,7 +327,9 @@ pub fn lookup_strava_exercise(
     template_id: Option<&str>,
 ) -> DbResult<Option<(String, &'static str)>> {
     if let Some(id) = template_id.filter(|id| !id.is_empty()) {
-        if let Some(user) = user_strava_exercise(conn, id)?.filter(|t| TABLES.strava_types.contains(t)) {
+        if let Some(user) =
+            user_strava_exercise(conn, id)?.filter(|t| TABLES.strava_types.contains(t))
+        {
             return Ok(Some((user, "user")));
         }
     }
@@ -286,15 +342,26 @@ mod tests {
 
     #[test]
     fn ratio_matches_difflib() {
-        let ratio = |a: &str, b: &str| sequence_ratio(&a.chars().collect::<Vec<_>>(), &b.chars().collect::<Vec<_>>());
+        let ratio = |a: &str, b: &str| {
+            sequence_ratio(
+                &a.chars().collect::<Vec<_>>(),
+                &b.chars().collect::<Vec<_>>(),
+            )
+        };
         assert_eq!(ratio("abcd", "bcde"), 0.75);
-        assert_eq!(ratio("bench press barbell", "bench press dumbbell"), 0.8717948717948718);
+        assert_eq!(
+            ratio("bench press barbell", "bench press dumbbell"),
+            0.8717948717948718
+        );
         assert_eq!(ratio("", ""), 1.0);
     }
 
     #[test]
     fn labels_match_python() {
         assert_eq!(garmin_exercise_label("BARBELL_RDL"), "Barbell RDL");
-        assert_eq!(strava_exercise_label("BENCH_PRESS_GENERIC"), "Bench press (generic)");
+        assert_eq!(
+            strava_exercise_label("BENCH_PRESS_GENERIC"),
+            "Bench press (generic)"
+        );
     }
 }
