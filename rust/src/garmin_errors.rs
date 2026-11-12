@@ -1,6 +1,8 @@
 use openidconnect::HttpResponse;
 use serde_json::{Value, json};
 
+use crate::net::HttpError;
+
 pub(crate) fn truthy(value: &Value) -> bool {
     crate::db::truthy(Some(value))
 }
@@ -41,15 +43,27 @@ impl std::fmt::Display for GarminError {
             Self::NotFound(msg)
             | Self::UploadRejected(msg)
             | Self::SubcategoryRejected(msg)
-            | Self::Api(msg) => f.write_str(msg),
-            Self::Network(err) => f.write_str(err),
+            | Self::Api(msg)
+            | Self::Network(msg)
+            | Self::Invalid(msg) => f.write_str(msg),
             Self::Malformed(err) => write!(f, "unreadable Garmin response: {err}"),
-            Self::Invalid(msg) => f.write_str(msg),
         }
     }
 }
 
 impl std::error::Error for GarminError {}
+
+impl From<HttpError> for GarminError {
+    fn from(err: HttpError) -> Self {
+        Self::Network(err.0)
+    }
+}
+
+impl From<serde_json::Error> for GarminError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::Malformed(err.to_string())
+    }
+}
 
 impl GarminError {
     /// An outage rather than a rejection: a network failure, a 429 or a 5xx.
@@ -139,32 +153,29 @@ pub(crate) fn py_str(value: &Value) -> String {
 pub(crate) fn api_error(response: &HttpResponse) -> GarminError {
     let status = response.status().as_u16();
     let mut message = format!("API Error {status}");
-    let detail = serde_json::from_slice::<Value>(response.body())
+    let data = serde_json::from_slice::<Value>(response.body())
         .ok()
-        .filter(Value::is_object)
-        .and_then(|data| {
-            let first = |v: &Value| v.as_array().and_then(|a| a.first()).cloned();
-            let nested = || {
-                let failures = data
-                    .get("detailedImportResult")
-                    .cloned()
-                    .unwrap_or(json!({}))
-                    .get("failures")
-                    .cloned()
-                    .unwrap_or(json!([{}]));
-                let failure = first(&failures)?;
-                first(&failure.get("messages").cloned().unwrap_or(json!([""])))
-            };
-            [data.get("message").cloned(), data.get("content").cloned()]
-                .into_iter()
-                .flatten()
-                .find(truthy)
-                .or_else(nested)
-                .filter(truthy)
-        });
+        .filter(Value::is_object);
+    let detail = data.as_ref().and_then(|data| {
+        fn first(v: &Value) -> Option<&Value> {
+            v.as_array()?.first()
+        }
+        let failure_message = data
+            .get("detailedImportResult")
+            .and_then(|d| d.get("failures"))
+            .and_then(first)
+            .and_then(|failure| failure.get("messages"))
+            .and_then(first);
+        [data.get("message"), data.get("content")]
+            .into_iter()
+            .flatten()
+            .find(|v| truthy(v))
+            .or(failure_message)
+            .filter(|v| truthy(v))
+    });
     if let Some(detail) = detail {
         message.push_str(" - ");
-        message.push_str(&py_str(&detail));
+        message.push_str(&py_str(detail));
     }
     if status == 404 {
         GarminError::NotFound(message)

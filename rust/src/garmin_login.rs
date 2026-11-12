@@ -1,33 +1,32 @@
 //! Signing in to Garmin with the account's email and password, the one path
-//! allowed to use them. It follows the Python `garminconnect` library's
-//! chain: the mobile app's sign-in first, then the SSO widget, then the web
-//! portal. Each either gets a service ticket, which is exchanged for the DI
-//! tokens the rest of the client uses, or a request for a one-time code.
-//! Wrong credentials or a code request end the chain; anything else moves on
-//! to the next route. Like the library, each route's requests look like a
+//! allowed to use them. Like the Python `garminconnect` library it tries the
+//! mobile app's sign-in, then the SSO widget, then the web portal. Each
+//! either gets a service ticket, which is exchanged for the DI tokens the
+//! rest of the client uses, or a request for a one-time code. Wrong
+//! credentials or a code request end the chain; anything else moves on to
+//! the next route. As in the library, each route's requests look like a
 //! browser down to the TLS handshake, and the mobile and portal routes try
 //! several browsers in turn, since Cloudflare rate-limits each separately.
 //! The library's further retries over plain TLS have no counterpart here.
 
-use std::sync::{Arc, LazyLock};
+mod sso;
+mod widget;
+
+use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use openidconnect::{HttpRequest, HttpResponse, http};
-use regex::Regex;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::garmin_client::{
-    self, CONNECTAPI_URL, DI_TOKEN_URL, GarminClient, GarminError, Tokens, basic_auth,
-    client_id_of, native_headers,
+    self, CONNECTAPI_URL, DI_TOKEN_URL, GarminClient, GarminError, SOCIAL_PROFILE_PATH, Tokens,
+    basic_auth, client_id_of, native_headers,
 };
 use crate::net::{self, Browser, Http};
 use crate::schedule::Clock;
 
 const SSO_URL: &str = "https://sso.garmin.com";
-const IOS_SSO_CLIENT_ID: &str = "GCM_IOS_DARK";
-const IOS_SERVICE_URL: &str = "https://mobile.integration.garmin.com/gcm/ios";
-const PORTAL_SSO_CLIENT_ID: &str = "GarminConnect";
-const PORTAL_SERVICE_URL: &str = "https://connect.garmin.com/app";
 const DI_GRANT_TYPE: &str =
     "https://connectapi.garmin.com/di-oauth2-service/oauth/grant/service_ticket";
 const DI_CLIENT_IDS: [&str; 4] = [
@@ -37,23 +36,42 @@ const DI_CLIENT_IDS: [&str; 4] = [
     "GARMIN_CONNECT_MOBILE_IOS_DI",
 ];
 const MAX_REDIRECTS: usize = 10;
-const MOBILE_BROWSERS: [Browser; 3] = [Browser::SafariIos, Browser::Safari, Browser::Chrome120];
-const PORTAL_BROWSERS: [Browser; 5] = [
-    Browser::Safari,
-    Browser::SafariIos,
-    Browser::Chrome120,
-    Browser::Edge101,
-    Browser::Chrome,
-];
 
-static CSRF: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"name="_csrf"\s+value="(.+?)""#).unwrap());
-static TITLE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<title>(.+?)</title>").unwrap());
-static TICKET: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\?ticket=(ST-[^"&\s]+)"#).unwrap());
-static MFA_VARS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"var\s+(customerGuid|mfaMethod|locale|clientId|codeSentTo)\s*=\s*"([^"]*)"\s*;"#)
-        .unwrap()
-});
+#[derive(Clone, Copy)]
+enum Route {
+    Mobile,
+    Widget,
+    Portal,
+}
+
+impl Route {
+    const ALL: [Self; 3] = [Self::Mobile, Self::Widget, Self::Portal];
+
+    /// The browsers the library presents this route as, in its order.
+    fn browsers(self) -> &'static [Browser] {
+        match self {
+            Self::Mobile => &[Browser::SafariIos, Browser::Safari, Browser::Chrome120],
+            Self::Widget => &[Browser::Chrome],
+            Self::Portal => &[
+                Browser::Safari,
+                Browser::SafariIos,
+                Browser::Chrome120,
+                Browser::Edge101,
+                Browser::Chrome,
+            ],
+        }
+    }
+}
+
+impl fmt::Display for Route {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Mobile => "mobile",
+            Self::Widget => "widget",
+            Self::Portal => "portal",
+        })
+    }
+}
 
 /// Which sign-in asked for the code, and what finishing it needs.
 #[derive(Clone, Debug, Default)]
@@ -97,13 +115,7 @@ enum Failure {
 }
 
 impl Failure {
-    fn message(self) -> String {
-        match self {
-            Self::Auth(message) | Self::RateLimited(message) | Self::Connection(message) => message,
-        }
-    }
-
-    fn text(&self) -> &str {
+    fn message(&self) -> &str {
         match self {
             Self::Auth(message) | Self::RateLimited(message) | Self::Connection(message) => message,
         }
@@ -159,94 +171,6 @@ impl Jar {
     }
 }
 
-fn status_type(res: &Value) -> Option<&str> {
-    res.pointer("/responseStatus/type").and_then(Value::as_str)
-}
-
-fn rate_limited_in_body(res: &Value) -> bool {
-    res.pointer("/error/status-code").and_then(Value::as_str) == Some("429")
-}
-
-fn title_of(html: &str) -> String {
-    TITLE
-        .captures(html)
-        .map(|c| c[1].to_string())
-        .unwrap_or_default()
-}
-
-fn mfa_vars(html: &str) -> Vec<(String, String)> {
-    MFA_VARS
-        .captures_iter(html)
-        .map(|c| (c[1].to_string(), c[2].to_string()))
-        .collect()
-}
-
-fn var<'a>(vars: &'a [(String, String)], name: &str) -> &'a str {
-    vars.iter()
-        .rev()
-        .find(|(n, _)| n == name)
-        .map_or("", |(_, v)| v.as_str())
-}
-
-fn mobile_params() -> [(&'static str, &'static str); 3] {
-    [
-        ("clientId", IOS_SSO_CLIENT_ID),
-        ("locale", "en-US"),
-        ("service", IOS_SERVICE_URL),
-    ]
-}
-
-fn portal_params() -> [(&'static str, &'static str); 3] {
-    [
-        ("clientId", PORTAL_SSO_CLIENT_ID),
-        ("locale", "en-US"),
-        ("service", PORTAL_SERVICE_URL),
-    ]
-}
-
-fn widget_params() -> Vec<(&'static str, String)> {
-    let base = format!("{SSO_URL}/sso");
-    let embed = format!("{base}/embed");
-    vec![
-        ("id", "gauth-widget".into()),
-        ("embedWidget", "true".into()),
-        ("gauthHost", embed.clone()),
-        ("service", embed.clone()),
-        ("source", embed.clone()),
-        ("redirectAfterAccountLoginUrl", embed.clone()),
-        ("redirectAfterAccountCreationUrl", embed),
-    ]
-}
-
-/// No User-Agent, here or on the portal: the browser the request presents
-/// as supplies its own, so the two always agree.
-fn mobile_headers() -> Vec<(&'static str, String)> {
-    vec![
-        ("Accept", "application/json, text/plain, */*".into()),
-        ("Content-Type", "application/json".into()),
-        ("Origin", SSO_URL.into()),
-    ]
-}
-
-fn portal_headers() -> Vec<(&'static str, String)> {
-    vec![
-        ("Accept", "application/json, text/plain, */*".into()),
-        ("Accept-Language", "en-US,en;q=0.9".into()),
-        ("Content-Type", "application/json".into()),
-        ("Origin", SSO_URL.into()),
-        (
-            "Referer",
-            format!(
-                "{SSO_URL}/portal/sso/en-US/sign-in?clientId={PORTAL_SSO_CLIENT_ID}&service={PORTAL_SERVICE_URL}"
-            ),
-        ),
-    ]
-}
-
-fn query<'a>(pairs: &'a [(&'a str, String)]) -> Vec<(&'a str, &'a str)> {
-    pairs.iter().map(|(k, v)| (*k, v.as_str())).collect()
-}
-
 impl SignIn {
     async fn send(
         &self,
@@ -281,13 +205,13 @@ impl SignIn {
     /// final answer and the address it came from.
     async fn follow(
         &self,
-        method: http::Method,
+        mut method: http::Method,
         url: &str,
         headers: &[(&str, String)],
         jar: &mut Jar,
-        body: Vec<u8>,
+        mut body: Vec<u8>,
     ) -> Result<(HttpResponse, String), String> {
-        let (mut method, mut url, mut body) = (method, url.to_string(), body);
+        let mut url = url.to_string();
         let mut headers = headers.to_vec();
         for _ in 0..=MAX_REDIRECTS {
             let response = self
@@ -337,29 +261,8 @@ impl SignIn {
         }
         let mut last = None;
         let mut rate_limited = 0;
-        let routes = ["mobile", "widget", "portal"];
-        for route in routes {
-            let attempt = match route {
-                "mobile" => {
-                    self.rotate(&MOBILE_BROWSERS, |s| async move {
-                        s.mobile_login(email, password).await
-                    })
-                    .await
-                }
-                "widget" => {
-                    self.rotate(&[Browser::Chrome], |s| async move {
-                        s.widget_login(email, password).await
-                    })
-                    .await
-                }
-                _ => {
-                    self.rotate(&PORTAL_BROWSERS, |s| async move {
-                        s.portal_login(email, password).await
-                    })
-                    .await
-                }
-            };
-            match attempt {
+        for route in Route::ALL {
+            match self.rotate(route, email, password).await {
                 Ok(Attempt::Challenged(pending)) => return Ok(Login::MfaRequired(pending)),
                 Ok(Attempt::Session(tokens)) if self.token_accepted(&tokens).await => {
                     self.save(&tokens)?;
@@ -387,7 +290,7 @@ impl SignIn {
                 }
             }
         }
-        Err(GarminError::Invalid(if rate_limited == routes.len() {
+        Err(GarminError::Invalid(if rate_limited == Route::ALL.len() {
             "All login strategies rate limited (429). Try again later or check your IP/network."
                 .into()
         } else {
@@ -398,19 +301,18 @@ impl SignIn {
         }))
     }
 
-    /// One route as each browser in turn, until one gets past the rate
-    /// limit or the bot check.
-    async fn rotate<F>(
-        &self,
-        browsers: &[Browser],
-        attempt: impl Fn(SignIn) -> F,
-    ) -> Result<Attempt, Failure>
-    where
-        F: Future<Output = Result<Attempt, Failure>>,
-    {
+    /// One route as each of its browsers in turn, until one gets past the
+    /// rate limit or the bot check.
+    async fn rotate(&self, route: Route, email: &str, password: &str) -> Result<Attempt, Failure> {
         let mut last = Failure::Connection("no browser to sign in as".into());
-        for &browser in browsers {
-            match attempt(self.presenting(browser)).await {
+        for &browser in route.browsers() {
+            let sign_in = self.presenting(browser);
+            let attempt = match route {
+                Route::Mobile => sign_in.mobile_login(email, password).await,
+                Route::Widget => sign_in.widget_login(email, password).await,
+                Route::Portal => sign_in.portal_login(email, password).await,
+            };
+            match attempt {
                 Ok(Attempt::Challenged(pending)) => {
                     return Ok(Attempt::Challenged(PendingLogin {
                         browser: Some(browser),
@@ -421,7 +323,7 @@ impl SignIn {
                     crate::log_debug!(
                         "garmin_login",
                         "Garmin sign-in as {browser:?} failed: {}",
-                        failure.text()
+                        failure.message()
                     );
                     last = failure;
                 }
@@ -461,7 +363,8 @@ impl SignIn {
             }
             Flow::Mobile | Flow::Portal => sign_in.verify_code(pending, code).await,
         };
-        let tokens = verified.map_err(|failure| GarminError::Invalid(failure.message()))?;
+        let tokens =
+            verified.map_err(|failure| GarminError::Invalid(failure.message().to_string()))?;
         if !self.token_accepted(&tokens).await {
             return Err(GarminError::Invalid(
                 "token rejected by API tier after MFA".into(),
@@ -482,448 +385,12 @@ impl SignIn {
             .map_err(|e| GarminError::Invalid(format!("Could not save the Garmin session: {e}")))
     }
 
-    async fn mobile_login(&self, email: &str, password: &str) -> Result<Attempt, Failure> {
-        let url = net::with_query(&format!("{SSO_URL}/mobile/api/login"), &mobile_params());
-        self.json_login(
-            &url,
-            &mobile_headers(),
-            Jar::default(),
-            email,
-            password,
-            Flow::Mobile,
-        )
-        .await
-    }
-
-    /// The desktop portal: its sign-in page first for cookies, then a pause
-    /// as a person would take to type, which Cloudflare looks for.
-    async fn portal_login(&self, email: &str, password: &str) -> Result<Attempt, Failure> {
-        let page = net::with_query(
-            &format!("{SSO_URL}/portal/sso/en-US/sign-in"),
-            &[
-                ("clientId", PORTAL_SSO_CLIENT_ID),
-                ("service", PORTAL_SERVICE_URL),
-            ],
-        );
-        let page_headers = [
-            (
-                "Accept",
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".to_string(),
-            ),
-            ("Accept-Language", "en-US,en;q=0.9".into()),
-        ];
-        let mut jar = Jar::default();
-        let (response, _) = self
-            .get(&page, &page_headers, &mut jar)
-            .await
-            .map_err(Failure::Connection)?;
-        if response.status().as_u16() == 429 {
-            return Err(Failure::RateLimited(
-                "Portal login GET returned 429 — Cloudflare blocking this request.".into(),
-            ));
-        }
-        self.wait_like_a_browser(10.0..20.0).await;
-        let url = net::with_query(&format!("{SSO_URL}/portal/api/login"), &portal_params());
-        self.json_login(&url, &portal_headers(), jar, email, password, Flow::Portal)
-            .await
-    }
-
-    /// The SSO's JSON sign-in, shared by the mobile and portal routes.
-    async fn json_login(
-        &self,
-        url: &str,
-        headers: &[(&str, String)],
-        mut jar: Jar,
-        email: &str,
-        password: &str,
-        flow: Flow,
-    ) -> Result<Attempt, Failure> {
-        let name = if matches!(flow, Flow::Portal) {
-            "Portal"
-        } else {
-            "Mobile"
-        };
-        let body = net::json_body(
-            &json!({"username": email, "password": password, "rememberMe": true, "captchaToken": ""}),
-        );
-        let response = self
-            .send(http::Method::POST, url, headers, &jar, body)
-            .await
-            .map_err(Failure::Connection)?;
-        jar.absorb(&response);
-        let status = response.status().as_u16();
-        if status == 429 {
-            return Err(Failure::RateLimited(format!(
-                "{name} login returned 429 — IP rate limited by Garmin"
-            )));
-        }
-        if status == 403 {
-            return Err(Failure::Connection(format!(
-                "{name} login: HTTP 403 (Cloudflare bot challenge)"
-            )));
-        }
-        let Ok(res) = serde_json::from_slice::<Value>(response.body()) else {
-            return Err(Failure::Connection(format!(
-                "{name} login failed (non-JSON): HTTP {status}"
-            )));
-        };
-        let service = if matches!(flow, Flow::Portal) {
-            PORTAL_SERVICE_URL
-        } else {
-            IOS_SERVICE_URL
-        };
-        match status_type(&res) {
-            Some("MFA_REQUIRED") => {
-                let method = res
-                    .pointer("/customerMfaInfo/mfaLastMethodUsed")
-                    .and_then(Value::as_str)
-                    .unwrap_or("email");
-                Ok(Attempt::Challenged(PendingLogin {
-                    flow,
-                    mfa_method: method.to_string(),
-                    cookies: jar.header(),
-                    browser: None,
-                }))
-            }
-            Some("SUCCESSFUL") => {
-                let ticket = res
-                    .get("serviceTicketId")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                Ok(Attempt::Session(
-                    self.exchange_ticket(ticket, service).await?,
-                ))
-            }
-            Some("INVALID_USERNAME_PASSWORD") => Err(Failure::Auth(
-                "401 Unauthorized (Invalid Username or Password)".into(),
-            )),
-            _ if rate_limited_in_body(&res) => Err(Failure::RateLimited(format!(
-                "{name} login: 429 in JSON body"
-            ))),
-            Some("CAPTCHA_REQUIRED") => Err(Failure::Connection(format!(
-                "{name} login: CAPTCHA required (bot challenge)"
-            ))),
-            other => Err(Failure::Connection(format!(
-                "{name} login failed: HTTP {status}, responseStatus={}",
-                other.unwrap_or("unknown")
-            ))),
-        }
-    }
-
-    /// The SSO's embeddable HTML sign-in form, which sits outside the
-    /// per-app rate limits of the JSON sign-in.
-    async fn widget_login(&self, email: &str, password: &str) -> Result<Attempt, Failure> {
-        let base = format!("{SSO_URL}/sso");
-        let embed = format!("{base}/embed");
-        let mut jar = Jar::default();
-        let embed_url = net::with_query(
-            &embed,
-            &[
-                ("id", "gauth-widget"),
-                ("embedWidget", "true"),
-                ("gauthHost", &base),
-            ],
-        );
-        let (response, _) = self
-            .get(&embed_url, &[], &mut jar)
-            .await
-            .map_err(Failure::Connection)?;
-        match response.status().as_u16() {
-            429 => return Err(Failure::RateLimited("Widget embed GET returned 429".into())),
-            s if !(200..300).contains(&s) => {
-                return Err(Failure::Connection(format!("Widget embed returned {s}")));
-            }
-            _ => {}
-        }
-        let params = widget_params();
-        let signin_url = net::with_query(&format!("{base}/signin"), &query(&params));
-        let (page, page_url) = self
-            .get(&signin_url, &[("Referer", embed.clone())], &mut jar)
-            .await
-            .map_err(Failure::Connection)?;
-        if page.status().as_u16() == 429 {
-            return Err(Failure::RateLimited(
-                "Widget signin GET returned 429".into(),
-            ));
-        }
-        let page_text = net::body_text(&page);
-        let csrf =
-            CSRF.captures(&page_text)
-                .map(|c| c[1].to_string())
-                .ok_or(Failure::Connection(
-                    "Widget login: missing CSRF token".into(),
-                ))?;
-        self.wait_like_a_browser(3.0..8.0).await;
-
-        let form = net::form(&[
-            ("username", email),
-            ("password", password),
-            ("embed", "true"),
-            ("_csrf", &csrf),
-        ]);
-        let headers = [
-            ("Referer", page_url),
-            (
-                "Content-Type",
-                "application/x-www-form-urlencoded".to_string(),
-            ),
-        ];
-        let (response, landed) = self
-            .follow(http::Method::POST, &signin_url, &headers, &mut jar, form)
-            .await
-            .map_err(Failure::Connection)?;
-        let status = response.status().as_u16();
-        if status == 429 {
-            return Err(Failure::RateLimited(
-                "Widget signin POST returned 429".into(),
-            ));
-        }
-        let text = net::body_text(&response);
-        let title = title_of(&text);
-        let lower = title.to_lowercase();
-        if [
-            "bad gateway",
-            "service unavailable",
-            "cloudflare",
-            "502",
-            "503",
-        ]
-        .iter()
-        .any(|h| lower.contains(h))
-        {
-            return Err(Failure::Connection(format!(
-                "Widget login: server error '{title}'"
-            )));
-        }
-        if ["locked", "invalid", "incorrect", "account error"]
-            .iter()
-            .any(|h| lower.contains(h))
-        {
-            return Err(Failure::Auth(format!(
-                "Widget authentication failed: '{title}'"
-            )));
-        }
-        if lower.contains("unable to sign in") || lower.contains("unable to login") {
-            return Err(Failure::Connection(format!(
-                "Widget login: account restricted '{title}'"
-            )));
-        }
-        let vars = mfa_vars(&text);
-        let method = var(&vars, "mfaMethod");
-        if lower.contains("mfa")
-            || (lower.contains("authentication application") && !method.is_empty())
-        {
-            self.request_widget_code(&vars, &landed, &jar).await?;
-            let csrf = CSRF
-                .captures(&text)
-                .map(|c| c[1].to_string())
-                .unwrap_or_default();
-            let flow = Flow::Widget {
-                csrf,
-                referer: landed,
-            };
-            return Ok(Attempt::Challenged(PendingLogin {
-                flow,
-                mfa_method: method.to_string(),
-                cookies: jar.header(),
-                browser: None,
-            }));
-        }
-        if title != "Success" {
-            return Err(Failure::Connection(format!(
-                "Widget login: unexpected title '{title}' (HTTP {status})"
-            )));
-        }
-        let ticket =
-            TICKET
-                .captures(&text)
-                .map(|c| c[1].to_string())
-                .ok_or(Failure::Connection(
-                    "Widget login: missing service ticket".into(),
-                ))?;
-        Ok(Attempt::Session(
-            self.exchange_ticket(&ticket, &embed).await?,
-        ))
-    }
-
-    /// An email or text code may not go out with the password post, so it is
-    /// asked for the way the widget's "Request a new code" link does.
-    async fn request_widget_code(
-        &self,
-        vars: &[(String, String)],
-        referer: &str,
-        jar: &Jar,
-    ) -> Result<(), Failure> {
-        let method = var(vars, "mfaMethod");
-        if !matches!(method.to_lowercase().as_str(), "email" | "sms")
-            || !var(vars, "codeSentTo").is_empty()
-        {
-            return Ok(());
-        }
-        let url = net::with_query(
-            &format!("{SSO_URL}/sso/verifyMFA/mfaCode"),
-            &[("clientId", var(vars, "clientId"))],
-        );
-        let headers = [
-            ("Content-Type", "application/json".to_string()),
-            ("Accept", "application/json, text/plain, */*".into()),
-            ("Referer", referer.to_string()),
-        ];
-        let body = net::json_body(
-            &json!({"customerGuid": var(vars, "customerGuid"), "mfaMethod": method, "locale": var(vars, "locale")}),
-        );
-        let response = self
-            .send(http::Method::POST, &url, &headers, jar, body)
-            .await
-            .map_err(Failure::Connection)?;
-        match response.status().as_u16() {
-            429 => Err(Failure::RateLimited(
-                "Widget MFA code request returned 429".into(),
-            )),
-            s if !(200..300).contains(&s) => Err(Failure::Connection(format!(
-                "Widget MFA code request returned {s}"
-            ))),
-            _ => Ok(()),
-        }
-    }
-
-    async fn verify_widget_code(
-        &self,
-        pending: &PendingLogin,
-        csrf: &str,
-        referer: &str,
-        code: &str,
-    ) -> Result<Tokens, Failure> {
-        if csrf.is_empty() {
-            return Err(Failure::Auth("Widget MFA: missing CSRF token".into()));
-        }
-        let url = net::with_query(
-            &format!("{SSO_URL}/sso/verifyMFA/loginEnterMfaCode"),
-            &query(&widget_params()),
-        );
-        let headers = [
-            ("Referer", referer.to_string()),
-            ("Content-Type", "application/x-www-form-urlencoded".into()),
-        ];
-        let form = net::form(&[
-            ("mfa-code", code),
-            ("embed", "true"),
-            ("_csrf", csrf),
-            ("fromPage", "setupEnterMfaCode"),
-        ]);
-        let mut jar = Jar::from_header(&pending.cookies);
-        let (response, _) = self
-            .follow(http::Method::POST, &url, &headers, &mut jar, form)
-            .await
-            .map_err(Failure::Connection)?;
-        if response.status().as_u16() == 429 {
-            return Err(Failure::RateLimited(
-                "Widget MFA verify returned 429".into(),
-            ));
-        }
-        let text = net::body_text(&response);
-        let title = title_of(&text);
-        if title != "Success" {
-            return Err(Failure::Auth(format!("Widget MFA failed: {title}")));
-        }
-        let ticket = TICKET
-            .captures(&text)
-            .map(|c| c[1].to_string())
-            .ok_or(Failure::Auth("Widget MFA: missing service ticket".into()))?;
-        self.exchange_ticket(&ticket, &format!("{SSO_URL}/sso/embed"))
-            .await
-    }
-
-    /// Garmin's two JSON code endpoints share the sign-in's cookies but may
-    /// sit in different rate-limit buckets, so the other is tried too.
-    async fn verify_code(&self, pending: &PendingLogin, code: &str) -> Result<Tokens, Failure> {
-        let body = json!({"mfaMethod": pending.mfa_method, "mfaVerificationCode": code, "rememberMyBrowser": true,
-                          "reconsentList": [], "mfaSetup": false});
-        let mobile = net::with_query(
-            &format!("{SSO_URL}/mobile/api/mfa/verifyCode"),
-            &mobile_params(),
-        );
-        let portal = net::with_query(
-            &format!("{SSO_URL}/portal/api/mfa/verifyCode"),
-            &portal_params(),
-        );
-        let (endpoints, mut headers, service) = match pending.flow {
-            Flow::Portal => ([portal, mobile], portal_headers(), PORTAL_SERVICE_URL),
-            _ => ([mobile, portal], mobile_headers(), IOS_SERVICE_URL),
-        };
-        if !pending.cookies.is_empty() {
-            headers.push(("Cookie", pending.cookies.clone()));
-        }
-        let mut failures = Vec::new();
-        let mut rate_limited = 0;
-        for url in &endpoints {
-            let path = url.split('?').next().unwrap_or(url);
-            let response = match self
-                .send(
-                    http::Method::POST,
-                    url,
-                    &headers,
-                    &Jar::default(),
-                    net::json_body(&body),
-                )
-                .await
-            {
-                Ok(response) => response,
-                Err(err) => {
-                    failures.push(format!("{path}: connection error {err}"));
-                    continue;
-                }
-            };
-            if response.status().as_u16() == 429 {
-                failures.push(format!("{path}: HTTP 429"));
-                rate_limited += 1;
-                continue;
-            }
-            let Ok(res) = serde_json::from_slice::<Value>(response.body()) else {
-                failures.push(format!(
-                    "{path}: HTTP {} non-JSON",
-                    response.status().as_u16()
-                ));
-                continue;
-            };
-            if rate_limited_in_body(&res) {
-                failures.push(format!("{path}: 429 in JSON body"));
-                rate_limited += 1;
-                continue;
-            }
-            if status_type(&res) == Some("SUCCESSFUL") {
-                let ticket = res
-                    .get("serviceTicketId")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                return self.exchange_ticket(ticket, service).await;
-            }
-            let status = status_type(&res)
-                .or_else(|| res.pointer("/error/status-code").and_then(Value::as_str))
-                .unwrap_or("unknown");
-            failures.push(format!("{path}: {status}"));
-        }
-        let listed = failures
-            .iter()
-            .map(|f| format!("'{f}'"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        if rate_limited == endpoints.len() {
-            return Err(Failure::RateLimited(format!(
-                "MFA verification rate limited on all endpoints: [{listed}]"
-            )));
-        }
-        Err(Failure::Auth(format!(
-            "MFA verification failed: [{listed}]"
-        )))
-    }
-
     /// Trades the SSO's service ticket for DI tokens, trying each known
     /// app identity in turn. `service` must be the one the ticket was for.
     async fn exchange_ticket(&self, ticket: &str, service: &str) -> Result<Tokens, Failure> {
         let chrome = self.presenting(Browser::Chrome);
         for client_id in DI_CLIENT_IDS {
-            let headers = native_headers(&[
+            let headers = native_headers([
                 ("Authorization", basic_auth(client_id)),
                 (
                     "Accept",
@@ -932,10 +399,6 @@ impl SignIn {
                 ("Content-Type", "application/x-www-form-urlencoded".into()),
                 ("Cache-Control", "no-cache".into()),
             ]);
-            let headers: Vec<(&str, String)> = headers
-                .iter()
-                .map(|(k, v)| (k.as_str(), v.clone()))
-                .collect();
             let body = net::form(&[
                 ("client_id", client_id),
                 ("service_ticket", ticket),
@@ -960,7 +423,7 @@ impl SignIn {
                     "DI token exchange rate limited".into(),
                 ));
             }
-            if !(200..300).contains(&status) {
+            if !response.status().is_success() {
                 continue;
             }
             let data: Value = serde_json::from_slice(response.body()).unwrap_or(Value::Null);
@@ -985,15 +448,11 @@ impl SignIn {
     /// definite 401/403 counts, so an outage never fails a good sign-in.
     async fn token_accepted(&self, tokens: &Tokens) -> bool {
         let bearer = format!("Bearer {}", tokens.di_token.as_deref().unwrap_or_default());
-        let headers = native_headers(&[
+        let headers = native_headers([
             ("Authorization", bearer),
             ("Accept", "application/json".into()),
         ]);
-        let headers: Vec<(&str, String)> = headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.clone()))
-            .collect();
-        let url = format!("{CONNECTAPI_URL}/userprofile-service/socialProfile");
+        let url = format!("{CONNECTAPI_URL}{SOCIAL_PROFILE_PATH}");
         match self
             .send(
                 http::Method::GET,

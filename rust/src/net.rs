@@ -1,5 +1,6 @@
 //! Outbound HTTP for the service clients. Every call goes through `Http`, so
-//! tests stand in for Hevy, Strava or an identity provider without a network.
+//! tests stand in for Garmin, Hevy, Strava or an identity provider without a
+//! network.
 
 use std::future::Future;
 use std::path::Path;
@@ -39,14 +40,20 @@ async fn execute(client: &reqwest::Client, request: HttpRequest) -> Result<HttpR
         *outgoing.timeout_mut() = Some(timeout);
     }
     let response = client.execute(outgoing).await.map_err(|e| describe(&e))?;
-    let mut builder = http::Response::builder()
-        .status(response.status())
-        .version(response.version());
-    for (name, value) in response.headers() {
-        builder = builder.header(name, value);
-    }
+    let builder = response_head(response.status(), response.version(), response.headers());
     let body = response.bytes().await.map_err(|e| describe(&e))?;
     builder.body(body.to_vec()).map_err(|e| e.to_string())
+}
+
+fn response_head(
+    status: http::StatusCode,
+    version: http::Version,
+    headers: &http::HeaderMap,
+) -> http::response::Builder {
+    headers.iter().fold(
+        http::Response::builder().status(status).version(version),
+        |builder, (name, value)| builder.header(name, value),
+    )
 }
 
 fn describe(error: &reqwest::Error) -> String {
@@ -203,12 +210,7 @@ async fn as_browser(
         .send()
         .await
         .map_err(|e| HttpError(e.to_string()))?;
-    let mut builder = http::Response::builder()
-        .status(response.status())
-        .version(response.version());
-    for (name, value) in response.headers() {
-        builder = builder.header(name, value);
-    }
+    let builder = response_head(response.status(), response.version(), response.headers());
     let bytes = response
         .bytes()
         .await
@@ -231,22 +233,22 @@ pub fn provider_http() -> Http {
     wrap(&CLIENT)
 }
 
-/// `application/x-www-form-urlencoded`, as `requests` encodes a `data=` dict.
-pub fn form(pairs: &[(&str, &str)]) -> Vec<u8> {
+fn urlencoded(pairs: &[(&str, &str)]) -> String {
     openidconnect::url::form_urlencoded::Serializer::new(String::new())
         .extend_pairs(pairs)
         .finish()
-        .into_bytes()
+}
+
+/// `application/x-www-form-urlencoded`, as `requests` encodes a `data=` dict.
+pub fn form(pairs: &[(&str, &str)]) -> Vec<u8> {
+    urlencoded(pairs).into_bytes()
 }
 
 pub fn with_query(url: &str, pairs: &[(&str, &str)]) -> String {
     if pairs.is_empty() {
         return url.to_string();
     }
-    let query = openidconnect::url::form_urlencoded::Serializer::new(String::new())
-        .extend_pairs(pairs)
-        .finish();
-    format!("{url}?{query}")
+    format!("{url}?{}", urlencoded(pairs))
 }
 
 pub fn request(

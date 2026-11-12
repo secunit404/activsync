@@ -5,11 +5,13 @@ use openidconnect::{HttpResponse, http};
 use serde_json::Value;
 
 use crate::garmin_client::{
-    API_LABEL, API_TIMEOUT, CONNECTAPI_URL, GarminClient, check_path, expires_soon, native_headers,
+    CONNECTAPI_URL, GarminClient, check_path, expires_soon, native_headers,
 };
 use crate::garmin_errors::{GarminError, api_error, status_of};
 use crate::net;
 
+const API_TIMEOUT: Duration = Duration::from_secs(15);
+const API_LABEL: &str = "API call";
 const RETRY_ATTEMPTS: u32 = 3;
 const RATE_LIMIT_ATTEMPTS: u32 = 3;
 const RATE_LIMIT_BASE_WAIT: Duration = Duration::from_secs(30);
@@ -40,13 +42,11 @@ impl<'a> Request<'a> {
     }
 
     pub(crate) fn json(method: http::Method, path: &'a str, payload: &Value) -> Self {
-        let headers = vec![("Content-Type", "application/json".to_string())];
         Self {
             method,
-            path,
-            query: &[],
-            headers,
+            headers: vec![("Content-Type", "application/json".to_string())],
             body: net::json_body(payload),
+            ..Self::get(path)
         }
     }
 }
@@ -86,16 +86,12 @@ impl Waits {
 impl GarminClient {
     pub(crate) async fn send(&self, request: &Request<'_>) -> Result<HttpResponse, GarminError> {
         let token = self.tokens().di_token.ok_or(GarminError::SessionExpired)?;
-        let mut extra = vec![
+        let extra = [
             ("Authorization", format!("Bearer {token}")),
             ("Accept", "application/json".to_string()),
         ];
-        extra.extend(request.headers.iter().cloned());
-        let headers = native_headers(&extra);
-        let headers: Vec<(&str, &str)> = headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
+        let headers = native_headers(extra.into_iter().chain(request.headers.iter().cloned()));
+        let headers: Vec<(&str, &str)> = headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
         let query: Vec<(&str, &str)> = request
             .query
             .iter()
@@ -105,11 +101,8 @@ impl GarminClient {
             &format!("{CONNECTAPI_URL}/{}", request.path.trim_start_matches('/')),
             &query,
         );
-        let outgoing = net::request(request.method.clone(), &url, &headers, request.body.clone())
-            .map_err(|e| GarminError::Network(e.0))?;
-        (self.http)(net::with_timeout(outgoing, API_TIMEOUT))
-            .await
-            .map_err(|e| GarminError::Network(e.0))
+        let outgoing = net::request(request.method.clone(), &url, &headers, request.body.clone())?;
+        Ok((self.http)(net::with_timeout(outgoing, API_TIMEOUT)).await?)
     }
 
     pub(crate) async fn run(&self, request: &Request<'_>) -> Result<Vec<u8>, GarminError> {
@@ -135,8 +128,7 @@ impl GarminClient {
     }
 
     pub(crate) async fn run_json(&self, request: &Request<'_>) -> Result<Value, GarminError> {
-        let body = self.run(request).await?;
-        serde_json::from_slice(&body).map_err(|e| GarminError::Malformed(e.to_string()))
+        Ok(serde_json::from_slice(&self.run(request).await?)?)
     }
 
     /// The library's `connectapi` and `download`: a 5xx or a network failure
@@ -160,7 +152,7 @@ impl GarminClient {
                 _ => false,
             };
             if !retryable {
-                return Err(Self::worded(label, err));
+                return Err(worded(label, err));
             }
             if attempt >= RETRY_ATTEMPTS {
                 crate::log_error!(
@@ -168,7 +160,7 @@ impl GarminClient {
                     "{label} failed for path '{}': {err}",
                     request.path
                 );
-                return Err(Self::worded(label, err));
+                return Err(worded(label, err));
             }
             let delay = self.waits.backoff_for(attempt);
             crate::log_warn!(
@@ -186,36 +178,15 @@ impl GarminClient {
         }
     }
 
-    pub(crate) fn worded(label: &str, err: GarminError) -> GarminError {
-        match err {
-            GarminError::Network(text) => GarminError::Network(format!("Connection error: {text}")),
-            GarminError::NotFound(message) => {
-                GarminError::NotFound(format!("{label} client error (404): {message}"))
-            }
-            GarminError::Api(message) => match status_of(&message) {
-                Some(401) => GarminError::Api(format!("Authentication failed: {message}")),
-                Some(429) => GarminError::Api(format!("Rate limit exceeded: {message}")),
-                Some(status) if (400..500).contains(&status) => {
-                    GarminError::Api(format!("{label} client error ({status}): {message}"))
-                }
-                Some(_) => GarminError::Api(format!("{label} HTTP error: {message}")),
-                None => GarminError::Api(message),
-            },
-            other => other,
-        }
-    }
-
-    pub(crate) async fn call_json(&self, request: &Request<'_>) -> Result<Value, GarminError> {
-        let body = self.call(API_LABEL, request).await?;
-        serde_json::from_slice(&body).map_err(|e| GarminError::Malformed(e.to_string()))
-    }
-
     pub(crate) async fn get_json(
         &self,
         path: &str,
         query: &[(&str, String)],
     ) -> Result<Value, GarminError> {
-        self.call_json(&Request::get(path).with_query(query)).await
+        let body = self
+            .call(API_LABEL, &Request::get(path).with_query(query))
+            .await?;
+        Ok(serde_json::from_slice(&body)?)
     }
 
     pub(crate) async fn raw_json(
@@ -277,5 +248,24 @@ impl GarminClient {
             self.rest().await;
         }
         result
+    }
+}
+
+fn worded(label: &str, err: GarminError) -> GarminError {
+    match err {
+        GarminError::Network(text) => GarminError::Network(format!("Connection error: {text}")),
+        GarminError::NotFound(message) => {
+            GarminError::NotFound(format!("{label} client error (404): {message}"))
+        }
+        GarminError::Api(message) => match status_of(&message) {
+            Some(401) => GarminError::Api(format!("Authentication failed: {message}")),
+            Some(429) => GarminError::Api(format!("Rate limit exceeded: {message}")),
+            Some(status) if (400..500).contains(&status) => {
+                GarminError::Api(format!("{label} client error ({status}): {message}"))
+            }
+            Some(_) => GarminError::Api(format!("{label} HTTP error: {message}")),
+            None => GarminError::Api(message),
+        },
+        other => other,
     }
 }
