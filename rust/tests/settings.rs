@@ -166,7 +166,7 @@ async fn settings_state_matches_python_shape() {
     }));
     assert_eq!(s["preferences"], json!({
         "displayTimezone": "Europe/Stockholm", "garminPollIntervalMinutes": 20,
-        "stravaPollIntervalMinutes": 5, "lookbackDays": 7
+        "stravaPollIntervalMinutes": 5, "lookbackDays": 7, "undoDelaySeconds": 5
     }));
     assert_eq!(s["timezones"].as_array().unwrap().len(), 27);
 
@@ -192,9 +192,33 @@ async fn settings_state_matches_python_shape() {
 }
 
 #[tokio::test]
+async fn undo_delay_defaults_to_five_and_rejects_other_values() {
+    let (_, app) = app(true);
+    assert_eq!(ok(&app, Method::GET, "/api/v1/settings", None).await["preferences"]["undoDelaySeconds"], 5);
+    let payload = json!({"displayTimezone": "Europe/Oslo", "garminPollIntervalMinutes": 30, "stravaPollIntervalMinutes": 8, "lookbackDays": 14});
+
+    for bad in [json!(1), json!(-1), json!(60), json!("5")] {
+        let mut request = payload.clone();
+        request["undoDelaySeconds"] = bad;
+        let (status, _, _) = send(&app, Method::PUT, "/api/v1/settings/preferences", Some(request)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let (status, _, _) = send(&app, Method::PUT, "/api/v1/settings/preferences", Some(payload.clone())).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(ok(&app, Method::GET, "/api/v1/settings", None).await["preferences"]["undoDelaySeconds"], 5);
+
+    for good in [0, 3, 5, 10] {
+        let mut request = payload.clone();
+        request["undoDelaySeconds"] = json!(good);
+        ok(&app, Method::PUT, "/api/v1/settings/preferences", Some(request)).await;
+        assert_eq!(ok(&app, Method::GET, "/api/v1/settings", None).await["preferences"]["undoDelaySeconds"], good);
+    }
+}
+
+#[tokio::test]
 async fn preferences_save_and_validate_timezone() {
     let (_, app) = app(true);
-    let prefs = json!({"displayTimezone": "Mars/Base", "garminPollIntervalMinutes": 30, "stravaPollIntervalMinutes": 10, "lookbackDays": 3});
+    let prefs = json!({"displayTimezone": "Mars/Base", "garminPollIntervalMinutes": 30, "stravaPollIntervalMinutes": 10, "lookbackDays": 3, "undoDelaySeconds": 10});
     let (status, body, _) = send(&app, Method::PUT, "/api/v1/settings/preferences", Some(prefs.clone())).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["detail"], "Unknown timezone: Mars/Base");
@@ -346,4 +370,10 @@ async fn dev_onboarding_flag_reopens_the_wizard() {
     let (_, app) = app(true);
     ok(&app, Method::POST, "/api/v1/dev/onboarding-state", Some(json!({"complete": false}))).await;
     assert_eq!(ok(&app, Method::GET, "/api/v1/app", None).await["setup"]["step"], "hevy");
+}
+
+#[test]
+fn default_undo_delay_is_five_seconds() {
+    let db = Db::open_in_memory().unwrap();
+    assert_eq!(activsync::config::load_config(&db.lock(), false).unwrap().int("undo_delay_seconds"), 5);
 }

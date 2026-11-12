@@ -309,7 +309,7 @@ pub async fn choose_match(
         deadline: schedule::deadline_iso(scheduled.deadline),
         strategy,
         remaining_ms: ((scheduled.deadline - scheduler.now()) * 1000.0).round().max(0.0) as i64,
-        undo_window_ms: (scheduler.window_seconds * 1000.0).round() as i64,
+        undo_window_ms: (scheduled.window_seconds * 1000.0).round() as i64,
     }))
 }
 

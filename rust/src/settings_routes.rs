@@ -96,6 +96,7 @@ pub struct PreferenceState {
     garmin_poll_interval_minutes: i64,
     strava_poll_interval_minutes: i64,
     lookback_days: i64,
+    undo_delay_seconds: i64,
 }
 
 #[derive(Serialize)]
@@ -157,6 +158,7 @@ pub async fn settings_state(State(state): State<AppState>) -> ApiResult<Settings
             garmin_poll_interval_minutes: cfg.int("garmin_poll_interval_minutes"),
             strava_poll_interval_minutes: cfg.int("strava_poll_interval_minutes"),
             lookback_days: cfg.int("lookback_days"),
+            undo_delay_seconds: cfg.int("undo_delay_seconds"),
         },
         timezones: COMMON_TIMEZONES.to_vec(),
         activity_types: types
@@ -324,7 +326,10 @@ pub struct PreferencesRequest {
     garmin_poll_interval_minutes: i64,
     strava_poll_interval_minutes: i64,
     lookback_days: i64,
+    undo_delay_seconds: i64,
 }
+
+const UNDO_DELAYS: [i64; 4] = [0, 3, 5, 10];
 
 pub async fn save_preferences(
     State(state): State<AppState>,
@@ -333,6 +338,9 @@ pub async fn save_preferences(
     let p = body(payload)?;
     if p.garmin_poll_interval_minutes < 1 || p.strava_poll_interval_minutes < 1 || p.lookback_days < 1 {
         return Err(invalid("Poll intervals and lookback days must be at least 1"));
+    }
+    if !UNDO_DELAYS.contains(&p.undo_delay_seconds) {
+        return Err(invalid("undoDelaySeconds must be one of 0, 3, 5 or 10"));
     }
     if !timefmt::is_valid_timezone(&p.display_timezone) {
         return Err(bad_request(format!("Unknown timezone: {}", p.display_timezone)));
@@ -343,6 +351,7 @@ pub async fn save_preferences(
         cfg.set("garmin_poll_interval_minutes", json!(p.garmin_poll_interval_minutes));
         cfg.set("strava_poll_interval_minutes", json!(p.strava_poll_interval_minutes));
         cfg.set("lookback_days", json!(p.lookback_days));
+        cfg.set("undo_delay_seconds", json!(p.undo_delay_seconds));
     })?;
     crate::logging::set_timezone(&p.display_timezone);
     state.events.publish("refresh");

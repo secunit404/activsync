@@ -157,6 +157,15 @@ impl AppState {
         Self { development, ..self }
     }
 
+    /// Makes both undo schedulers read the undo delay setting at schedule time.
+    pub fn with_configured_undo_window(self) -> Self {
+        Self {
+            scheduler: self.scheduler.with_configured_window(),
+            match_scheduler: self.match_scheduler.with_configured_window(),
+            ..self
+        }
+    }
+
     pub fn with_hevy_http(self, hevy_http: net::Http) -> Self {
         Self { hevy_http: Some(hevy_http), ..self }
     }

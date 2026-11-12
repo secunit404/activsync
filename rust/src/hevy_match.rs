@@ -33,6 +33,7 @@ const MAX_SLEEP_SECONDS: f64 = 30.0;
 pub struct Scheduled {
     pub strategy: String,
     pub deadline: f64,
+    pub window_seconds: f64,
 }
 
 #[derive(Debug)]
@@ -62,7 +63,7 @@ pub fn schedule(
     now: f64,
     window_seconds: f64,
 ) -> Result<Scheduled, MatchError> {
-    let scheduled = Scheduled { strategy: strategy.into(), deadline: now + window_seconds };
+    let scheduled = Scheduled { strategy: strategy.into(), deadline: now + window_seconds, window_seconds };
     let tx = conn.transaction()?;
     if is_active(&tx, hevy_id)? {
         return Err(MatchError::AlreadyScheduled);
@@ -233,7 +234,7 @@ pub struct HevyMatchScheduler {
     db: Db,
     events: EventBus,
     clock: Clock,
-    pub window_seconds: f64,
+    window_override: Option<f64>,
     wake: Arc<Notify>,
     applier: Arc<dyn MatchApplier>,
 }
@@ -241,11 +242,15 @@ pub struct HevyMatchScheduler {
 impl HevyMatchScheduler {
     pub fn new(db: Db, events: EventBus, clock: Clock, window_seconds: f64) -> Self {
         let applier = Arc::new(MockApplier { db: db.clone() });
-        Self { db, events, clock, window_seconds, wake: Arc::new(Notify::new()), applier }
+        Self { db, events, clock, window_override: Some(window_seconds), wake: Arc::new(Notify::new()), applier }
     }
 
     pub fn with_applier(self, applier: Arc<dyn MatchApplier>) -> Self {
         Self { applier, ..self }
+    }
+
+    pub fn with_configured_window(self) -> Self {
+        Self { window_override: None, ..self }
     }
 
     pub fn now(&self) -> f64 {
@@ -253,7 +258,13 @@ impl HevyMatchScheduler {
     }
 
     pub fn schedule(&self, hevy_id: &str, strategy: &str) -> Result<Scheduled, MatchError> {
-        let scheduled = schedule(&mut self.db.lock(), hevy_id, strategy, self.now(), self.window_seconds)?;
+        let mut conn = self.db.lock();
+        let window_seconds = match self.window_override {
+            Some(window) => window,
+            None => crate::schedule::configured_window_seconds(&conn)?,
+        };
+        let scheduled = schedule(&mut conn, hevy_id, strategy, self.now(), window_seconds)?;
+        drop(conn);
         self.wake.notify_one();
         self.events.publish("refresh");
         Ok(scheduled)

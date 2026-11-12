@@ -49,7 +49,7 @@ fn schedule_publish(state: &AppState, ids: &[i64], kind: &str) -> ApiResult<Publ
         publish_scheduled_at: schedule::deadline_iso(batch.deadline),
         batch_id: batch.batch_id,
         remaining_ms: (remaining * 1000.0).round().max(0.0) as i64,
-        undo_window_ms: (state.scheduler.window_seconds * 1000.0).round() as i64,
+        undo_window_ms: (batch.window_seconds * 1000.0).round() as i64,
     }))
 }
 

@@ -98,7 +98,7 @@ async fn main() {
     }
 
     let clock = schedule::system_clock();
-    let state = AppState::new(db.clone(), mock, clock.clone(), schedule::UNDO_WINDOW_SECONDS, auth).with_development(development);
+    let state = AppState::new(db.clone(), mock, clock.clone(), schedule::UNDO_WINDOW_SECONDS, auth).with_development(development).with_configured_undo_window();
     let (state, poller) = if mock { (state, None) } else { real_accounts(state, manual_only, token_dir) };
     let scheduler = state.scheduler.clone().spawn();
     let match_scheduler = state.match_scheduler.clone().spawn();

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use activsync::auth_guard::AuthConfig;
 use activsync::db::{self, Db};
-use activsync::{AppState, build_app, hevy_db, hevy_seed, schedule, seed};
+use activsync::{AppState, build_app, config, hevy_db, hevy_seed, schedule, seed};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
@@ -38,7 +38,7 @@ struct Harness {
 
 fn harness_with(db: Db) -> Harness {
     let clock = TestClock(Arc::new(AtomicU64::new(1_800_000_000f64.to_bits())));
-    let state = AppState::new(db, true, clock.clock(), schedule::UNDO_WINDOW_SECONDS, AuthConfig::sign_in_off());
+    let state = AppState::new(db, true, clock.clock(), schedule::UNDO_WINDOW_SECONDS, AuthConfig::sign_in_off()).with_configured_undo_window();
     let app = build_app(state.clone(), None);
     Harness { state, app, clock }
 }
@@ -97,6 +97,33 @@ async fn queue_and_detail_match_python() {
 
     let (status, body) = call(&h.app, Method::GET, "/api/v1/hevy/nope", None).await;
     assert_eq!((status, body["detail"].as_str()), (StatusCode::NOT_FOUND, Some("Unknown Hevy workout.")));
+}
+
+fn set_undo_delay(h: &Harness, seconds: i64) {
+    config::edit(&h.state.db.lock(), false, |cfg| cfg.set("undo_delay_seconds", json!(seconds))).unwrap();
+}
+
+#[tokio::test]
+async fn the_configured_undo_delay_sets_the_window_and_deadline() {
+    for delay in [0, 3, 5, 10] {
+        let h = harness();
+        set_undo_delay(&h, delay);
+
+        let body = ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-syncing/match", Some(json!({"strategy": "merge"}))).await;
+
+        assert_eq!(body["undoWindowMs"], delay * 1000);
+        assert_eq!(body["remainingMs"], delay * 1000);
+        assert_eq!(body["deadline"], schedule::deadline_iso(1_800_000_000.0 + delay as f64));
+    }
+}
+
+#[tokio::test]
+async fn a_zero_undo_delay_applies_on_the_next_pass() {
+    let h = harness();
+    set_undo_delay(&h, 0);
+    ok(&h.app, Method::POST, "/api/v1/hevy/hw-dev-syncing/match", Some(json!({"strategy": "merge"}))).await;
+
+    assert_eq!(h.state.match_scheduler.run_due().await.unwrap(), 1);
 }
 
 #[tokio::test]

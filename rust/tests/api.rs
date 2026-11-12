@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use activsync::auth_guard::AuthConfig;
 use activsync::db::{self, Db, NewActivity};
-use activsync::{AppState, build_app, routes, schedule, seed};
+use activsync::{AppState, build_app, config, routes, schedule, seed};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
@@ -54,7 +54,7 @@ fn harness() -> Harness {
     seed::seed(&mut db.lock(), Utc::now(), true).unwrap();
     connect_services(&db.lock());
     let clock = TestClock::new(1_800_000_000.0);
-    let state = AppState::new(db, true, clock.clock(), schedule::UNDO_WINDOW_SECONDS, AuthConfig::sign_in_off());
+    let state = AppState::new(db, true, clock.clock(), schedule::UNDO_WINDOW_SECONDS, AuthConfig::sign_in_off()).with_configured_undo_window();
     let app = build_app(state.clone(), None);
     Harness { state, app, clock }
 }
@@ -347,6 +347,39 @@ async fn restore_without_body_follows_held_categories() {
     assert_eq!(status, StatusCode::OK);
     let row = db::get_activity(&h.state.db.lock(), id).unwrap().unwrap();
     assert_eq!(row.publish_status, "pending", "walking and yoga are not held categories");
+}
+
+fn set_undo_delay(h: &Harness, seconds: i64) {
+    config::edit(&h.state.db.lock(), false, |cfg| cfg.set("undo_delay_seconds", json!(seconds))).unwrap();
+}
+
+#[tokio::test]
+async fn the_configured_undo_delay_sets_the_window_and_deadline() {
+    for delay in [0, 3, 5, 10] {
+        let h = harness();
+        set_undo_delay(&h, delay);
+        let id = first_with_status(&get(&h.app, "/api/v1/activities?status=pending").await, "pending");
+
+        let (status, body) = call(&h.app, Method::POST, &format!("/api/v1/activities/{id}/publish/schedule"), None).await;
+
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["undoWindowMs"], delay * 1000);
+        assert_eq!(body["remainingMs"], delay * 1000);
+        assert_eq!(body["publishScheduledAt"], schedule::deadline_iso(1_800_000_000.0 + delay as f64));
+    }
+}
+
+#[tokio::test]
+async fn a_zero_undo_delay_sends_on_the_next_pass() {
+    let h = harness();
+    set_undo_delay(&h, 0);
+    let id = first_with_status(&get(&h.app, "/api/v1/activities?status=pending").await, "pending");
+
+    let (_, scheduled) = call(&h.app, Method::POST, &format!("/api/v1/activities/{id}/publish/schedule"), None).await;
+    let batch = scheduled["batchId"].as_str().unwrap().to_string();
+
+    assert_eq!(h.state.scheduler.run_due().await.unwrap(), 1);
+    assert_eq!(get(&h.app, &format!("/api/v1/activities/publish/batches/{batch}")).await["state"], "done");
 }
 
 #[tokio::test]

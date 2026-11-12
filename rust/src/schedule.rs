@@ -19,6 +19,10 @@ use crate::strava_client::{StravaClient, StravaError};
 use crate::sync::{self, Services, SyncError};
 
 pub const UNDO_WINDOW_SECONDS: f64 = 5.0;
+
+pub fn configured_window_seconds(conn: &Connection) -> DbResult<f64> {
+    Ok(crate::config::load_config(conn, false)?.int("undo_delay_seconds") as f64)
+}
 pub const PUBLISHABLE_STATUSES: [&str; 3] = ["held", "pending", "missing"];
 
 pub const WAITING: &str = "waiting";
@@ -60,6 +64,7 @@ impl ScheduleRow {
 pub struct Scheduled {
     pub batch_id: String,
     pub deadline: f64,
+    pub window_seconds: f64,
 }
 
 #[derive(Debug)]
@@ -92,7 +97,7 @@ pub fn schedule(
     window_seconds: f64,
 ) -> Result<Scheduled, ScheduleError> {
     let ids: Vec<i64> = activities.iter().map(|a| a.garmin_activity_id).collect();
-    let batch = Scheduled { batch_id: new_batch_id(), deadline: now + window_seconds };
+    let batch = Scheduled { batch_id: new_batch_id(), deadline: now + window_seconds, window_seconds };
     let tx = conn.transaction()?;
     let active: Option<i64> = tx
         .query_row(
@@ -240,7 +245,7 @@ pub struct PublishScheduler {
     db: Db,
     events: EventBus,
     clock: Clock,
-    pub window_seconds: f64,
+    window_override: Option<f64>,
     wake: Arc<Notify>,
     /// The real Garmin and Strava; without them publishing is simulated.
     clients: Option<Arc<dyn Clients>>,
@@ -248,11 +253,22 @@ pub struct PublishScheduler {
 
 impl PublishScheduler {
     pub fn new(db: Db, events: EventBus, clock: Clock, window_seconds: f64) -> Self {
-        Self { db, events, clock, window_seconds, wake: Arc::new(Notify::new()), clients: None }
+        Self { db, events, clock, window_override: Some(window_seconds), wake: Arc::new(Notify::new()), clients: None }
     }
 
     pub fn with_clients(self, clients: Arc<dyn Clients>) -> Self {
         Self { clients: Some(clients), ..self }
+    }
+
+    pub fn with_configured_window(self) -> Self {
+        Self { window_override: None, ..self }
+    }
+
+    pub fn window_seconds(&self) -> DbResult<f64> {
+        match self.window_override {
+            Some(window) => Ok(window),
+            None => configured_window_seconds(&self.db.lock()),
+        }
     }
 
     pub fn now(&self) -> f64 {
@@ -260,7 +276,13 @@ impl PublishScheduler {
     }
 
     pub fn schedule(&self, activities: &[ActivityRow], kind: &str) -> Result<Scheduled, ScheduleError> {
-        let batch = schedule(&mut self.db.lock(), activities, self.now(), kind, self.window_seconds)?;
+        let mut conn = self.db.lock();
+        let window_seconds = match self.window_override {
+            Some(window) => window,
+            None => configured_window_seconds(&conn)?,
+        };
+        let batch = schedule(&mut conn, activities, self.now(), kind, window_seconds)?;
+        drop(conn);
         self.wake.notify_one();
         self.events.publish("refresh");
         Ok(batch)
