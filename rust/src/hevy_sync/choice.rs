@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use crate::poller::BoxFuture;
 use chrono::{DateTime, Utc};
-use futures_util::future::BoxFuture;
 use rusqlite::Connection;
 
 use super::{StepError, apply_strategy, hevy_context, log_transition, record_failure};

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::future::BoxFuture;
+use crate::poller::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, params};
 use tokio::sync::Notify;
 

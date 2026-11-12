@@ -13,8 +13,8 @@ mod reapply;
 
 use std::collections::HashMap;
 
+use crate::poller::BoxFuture;
 use chrono::{DateTime, Duration, Utc};
-use futures_util::future::BoxFuture;
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
