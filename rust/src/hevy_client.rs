@@ -248,13 +248,12 @@ impl HevyClient {
         }
         if let Some(remaining) =
             net::header(&response, "x-ratelimit-remaining").and_then(|v| v.parse::<i64>().ok())
+            && remaining < 10
         {
-            if remaining < 10 {
-                crate::log_warn!(
-                    "hevy_client",
-                    "Hevy API rate limit low: {remaining} requests remaining"
-                );
-            }
+            crate::log_warn!(
+                "hevy_client",
+                "Hevy API rate limit low: {remaining} requests remaining"
+            );
         }
         serde_json::from_slice(response.body())
             .map_err(|e| HevyError::Malformed(json_message(response.body(), &e)))

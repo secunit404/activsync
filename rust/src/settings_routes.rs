@@ -349,7 +349,7 @@ async fn connect_hevy(state: &AppState, api_key: &str, in_setup: bool) -> Result
     if in_setup {
         let conn = state.db.lock();
         db::set_config_value(&conn, "setup_hevy_done", &json!(true))?;
-        config::edit(&conn, development(&state), |cfg| {
+        config::edit(&conn, development(state), |cfg| {
             cfg.set("hevy_enabled", json!(true))
         })?;
     }

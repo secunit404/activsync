@@ -691,13 +691,13 @@ pub async fn edit_activity_metadata(
         .garmin
         .update_activity_metadata(garmin_activity_id, title, description)
         .await?;
-    if row.publish_status == "published" {
-        if let Some(strava_id) = row.strava_activity_id.filter(|id| *id != 0) {
-            services
-                .strava
-                .update_activity_metadata(strava_id, title, description)
-                .await?;
-        }
+    if row.publish_status == "published"
+        && let Some(strava_id) = row.strava_activity_id.filter(|id| *id != 0)
+    {
+        services
+            .strava
+            .update_activity_metadata(strava_id, title, description)
+            .await?;
     }
     let garmin_data = if row.garmin_data.is_empty() {
         "{}"

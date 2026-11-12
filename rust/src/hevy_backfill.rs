@@ -198,10 +198,10 @@ fn mapping_misses(conn: &Connection, workout: &Value) -> DbResult<(bool, Vec<Str
         let template = exercise.get("exercise_template_id").and_then(Value::as_str);
         if exercise_tables::lookup_exercise(conn, field(exercise, "title"), template)?.is_none() {
             any = true;
-            if let Some(id) = template.filter(|id| !id.is_empty()) {
-                if !missing.iter().any(|m| m == id) {
-                    missing.push(id.to_string());
-                }
+            if let Some(id) = template.filter(|id| !id.is_empty())
+                && !missing.iter().any(|m| m == id)
+            {
+                missing.push(id.to_string());
             }
         }
     }

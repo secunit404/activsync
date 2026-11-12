@@ -268,10 +268,8 @@ async fn signing_keys(
     refresh: bool,
 ) -> Result<CoreJsonWebKeySet, String> {
     let key = ProviderKey::of(config);
-    if !refresh {
-        if let Some(jwks) = sessions.cached(&key).and_then(|d| d.jwks) {
-            return Ok(jwks);
-        }
+    if !refresh && let Some(jwks) = sessions.cached(&key).and_then(|d| d.jwks) {
+        return Ok(jwks);
     }
     let jwks: CoreJsonWebKeySet = get_json(http, metadata.jwks_uri().as_str()).await?;
     sessions.store_jwks(&key, jwks.clone());
@@ -304,6 +302,13 @@ fn client_for(
     .set_redirect_uri(RedirectUrl::new(redirect_uri.into()).map_err(|e| e.to_string())?))
 }
 
+/// Where a sign-in returns to, and what it was started for.
+pub struct Return<'a> {
+    pub redirect_uri: &'a str,
+    pub intent: &'a str,
+    pub next: &'a str,
+}
+
 /// The provider's sign-in page to send the browser to, and the cookie value
 /// that finds this flow again on the way back.
 pub async fn begin(
@@ -312,10 +317,13 @@ pub async fn begin(
     config: &OidcConfig,
     cookie: Option<&str>,
     now: f64,
-    redirect_uri: &str,
-    intent: &str,
-    next: &str,
+    to: Return<'_>,
 ) -> Result<(String, String), OidcError> {
+    let Return {
+        redirect_uri,
+        intent,
+        next,
+    } = to;
     let client = match discovered(http, sessions, config)
         .await
         .and_then(|m| client_for(m, config, redirect_uri))
@@ -484,15 +492,14 @@ fn authlib_problem(
     if let Some(at_hash) = claims
         .get("at_hash")
         .filter(|_| truthy(claims.get("at_hash")))
+        && !expected.access_token.is_empty()
     {
-        if !expected.access_token.is_empty() {
-            let alg = header
-                .get("alg")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            if half_hash(expected.access_token, alg).as_deref() != at_hash.as_str() {
-                return invalid("at_hash");
-            }
+        let alg = header
+            .get("alg")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if half_hash(expected.access_token, alg).as_deref() != at_hash.as_str() {
+            return invalid("at_hash");
         }
     }
     Ok(())
@@ -621,7 +628,7 @@ pub async fn finish(
             .set_allowed_algs(algs.clone())
             .set_other_audience_verifier_fn(|_| true)
             .set_time_fn(|| DateTime::<Utc>::MIN_UTC);
-        let verified = id_token.claims(&verifier, &nonce).map(Clone::clone);
+        let verified = id_token.claims(&verifier, &nonce).cloned();
         drop(verifier);
         match verified {
             Ok(claims) => break (client, claims),

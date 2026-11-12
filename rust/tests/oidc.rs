@@ -316,7 +316,7 @@ impl Client {
 
     /// Follows the redirect to the provider, as a browser would, and returns
     /// the state the provider would send back.
-    async fn to_provider(&mut self, start: &str) -> String {
+    async fn follow_to_provider(&mut self, start: &str) -> String {
         let reply = self.visit(start).await;
         assert_eq!(reply.status, StatusCode::FOUND, "{:?}", reply.headers);
         let url = Url::parse(reply.location()).unwrap();
@@ -359,7 +359,7 @@ impl Client {
             "/auth/oidc/login?intent=link&next=%2Fsettings"
         );
         let state = self
-            .to_provider("/auth/oidc/login?intent=link&next=%2Fsettings")
+            .follow_to_provider("/auth/oidc/login?intent=link&next=%2Fsettings")
             .await;
         let back = self
             .visit(&format!("/auth/oidc/callback?state={state}&code=good-code"))
@@ -411,7 +411,9 @@ async fn link_then_sign_in_with_the_provider() {
         json!({"label": "Pocket ID", "autoRedirect": false, "logoUrl": null})
     );
 
-    let state = c.to_provider("/auth/oidc/login?next=%2Factivities").await;
+    let state = c
+        .follow_to_provider("/auth/oidc/login?next=%2Factivities")
+        .await;
     let callback = format!("/auth/oidc/callback?state={state}&code=good-code");
     let back = c.visit(&callback).await;
     assert_eq!(
@@ -435,7 +437,7 @@ async fn another_provider_account_is_refused() {
     c.configure().await;
     c.link().await;
     c.idp.lock().unwrap().sub = "someone-else".into();
-    let state = c.to_provider("/auth/oidc/login").await;
+    let state = c.follow_to_provider("/auth/oidc/login").await;
     let back = c
         .visit(&format!("/auth/oidc/callback?state={state}&code=good-code"))
         .await;
@@ -449,14 +451,14 @@ async fn bad_answers_from_the_provider_are_rejected() {
     c.configure().await;
     c.link().await;
 
-    let state = c.to_provider("/auth/oidc/login").await;
+    let state = c.follow_to_provider("/auth/oidc/login").await;
     let wrong_state = c
         .visit("/auth/oidc/callback?state=forged&code=good-code")
         .await;
     assert_eq!(wrong_state.location(), "/login?error=oidc_state");
     assert!(state != "forged");
 
-    c.to_provider("/auth/oidc/login").await;
+    c.follow_to_provider("/auth/oidc/login").await;
     let denied = c.visit("/auth/oidc/callback?error=access_denied").await;
     assert_eq!(denied.location(), "/login?error=oidc_denied");
 
@@ -464,7 +466,7 @@ async fn bad_answers_from_the_provider_are_rejected() {
         |idp: &mut Idp| idp.audience = "another-client".into(),
         |idp: &mut Idp| idp.nonce_override = Some("replayed".into()),
     ] {
-        let state = c.to_provider("/auth/oidc/login").await;
+        let state = c.follow_to_provider("/auth/oidc/login").await;
         tamper(&mut c.idp.lock().unwrap());
         let back = c
             .visit(&format!("/auth/oidc/callback?state={state}&code=good-code"))
@@ -473,7 +475,7 @@ async fn bad_answers_from_the_provider_are_rejected() {
         *c.idp.lock().unwrap() = Idp::default();
     }
 
-    let state = c.to_provider("/auth/oidc/login").await;
+    let state = c.follow_to_provider("/auth/oidc/login").await;
     c.idp.lock().unwrap().token_error = Some("access_denied");
     let back = c
         .visit(&format!("/auth/oidc/callback?state={state}&code=good-code"))
@@ -632,7 +634,7 @@ fn fetched(c: &Client, path: &str) -> usize {
 }
 
 async fn sign_in_through_provider(c: &mut Client) -> Reply {
-    let state = c.to_provider("/auth/oidc/login").await;
+    let state = c.follow_to_provider("/auth/oidc/login").await;
     c.visit(&format!("/auth/oidc/callback?state={state}&code=good-code"))
         .await
 }

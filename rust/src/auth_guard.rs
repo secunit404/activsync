@@ -463,33 +463,33 @@ fn authenticate(
     if auth.disabled {
         return Ok(Authenticated::Yes(AuthState::of("disabled")));
     }
-    if let Some(proxy) = &auth.proxy {
-        if let Some(value) = headers.get(proxy.header.as_str()).map(latin1) {
-            let peer = ctx
-                .peer
-                .map_or_else(|| "None".to_string(), |p| p.to_string());
-            if proxy.trusts(ctx.peer) {
-                if value == proxy.user {
-                    return Ok(Authenticated::Yes(AuthState {
-                        user: Some(value),
-                        ..AuthState::of("proxy")
-                    }));
-                }
-                crate::log_warn!(
-                    "auth",
-                    "proxy at {peer} asserted {}={}, which is not the configured owner",
-                    proxy.header,
-                    py_repr(&value)
-                );
-                return Ok(Authenticated::Rejected);
+    if let Some(proxy) = &auth.proxy
+        && let Some(value) = headers.get(proxy.header.as_str()).map(latin1)
+    {
+        let peer = ctx
+            .peer
+            .map_or_else(|| "None".to_string(), |p| p.to_string());
+        if proxy.trusts(ctx.peer) {
+            if value == proxy.user {
+                return Ok(Authenticated::Yes(AuthState {
+                    user: Some(value),
+                    ..AuthState::of("proxy")
+                }));
             }
-            if auth.warnings.untrusted_proxy_due(state.scheduler.now()) {
-                crate::log_warn!(
-                    "auth",
-                    "ignored {} from untrusted peer {peer}; is something bypassing the proxy?",
-                    proxy.header
-                );
-            }
+            crate::log_warn!(
+                "auth",
+                "proxy at {peer} asserted {}={}, which is not the configured owner",
+                proxy.header,
+                py_repr(&value)
+            );
+            return Ok(Authenticated::Rejected);
+        }
+        if auth.warnings.untrusted_proxy_due(state.scheduler.now()) {
+            crate::log_warn!(
+                "auth",
+                "ignored {} from untrusted peer {peer}; is something bypassing the proxy?",
+                proxy.header
+            );
         }
     }
     let Some(token) = cookie(headers, ctx.session_cookie()).filter(|t| !t.is_empty()) else {
@@ -550,10 +550,10 @@ fn detail(status: StatusCode, message: &str) -> Response {
 fn add_security_headers(response: &mut Response, csp: &str, https: bool) {
     let headers = response.headers_mut();
     let mut set = |name: &'static str, value: &str| {
-        if !headers.contains_key(name) {
-            if let Ok(value) = HeaderValue::from_str(value) {
-                headers.insert(name, value);
-            }
+        if !headers.contains_key(name)
+            && let Ok(value) = HeaderValue::from_str(value)
+        {
+            headers.insert(name, value);
         }
     };
     set("content-security-policy", csp);

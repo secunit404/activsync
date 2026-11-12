@@ -689,14 +689,14 @@ pub async fn apply_match_choice(
         Err(err) => Err(err),
     };
     let conn = db.lock();
-    if let Err(ChoiceError::Failed(err)) = &outcome {
-        if !matches!(err, StepError::HevyAuth) {
-            crate::log_warn!(
-                "hevy_sync",
-                "applying Hevy match choice for {hevy_id} failed: {err}"
-            );
-            record_choice_failure(&conn, hevy_id, &err.to_string())?;
-        }
+    if let Err(ChoiceError::Failed(err)) = &outcome
+        && !matches!(err, StepError::HevyAuth)
+    {
+        crate::log_warn!(
+            "hevy_sync",
+            "applying Hevy match choice for {hevy_id} failed: {err}"
+        );
+        record_choice_failure(&conn, hevy_id, &err.to_string())?;
     }
     hevy_db::release_lease(&conn, hevy_id, &token)?;
     log_transition(&conn, hevy_id, "awaiting_match");
@@ -781,9 +781,9 @@ pub async fn reapply(
     Ok(())
 }
 
-fn fingerprint(
-    row: Option<&Workout>,
-) -> Option<(String, Option<i64>, Option<String>, Option<String>)> {
+type Fingerprint = (String, Option<i64>, Option<String>, Option<String>);
+
+fn fingerprint(row: Option<&Workout>) -> Option<Fingerprint> {
     row.map(|r| {
         (
             r.status.clone(),

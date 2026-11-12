@@ -410,13 +410,13 @@ impl PublishScheduler {
 
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            if let Ok(recovered) = recover(&self.db.lock()) {
-                if recovered > 0 {
-                    crate::log_info!(
-                        "schedule",
-                        "resuming {recovered} publish(es) interrupted by a restart"
-                    );
-                }
+            if let Ok(recovered) = recover(&self.db.lock())
+                && recovered > 0
+            {
+                crate::log_info!(
+                    "schedule",
+                    "resuming {recovered} publish(es) interrupted by a restart"
+                );
             }
             loop {
                 let timeout = match self.run_due().await.and_then(|_| self.sleep_seconds()) {

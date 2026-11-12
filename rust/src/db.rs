@@ -167,10 +167,10 @@ pub struct Db(Arc<Mutex<Connection>>);
 
 impl Db {
     pub fn open(path: &Path) -> DbResult<Self> {
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                let _ = std::fs::create_dir_all(parent);
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            let _ = std::fs::create_dir_all(parent);
         }
         Self::init(Connection::open(path)?)
     }

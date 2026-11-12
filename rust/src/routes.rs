@@ -60,10 +60,10 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let mut response = (self.status, Json(json!({ "detail": self.detail }))).into_response();
-        if let Some((name, value)) = self.header {
-            if let Ok(value) = axum::http::HeaderValue::from_str(&value) {
-                response.headers_mut().insert(name, value);
-            }
+        if let Some((name, value)) = self.header
+            && let Ok(value) = axum::http::HeaderValue::from_str(&value)
+        {
+            response.headers_mut().insert(name, value);
         }
         response
     }
@@ -331,12 +331,13 @@ pub async fn activities_page(
         return Err(ApiError::invalid("sort must be newest or oldest"));
     }
     let status = query.status;
-    if let Some(status) = &status {
-        if status != "review" && !PUBLISH_STATUSES.contains(&status.as_str()) {
-            return Err(ApiError::invalid(
-                "status must be one of pending, held, published, missing, excluded, or review",
-            ));
-        }
+    if let Some(status) = &status
+        && status != "review"
+        && !PUBLISH_STATUSES.contains(&status.as_str())
+    {
+        return Err(ApiError::invalid(
+            "status must be one of pending, held, published, missing, excluded, or review",
+        ));
     }
     let page = parse_int(query.page.as_deref(), 1, "page")?;
     if page < 1 {
@@ -362,10 +363,11 @@ pub async fn activities_page(
         if activity.row.publish_status == "excluded" {
             continue;
         }
-        if let Some(local) = timefmt::to_local(&activity.row.start_time, tz) {
-            if week_start <= local && local < week_end {
-                week_seconds += activity.duration_seconds.unwrap_or_default();
-            }
+        if let Some(local) = timefmt::to_local(&activity.row.start_time, tz)
+            && week_start <= local
+            && local < week_end
+        {
+            week_seconds += activity.duration_seconds.unwrap_or_default();
         }
     }
 

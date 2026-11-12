@@ -409,9 +409,11 @@ pub async fn oidc_login(
         &config,
         cookie_value,
         now,
-        &uri,
-        &intent,
-        &next,
+        oidc_flow::Return {
+            redirect_uri: &uri,
+            intent: &intent,
+            next: &next,
+        },
     )
     .await
     {

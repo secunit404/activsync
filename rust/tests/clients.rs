@@ -11,11 +11,10 @@ use openidconnect::HttpRequest;
 use serde_json::{Value, json};
 
 type Seen = Arc<Mutex<Vec<HttpRequest>>>;
+type Reply = Result<(u16, Value, Vec<(&'static str, &'static str)>), &'static str>;
 
 /// Answers each call with the next scripted reply and keeps every request.
-fn scripted(
-    replies: Vec<Result<(u16, Value, Vec<(&'static str, &'static str)>), &'static str>>,
-) -> (Http, Seen) {
+fn scripted(replies: Vec<Reply>) -> (Http, Seen) {
     let queue = Arc::new(Mutex::new(VecDeque::from(replies)));
     let seen: Seen = Arc::default();
     let log = seen.clone();
@@ -40,11 +39,11 @@ fn scripted(
     (http, seen)
 }
 
-fn ok(body: Value) -> Result<(u16, Value, Vec<(&'static str, &'static str)>), &'static str> {
+fn ok(body: Value) -> Reply {
     Ok((200, body, vec![]))
 }
 
-fn status(code: u16) -> Result<(u16, Value, Vec<(&'static str, &'static str)>), &'static str> {
+fn status(code: u16) -> Reply {
     Ok((code, json!({}), vec![]))
 }
 
@@ -56,9 +55,7 @@ fn urls(seen: &Seen) -> Vec<String> {
         .collect()
 }
 
-fn hevy(
-    replies: Vec<Result<(u16, Value, Vec<(&'static str, &'static str)>), &'static str>>,
-) -> (HevyClient, Seen) {
+fn hevy(replies: Vec<Reply>) -> (HevyClient, Seen) {
     let (http, seen) = scripted(replies);
     (
         HevyClient::new(http, "key-123").unwrap().without_backoff(),
@@ -144,10 +141,7 @@ async fn hevy_counts_and_pages_defensively() {
 
 const NOW: i64 = 1_800_000_450;
 
-fn strava(
-    replies: Vec<Result<(u16, Value, Vec<(&'static str, &'static str)>), &'static str>>,
-    tokens: Value,
-) -> (StravaClient, Db, Seen) {
+fn strava(replies: Vec<Reply>, tokens: Value) -> (StravaClient, Db, Seen) {
     let db = Db::open_in_memory().unwrap();
     db::set_config_value(&db.lock(), "strava_tokens", &tokens).unwrap();
     let (http, seen) = scripted(replies);
@@ -182,9 +176,11 @@ async fn strava_refreshes_an_expiring_token_and_keeps_the_scope() {
         body(&seen, 0),
         "client_id=123&client_secret=shh&grant_type=refresh_token&refresh_token=rt"
     );
-    let request = &seen.lock().unwrap()[1];
-    assert_eq!(request.uri(), "https://www.strava.com/api/v3/activities/77");
-    assert_eq!(request.headers()["authorization"], "Bearer new");
+    {
+        let request = &seen.lock().unwrap()[1];
+        assert_eq!(request.uri(), "https://www.strava.com/api/v3/activities/77");
+        assert_eq!(request.headers()["authorization"], "Bearer new");
+    }
     let stored = db::get_config_value(&db.lock(), "strava_tokens")
         .unwrap()
         .unwrap();

@@ -153,13 +153,13 @@ fn parse_host_port(value: &str) -> (String, i64) {
         };
         return (host.to_string(), py_int(port).unwrap_or(0));
     }
-    if value.matches(':').count() == 1 {
-        if let Some((host, port)) = value.rsplit_once(':') {
-            return match py_int(port) {
-                Some(port) => (host.to_string(), port),
-                None => (value.to_string(), 0),
-            };
-        }
+    if value.matches(':').count() == 1
+        && let Some((host, port)) = value.rsplit_once(':')
+    {
+        return match py_int(port) {
+            Some(port) => (host.to_string(), port),
+            None => (value.to_string(), 0),
+        };
     }
     (value.to_string(), 0)
 }
@@ -230,7 +230,7 @@ impl ForwardedTrust {
         let scheme = headers
             .get_all("x-forwarded-proto")
             .iter()
-            .last()
+            .next_back()
             .map(|v| latin1(v).trim().to_string())
             .filter(|p| matches!(p.as_str(), "http" | "https" | "ws" | "wss"));
         let lines: Vec<String> = headers
@@ -391,7 +391,8 @@ mod tests {
 
     #[test]
     fn forwarded_for_matches_uvicorn() {
-        let cases: &[(&str, &str, &[&str], Option<(&str, i64)>)] = &[
+        type Case<'a> = (&'a str, &'a str, &'a [&'a str], Option<(&'a str, i64)>);
+        let cases: &[Case] = &[
             (
                 "127.0.0.1, 10.0.0.0/8",
                 "127.0.0.1",

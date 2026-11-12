@@ -171,6 +171,9 @@ pub fn build_exercise_sets_payload(
 
     let ideal: f64 = slots.iter().map(|s| s.set_dur + s.rest_dur).sum();
     let scale = if ideal > 0.0 { duration_s / ideal } else { 1.0 };
+    // Not `clamp`: a NaN scale must land on MAX_SCALE, as Python's
+    // `max(MIN, min(MAX, scale))` makes it.
+    #[allow(clippy::manual_clamp)]
     let scale = scale.min(MAX_SCALE).max(MIN_SCALE);
 
     let stamp = |cursor: f64| {
@@ -662,10 +665,8 @@ impl Apply<'_> {
                 s.get("product")
                     .is_some_and(|p| p.as_f64() == Some(0.0) || p == "0")
             });
-            if generic {
-                if let Some(detected) = fit_builder::identity_from_fit(&fit) {
-                    persist_identity(&conn, detected)?;
-                }
+            if generic && let Some(detected) = fit_builder::identity_from_fit(&fit) {
+                persist_identity(&conn, detected)?;
             }
             let published = db::get_activity(&conn, source)?
                 .is_some_and(|a| a.strava_activity_id.is_some_and(|id| id != 0));

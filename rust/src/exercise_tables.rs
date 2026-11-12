@@ -236,10 +236,10 @@ pub fn lookup_exercise(
     title: &str,
     template_id: Option<&str>,
 ) -> DbResult<Option<(i64, i64)>> {
-    if let Some(id) = template_id.filter(|id| !id.is_empty()) {
-        if let Some(pair) = user_mapping(conn, id)?.filter(|p| p.0 != UNKNOWN_CATEGORY) {
-            return Ok(Some(pair));
-        }
+    if let Some(id) = template_id.filter(|id| !id.is_empty())
+        && let Some(pair) = user_mapping(conn, id)?.filter(|p| p.0 != UNKNOWN_CATEGORY)
+    {
+        return Ok(Some(pair));
     }
     Ok(standard_mapping(title, template_id))
 }
@@ -326,12 +326,11 @@ pub fn lookup_strava_exercise(
     title: &str,
     template_id: Option<&str>,
 ) -> DbResult<Option<(String, &'static str)>> {
-    if let Some(id) = template_id.filter(|id| !id.is_empty()) {
-        if let Some(user) =
+    if let Some(id) = template_id.filter(|id| !id.is_empty())
+        && let Some(user) =
             user_strava_exercise(conn, id)?.filter(|t| TABLES.strava_types.contains(t))
-        {
-            return Ok(Some((user, "user")));
-        }
+    {
+        return Ok(Some((user, "user")));
     }
     default_strava_exercise(conn, title, template_id)
 }
