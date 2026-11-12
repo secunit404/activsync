@@ -30,7 +30,7 @@ export function SetupStepDots({ step }: { step: SetupStep | null }) {
     <>
       <nav
         aria-hidden="true"
-        className="hidden shrink-0 flex-col justify-between border-r border-border bg-[var(--rail)] px-6 py-8 md:flex md:w-[260px]"
+        className="hidden shrink-0 flex-col justify-between border-r border-border bg-[var(--rail)] px-6 py-8 md:flex md:w-[260px] md:rounded-l-[calc(var(--radius-2xl)-1px)]"
       >
         <div className="flex flex-col gap-9">
           <AppBrand />
