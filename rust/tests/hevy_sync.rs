@@ -371,16 +371,19 @@ fn setup(scenario: &Value) -> Db {
     db
 }
 
+fn profile(value: &Value) -> Profile {
+    Profile {
+        weight_kg: value["weight_kg"].as_f64().unwrap(),
+        birth_year: value["birth_year"].as_i64().unwrap(),
+        vo2max: value["vo2max"].as_f64().unwrap(),
+        sex: value["sex"].as_str().unwrap().into(),
+    }
+}
+
 #[tokio::test]
 async fn the_hevy_leg_runs_like_python() {
     let reference = fixture();
-    let p = &reference["profile"];
-    let profile = Profile {
-        weight_kg: p["weight_kg"].as_f64().unwrap(),
-        birth_year: p["birth_year"].as_i64().unwrap(),
-        vo2max: p["vo2max"].as_f64().unwrap(),
-        sex: p["sex"].as_str().unwrap().into(),
-    };
+    let profile = profile(&reference["profile"]);
     for scenario in reference["scenarios"].as_array().unwrap() {
         let name = scenario["name"].as_str().unwrap();
         let db = setup(scenario);
@@ -438,13 +441,7 @@ async fn the_hevy_leg_runs_like_python() {
 #[tokio::test]
 async fn a_match_choice_applies_like_python() {
     let reference = fixture();
-    let p = &reference["profile"];
-    let profile = Profile {
-        weight_kg: p["weight_kg"].as_f64().unwrap(),
-        birth_year: p["birth_year"].as_i64().unwrap(),
-        vo2max: p["vo2max"].as_f64().unwrap(),
-        sex: p["sex"].as_str().unwrap().into(),
-    };
+    let profile = profile(&reference["profile"]);
     for choice in reference["choices"].as_array().unwrap() {
         let name = choice["name"].as_str().unwrap();
         let mut scenario = json!({"activities": choice["activities"], "workouts": []});

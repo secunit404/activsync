@@ -1,7 +1,6 @@
-//! Server-side undo window for Hevy match decisions, as in the Python app's
-//! `hevy_match_schedule.py`. The scheduler claims with `WHERE state =
-//! 'waiting'` and undo deletes with the same guard, so only one of them can
-//! match a row.
+//! Server-side undo window for Hevy match decisions. The scheduler claims
+//! with `WHERE state = 'waiting'` and undo deletes with the same guard, so
+//! only one of them can match a row.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,11 +15,11 @@ use crate::events::EventBus;
 use crate::hevy_db;
 use crate::schedule::Clock;
 
-pub const WAITING: &str = "waiting";
+const WAITING: &str = "waiting";
 pub const APPLYING: &str = "applying";
-pub const DONE: &str = "done";
-pub const FAILED: &str = "failed";
-pub const SKIPPED: &str = "skipped";
+const DONE: &str = "done";
+const FAILED: &str = "failed";
+const SKIPPED: &str = "skipped";
 
 pub const FAILURE_MESSAGE: &str =
     "Could not apply that Hevy match. Check the server log for details.";
@@ -57,7 +56,7 @@ pub struct Decision {
     pub message: Option<String>,
 }
 
-pub fn schedule(
+fn schedule(
     conn: &mut Connection,
     hevy_id: &str,
     strategy: &str,
@@ -88,14 +87,14 @@ pub fn schedule(
     Ok(scheduled)
 }
 
-pub fn cancel(conn: &Connection, hevy_id: &str) -> DbResult<usize> {
+fn cancel(conn: &Connection, hevy_id: &str) -> DbResult<usize> {
     conn.execute(
         &format!("DELETE FROM hevy_match_schedule WHERE hevy_id = ?1 AND state = '{WAITING}'"),
         [hevy_id],
     )
 }
 
-pub fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(String, String, f64)>> {
+fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(String, String, f64)>> {
     let mut stmt = conn.prepare(&format!(
         "UPDATE hevy_match_schedule SET state = '{APPLYING}' \
          WHERE state = '{WAITING}' AND deadline <= ?1 \
@@ -108,7 +107,7 @@ pub fn claim_due(conn: &Connection, now: f64) -> DbResult<Vec<(String, String, f
     Ok(rows)
 }
 
-pub fn finish(
+fn finish(
     conn: &Connection,
     hevy_id: &str,
     state: &str,
@@ -127,14 +126,14 @@ pub fn finish(
 
 /// Re-applying an interrupted decision is safe: the apply step re-reads the
 /// workout and finishes as skipped unless it is still awaiting a match.
-pub fn recover(conn: &Connection) -> DbResult<usize> {
+fn recover(conn: &Connection) -> DbResult<usize> {
     conn.execute(
         &format!("UPDATE hevy_match_schedule SET state = '{WAITING}' WHERE state = '{APPLYING}'"),
         [],
     )
 }
 
-pub fn prune(conn: &Connection, now: f64) -> DbResult<()> {
+fn prune(conn: &Connection, now: f64) -> DbResult<()> {
     conn.execute(
         "DELETE FROM hevy_match_schedule WHERE finished_at IS NOT NULL AND finished_at < ?1",
         [now - RESULT_RETENTION_SECONDS],
@@ -142,7 +141,7 @@ pub fn prune(conn: &Connection, now: f64) -> DbResult<()> {
     Ok(())
 }
 
-pub fn next_deadline(conn: &Connection) -> DbResult<Option<f64>> {
+fn next_deadline(conn: &Connection) -> DbResult<Option<f64>> {
     conn.query_row(
         &format!("SELECT MIN(deadline) FROM hevy_match_schedule WHERE state = '{WAITING}'"),
         [],
@@ -204,8 +203,8 @@ pub trait MatchApplier: Send + Sync {
     ) -> BoxFuture<'a, Result<String, ApplyFailure>>;
 }
 
-pub struct MockApplier {
-    pub db: Db,
+struct MockApplier {
+    db: Db,
 }
 
 impl MatchApplier for MockApplier {
@@ -225,11 +224,7 @@ impl MatchApplier for MockApplier {
 
 /// Mock-mode stand-in for applying the choice to Garmin: records it on the
 /// workout and its claimed watch activity without any network call.
-pub fn mock_apply(
-    conn: &Connection,
-    hevy_id: &str,
-    strategy: &str,
-) -> DbResult<Option<&'static str>> {
+fn mock_apply(conn: &Connection, hevy_id: &str, strategy: &str) -> DbResult<Option<&'static str>> {
     let Some(workout) = hevy_db::get_workout(conn, hevy_id)? else {
         return Ok(None);
     };

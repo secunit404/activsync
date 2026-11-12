@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::hevy_apply::float;
 use crate::hevy_db::{self, Workout};
 use crate::hevy_description::generate_description;
 use crate::hevy_match::{self, MatchError};
@@ -22,7 +23,6 @@ const TERMINAL_STATUSES: [&str; 5] = [
     "uploaded_passive",
     "linked_existing",
 ];
-const RETRYABLE_STATUSES: [&str; 3] = ["needs_mapping", "failed", "needs_review"];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -174,16 +174,6 @@ pub struct HevyWorkoutDetail {
     description_preview: String,
 }
 
-/// Python's `float()` of a set field, with `None` for anything unreadable.
-fn number(value: Option<&Value>) -> Option<f64> {
-    match value? {
-        Value::Number(n) => n.as_f64(),
-        Value::Bool(b) => Some(f64::from(u8::from(*b))),
-        Value::String(s) => s.trim().parse().ok(),
-        _ => None,
-    }
-}
-
 fn text(value: Option<&Value>) -> Option<String> {
     value
         .and_then(Value::as_str)
@@ -233,11 +223,11 @@ pub fn workout_detail(
                     .map(|(index, set)| HevyWorkoutSetDetail {
                         number: index + 1,
                         set_type: text(set.get("type")).unwrap_or_else(|| "normal".into()),
-                        reps: number(set.get("reps")),
-                        weight_kg: number(set.get("weight_kg").or_else(|| set.get("weight"))),
-                        distance_meters: number(set.get("distance_meters")),
-                        duration_seconds: number(set.get("duration_seconds")),
-                        rpe: number(set.get("rpe")),
+                        reps: float(set.get("reps")),
+                        weight_kg: float(set.get("weight_kg").or_else(|| set.get("weight"))),
+                        distance_meters: float(set.get("distance_meters")),
+                        duration_seconds: float(set.get("duration_seconds")),
+                        rpe: float(set.get("rpe")),
                         custom_metric: custom_metric(set.get("custom_metric")),
                     })
                     .collect(),
@@ -443,7 +433,7 @@ pub async fn retry(
     Path(hevy_id): Path<String>,
 ) -> ApiResult<HevyQueueActionResult> {
     with_lease(&state, &hevy_id, |conn, row| {
-        if !RETRYABLE_STATUSES.contains(&row.status.as_str()) {
+        if !PROBLEMS.contains(&row.status.as_str()) {
             return Err(ApiError::conflict(format!(
                 "Nothing to retry — workout is {}.",
                 row.status

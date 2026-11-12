@@ -1,11 +1,15 @@
-//! The Hevy leg of the poller, as the Python app's `hevy_sync`: read Hevy's
-//! events feed, park workouts with unmapped exercises, match each workout to
-//! its watch activity, apply it with the configured strategy, re-apply
-//! edits, and push edited titles and descriptions to Strava copies.
+//! The Hevy leg of the poller: read Hevy's events feed, park workouts with
+//! unmapped exercises, match each workout to its watch activity, apply it
+//! with the configured strategy, re-apply edits, and push edited titles and
+//! descriptions to Strava copies.
 //!
 //! The events cursor advances only past events whose effect landed, and each
 //! effect is applied before its dedupe key is recorded, so a crash anywhere
 //! is absorbed on the next poll.
+
+mod choice;
+mod feed;
+mod reapply;
 
 use std::collections::HashMap;
 
@@ -14,20 +18,19 @@ use futures_util::future::BoxFuture;
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
+pub use choice::{ChoiceError, RealMatchApplier, apply_match_choice};
+pub use feed::CURSOR_KEY;
+
 use crate::config::{self, Config};
 use crate::db::{self, Db};
 use crate::events::EventBus;
 use crate::exercise_tables;
 use crate::fit_builder::Profile;
 use crate::garmin_client::{GarminClient, GarminError};
-use crate::hevy_apply::{
-    self, Apply, ApplyError, activity_metrics, build_exercise_sets_payload, resolve_exercises,
-};
+use crate::hevy_apply::{self, Apply, ApplyError};
 use crate::hevy_client::{HevyClient, HevyError};
 use crate::hevy_db::{self, APPLIED_STATUSES, Template, Workout};
-use crate::hevy_description::{generate_description, generate_title};
 use crate::hevy_match;
-use crate::hevy_match::{ApplyFailure, MatchApplier};
 use crate::hevy_profile;
 use crate::net::Http;
 use crate::poller::{self, Clients, HevyLeg, HevyLegError};
@@ -35,23 +38,9 @@ use crate::strava_client::StravaClient;
 use crate::sync;
 use crate::timefmt::parse_timestamp;
 
-pub const CURSOR_KEY: &str = "hevy_events_cursor";
-const CURSOR_LAG_MINUTES: i64 = 5;
 const OVERLAP_MIN: f64 = 0.70;
 const DRIFT_MAX_MINUTES: f64 = 20.0;
 const GRACE_DEFAULT_MINUTES: i64 = 120;
-
-/// A Hevy deletion for one of these is surfaced for review, never applied:
-/// the workout has landed on Garmin or is on its way.
-const SYNCED_STATUSES: [&str; 7] = [
-    "merged",
-    "described",
-    "replaced",
-    "uploaded_passive",
-    "linked_existing",
-    "syncing",
-    "needs_review",
-];
 
 /// `failed` and `needs_mapping` are left out on purpose: a definite rejection
 /// must not re-upload every tick. They come back through the user's retry
@@ -108,143 +97,6 @@ impl From<GarminError> for StepError {
     }
 }
 
-fn text(value: Option<&Value>) -> String {
-    match value {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Null) | None => String::new(),
-        Some(other) => other.to_string(),
-    }
-}
-
-/// (type, workout id, timestamp): the dedupe key.
-fn event_key(event: &Value) -> (&'static str, String, String) {
-    if event["type"] == "deleted" {
-        return (
-            "deleted",
-            text(event.get("id")),
-            text(event.get("deleted_at")),
-        );
-    }
-    let workout = &event["workout"];
-    (
-        "updated",
-        text(workout.get("id")),
-        text(workout.get("updated_at")),
-    )
-}
-
-fn apply_updated(conn: &Connection, event: &Value) -> rusqlite::Result<()> {
-    let workout = &event["workout"];
-    let id = text(workout.get("id"));
-    let updated_at = text(workout.get("updated_at"));
-    let before = hevy_db::get_workout(conn, &id)?;
-    let title = text(workout.get("title"));
-    hevy_db::upsert_workout(
-        conn,
-        &id,
-        &title,
-        &text(workout.get("start_time")),
-        &text(workout.get("end_time")),
-        &updated_at,
-        workout,
-    )?;
-    let after = hevy_db::get_workout(conn, &id)?;
-    if before.is_none() && after.is_some() {
-        crate::log_info!(
-            "hevy_sync",
-            "hevy workout {id} ({title}) received, ended {}",
-            text(workout.get("end_time"))
-        );
-    }
-    // A Hevy edit can remove the exercise that needed a mapping. The equality
-    // wakes only the current revision and keeps a replay after a crash safe.
-    if before.is_some_and(|b| b.status == "needs_mapping")
-        && after.is_some_and(|a| a.source_updated_at.as_deref() == Some(&updated_at))
-    {
-        hevy_db::wake_workout(conn, &id)?;
-    }
-    Ok(())
-}
-
-fn apply_deleted(conn: &Connection, event: &Value) -> rusqlite::Result<()> {
-    let Some(row) = hevy_db::get_workout(conn, &text(event.get("id")))? else {
-        return Ok(());
-    };
-    if SYNCED_STATUSES.contains(&row.status.as_str()) {
-        // Never delete on Garmin automatically; surface it instead.
-        hevy_db::set_workout_status(conn, &row.hevy_id, "needs_review", Some("deleted in Hevy"))
-    } else {
-        hevy_db::delete_workout(conn, &row.hevy_id)
-    }
-}
-
-/// Reads Hevy's events feed and applies the new ones; returns how many. A
-/// missing cursor starts at `now`: history is never replayed here, backfill
-/// is its own action.
-pub async fn ingest_events(
-    db: &Db,
-    hevy: &HevyClient,
-    now: DateTime<Utc>,
-) -> Result<usize, HevyLegError> {
-    let cursor = db::get_config_value(&db.lock(), CURSOR_KEY)?.filter(|c| db::truthy(Some(c)));
-    let Some(cursor) = cursor else {
-        db::set_config_value(&db.lock(), CURSOR_KEY, &json!(db::iso(now)))?;
-        return Ok(0);
-    };
-    let cursor = text(Some(&cursor));
-    let since = parse_timestamp(&cursor).map_or_else(
-        || cursor.clone(),
-        |at| db::iso(at - Duration::minutes(CURSOR_LAG_MINUTES)),
-    );
-    let mut events = hevy.iter_events_since(&since).await?;
-    // Oldest first, a deletion last at equal timestamps: an old update must
-    // never resurrect a newer deletion, whatever order the page came in.
-    events.sort_by_cached_key(|event| {
-        let (kind, _, ts) = event_key(event);
-        (ts, kind == "deleted")
-    });
-
-    let conn = db.lock();
-    let mut processed = cursor.clone();
-    let mut fresh = 0;
-    let mut outcome = Ok(());
-    for event in &events {
-        let (kind, workout_id, ts) = event_key(event);
-        let seen = match hevy_db::event_seen(&conn, kind, &workout_id, &ts) {
-            Ok(seen) => seen,
-            Err(err) => {
-                outcome = Err(err);
-                break;
-            }
-        };
-        if !seen {
-            // The effect before the dedupe record: a crash between them
-            // re-runs the idempotent effect rather than losing it.
-            let applied = if kind == "updated" {
-                apply_updated(&conn, event)
-            } else {
-                apply_deleted(&conn, event)
-            }
-            .and_then(|()| hevy_db::record_event_seen(&conn, kind, &workout_id, &ts));
-            if let Err(err) = applied {
-                outcome = Err(err);
-                break;
-            }
-            fresh += 1;
-        }
-        // A seen event still moves the cursor, or it would lag until an
-        // unrelated newer event arrived.
-        if ts > processed {
-            processed = ts;
-        }
-    }
-    if processed != cursor {
-        db::set_config_value(&conn, CURSOR_KEY, &json!(processed))?;
-    }
-    outcome?;
-    Ok(fresh)
-}
-
 /// Hevy's exercise template in the table's shape. Hevy has named the
 /// equipment field two ways; the fallbacks cover a template the API would
 /// not return, known only by the id and title seen on the workout.
@@ -280,7 +132,7 @@ pub(crate) fn store_template(
 /// structured sets need every exercise mapped; a miss parks the workout
 /// listing every missing title and caches unknown templates for the
 /// mappings page. Describe uses Hevy's own titles and always passes.
-pub async fn apply_mapping_gate(
+async fn apply_mapping_gate(
     db: &Db,
     row: &Workout,
     strategy: &str,
@@ -344,7 +196,7 @@ pub async fn apply_mapping_gate(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WatchMatch {
+pub(crate) enum WatchMatch {
     One(i64),
     /// Several unclaimed candidates.
     Multiple,
@@ -355,7 +207,7 @@ pub enum WatchMatch {
 
 /// The workout's watch activity among the local ones, with no Garmin call.
 /// A candidate this workout already claimed counts as its own.
-pub fn find_watch_match(conn: &Connection, row: &Workout) -> rusqlite::Result<WatchMatch> {
+pub(crate) fn find_watch_match(conn: &Connection, row: &Workout) -> rusqlite::Result<WatchMatch> {
     let Some((hevy_start, hevy_end)) =
         hevy_apply::workout_window(row).filter(|(start, end)| end > start)
     else {
@@ -456,12 +308,21 @@ fn record_failure(conn: &Connection, hevy_id: &str, error: &str) -> rusqlite::Re
     hevy_db::set_workout_status(conn, hevy_id, status, Some(error))
 }
 
-async fn execute(apply: &Apply<'_>, row: &Workout, strategy: &str) -> Result<(), ApplyError> {
-    match strategy {
-        "describe" => apply.execute_describe(row).await,
-        "replace" => apply.execute_replace(row).await,
-        _ => apply.execute_merge(row).await,
+async fn apply_strategy(
+    apply: &Apply<'_>,
+    hevy: &HevyClient,
+    row: &Workout,
+    strategy: &str,
+) -> Result<(), StepError> {
+    if !apply_mapping_gate(apply.db, row, strategy, hevy).await? {
+        return Ok(());
     }
+    match strategy {
+        "describe" => apply.execute_describe(row).await?,
+        "replace" => apply.execute_replace(row).await?,
+        _ => apply.execute_merge(row).await?,
+    }
+    Ok(())
 }
 
 async fn decide(
@@ -515,9 +376,7 @@ async fn decide(
                 }
                 row
             };
-            if apply_mapping_gate(db, &row, strategy, hevy).await? {
-                execute(apply, &row, strategy).await?;
-            }
+            apply_strategy(apply, hevy, &row, strategy).await?;
         }
         WatchMatch::Multiple => {
             hevy_db::set_workout_status(
@@ -549,7 +408,7 @@ async fn decide(
 }
 
 /// One workout's turn this tick, under its lease.
-pub async fn process_workout(
+async fn process_workout(
     apply: &Apply<'_>,
     hevy: &HevyClient,
     row: &Workout,
@@ -581,296 +440,13 @@ pub async fn process_workout(
     result
 }
 
-#[derive(Debug)]
-pub enum ChoiceError {
-    Busy,
-    Unknown,
-    Invalid(String),
-    Failed(StepError),
-}
-
-impl std::fmt::Display for ChoiceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Busy => f.write_str("Workout is being processed right now."),
-            Self::Unknown => f.write_str("Unknown Hevy workout."),
-            Self::Invalid(msg) => f.write_str(msg),
-            Self::Failed(err) => err.fmt(f),
-        }
-    }
-}
-
-impl From<StepError> for ChoiceError {
-    fn from(err: StepError) -> Self {
-        Self::Failed(err)
-    }
-}
-
-impl From<rusqlite::Error> for ChoiceError {
-    fn from(err: rusqlite::Error) -> Self {
-        Self::Failed(err.into())
-    }
-}
-
-fn validate_choice(
-    conn: &Connection,
-    hevy_id: &str,
-    strategy: &str,
-) -> Result<Workout, ChoiceError> {
-    let row = hevy_db::get_workout(conn, hevy_id)?.ok_or(ChoiceError::Unknown)?;
-    let Some(source) = row
-        .source_garmin_activity_id
-        .filter(|id| *id != 0 && row.status == "awaiting_match")
-    else {
-        return Err(ChoiceError::Invalid(
-            "This workout is not waiting for a match decision.".into(),
-        ));
-    };
-    if hevy_db::get_open_operation(conn, hevy_id)?.is_some() {
-        return Err(ChoiceError::Invalid(
-            "This workout already has an operation in progress.".into(),
-        ));
-    }
-    if strategy == "replace" && db::get_activity(conn, source)?.is_some_and(|a| a.is_published()) {
-        return Err(ChoiceError::Invalid(
-            "Replace is unavailable because this activity is already on Strava. Choose Merge or Description only.".into(),
-        ));
-    }
-    Ok(row)
-}
-
-async fn choose(
-    apply: &Apply<'_>,
-    hevy: &HevyClient,
-    row: &Workout,
-    strategy: &str,
-) -> Result<(), StepError> {
-    if apply_mapping_gate(apply.db, row, strategy, hevy).await? {
-        execute(apply, row, strategy).await?;
-    }
-    Ok(())
-}
-
-/// What a failed choice leaves on the workout: still awaiting the choice if
-/// nothing moved it, `syncing` with an open operation, else `failed`.
-fn record_choice_failure(conn: &Connection, hevy_id: &str, error: &str) -> rusqlite::Result<()> {
-    let awaiting =
-        hevy_db::get_workout(conn, hevy_id)?.is_some_and(|row| row.status == "awaiting_match");
-    let status = match hevy_db::get_open_operation(conn, hevy_id)? {
-        _ if awaiting => "awaiting_match",
-        Some(_) => "syncing",
-        None => "failed",
-    };
-    hevy_db::set_workout_status(conn, hevy_id, status, Some(error))
-}
-
-/// Applies the owner's explicit choice to a claimed watch match. A refused
-/// choice changes nothing: a scheduled choice can run after the workout was
-/// applied, and recording the refusal would mark it failed.
-pub async fn apply_match_choice(
-    apply: &Apply<'_>,
-    hevy: &HevyClient,
-    hevy_id: &str,
-    strategy: &str,
-    now: DateTime<Utc>,
-) -> Result<Option<Workout>, ChoiceError> {
-    if !matches!(strategy, "merge" | "replace" | "describe") {
-        return Err(ChoiceError::Invalid(format!(
-            "unsupported Hevy match strategy: {strategy}"
-        )));
-    }
-    let db = apply.db;
-    let token = hevy_db::acquire_lease(&db.lock(), hevy_id, now)?.ok_or(ChoiceError::Busy)?;
-    let checked = validate_choice(&db.lock(), hevy_id, strategy);
-    let outcome = match checked {
-        Ok(row) => choose(apply, hevy, &row, strategy)
-            .await
-            .map_err(ChoiceError::Failed),
-        Err(err) => Err(err),
-    };
-    let conn = db.lock();
-    if let Err(ChoiceError::Failed(err)) = &outcome
-        && !matches!(err, StepError::HevyAuth)
-    {
-        crate::log_warn!(
-            "hevy_sync",
-            "applying Hevy match choice for {hevy_id} failed: {err}"
-        );
-        record_choice_failure(&conn, hevy_id, &err.to_string())?;
-    }
-    hevy_db::release_lease(&conn, hevy_id, &token)?;
-    log_transition(&conn, hevy_id, "awaiting_match");
-    outcome.and_then(|()| Ok(hevy_db::get_workout(&conn, hevy_id)?))
-}
-
-async fn redo(apply: &Apply<'_>, hevy: &HevyClient, row: &Workout) -> Result<(), StepError> {
-    let strategy = row.applied_strategy.as_deref().unwrap_or("merge");
-    if !apply_mapping_gate(apply.db, row, strategy, hevy).await? {
-        return Ok(());
-    }
-    let target = row.garmin_activity_id.ok_or_else(|| {
-        ApplyError::Invalid(format!("workout {} has no linked activity", row.hevy_id))
-    })?;
-    if row.applied_strategy.as_deref() != Some("describe") {
-        let (resolved, window) = {
-            let conn = apply.db.lock();
-            let resolved = match resolve_exercises(&conn, &row.payload_json()) {
-                Ok(resolved) => resolved,
-                Err(ApplyError::MappingMiss { title, .. }) => {
-                    let error = format!("unmapped exercises: {title}");
-                    hevy_db::set_workout_status(
-                        &conn,
-                        &row.hevy_id,
-                        "needs_mapping",
-                        Some(&error),
-                    )?;
-                    return Ok(());
-                }
-                Err(err) => return Err(err.into()),
-            };
-            (resolved, hevy_apply::activity_window(&conn, target, row)?)
-        };
-        let mut payload = build_exercise_sets_payload(&resolved, &window.0, window.1)
-            .map_err(ApplyError::Invalid)?;
-        payload["activityId"] = json!(target);
-        apply.garmin.put_exercise_sets(target, &payload).await?;
-    }
-    let write_summary = matches!(strategy, "describe" | "passive") || apply.summary_on_structured();
-    apply
-        .apply_metadata(target, row, write_summary, (None, None))
-        .await?;
-    hevy_db::set_applied_garmin(
-        &apply.db.lock(),
-        &row.hevy_id,
-        row.source_updated_at.as_deref(),
-    )?;
-    Ok(())
-}
-
-/// A newer Hevy revision of an applied workout, re-applied with the
-/// strategy it was first applied with, never the current setting.
-pub async fn reapply(
-    apply: &Apply<'_>,
-    hevy: &HevyClient,
-    row: &Workout,
-    now: DateTime<Utc>,
-) -> rusqlite::Result<()> {
-    let db = apply.db;
-    let Some(token) = hevy_db::acquire_lease(&db.lock(), &row.hevy_id, now)? else {
-        return Ok(());
-    };
-    let outcome = redo(apply, hevy, row).await;
-    let conn = db.lock();
-    match outcome {
-        Ok(()) => {}
-        Err(StepError::Apply(ApplyError::Garmin(GarminError::ActivityGone(_)))) => {
-            let error = "linked activity deleted on Garmin — re-sync as fresh upload";
-            hevy_db::set_workout_status(&conn, &row.hevy_id, "needs_review", Some(error))?;
-        }
-        Err(err) => {
-            crate::log_warn!(
-                "hevy_sync",
-                "re-applying hevy workout {} failed: {err}",
-                row.hevy_id
-            );
-            hevy_db::set_workout_status(&conn, &row.hevy_id, &row.status, Some(&err.to_string()))?;
-        }
-    }
-    hevy_db::release_lease(&conn, &row.hevy_id, &token)?;
-    log_transition(&conn, &row.hevy_id, &row.status);
-    Ok(())
-}
-
-type Fingerprint = (String, Option<i64>, Option<String>, Option<String>);
-
-fn fingerprint(row: Option<&Workout>) -> Option<Fingerprint> {
-    row.map(|r| {
-        (
-            r.status.clone(),
-            r.garmin_activity_id,
-            r.garmin_applied_updated_at.clone(),
-            r.error.clone(),
-        )
-    })
-}
-
-/// Pushes edited titles and descriptions to published Strava copies. The
-/// Garmin side can succeed while Strava is down, so this retries each tick
-/// until Strava has the applied Garmin revision.
-pub async fn strava_catchup(
-    db: &Db,
-    strava: &StravaClient,
-    cfg: &Config,
-) -> Result<bool, HevyLegError> {
-    let mut changed = false;
-    for status in APPLIED_STATUSES {
-        let rows = hevy_db::list_workouts(&db.lock(), status)?;
-        for row in rows {
-            let garmin_applied = row.garmin_applied_updated_at.clone().unwrap_or_default();
-            if garmin_applied.is_empty()
-                || garmin_applied <= row.strava_applied_updated_at.clone().unwrap_or_default()
-            {
-                continue;
-            }
-            let (activity, metrics) = {
-                let conn = db.lock();
-                let activity = match row.garmin_activity_id.filter(|id| *id != 0) {
-                    Some(id) => db::get_activity(&conn, id)?,
-                    None => None,
-                };
-                // Not published yet: the publish carries the current text.
-                let Some(activity) =
-                    activity.filter(|a| a.strava_activity_id.is_some_and(|id| id != 0))
-                else {
-                    continue;
-                };
-                let metrics =
-                    activity_metrics(&conn, &row, activity.garmin_activity_id, (None, None))
-                        .map_err(|err| HevyLegError::Failed(err.to_string()))?;
-                (activity, metrics)
-            };
-            let payload = row.payload_json();
-            let strategy = row.applied_strategy.as_deref().unwrap_or("merge");
-            let write_summary = matches!(strategy, "describe" | "passive")
-                || cfg
-                    .get("hevy_summary_on_structured")
-                    .is_none_or(|v| db::truthy(Some(v)));
-            let template = |key: &str| cfg.get(key).and_then(Value::as_str);
-            let texts =
-                generate_title(&payload, template("hevy_title_template")).and_then(|title| {
-                    let description = if write_summary {
-                        generate_description(
-                            &payload,
-                            metrics.0,
-                            metrics.1,
-                            template("hevy_description_template"),
-                        )?
-                    } else {
-                        activity.description.clone()
-                    };
-                    Ok((title, description))
-                });
-            let strava_id = activity.strava_activity_id.unwrap_or_default();
-            let pushed = match texts {
-                Ok((title, description)) => strava
-                    .update_activity_metadata(strava_id, &title, &description)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Err(err) => Err(err),
-            };
-            if let Err(err) = pushed {
-                crate::log_warn!(
-                    "hevy_sync",
-                    "strava catch-up failed for {}: {err}",
-                    row.hevy_id
-                );
-                continue;
-            }
-            hevy_db::set_applied_strava(&db.lock(), &row.hevy_id, &garmin_applied)?;
-            changed = true;
-        }
-    }
-    Ok(changed)
+fn fingerprint(row: &Workout) -> (&str, Option<i64>, Option<&str>, Option<&str>) {
+    (
+        &row.status,
+        row.garmin_activity_id,
+        row.garmin_applied_updated_at.as_deref(),
+        row.error.as_deref(),
+    )
 }
 
 /// One tick of the Hevy leg; whether anything changed, which hands off to
@@ -882,13 +458,13 @@ pub async fn run_hevy_leg(
     now: DateTime<Utc>,
 ) -> Result<bool, HevyLegError> {
     let db = apply.db;
-    let mut changed = ingest_events(db, hevy, now).await? > 0;
+    let mut changed = feed::ingest_events(db, hevy, now).await? > 0;
     for status in ACTIONABLE {
         let rows = hevy_db::list_workouts(&db.lock(), status)?;
         for row in rows {
             process_workout(apply, hevy, &row, now).await?;
             let after = hevy_db::get_workout(&db.lock(), &row.hevy_id)?;
-            if fingerprint(after.as_ref()) != fingerprint(Some(&row)) {
+            if after.as_ref().map(fingerprint) != Some(fingerprint(&row)) {
                 changed = true;
             }
         }
@@ -896,19 +472,19 @@ pub async fn run_hevy_leg(
     for status in APPLIED_STATUSES {
         let rows = hevy_db::list_workouts(&db.lock(), status)?;
         for row in rows {
-            let applied = row.garmin_applied_updated_at.clone().unwrap_or_default();
+            let applied = row.garmin_applied_updated_at.as_deref().unwrap_or_default();
             if row
                 .source_updated_at
-                .as_ref()
-                .is_some_and(|source| !source.is_empty() && *source > applied)
+                .as_deref()
+                .is_some_and(|source| !source.is_empty() && source > applied)
             {
-                reapply(apply, hevy, &row, now).await?;
+                reapply::reapply(apply, hevy, &row, now).await?;
                 changed = true;
             }
         }
     }
     if let Some(strava) = strava {
-        changed = strava_catchup(db, strava, apply.cfg).await? || changed;
+        changed = reapply::strava_catchup(apply, strava).await? || changed;
     }
     Ok(changed)
 }
@@ -927,58 +503,6 @@ async fn hevy_context(
     let profile = hevy_profile::get_profile(db, garmin, now).await;
     let cfg = config::load_config(&db.lock(), development).map_err(|e| e.to_string())?;
     Ok((hevy, profile, cfg))
-}
-
-/// Applies an owner's match choice to Garmin, then reads Garmin back so the
-/// dashboard shows the result.
-pub struct RealMatchApplier {
-    pub db: Db,
-    pub events: EventBus,
-    pub clients: std::sync::Arc<dyn Clients>,
-    pub hevy_http: Http,
-    pub development: bool,
-}
-
-impl RealMatchApplier {
-    async fn apply_now(&self, hevy_id: &str, strategy: &str) -> Result<String, ApplyFailure> {
-        let now = Utc::now();
-        let failed = |err: &dyn std::fmt::Display| ApplyFailure::Failed(err.to_string());
-        let garmin = poller::open_garmin(&self.db, &self.events, self.clients.as_ref(), now)
-            .await
-            .map_err(|e| failed(&e))?;
-        let (hevy, profile, cfg) =
-            hevy_context(&self.db, &garmin, &self.hevy_http, self.development, now)
-                .await
-                .map_err(|e| failed(&e))?;
-        let apply = Apply {
-            db: &self.db,
-            garmin: &garmin,
-            cfg: &cfg,
-            profile: &profile,
-        };
-        let row = match apply_match_choice(&apply, &hevy, hevy_id, strategy, now).await {
-            Ok(row) => row.ok_or_else(|| ApplyFailure::Failed("the workout disappeared".into()))?,
-            Err(ChoiceError::Failed(StepError::HevyAuth)) => return Err(ApplyFailure::HevyAuth),
-            Err(err) => return Err(failed(&err)),
-        };
-        if matches!(row.status.as_str(), "merged" | "replaced" | "described") {
-            sync::sync_garmin(&self.db, &garmin, &cfg, now, None, None)
-                .await
-                .map_err(|e| failed(&e))?;
-        }
-        self.events.publish("refresh");
-        Ok(row.status)
-    }
-}
-
-impl MatchApplier for RealMatchApplier {
-    fn apply<'a>(
-        &'a self,
-        hevy_id: &'a str,
-        strategy: &'a str,
-    ) -> BoxFuture<'a, Result<String, ApplyFailure>> {
-        Box::pin(self.apply_now(hevy_id, strategy))
-    }
 }
 
 /// Starts one workout now rather than at the next Hevy poll, as backfill and

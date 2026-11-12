@@ -71,7 +71,6 @@ pub struct Operation {
     pub generated_avg_hr: Option<f64>,
     pub attempt_count: i64,
     pub delete_attempt_count: i64,
-    pub last_error: Option<String>,
 }
 
 impl Operation {
@@ -90,7 +89,6 @@ impl Operation {
             generated_avg_hr: row.get("generated_avg_hr")?,
             attempt_count: row.get("attempt_count")?,
             delete_attempt_count: row.get("delete_attempt_count")?,
-            last_error: row.get("last_error")?,
         })
     }
 }
@@ -131,6 +129,18 @@ fn ids_json(ids: &[i64]) -> String {
 
 fn now_iso() -> String {
     db::iso(Utc::now())
+}
+
+fn unless_conflict<T>(result: DbResult<T>) -> DbResult<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(rusqlite::Error::SqliteFailure(e, _))
+            if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+        {
+            Ok(None)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Inserts a workout as waiting for its watch activity, or refreshes it from
@@ -219,15 +229,7 @@ pub fn claim_source(conn: &Connection, hevy_id: &str, source: i64) -> DbResult<b
          WHERE hevy_id = ?3 AND (source_garmin_activity_id IS NULL OR source_garmin_activity_id = ?1)",
         params![source, now_iso(), hevy_id],
     );
-    match changed {
-        Ok(n) => Ok(n == 1),
-        Err(rusqlite::Error::SqliteFailure(e, _))
-            if e.code == rusqlite::ErrorCode::ConstraintViolation =>
-        {
-            Ok(false)
-        }
-        Err(e) => Err(e),
-    }
+    Ok(unless_conflict(changed)? == Some(1))
 }
 
 /// The applied strategy is set once and never changed afterwards.
@@ -371,15 +373,7 @@ pub fn open_operation(
             now
         ],
     );
-    match inserted {
-        Ok(_) => Ok(Some(conn.last_insert_rowid())),
-        Err(rusqlite::Error::SqliteFailure(e, _))
-            if e.code == rusqlite::ErrorCode::ConstraintViolation =>
-        {
-            Ok(None)
-        }
-        Err(e) => Err(e),
-    }
+    Ok(unless_conflict(inserted)?.map(|_| conn.last_insert_rowid()))
 }
 
 /// One journal column to change.
@@ -675,38 +669,31 @@ pub fn wake_needs_mapping(conn: &Connection, template_id: &str) -> DbResult<Vec<
         })
         .map(|row| row.hevy_id)
         .collect();
-    wake(conn, affected)
+    let now = now_iso();
+    for hevy_id in &affected {
+        wake(conn, hevy_id, &now)?;
+    }
+    Ok(affected)
 }
 
 /// Wakes one parked workout, for a newer Hevy revision of it.
-pub fn wake_workout(conn: &Connection, hevy_id: &str) -> DbResult<Vec<String>> {
-    let parked = get_workout(conn, hevy_id)?.is_some_and(|row| row.status == "needs_mapping");
-    wake(
-        conn,
-        if parked {
-            vec![hevy_id.to_string()]
-        } else {
-            Vec::new()
-        },
-    )
+pub fn wake_workout(conn: &Connection, hevy_id: &str) -> DbResult<()> {
+    wake(conn, hevy_id, &now_iso())
 }
 
-fn wake(conn: &Connection, affected: Vec<String>) -> DbResult<Vec<String>> {
-    let now = now_iso();
-    for hevy_id in &affected {
-        conn.execute(
-            "UPDATE hevy_workouts
-             SET status = CASE applied_strategy
-                     WHEN 'merge' THEN 'merged'
-                     WHEN 'describe' THEN 'described'
-                     WHEN 'replace' THEN 'replaced'
-                     WHEN 'passive' THEN 'uploaded_passive'
-                     ELSE 'waiting_watch'
-                 END,
-                 error = NULL, updated_at = ?1
-             WHERE hevy_id = ?2 AND status = 'needs_mapping'",
-            params![now, hevy_id],
-        )?;
-    }
-    Ok(affected)
+fn wake(conn: &Connection, hevy_id: &str, now: &str) -> DbResult<()> {
+    conn.execute(
+        "UPDATE hevy_workouts
+         SET status = CASE applied_strategy
+                 WHEN 'merge' THEN 'merged'
+                 WHEN 'describe' THEN 'described'
+                 WHEN 'replace' THEN 'replaced'
+                 WHEN 'passive' THEN 'uploaded_passive'
+                 ELSE 'waiting_watch'
+             END,
+             error = NULL, updated_at = ?1
+         WHERE hevy_id = ?2 AND status = 'needs_mapping'",
+        params![now, hevy_id],
+    )?;
+    Ok(())
 }
