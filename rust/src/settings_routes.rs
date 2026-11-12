@@ -13,7 +13,7 @@ use crate::hevy_settings::{self, DeviceIdentity, HevySettingsState, ProfileOverr
 use crate::{hevy_sync, onboarding};
 use crate::routes::{ApiError, UpdateState, development};
 use crate::view::{self, Connections};
-use crate::{AppState, config, timefmt, version};
+use crate::{AppState, config, mock, timefmt, version};
 
 type ApiResult<T> = Result<Json<T>, ApiError>;
 
@@ -201,10 +201,12 @@ pub async fn save_strava_credentials(
 }
 
 pub async fn disconnect_strava(State(state): State<AppState>) -> ApiResult<ActionResult> {
-    let conn = state.db.lock();
-    db::set_config_value(&conn, "strava_tokens", &Value::Null)?;
+    match &state.clients {
+        Some(clients) => clients.strava().disconnect().await,
+        None => db::set_config_value(&state.db.lock(), "strava_tokens", &Value::Null)?,
+    }
     state.events.publish("refresh");
-    action(&state, &conn, "Strava disconnected. Publishing is paused.", false)
+    action(&state, &state.db.lock(), "Strava disconnected. Publishing is paused.", false)
 }
 
 #[derive(Deserialize)]
@@ -233,27 +235,24 @@ async fn validate_hevy_key(state: &AppState, api_key: &str) -> Result<Option<Hev
 }
 
 /// Best effort: caching every exercise template now fills the mappings page
-/// before the first workout arrives.
-async fn prefetch_templates(state: &AppState, hevy: &HevyClient) {
-    let mut page = 1;
-    loop {
-        let (templates, more) = match hevy.get_exercise_templates_page(page).await {
-            Ok(found) => found,
+/// before the first workout arrives. Nothing is written unless every page
+/// was fetched.
+async fn prefetch_templates(state: &AppState, hevy: Option<&HevyClient>) {
+    let templates = match hevy {
+        Some(hevy) => match hevy.iter_all_exercise_templates().await {
+            Ok(templates) => templates,
             Err(err) => return crate::log_warn!("settings_routes", "Hevy template prefetch after connect failed: {err}"),
+        },
+        None => mock::hevy_templates(),
+    };
+    let conn = state.db.lock();
+    for template in &templates {
+        let Some(id) = template.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()) else {
+            continue;
         };
-        let conn = state.db.lock();
-        for template in &templates {
-            let Some(id) = template.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()) else {
-                continue;
-            };
-            if let Err(err) = hevy_sync::store_template(&conn, template, id, "") {
-                return crate::log_warn!("settings_routes", "Hevy template prefetch after connect failed: {err}");
-            }
+        if let Err(err) = hevy_sync::store_template(&conn, template, id, "") {
+            return crate::log_warn!("settings_routes", "Hevy template prefetch after connect failed: {err}");
         }
-        if !more {
-            return;
-        }
-        page += 1;
     }
 }
 
@@ -271,9 +270,7 @@ async fn connect_hevy(state: &AppState, api_key: &str, in_setup: bool) -> Result
             db::set_config_value(&conn, "hevy_events_cursor", &json!(db::iso(Utc::now())))?;
         }
     }
-    if let Some(hevy) = hevy {
-        prefetch_templates(state, &hevy).await;
-    }
+    prefetch_templates(state, hevy.as_ref()).await;
     if in_setup {
         let conn = state.db.lock();
         db::set_config_value(&conn, "setup_hevy_done", &json!(true))?;

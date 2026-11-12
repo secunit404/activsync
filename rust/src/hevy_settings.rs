@@ -122,45 +122,126 @@ pub fn hevy_settings_state(conn: &Connection, cfg: &Config) -> DbResult<HevySett
     })
 }
 
+/// One `{...}` replacement field as `string.Formatter().parse` reports it.
 struct Field {
     name: String,
     has_options: bool,
 }
 
-/// The placeholders in a `str.format` template, with Python's own error
-/// messages for stray or unclosed braces.
-fn parse_fields(template: &str) -> Result<Vec<Field>, String> {
-    let chars: Vec<char> = template.chars().collect();
-    let mut fields = Vec::new();
-    let mut i = 0;
-    while i < chars.len() {
-        match chars[i] {
-            '{' if chars.get(i + 1) == Some(&'{') => i += 2,
-            '}' if chars.get(i + 1) == Some(&'}') => i += 2,
-            '}' => return Err("Single '}' encountered in format string".into()),
-            '{' if i + 1 == chars.len() => return Err("Single '{' encountered in format string".into()),
-            '{' => {
-                let Some(close) = chars[i + 1..].iter().position(|c| *c == '}') else {
-                    return Err("expected '}' before end of string".into());
-                };
-                let body: String = chars[i + 1..i + 1 + close].iter().collect();
-                let name_end = body.find(['!', ':']).unwrap_or(body.len());
-                fields.push(Field { name: body[..name_end].to_string(), has_options: name_end < body.len() });
-                i += close + 2;
-            }
-            _ => i += 1,
+/// Walks a `str.format` template the way CPython's `MarkupIterator` does,
+/// one piece at a time, so a parse error surfaces only after the fields
+/// before it have been checked.
+struct Markup {
+    chars: Vec<char>,
+    pos: usize,
+}
+
+impl Markup {
+    fn next_field(&mut self) -> Option<Result<Option<Field>, String>> {
+        if self.pos >= self.chars.len() {
+            return None;
         }
+        let mut last = '\0';
+        let mut markup_follows = false;
+        while self.pos < self.chars.len() {
+            last = self.chars[self.pos];
+            self.pos += 1;
+            if last == '{' || last == '}' {
+                markup_follows = true;
+                break;
+            }
+        }
+        let at_end = self.pos >= self.chars.len();
+        if last == '}' && (at_end || self.chars[self.pos] != last) {
+            return Some(Err("Single '}' encountered in format string".into()));
+        }
+        if at_end && last == '{' {
+            return Some(Err("Single '{' encountered in format string".into()));
+        }
+        if !at_end && last == self.chars[self.pos] {
+            self.pos += 1;
+            markup_follows = false;
+        }
+        if !markup_follows {
+            return Some(Ok(None));
+        }
+        Some(self.parse_field().map(Some))
     }
-    Ok(fields)
+
+    fn parse_field(&mut self) -> Result<Field, String> {
+        let start = self.pos;
+        let mut last = '\0';
+        while self.pos < self.chars.len() {
+            last = self.chars[self.pos];
+            self.pos += 1;
+            match last {
+                '{' => return Err("unexpected '{' in field name".into()),
+                '[' => {
+                    while self.pos < self.chars.len() && self.chars[self.pos] != ']' {
+                        self.pos += 1;
+                    }
+                }
+                '}' | ':' | '!' => break,
+                _ => {}
+            }
+        }
+        if !matches!(last, '}' | ':' | '!') {
+            return Err("expected '}' before end of string".into());
+        }
+        let name: String = self.chars[start..self.pos - 1].iter().collect();
+        if last == '}' {
+            return Ok(Field { name, has_options: false });
+        }
+        let mut has_conversion = false;
+        if last == '!' {
+            let Some(&conversion) = self.chars.get(self.pos) else {
+                return Err("end of string while looking for conversion specifier".into());
+            };
+            self.pos += 1;
+            has_conversion = conversion != '\0';
+            if let Some(&next) = self.chars.get(self.pos) {
+                self.pos += 1;
+                if next == '}' {
+                    return Ok(Field { name, has_options: has_conversion });
+                }
+                if next != ':' {
+                    return Err("expected ':' after conversion specifier".into());
+                }
+            }
+        }
+        let spec_start = self.pos;
+        let mut depth = 1;
+        while let Some(&c) = self.chars.get(self.pos) {
+            self.pos += 1;
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(Field { name, has_options: has_conversion || self.pos - 1 > spec_start });
+                    }
+                }
+                _ => {}
+            }
+        }
+        Err("unmatched '{' in format spec".into())
+    }
+}
+
+fn is_blank(template: &str) -> bool {
+    template.chars().all(|c| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
 }
 
 fn validate(template: &str, allowed: &[&str], label: &str) -> Result<(), String> {
-    if template.trim().is_empty() {
+    if is_blank(template) {
         return Err(format!("{label} template cannot be empty."));
     }
     let lower = label.to_lowercase();
-    let fields = parse_fields(template).map_err(|err| format!("Invalid {lower} template: {err}"))?;
-    for field in fields {
+    let mut markup = Markup { chars: template.chars().collect(), pos: 0 };
+    while let Some(piece) = markup.next_field() {
+        let Some(field) = piece.map_err(|err| format!("Invalid {lower} template: {err}"))? else {
+            continue;
+        };
         if !allowed.contains(&field.name.as_str()) {
             return Err(format!("Unknown {lower} placeholder: {{{}}}.", field.name));
         }

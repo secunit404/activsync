@@ -14,6 +14,8 @@ pub mod exercise_tables;
 pub mod fit_builder;
 pub mod fit_encode;
 pub mod garmin_client;
+pub mod garmin_errors;
+pub mod garmin_retry;
 pub mod garmin_login;
 pub mod garmin_routes;
 pub mod hevy_apply;
@@ -38,6 +40,8 @@ pub mod oidc_logo;
 pub mod oidc_routes;
 pub mod onboarding;
 pub mod poller;
+pub mod proxy_headers;
+pub mod publish_routes;
 pub mod routes;
 pub mod schedule;
 pub mod seed;
@@ -56,10 +60,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
-use axum::http::{HeaderValue, header};
+use axum::http::{HeaderValue, Uri, header};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
-use tower_http::services::{ServeDir, ServeFile};
-use tower_http::set_header::SetResponseHeaderLayer;
+use tower_http::services::ServeDir;
 
 use crate::auth_core::{AttemptLimiter, SetupCode};
 use crate::auth_guard::AuthConfig;
@@ -258,6 +262,7 @@ fn hevy_router() -> Router<AppState> {
 }
 
 fn api_router() -> Router<AppState> {
+    use publish_routes::*;
     use routes::*;
     Router::new()
         .merge(settings_router())
@@ -266,19 +271,23 @@ fn api_router() -> Router<AppState> {
         .route("/app", get(app_state))
         .route("/catch-up-report", axum::routing::delete(dismiss_catch_up_report))
         .route("/activities", get(activities_page))
+        .route("/activities/publish", post(publish_activities))
         .route("/activities/publish/schedule", post(schedule_publish_activities))
         .route("/activities/publish/cancel", post(cancel_publish_activities))
         .route("/activities/publish/batches/{batch_id}", get(publish_batch))
         .route("/activities/{id}", put(edit_activity))
         .route("/activities/{id}/exclude", post(exclude_activity))
         .route("/activities/{id}/restore", post(restore_activity))
+        .route("/activities/{id}/publish", post(publish_activity))
         .route("/activities/{id}/publish/schedule", post(schedule_publish_activity))
         .route("/activities/{id}/publish/cancel", post(cancel_publish_activity))
         .fallback(not_found)
+        .method_not_allowed_fallback(method_not_allowed)
 }
 
 /// The full app: JSON API, live refresh stream, and, when `web_dir` holds a
-/// built frontend, its assets with `index.html` for every other path.
+/// built frontend, its assets with `index.html` for every other path outside
+/// the reserved prefixes.
 /// The browser-tab and home-screen icons, the files the Python app serves.
 const FAVICON: &[u8] = include_bytes!("../../src/activsync/static/favicon.png");
 const APPLE_TOUCH_ICON: &[u8] = include_bytes!("../../src/activsync/static/apple-touch-icon.png");
@@ -296,21 +305,50 @@ pub fn build_app(mut state: AppState, web_dir: Option<&Path>) -> Router {
         .route("/strava/callback", get(strava_routes::strava_callback))
         .route("/auth/oidc/login", get(oidc_routes::oidc_login))
         .route("/auth/oidc/callback", get(oidc_routes::oidc_callback));
-    if let Some(dir) = web_dir.filter(|d| d.join("index.html").is_file()) {
-        let index = ServeFile::new(dir.join("index.html"));
-        let spa = ServeDir::new(dir).fallback(index);
-        app = app.fallback_service(
-            tower::ServiceBuilder::new()
-                .layer(SetResponseHeaderLayer::if_not_present(
-                    header::CACHE_CONTROL,
-                    HeaderValue::from_static("no-cache"),
-                ))
-                .service(spa),
+    if let Some(dir) = web_dir {
+        let assets = ServeDir::new(dir.join("assets")).fallback(Router::new().fallback(routes::not_found));
+        app = app.nest_service(
+            "/assets",
+            Router::new().fallback_service(assets).layer(axum::middleware::map_response(text_charset)),
         );
     }
+    let index = web_dir.map(|d| d.join("index.html")).filter(|index| index.is_file()).map(Arc::new);
+    app = app.fallback(get(move |uri: Uri| spa(index.clone(), uri)));
     app.layer(axum::middleware::from_fn_with_state(state.clone(), auth_guard::guard))
         .layer(axum::middleware::from_fn(logging::access_log))
         .with_state(state)
+}
+
+/// Paths under these belong to the API and the OAuth routes, so a miss is a
+/// 404 rather than the app's front page.
+const SPA_RESERVED_PREFIXES: [&str; 4] = ["api", "assets", "strava", "auth"];
+
+async fn spa(index: Option<Arc<PathBuf>>, uri: Uri) -> Response {
+    let first_segment = uri.path().strip_prefix('/').unwrap_or(uri.path()).split('/').next().unwrap_or_default();
+    let body = match &index {
+        Some(index) if !SPA_RESERVED_PREFIXES.contains(&first_segment) => tokio::fs::read(index.as_path()).await.ok(),
+        _ => None,
+    };
+    match body {
+        Some(body) => {
+            ([(header::CONTENT_TYPE, "text/html; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")], body).into_response()
+        }
+        None => routes::not_found().await.into_response(),
+    }
+}
+
+/// Starlette adds the charset to every `text/*` type it serves.
+async fn text_charset(mut response: Response) -> Response {
+    let text = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| value.starts_with("text/") && !value.contains("charset"))
+        .map(|value| format!("{value}; charset=utf-8"));
+    if let Some(value) = text.and_then(|value| HeaderValue::from_str(&value).ok()) {
+        response.headers_mut().insert(header::CONTENT_TYPE, value);
+    }
+    response
 }
 
 pub fn default_web_dir() -> PathBuf {

@@ -84,7 +84,7 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
         );
     }
     let code = query.code.as_deref().unwrap_or_default();
-    if query.error.is_some() || code.is_empty() {
+    if query.error.as_deref().is_some_and(|error| !error.is_empty()) || code.is_empty() {
         crate::log_warn!("strava_routes", "strava authorization did not complete: error={:?}", query.error);
         return fail(
             "Strava did not send an authorization back. Try again and check \
@@ -128,7 +128,6 @@ pub async fn strava_callback(State(state): State<AppState>, Query(query): Query<
         onboarding::setup_step(&conn, &connections, state.auth.disabled)?.is_some()
     };
     if in_setup {
-        state.events.publish("refresh");
         return Ok(Redirect::to("/setup"));
     }
     run_catch_up(&state, None).await?;

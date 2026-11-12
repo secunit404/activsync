@@ -6,7 +6,7 @@ use activsync::db::{self, Db, NewActivity};
 use activsync::{AppState, build_app, routes, schedule, seed};
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Method, Request, StatusCode};
+use axum::http::{Method, Request, StatusCode, header};
 use chrono::{TimeZone, Utc};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -36,9 +36,23 @@ struct Harness {
     clock: TestClock,
 }
 
+fn connect_services(conn: &rusqlite::Connection) {
+    for (key, value) in [
+        ("garmin_credentials", json!({"email": "dev@example.com", "password": "dev-password"})),
+        ("garmin_credentials_verified", json!(true)),
+        ("garmin_last_sync_at", json!(db::iso(Utc::now()))),
+        ("garmin_last_sync_ok", json!(true)),
+        ("strava_credentials", json!({"client_id": "12345", "client_secret": "dev-secret"})),
+        ("strava_tokens", json!({"refresh_token": "dev-refresh-token"})),
+    ] {
+        db::set_config_value(conn, key, &value).unwrap();
+    }
+}
+
 fn harness() -> Harness {
     let db = Db::open_in_memory().unwrap();
     seed::seed(&mut db.lock(), Utc::now(), true).unwrap();
+    connect_services(&db.lock());
     let clock = TestClock::new(1_800_000_000.0);
     let state = AppState::new(db, true, clock.clock(), schedule::UNDO_WINDOW_SECONDS, AuthConfig::sign_in_off());
     let app = build_app(state.clone(), None);
@@ -115,6 +129,18 @@ fn plain_db_with(rows: &[(i64, &str, &str)]) -> Db {
 async fn health_reports_ok() {
     let h = harness();
     assert_eq!(get(&h.app, "/health").await, json!({"status": "ok"}));
+}
+
+#[tokio::test]
+async fn live_refresh_events_carry_a_data_line() {
+    let h = harness();
+    let request = Request::get("/api/events").header("host", "127.0.0.1:8382").body(Body::empty()).unwrap();
+    let response = h.app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.headers()["content-type"], "text/event-stream");
+    let mut body = response.into_body();
+    h.state.events.publish("refresh");
+    let frame = body.frame().await.unwrap().unwrap().into_data().unwrap();
+    assert_eq!(std::str::from_utf8(&frame).unwrap(), "event: refresh\ndata:  \n\n");
 }
 
 #[tokio::test]
@@ -452,12 +478,43 @@ async fn spa_paths_serve_index_html() {
     std::fs::write(dir.path().join("assets/app.js"), "console.log(1)").unwrap();
     let h = harness();
     let app = build_app(h.state.clone(), Some(dir.path()));
-    for (uri, expected) in [("/activities", "<html>spa</html>"), ("/assets/app.js", "console.log(1)")] {
-        let response = app.clone().oneshot(Request::get(uri).header("host", "127.0.0.1:8382").body(Body::empty()).unwrap()).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK, "{uri}");
-        let bytes = response.into_body().collect().await.unwrap().to_bytes();
-        assert_eq!(bytes, expected.as_bytes());
+    let fetch = |uri: &'static str| {
+        let app = app.clone();
+        async move {
+            let request = Request::get(uri).header("host", "127.0.0.1:8382").body(Body::empty()).unwrap();
+            let (parts, body) = app.oneshot(request).await.unwrap().into_parts();
+            (parts, body.collect().await.unwrap().to_bytes())
+        }
+    };
+
+    for uri in ["/", "/activities", "/settings/hevy", "/robots.txt"] {
+        let (parts, body) = fetch(uri).await;
+        assert_eq!(parts.status, StatusCode::OK, "{uri}");
+        assert_eq!(body, "<html>spa</html>".as_bytes(), "{uri}");
+        assert_eq!(parts.headers[header::CONTENT_TYPE], "text/html; charset=utf-8", "{uri}");
+        assert_eq!(parts.headers[header::CACHE_CONTROL], "no-cache", "{uri}");
     }
+
+    let (parts, body) = fetch("/assets/app.js").await;
+    assert_eq!(parts.status, StatusCode::OK);
+    assert_eq!(body, "console.log(1)".as_bytes());
+    assert!(!parts.headers.contains_key(header::CACHE_CONTROL), "hashed assets are not revalidated on every load");
+    assert!(parts.headers[header::CONTENT_TYPE].to_str().unwrap().ends_with("; charset=utf-8"));
+
+    for uri in ["/api", "/api/", "/api/nothing", "/assets", "/assets/missing.js", "/strava/other", "/auth", "/auth/other"] {
+        let (parts, body) = fetch(uri).await;
+        assert_eq!(parts.status, StatusCode::NOT_FOUND, "{uri}");
+        assert_eq!(serde_json::from_slice::<Value>(&body).unwrap(), json!({"detail": "Not Found"}), "{uri}");
+        assert!(!parts.headers.contains_key(header::CACHE_CONTROL), "{uri}");
+    }
+}
+
+#[tokio::test]
+async fn every_unknown_path_is_404_without_a_frontend_build() {
+    let h = harness();
+    let request = Request::get("/activities").header("host", "127.0.0.1:8382").body(Body::empty()).unwrap();
+    let response = h.app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[test]

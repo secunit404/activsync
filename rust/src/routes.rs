@@ -1,10 +1,10 @@
-use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::time::Duration;
 
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{Path, Query, State};
+use axum::extract::{FromRequestParts, Path, Query, State};
+use axum::http::request::Parts;
 use axum::http::{StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -16,10 +16,11 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::db::{self, ActivityRow};
-use crate::schedule::{self, ScheduleError};
+use crate::schedule;
+use crate::sync::{self, Services, SyncResult};
 use crate::update_check::REPO_URL;
 use crate::view::{self, ActivityDetail, Connections};
-use crate::{AppState, config, onboarding, timefmt, version};
+use crate::{AppState, config, mock, onboarding, timefmt, version};
 
 const PUBLISH_STATUSES: [&str; 5] = ["pending", "held", "published", "missing", "excluded"];
 const REVIEW_STATUSES: [&str; 2] = ["held", "missing"];
@@ -153,7 +154,7 @@ pub async fn app_state(State(state): State<AppState>) -> ApiResult<AppStateRespo
         name: "ActivSync",
         release: display == *version::VERSION,
         version: display,
-        development: development(&state),
+        development: state.mock_mode,
         setup: SetupState { complete: step.is_none(), step },
         connections,
         hevy: HevyState {
@@ -258,14 +259,48 @@ pub struct ActivitiesPage {
     pagination: PaginationState,
 }
 
+/// An integer as Python reads it: one beyond 64 bits keeps its sign and
+/// saturates, so a huge `page` clamps to the last page instead of failing.
+fn saturating_int(text: &str) -> Option<i64> {
+    let text = text.trim();
+    let digits = text.strip_prefix(['+', '-']).unwrap_or(text);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    Some(text.parse().unwrap_or(if text.starts_with('-') { i64::MIN } else { i64::MAX }))
+}
+
 fn parse_int(raw: Option<&str>, default: i64, name: &str) -> Result<i64, ApiError> {
     match raw {
         None => Ok(default),
-        Some(text) => text
-            .trim()
-            .parse()
-            .map_err(|_| ApiError::invalid(format!("{name} must be an integer"))),
+        Some(text) => saturating_int(text).ok_or_else(|| ApiError::invalid(format!("{name} must be an integer"))),
     }
+}
+
+/// The activity id in the path; anything but an integer is a JSON 422 like
+/// the rest of the API's errors, and one past 64 bits names no activity.
+pub struct ActivityId(pub i64);
+
+impl<S: Send + Sync> FromRequestParts<S> for ActivityId {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, ApiError> {
+        let Path(raw) = Path::<String>::from_request_parts(parts, state)
+            .await
+            .map_err(|rejection| ApiError::new(rejection.status(), rejection.body_text()))?;
+        saturating_int(&raw).map(Self).ok_or_else(|| {
+            ApiError::invalid("Input should be a valid integer, unable to parse string as an integer")
+        })
+    }
+}
+
+pub async fn method_not_allowed() -> ApiError {
+    ApiError::new(StatusCode::METHOD_NOT_ALLOWED, "Method Not Allowed")
+}
+
+pub(crate) fn internal(context: &str, err: impl std::fmt::Display) -> ApiError {
+    crate::log_error!("routes", "{context}: {err}");
+    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
 }
 
 pub async fn activities_page(
@@ -379,28 +414,28 @@ pub async fn activities_page(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionResult {
-    message: String,
-    severity: &'static str,
-    published_count: i64,
-    failed_count: i64,
-    blocked_count: i64,
+    pub(crate) message: String,
+    pub(crate) severity: &'static str,
+    pub(crate) published_count: i64,
+    pub(crate) failed_count: i64,
+    pub(crate) blocked_count: i64,
 }
 
 impl ActionResult {
-    fn success(message: impl Into<String>) -> Self {
+    pub(crate) fn success(message: impl Into<String>) -> Self {
         Self { message: message.into(), severity: "success", published_count: 0, failed_count: 0, blocked_count: 0 }
     }
 }
 
-fn require_activity(conn: &rusqlite::Connection, id: i64) -> Result<ActivityRow, ApiError> {
+pub(crate) fn require_activity(conn: &rusqlite::Connection, id: i64) -> Result<ActivityRow, ApiError> {
     db::get_activity(conn, id)?.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Activity was not found"))
 }
 
-fn is_publishable(row: &ActivityRow) -> bool {
+pub(crate) fn is_publishable(row: &ActivityRow) -> bool {
     schedule::PUBLISHABLE_STATUSES.contains(&row.publish_status.as_str())
 }
 
-fn require_publish_connections(conn: &rusqlite::Connection) -> Result<(), ApiError> {
+pub(crate) fn require_publish_connections(conn: &rusqlite::Connection) -> Result<(), ApiError> {
     let connections = view::connection_status(conn, Utc::now())?;
     if connections.garmin.connected && connections.strava.connected {
         return Ok(());
@@ -425,27 +460,33 @@ pub fn content_hash(title: &str, description: &str, activity_type: &str, garmin_
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+async fn save_metadata(state: &AppState, id: i64, title: &str, description: &str) -> SyncResult<()> {
+    let Some(clients) = state.clients.clone() else {
+        return mock::edit_activity_metadata(&state.db, id, title, description);
+    };
+    let garmin = clients.garmin().await?;
+    let strava = clients.strava();
+    sync::edit_activity_metadata(&Services { db: &state.db, garmin: &garmin, strava: &strava }, id, title, description).await
+}
+
 pub async fn edit_activity(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    ActivityId(id): ActivityId,
     payload: Result<Json<EditActivityRequest>, JsonRejection>,
 ) -> ApiResult<ActionResult> {
     let Json(payload) = payload?;
-    let conn = state.db.lock();
-    let activity = require_activity(&conn, id)?;
-    let title = payload.title.trim();
-    if title.is_empty() {
+    let activity = require_activity(&state.db.lock(), id)?;
+    if payload.title.trim().is_empty() {
         return Err(ApiError::invalid("Activity title cannot be blank"));
     }
-    let description = payload.description.trim();
-    let hash = content_hash(title, description, &activity.activity_type, &activity.garmin_data);
-    db::update_activity_metadata(&conn, id, title, description, &hash)?;
-    drop(conn);
+    save_metadata(&state, id, &payload.title, &payload.description)
+        .await
+        .map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("Could not save activity: {err}")))?;
     state.events.publish("refresh");
     Ok(Json(ActionResult::success(format!("Saved changes to {}", activity.title))))
 }
 
-pub async fn exclude_activity(State(state): State<AppState>, Path(id): Path<i64>) -> ApiResult<ActionResult> {
+pub async fn exclude_activity(State(state): State<AppState>, ActivityId(id): ActivityId) -> ApiResult<ActionResult> {
     let conn = state.db.lock();
     let activity = require_activity(&conn, id)?;
     if !is_publishable(&activity) {
@@ -457,17 +498,30 @@ pub async fn exclude_activity(State(state): State<AppState>, Path(id): Path<i64>
     Ok(Json(ActionResult::success(format!("Excluded {}", activity.title))))
 }
 
+fn present<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(deserializer).map(Some)
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestoreActivityRequest {
     status: String,
-    #[serde(default)]
-    hold_reason: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    hold_reason: Option<Option<String>>,
+    #[serde(default, rename = "hold_reason", deserialize_with = "present")]
+    hold_reason_snake: Option<Option<String>>,
+}
+
+impl RestoreActivityRequest {
+    /// The camelCase key wins when both are sent, as pydantic reads an alias.
+    fn hold_reason(&self) -> Option<&str> {
+        self.hold_reason.as_ref().or(self.hold_reason_snake.as_ref()).and_then(|r| r.as_deref())
+    }
 }
 
 pub async fn restore_activity(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    ActivityId(id): ActivityId,
     body: axum::body::Bytes,
 ) -> ApiResult<ActionResult> {
     let payload: Option<RestoreActivityRequest> = if body.iter().all(u8::is_ascii_whitespace) {
@@ -483,7 +537,7 @@ pub async fn restore_activity(
         if !["pending", "held", "missing"].contains(&p.status.as_str()) {
             return Err(ApiError::invalid("status must be pending, held, or missing"));
         }
-        if p.hold_reason.as_deref().is_some_and(|r| r != "category" && r != "backlog") {
+        if p.hold_reason().is_some_and(|r| r != "category" && r != "backlog") {
             return Err(ApiError::invalid("holdReason must be category or backlog"));
         }
     }
@@ -493,7 +547,7 @@ pub async fn restore_activity(
         return Err(ApiError::conflict("Activity is not excluded"));
     }
     match payload {
-        Some(p) => db::set_publish_status(&conn, id, &p.status, p.hold_reason.as_deref())?,
+        Some(p) => db::set_publish_status(&conn, id, &p.status, p.hold_reason())?,
         None => {
             let held = config::load_config(&conn, development(&state))?.held_activity_types();
             if held.contains(&activity.activity_type) {
@@ -508,185 +562,6 @@ pub async fn restore_activity(
     Ok(Json(ActionResult::success(format!("Restored {}", activity.title))))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PublishScheduled {
-    batch_id: String,
-    publish_scheduled_at: String,
-    remaining_ms: i64,
-    undo_window_ms: i64,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ActivityIdsRequest {
-    activity_ids: Vec<i64>,
-}
-
-fn unique_ids(payload: ActivityIdsRequest) -> Result<Vec<i64>, ApiError> {
-    if payload.activity_ids.is_empty() {
-        return Err(ApiError::invalid("activityIds must list at least one activity"));
-    }
-    Ok(payload.activity_ids.into_iter().collect::<BTreeSet<_>>().into_iter().collect())
-}
-
-fn schedule_publish(state: &AppState, ids: &[i64], kind: &str) -> ApiResult<PublishScheduled> {
-    let activities = {
-        let conn = state.db.lock();
-        let activities = ids.iter().map(|id| require_activity(&conn, *id)).collect::<Result<Vec<_>, _>>()?;
-        if !activities.iter().all(is_publishable) {
-            return Err(ApiError::conflict(if kind == "single" {
-                "Only pending, held, or missing activities can be published"
-            } else {
-                "Some selected activities are no longer publishable. Refresh and try again."
-            }));
-        }
-        require_publish_connections(&conn)?;
-        activities
-    };
-    let batch = state.scheduler.schedule(&activities, kind).map_err(|err| match err {
-        ScheduleError::AlreadyScheduled => {
-            ApiError::conflict("Already publishing to Strava. Refresh to see where it stands.")
-        }
-        ScheduleError::Db(err) => err.into(),
-    })?;
-    let remaining = batch.deadline - state.scheduler.now();
-    Ok(Json(PublishScheduled {
-        publish_scheduled_at: schedule::deadline_iso(batch.deadline),
-        batch_id: batch.batch_id,
-        remaining_ms: (remaining * 1000.0).round().max(0.0) as i64,
-        undo_window_ms: (state.scheduler.window_seconds * 1000.0).round() as i64,
-    }))
-}
-
-pub async fn schedule_publish_activity(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-) -> ApiResult<PublishScheduled> {
-    schedule_publish(&state, &[id], "single")
-}
-
-pub async fn schedule_publish_activities(
-    State(state): State<AppState>,
-    payload: Result<Json<ActivityIdsRequest>, JsonRejection>,
-) -> ApiResult<PublishScheduled> {
-    let ids = unique_ids(payload?.0)?;
-    schedule_publish(&state, &ids, "bulk")
-}
-
-fn cancel_publish(state: &AppState, ids: &[i64]) -> ApiResult<ActionResult> {
-    if state.scheduler.cancel(ids)? > 0 {
-        return Ok(Json(ActionResult::success("Nothing was sent to Strava.")));
-    }
-    let conn = state.db.lock();
-    for id in ids {
-        if schedule::get(&conn, *id)?.is_some() {
-            return Err(ApiError::conflict("Too late to undo: it is already being sent to Strava."));
-        }
-    }
-    Err(ApiError::conflict("Nothing is waiting to publish."))
-}
-
-pub async fn cancel_publish_activity(State(state): State<AppState>, Path(id): Path<i64>) -> ApiResult<ActionResult> {
-    cancel_publish(&state, &[id])
-}
-
-pub async fn cancel_publish_activities(
-    State(state): State<AppState>,
-    payload: Result<Json<ActivityIdsRequest>, JsonRejection>,
-) -> ApiResult<ActionResult> {
-    let ids = unique_ids(payload?.0)?;
-    cancel_publish(&state, &ids)
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PublishBatch {
-    batch_id: String,
-    state: &'static str,
-    remaining_ms: i64,
-    result: Option<ActionResult>,
-    error: Option<String>,
-}
-
-/// The same toast an immediate publish would return, built from what the
-/// scheduler recorded.
-fn batch_outcome(rows: &[schedule::ScheduleRow], titles: &HashMap<i64, String>) -> (Option<ActionResult>, Option<String>) {
-    if rows[0].batch_kind == "single" {
-        let row = &rows[0];
-        let title = titles.get(&row.garmin_activity_id).map_or("Activity", String::as_str);
-        return match row.state.as_str() {
-            schedule::PUBLISHED => {
-                let verb = if row.prior_status == "missing" { "Republished" } else { "Published" };
-                (Some(ActionResult::success(format!("{verb} {title} to Strava"))), None)
-            }
-            schedule::SKIPPED => (None, Some(format!("{title} was no longer publishable, so nothing was sent."))),
-            _ => (None, Some(row.message.clone().unwrap_or_else(|| "Could not publish activity".into()))),
-        };
-    }
-    let count = |state: &str| rows.iter().filter(|r| r.state == state).count() as i64;
-    let (published, failed, blocked, skipped) =
-        (count(schedule::PUBLISHED), count(schedule::FAILED), count(schedule::BLOCKED), count(schedule::SKIPPED));
-    if failed + blocked + skipped > 0 {
-        let mut parts = vec![format!("Published {published}")];
-        if failed > 0 {
-            parts.push(format!("{failed} failed and stayed ready to retry"));
-        }
-        if blocked > 0 {
-            parts.push(format!("{blocked} blocked by Hevy sync"));
-        }
-        if skipped > 0 {
-            parts.push(format!("{skipped} no longer publishable"));
-        }
-        return (
-            Some(ActionResult {
-                message: parts.join("; "),
-                severity: "warning",
-                published_count: published,
-                failed_count: failed,
-                blocked_count: blocked,
-            }),
-            None,
-        );
-    }
-    let noun = if published == 1 { "activity" } else { "activities" };
-    (
-        Some(ActionResult {
-            published_count: published,
-            ..ActionResult::success(format!("Published {published} {noun} to Strava"))
-        }),
-        None,
-    )
-}
-
-pub async fn publish_batch(State(state): State<AppState>, Path(batch_id): Path<String>) -> ApiResult<PublishBatch> {
-    let conn = state.db.lock();
-    let rows = schedule::batch_rows(&conn, &batch_id)?;
-    if rows.is_empty() {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "Nothing is publishing under that id."));
-    }
-    let remaining_ms = ((rows[0].deadline - state.scheduler.now()) * 1000.0).round().max(0.0) as i64;
-    let pending = |s: &str| rows.iter().any(|r| r.state == s);
-    let (batch_state, remaining_ms) = if pending(schedule::WAITING) {
-        ("waiting", remaining_ms)
-    } else if pending(schedule::SENDING) {
-        ("sending", 0)
-    } else {
-        ("done", 0)
-    };
-    let (result, error) = if batch_state == "done" {
-        let mut titles = HashMap::new();
-        for row in &rows {
-            if let Some(activity) = db::get_activity(&conn, row.garmin_activity_id)? {
-                titles.insert(row.garmin_activity_id, activity.title);
-            }
-        }
-        batch_outcome(&rows, &titles)
-    } else {
-        (None, None)
-    };
-    Ok(Json(PublishBatch { batch_id, state: batch_state, remaining_ms, result, error }))
-}
 
 pub fn icon(png: &'static [u8]) -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/png")], png)
@@ -699,7 +574,9 @@ pub async fn health() -> Json<Value> {
 pub async fn sse_events(State(state): State<AppState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let stream = BroadcastStream::new(state.events.subscribe())
         .filter_map(|event| event.ok())
-        .map(|name| Ok(Event::default().event(name).data("")));
+        // Not `data("")`: axum then omits the data line, and browsers drop
+        // an event that has none, so `refresh` would never fire.
+        .map(|name| Ok(Event::default().event(name).data(" ")));
     Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive"))
 }
 

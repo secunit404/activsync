@@ -31,9 +31,6 @@ pub const SKIPPED: &str = "skipped";
 const RESULT_RETENTION_SECONDS: f64 = 3600.0;
 const MAX_SLEEP_SECONDS: f64 = 30.0;
 
-/// Mock Strava ids start here so they never collide with Garmin ids.
-const MOCK_STRAVA_ID_BASE: i64 = 17_000_000_000;
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScheduleRow {
     pub garmin_activity_id: i64,
@@ -384,6 +381,6 @@ fn mock_send(conn: &Connection, id: i64) -> DbResult<(&'static str, Option<Strin
             Some(format!("Activity was blocked by Hevy sync: hevy workout {hevy_id} is {status}.")),
         ));
     }
-    db::set_published(conn, id, MOCK_STRAVA_ID_BASE + id, Utc::now())?;
+    db::set_published(conn, id, crate::mock::STRAVA_ID_BASE + id, Utc::now())?;
     Ok((PUBLISHED, None))
 }

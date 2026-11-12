@@ -15,7 +15,7 @@ use crate::routes::{ApiError, development};
 use crate::settings_routes::{ActionResult, action, conflict, invalid, require_garmin, require_not_onboarded};
 use crate::strava_client::StravaError;
 use crate::sync::{self, Services, SyncError};
-use crate::{AppState, config, db, onboarding, view};
+use crate::{AppState, config, db, mock, onboarding, view};
 
 type ApiResult<T> = Result<Json<T>, ApiError>;
 
@@ -48,6 +48,18 @@ async fn first_sync(state: &AppState, clients: &dyn Clients, now: DateTime<Utc>)
     Ok(())
 }
 
+fn mock_first_sync(state: &AppState, now: DateTime<Utc>) -> Result<(), String> {
+    let has_types = matches!(db::get_config_value(&state.db.lock(), "garmin_activity_types").map_err(|e| e.to_string())?,
+        Some(Value::Array(types)) if !types.is_empty());
+    if !has_types {
+        onboarding::store_garmin_categories(&state.db.lock(), development(state), true, now).map_err(|e| e.to_string())?;
+    }
+    let cfg = config::load_config(&state.db.lock(), development(state)).map_err(|e| e.to_string())?;
+    mock::sync_garmin(&state.db, &cfg, now, None, None).map_err(|e| e.to_string())?;
+    mock::check_strava_status(&state.db, &cfg, now, None).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub async fn initial_sync(State(state): State<AppState>) -> ApiResult<ActionResult> {
     let now = Utc::now();
     {
@@ -62,14 +74,7 @@ pub async fn initial_sync(State(state): State<AppState>) -> ApiResult<ActionResu
         Some(clients) => first_sync(&state, clients.as_ref(), now)
             .await
             .map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("Initial sync failed: {err}")))?,
-        None => {
-            let conn = state.db.lock();
-            let has_types = matches!(db::get_config_value(&conn, "garmin_activity_types")?, Some(Value::Array(a)) if !a.is_empty());
-            if !has_types {
-                onboarding::store_garmin_categories(&conn, development(&state), true, now)?;
-            }
-            onboarding::record_garmin_sync(&conn, now)?;
-        }
+        None => mock_first_sync(&state, now).map_err(|err| ApiError::new(StatusCode::BAD_GATEWAY, format!("Initial sync failed: {err}")))?,
     }
     let conn = state.db.lock();
     db::set_config_value(&conn, "initial_sync_done", &json!(true))?;
@@ -103,6 +108,15 @@ async fn sync_garmin_now(state: &AppState, clients: &dyn Clients, strava_connect
     Ok(())
 }
 
+fn sync_garmin_mock(state: &AppState, strava_connected: bool, now: DateTime<Utc>) -> Result<(), ApiError> {
+    let cfg = config::load_config(&state.db.lock(), development(state))?;
+    mock::sync_garmin(&state.db, &cfg, now, None, None).map_err(|err| server_error("Garmin sync", err))?;
+    if strava_connected {
+        mock::check_strava_status(&state.db, &cfg, now, None).map_err(|err| server_error("Strava status check", err))?;
+    }
+    Ok(())
+}
+
 async fn sync_strava_now(state: &AppState, clients: &dyn Clients, now: DateTime<Utc>) -> Result<(), ApiError> {
     let cfg = config::load_config(&state.db.lock(), development(state))?;
     match sync::check_strava_status(&state.db, &clients.strava(), &cfg, now, None).await {
@@ -122,7 +136,7 @@ pub async fn manual_sync(State(state): State<AppState>, Path(service): Path<Stri
             }
             match state.clients.clone() {
                 Some(clients) => sync_garmin_now(&state, clients.as_ref(), connections.strava.connected, now).await?,
-                None => onboarding::record_garmin_sync(&state.db.lock(), now)?,
+                None => sync_garmin_mock(&state, connections.strava.connected, now)?,
             }
             "Garmin synced."
         }
@@ -130,8 +144,12 @@ pub async fn manual_sync(State(state): State<AppState>, Path(service): Path<Stri
             if !connections.strava.connected {
                 return Err(conflict("Strava is disconnected — reconnect it to sync."));
             }
-            if let Some(clients) = state.clients.clone() {
-                sync_strava_now(&state, clients.as_ref(), now).await?;
+            match state.clients.clone() {
+                Some(clients) => sync_strava_now(&state, clients.as_ref(), now).await?,
+                None => {
+                    let cfg = config::load_config(&state.db.lock(), development(&state))?;
+                    mock::check_strava_status(&state.db, &cfg, now, None).map_err(|err| server_error("Strava status check", err))?;
+                }
             }
             "Strava synced."
         }
@@ -146,15 +164,13 @@ pub async fn manual_sync(State(state): State<AppState>, Path(service): Path<Stri
 /// nothing did. `last_sync_ok_at` is `None` to read the stored value.
 pub(crate) async fn run_catch_up(state: &AppState, last_sync_ok_at: Option<Option<String>>) -> Result<(), ApiError> {
     let now = Utc::now();
-    let Some(clients) = state.clients.clone() else {
-        onboarding::run_catch_up(&state.db.lock(), now)?;
-        state.events.publish("refresh");
-        return Ok(());
-    };
     let caught_up = async {
+        let cfg = config::load_config(&state.db.lock(), development(state)).map_err(|e| e.to_string())?;
+        let Some(clients) = state.clients.clone() else {
+            return mock::catch_up_sync(&state.db, &cfg, now, last_sync_ok_at).map_err(|e| e.to_string());
+        };
         let garmin = open_garmin(clients.as_ref()).await?;
         let strava = clients.strava();
-        let cfg = config::load_config(&state.db.lock(), development(state)).map_err(|e| e.to_string())?;
         let services = Services { db: &state.db, garmin: &garmin, strava: &strava };
         sync::catch_up_sync(&services, &cfg, now, last_sync_ok_at).await.map_err(|e| e.to_string())
     };

@@ -70,24 +70,6 @@ pub fn persist_strava_credentials(conn: &Connection, client_id: &str, client_sec
     Ok(())
 }
 
-/// What a successful Garmin fetch records. The mock Garmin account holds
-/// exactly what the local table already has, so nothing else changes.
-pub fn record_garmin_sync(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
-    let at = json!(db::iso(now));
-    db::set_config_value(conn, "garmin_last_sync_at", &at)?;
-    db::set_config_value(conn, "garmin_last_sync_ok_at", &at)?;
-    db::set_config_value(conn, "garmin_last_sync_ok", &json!(true))?;
-    db::set_config_value(conn, "garmin_last_sync_error", &Value::Null)?;
-    db::set_config_value(conn, "garmin_credentials_verified", &json!(true))
-}
-
-/// Reconnect catch-up. Against the mock accounts nothing new turns up, so the
-/// dashboard summary is cleared, as the Python app does when it finds nothing.
-pub fn run_catch_up(conn: &Connection, now: DateTime<Utc>) -> DbResult<()> {
-    record_garmin_sync(conn, now)?;
-    db::set_config_value(conn, "catch_up_report", &Value::Null)
-}
-
 /// Un-hold rows whose type was just switched to autosync. Backlog holds stay:
 /// a new autosync category says nothing about publishing an outage backlog.
 pub fn reconcile_held_activities(conn: &Connection, held_types: &[String]) -> DbResult<usize> {

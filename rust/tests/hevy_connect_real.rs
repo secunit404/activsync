@@ -193,7 +193,7 @@ async fn an_unreachable_hevy_saves_nothing() {
 }
 
 #[tokio::test]
-async fn a_good_key_in_setup_is_saved_and_caches_templates_best_effort() {
+async fn a_good_key_in_setup_is_saved_and_a_failed_template_prefetch_writes_nothing() {
     let h = harness(
         false,
         Box::new(|key, query| match key {
@@ -216,8 +216,27 @@ async fn a_good_key_in_setup_is_saved_and_caches_templates_best_effort() {
     assert!(h.config("hevy_events_cursor").is_some());
     assert_eq!(h.config("setup_hevy_done"), Some(json!(true)));
     assert_eq!(h.config("settings").unwrap()["hevy_enabled"], json!(true));
-    assert!(hevy_db::template_exists(&h.db.lock(), "T-ROW").unwrap());
+    assert!(!hevy_db::template_exists(&h.db.lock(), "T-ROW").unwrap());
     assert_eq!(h.hevy("/exercise_templates").len(), 2);
+}
+
+#[tokio::test]
+async fn every_template_page_is_fetched_before_any_is_cached() {
+    let h = harness(
+        true,
+        Box::new(|key, query| match key {
+            k if k.ends_with("/user/info") => (200, json!({"data": {"name": "lifter"}})),
+            k if k.ends_with("/exercise_templates") => {
+                let id = format!("T-PAGE{}", page_of(query));
+                (200, json!({"page_count": 2, "exercise_templates": [{"id": id, "title": "Row"}]}))
+            }
+            _ => (400, json!({})),
+        }),
+    );
+    let (status, body) = call(&h.app, "/api/v1/settings/hevy/credentials", json!({"apiKey": "key"})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(hevy_db::template_exists(&h.db.lock(), "T-PAGE1").unwrap());
+    assert!(hevy_db::template_exists(&h.db.lock(), "T-PAGE2").unwrap());
 }
 
 #[tokio::test]
