@@ -1,0 +1,3421 @@
+{
+ "baseTypes": {
+  "0": {
+   "endian_flag": 0,
+   "float": false,
+   "invalid": 255,
+   "signed": false,
+   "size": 1,
+   "string": false
+  },
+  "1": {
+   "endian_flag": 0,
+   "float": false,
+   "invalid": 127,
+   "signed": true,
+   "size": 1,
+   "string": false
+  },
+  "10": {
+   "endian_flag": 0,
+   "float": false,
+   "invalid": 0,
+   "signed": false,
+   "size": 1,
+   "string": false
+  },
+  "11": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 0,
+   "signed": false,
+   "size": 2,
+   "string": false
+  },
+  "12": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 0,
+   "signed": false,
+   "size": 4,
+   "string": false
+  },
+  "13": {
+   "endian_flag": 0,
+   "float": false,
+   "invalid": 255,
+   "signed": false,
+   "size": 1,
+   "string": false
+  },
+  "14": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 9223372036854775807,
+   "signed": true,
+   "size": 8,
+   "string": false
+  },
+  "15": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 18446744073709551615,
+   "signed": false,
+   "size": 8,
+   "string": false
+  },
+  "16": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 0,
+   "signed": false,
+   "size": 8,
+   "string": false
+  },
+  "2": {
+   "endian_flag": 0,
+   "float": false,
+   "invalid": 255,
+   "signed": false,
+   "size": 1,
+   "string": false
+  },
+  "3": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 32767,
+   "signed": true,
+   "size": 2,
+   "string": false
+  },
+  "4": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 65535,
+   "signed": false,
+   "size": 2,
+   "string": false
+  },
+  "5": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 2147483647,
+   "signed": true,
+   "size": 4,
+   "string": false
+  },
+  "6": {
+   "endian_flag": 128,
+   "float": false,
+   "invalid": 4294967295,
+   "signed": false,
+   "size": 4,
+   "string": false
+  },
+  "7": {
+   "endian_flag": 0,
+   "float": false,
+   "invalid": 0,
+   "signed": false,
+   "size": 1,
+   "string": true
+  },
+  "8": {
+   "endian_flag": 128,
+   "float": true,
+   "invalid": 4294967295,
+   "signed": true,
+   "size": 4,
+   "string": false
+  },
+  "9": {
+   "endian_flag": 128,
+   "float": true,
+   "invalid": 18446744073709551615,
+   "signed": true,
+   "size": 8,
+   "string": false
+  }
+ },
+ "messages": {
+  "activity": {
+   "fields": {
+    "event": {
+     "baseType": 0,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "event"
+    },
+    "event_group": {
+     "baseType": 2,
+     "num": 6,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "event_type": {
+     "baseType": 0,
+     "num": 4,
+     "offset": 0,
+     "scale": 1,
+     "type": "event_type"
+    },
+    "local_timestamp": {
+     "baseType": 6,
+     "num": 5,
+     "offset": 0,
+     "scale": 1,
+     "type": "local_date_time"
+    },
+    "num_sessions": {
+     "baseType": 4,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "timestamp": {
+     "baseType": 6,
+     "num": 253,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "total_timer_time": {
+     "baseType": 6,
+     "num": 0,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "type": {
+     "baseType": 0,
+     "num": 2,
+     "offset": 0,
+     "scale": 1,
+     "type": "activity"
+    }
+   },
+   "num": 34
+  },
+  "event": {
+   "fields": {
+    "activity_type": {
+     "baseType": 0,
+     "num": 14,
+     "offset": 0,
+     "scale": 1,
+     "type": "activity_type"
+    },
+    "data": {
+     "baseType": 6,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "data16": {
+     "baseType": 4,
+     "num": 2,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "device_index": {
+     "baseType": 2,
+     "num": 13,
+     "offset": 0,
+     "scale": 1,
+     "type": "device_index"
+    },
+    "event": {
+     "baseType": 0,
+     "num": 0,
+     "offset": 0,
+     "scale": 1,
+     "type": "event"
+    },
+    "event_group": {
+     "baseType": 2,
+     "num": 4,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "event_type": {
+     "baseType": 0,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "event_type"
+    },
+    "front_gear": {
+     "baseType": 10,
+     "num": 10,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8z"
+    },
+    "front_gear_num": {
+     "baseType": 10,
+     "num": 9,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8z"
+    },
+    "opponent_score": {
+     "baseType": 4,
+     "num": 8,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "radar_threat_avg_approach_speed": {
+     "baseType": 2,
+     "num": 23,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint8"
+    },
+    "radar_threat_count": {
+     "baseType": 2,
+     "num": 22,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "radar_threat_level_max": {
+     "baseType": 0,
+     "num": 21,
+     "offset": 0,
+     "scale": 1,
+     "type": "radar_threat_level_type"
+    },
+    "radar_threat_max_approach_speed": {
+     "baseType": 2,
+     "num": 24,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint8"
+    },
+    "rear_gear": {
+     "baseType": 10,
+     "num": 12,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8z"
+    },
+    "rear_gear_num": {
+     "baseType": 10,
+     "num": 11,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8z"
+    },
+    "score": {
+     "baseType": 4,
+     "num": 7,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "start_timestamp": {
+     "baseType": 6,
+     "num": 15,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "timestamp": {
+     "baseType": 6,
+     "num": 253,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    }
+   },
+   "num": 21
+  },
+  "exercise_title": {
+   "fields": {
+    "exercise_category": {
+     "baseType": 4,
+     "num": 0,
+     "offset": 0,
+     "scale": 1,
+     "type": "exercise_category"
+    },
+    "exercise_name": {
+     "baseType": 4,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "message_index": {
+     "baseType": 4,
+     "num": 254,
+     "offset": 0,
+     "scale": 1,
+     "type": "message_index"
+    },
+    "wkt_step_name": {
+     "baseType": 7,
+     "num": 2,
+     "offset": 0,
+     "scale": 1,
+     "type": "string"
+    }
+   },
+   "num": 264
+  },
+  "file_id": {
+   "fields": {
+    "manufacturer": {
+     "baseType": 4,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "manufacturer"
+    },
+    "number": {
+     "baseType": 4,
+     "num": 5,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "product": {
+     "baseType": 4,
+     "num": 2,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "product_name": {
+     "baseType": 7,
+     "num": 8,
+     "offset": 0,
+     "scale": 1,
+     "type": "string"
+    },
+    "serial_number": {
+     "baseType": 12,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32z"
+    },
+    "time_created": {
+     "baseType": 6,
+     "num": 4,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "type": {
+     "baseType": 0,
+     "num": 0,
+     "offset": 0,
+     "scale": 1,
+     "type": "file"
+    }
+   },
+   "num": 0
+  },
+  "lap": {
+   "fields": {
+    "active_time": {
+     "baseType": 6,
+     "num": 70,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "avg_altitude": {
+     "baseType": 4,
+     "num": 42,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint16"
+    },
+    "avg_cadence": {
+     "baseType": 2,
+     "num": 17,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_cadence_position": {
+     "baseType": 2,
+     "num": 108,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_combined_pedal_smoothness": {
+     "baseType": 2,
+     "num": 95,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_core_temperature": {
+     "baseType": 4,
+     "num": 158,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_depth": {
+     "baseType": 6,
+     "num": 122,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "avg_flow": {
+     "baseType": 8,
+     "num": 154,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "avg_fractional_cadence": {
+     "baseType": 2,
+     "num": 80,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "avg_grade": {
+     "baseType": 3,
+     "num": 45,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "avg_grit": {
+     "baseType": 8,
+     "num": 153,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "avg_heart_rate": {
+     "baseType": 2,
+     "num": 15,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_left_pco": {
+     "baseType": 1,
+     "num": 100,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "avg_left_pedal_smoothness": {
+     "baseType": 2,
+     "num": 93,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_left_power_phase": {
+     "baseType": 2,
+     "num": 102,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_left_power_phase_peak": {
+     "baseType": 2,
+     "num": 103,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_left_torque_effectiveness": {
+     "baseType": 2,
+     "num": 91,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_lev_motor_power": {
+     "baseType": 4,
+     "num": 115,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "avg_neg_grade": {
+     "baseType": 3,
+     "num": 47,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "avg_neg_vertical_speed": {
+     "baseType": 3,
+     "num": 54,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "avg_pos_grade": {
+     "baseType": 3,
+     "num": 46,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "avg_pos_vertical_speed": {
+     "baseType": 3,
+     "num": 53,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "avg_power": {
+     "baseType": 4,
+     "num": 19,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "avg_power_position": {
+     "baseType": 4,
+     "num": 106,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "avg_respiration_rate": {
+     "baseType": 2,
+     "num": 147,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_right_pco": {
+     "baseType": 1,
+     "num": 101,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "avg_right_pedal_smoothness": {
+     "baseType": 2,
+     "num": 94,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_right_power_phase": {
+     "baseType": 2,
+     "num": 104,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_right_power_phase_peak": {
+     "baseType": 2,
+     "num": 105,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_right_torque_effectiveness": {
+     "baseType": 2,
+     "num": 92,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_saturated_hemoglobin_percent": {
+     "baseType": 4,
+     "num": 87,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_speed": {
+     "baseType": 4,
+     "num": 13,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "avg_stance_time": {
+     "baseType": 4,
+     "num": 79,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_stance_time_balance": {
+     "baseType": 4,
+     "num": 119,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_stance_time_percent": {
+     "baseType": 4,
+     "num": 78,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_step_length": {
+     "baseType": 4,
+     "num": 120,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_stroke_distance": {
+     "baseType": 4,
+     "num": 37,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_temperature": {
+     "baseType": 1,
+     "num": 50,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "avg_total_hemoglobin_conc": {
+     "baseType": 4,
+     "num": 84,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_vam": {
+     "baseType": 4,
+     "num": 121,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "avg_vertical_oscillation": {
+     "baseType": 4,
+     "num": 77,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_vertical_ratio": {
+     "baseType": 4,
+     "num": 118,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "end_position_lat": {
+     "baseType": 5,
+     "num": 5,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "end_position_long": {
+     "baseType": 5,
+     "num": 6,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "enhanced_avg_altitude": {
+     "baseType": 6,
+     "num": 112,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint32"
+    },
+    "enhanced_avg_respiration_rate": {
+     "baseType": 4,
+     "num": 136,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "enhanced_avg_speed": {
+     "baseType": 6,
+     "num": 110,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "enhanced_max_altitude": {
+     "baseType": 6,
+     "num": 114,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint32"
+    },
+    "enhanced_max_respiration_rate": {
+     "baseType": 4,
+     "num": 137,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "enhanced_max_speed": {
+     "baseType": 6,
+     "num": 111,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "enhanced_min_altitude": {
+     "baseType": 6,
+     "num": 113,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint32"
+    },
+    "event": {
+     "baseType": 0,
+     "num": 0,
+     "offset": 0,
+     "scale": 1,
+     "type": "event"
+    },
+    "event_group": {
+     "baseType": 2,
+     "num": 26,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "event_type": {
+     "baseType": 0,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "event_type"
+    },
+    "first_length_index": {
+     "baseType": 4,
+     "num": 35,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "gps_accuracy": {
+     "baseType": 2,
+     "num": 44,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "intensity": {
+     "baseType": 0,
+     "num": 23,
+     "offset": 0,
+     "scale": 1,
+     "type": "intensity"
+    },
+    "jump_count": {
+     "baseType": 4,
+     "num": 151,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "lap_trigger": {
+     "baseType": 0,
+     "num": 24,
+     "offset": 0,
+     "scale": 1,
+     "type": "lap_trigger"
+    },
+    "left_right_balance": {
+     "baseType": 4,
+     "num": 34,
+     "offset": 0,
+     "scale": 1,
+     "type": "left_right_balance_100"
+    },
+    "lev_battery_consumption": {
+     "baseType": 2,
+     "num": 117,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "max_altitude": {
+     "baseType": 4,
+     "num": 43,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint16"
+    },
+    "max_cadence": {
+     "baseType": 2,
+     "num": 18,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_cadence_position": {
+     "baseType": 2,
+     "num": 109,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_core_temperature": {
+     "baseType": 4,
+     "num": 160,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "max_depth": {
+     "baseType": 6,
+     "num": 123,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "max_fractional_cadence": {
+     "baseType": 2,
+     "num": 81,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "max_heart_rate": {
+     "baseType": 2,
+     "num": 16,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_lev_motor_power": {
+     "baseType": 4,
+     "num": 116,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "max_neg_grade": {
+     "baseType": 3,
+     "num": 49,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "max_neg_vertical_speed": {
+     "baseType": 3,
+     "num": 56,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "max_pos_grade": {
+     "baseType": 3,
+     "num": 48,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "max_pos_vertical_speed": {
+     "baseType": 3,
+     "num": 55,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "max_power": {
+     "baseType": 4,
+     "num": 20,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "max_power_position": {
+     "baseType": 4,
+     "num": 107,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "max_respiration_rate": {
+     "baseType": 2,
+     "num": 148,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_saturated_hemoglobin_percent": {
+     "baseType": 4,
+     "num": 89,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "max_speed": {
+     "baseType": 4,
+     "num": 14,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "max_temperature": {
+     "baseType": 1,
+     "num": 51,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "max_total_hemoglobin_conc": {
+     "baseType": 4,
+     "num": 86,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "message_index": {
+     "baseType": 4,
+     "num": 254,
+     "offset": 0,
+     "scale": 1,
+     "type": "message_index"
+    },
+    "min_altitude": {
+     "baseType": 4,
+     "num": 62,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint16"
+    },
+    "min_core_temperature": {
+     "baseType": 4,
+     "num": 159,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "min_heart_rate": {
+     "baseType": 2,
+     "num": 63,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "min_saturated_hemoglobin_percent": {
+     "baseType": 4,
+     "num": 88,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "min_temperature": {
+     "baseType": 1,
+     "num": 124,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "min_total_hemoglobin_conc": {
+     "baseType": 4,
+     "num": 85,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "normalized_power": {
+     "baseType": 4,
+     "num": 33,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "num_active_lengths": {
+     "baseType": 4,
+     "num": 40,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "num_lengths": {
+     "baseType": 4,
+     "num": 32,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "opponent_score": {
+     "baseType": 4,
+     "num": 74,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "player_score": {
+     "baseType": 4,
+     "num": 83,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "repetition_num": {
+     "baseType": 4,
+     "num": 61,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "sport": {
+     "baseType": 0,
+     "num": 25,
+     "offset": 0,
+     "scale": 1,
+     "type": "sport"
+    },
+    "stand_count": {
+     "baseType": 4,
+     "num": 99,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "start_position_lat": {
+     "baseType": 5,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "start_position_long": {
+     "baseType": 5,
+     "num": 4,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "start_time": {
+     "baseType": 6,
+     "num": 2,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "stroke_count": {
+     "baseType": 4,
+     "num": 75,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "sub_sport": {
+     "baseType": 0,
+     "num": 39,
+     "offset": 0,
+     "scale": 1,
+     "type": "sub_sport"
+    },
+    "swim_stroke": {
+     "baseType": 0,
+     "num": 38,
+     "offset": 0,
+     "scale": 1,
+     "type": "swim_stroke"
+    },
+    "time_in_cadence_zone": {
+     "baseType": 6,
+     "num": 59,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_in_hr_zone": {
+     "baseType": 6,
+     "num": 57,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_in_power_zone": {
+     "baseType": 6,
+     "num": 60,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_in_speed_zone": {
+     "baseType": 6,
+     "num": 58,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_standing": {
+     "baseType": 6,
+     "num": 98,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "timestamp": {
+     "baseType": 6,
+     "num": 253,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "total_ascent": {
+     "baseType": 4,
+     "num": 21,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_calories": {
+     "baseType": 4,
+     "num": 11,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_cycles": {
+     "baseType": 6,
+     "num": 10,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "total_descent": {
+     "baseType": 4,
+     "num": 22,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_distance": {
+     "baseType": 6,
+     "num": 9,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint32"
+    },
+    "total_elapsed_time": {
+     "baseType": 6,
+     "num": 7,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "total_fat_calories": {
+     "baseType": 4,
+     "num": 12,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_flow": {
+     "baseType": 8,
+     "num": 150,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "total_fractional_ascent": {
+     "baseType": 2,
+     "num": 156,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint8"
+    },
+    "total_fractional_cycles": {
+     "baseType": 2,
+     "num": 82,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "total_fractional_descent": {
+     "baseType": 2,
+     "num": 157,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint8"
+    },
+    "total_grit": {
+     "baseType": 8,
+     "num": 149,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "total_moving_time": {
+     "baseType": 6,
+     "num": 52,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "total_timer_time": {
+     "baseType": 6,
+     "num": 8,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "total_work": {
+     "baseType": 6,
+     "num": 41,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "wkt_step_index": {
+     "baseType": 4,
+     "num": 71,
+     "offset": 0,
+     "scale": 1,
+     "type": "message_index"
+    },
+    "zone_count": {
+     "baseType": 4,
+     "num": 76,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    }
+   },
+   "num": 19
+  },
+  "record": {
+   "fields": {
+    "absolute_pressure": {
+     "baseType": 6,
+     "num": 91,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "accumulated_power": {
+     "baseType": 6,
+     "num": 29,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "activity_type": {
+     "baseType": 0,
+     "num": 42,
+     "offset": 0,
+     "scale": 1,
+     "type": "activity_type"
+    },
+    "air_time_remaining": {
+     "baseType": 6,
+     "num": 123,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "altitude": {
+     "baseType": 4,
+     "num": 2,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint16"
+    },
+    "ascent_rate": {
+     "baseType": 5,
+     "num": 127,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint32"
+    },
+    "ball_speed": {
+     "baseType": 4,
+     "num": 51,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "battery_soc": {
+     "baseType": 2,
+     "num": 81,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "cadence": {
+     "baseType": 2,
+     "num": 4,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "cadence256": {
+     "baseType": 4,
+     "num": 52,
+     "offset": 0,
+     "scale": 256,
+     "type": "uint16"
+    },
+    "calories": {
+     "baseType": 4,
+     "num": 33,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "cns_load": {
+     "baseType": 2,
+     "num": 97,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "combined_pedal_smoothness": {
+     "baseType": 2,
+     "num": 47,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "compressed_accumulated_power": {
+     "baseType": 4,
+     "num": 28,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "compressed_speed_distance": {
+     "baseType": 13,
+     "num": 8,
+     "offset": 0,
+     "scale": 1,
+     "type": "byte"
+    },
+    "core_temperature": {
+     "baseType": 4,
+     "num": 139,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "current_stress": {
+     "baseType": 4,
+     "num": 116,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "cycle_length": {
+     "baseType": 2,
+     "num": 12,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint8"
+    },
+    "cycle_length16": {
+     "baseType": 4,
+     "num": 87,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "cycles": {
+     "baseType": 2,
+     "num": 18,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "depth": {
+     "baseType": 6,
+     "num": 92,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "device_index": {
+     "baseType": 2,
+     "num": 62,
+     "offset": 0,
+     "scale": 1,
+     "type": "device_index"
+    },
+    "distance": {
+     "baseType": 6,
+     "num": 5,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint32"
+    },
+    "ebike_assist_level_percent": {
+     "baseType": 2,
+     "num": 120,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "ebike_assist_mode": {
+     "baseType": 2,
+     "num": 119,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "ebike_battery_level": {
+     "baseType": 2,
+     "num": 118,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "ebike_travel_range": {
+     "baseType": 4,
+     "num": 117,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "enhanced_altitude": {
+     "baseType": 6,
+     "num": 78,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint32"
+    },
+    "enhanced_respiration_rate": {
+     "baseType": 4,
+     "num": 108,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "enhanced_speed": {
+     "baseType": 6,
+     "num": 73,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "flow": {
+     "baseType": 8,
+     "num": 115,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "fractional_cadence": {
+     "baseType": 2,
+     "num": 53,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "gps_accuracy": {
+     "baseType": 2,
+     "num": 31,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "grade": {
+     "baseType": 3,
+     "num": 9,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "grit": {
+     "baseType": 8,
+     "num": 114,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "heart_rate": {
+     "baseType": 2,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "left_pco": {
+     "baseType": 1,
+     "num": 67,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "left_pedal_smoothness": {
+     "baseType": 2,
+     "num": 45,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "left_power_phase": {
+     "baseType": 2,
+     "num": 69,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "left_power_phase_peak": {
+     "baseType": 2,
+     "num": 70,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "left_right_balance": {
+     "baseType": 2,
+     "num": 30,
+     "offset": 0,
+     "scale": 1,
+     "type": "left_right_balance"
+    },
+    "left_torque_effectiveness": {
+     "baseType": 2,
+     "num": 43,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "motor_power": {
+     "baseType": 4,
+     "num": 82,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "n2_load": {
+     "baseType": 4,
+     "num": 98,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "ndl_time": {
+     "baseType": 6,
+     "num": 96,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "next_stop_depth": {
+     "baseType": 6,
+     "num": 93,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "next_stop_time": {
+     "baseType": 6,
+     "num": 94,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "po2": {
+     "baseType": 2,
+     "num": 129,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint8"
+    },
+    "position_lat": {
+     "baseType": 5,
+     "num": 0,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "position_long": {
+     "baseType": 5,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "power": {
+     "baseType": 4,
+     "num": 7,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "pressure_sac": {
+     "baseType": 4,
+     "num": 124,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "resistance": {
+     "baseType": 2,
+     "num": 10,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "respiration_rate": {
+     "baseType": 2,
+     "num": 99,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "right_pco": {
+     "baseType": 1,
+     "num": 68,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "right_pedal_smoothness": {
+     "baseType": 2,
+     "num": 46,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "right_power_phase": {
+     "baseType": 2,
+     "num": 71,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "right_power_phase_peak": {
+     "baseType": 2,
+     "num": 72,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "right_torque_effectiveness": {
+     "baseType": 2,
+     "num": 44,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "rmv": {
+     "baseType": 4,
+     "num": 126,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "saturated_hemoglobin_percent": {
+     "baseType": 4,
+     "num": 57,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "saturated_hemoglobin_percent_max": {
+     "baseType": 4,
+     "num": 59,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "saturated_hemoglobin_percent_min": {
+     "baseType": 4,
+     "num": 58,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "speed": {
+     "baseType": 4,
+     "num": 6,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "speed_1s": {
+     "baseType": 2,
+     "num": 17,
+     "offset": 0,
+     "scale": 16,
+     "type": "uint8"
+    },
+    "stance_time": {
+     "baseType": 4,
+     "num": 41,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "stance_time_balance": {
+     "baseType": 4,
+     "num": 84,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "stance_time_percent": {
+     "baseType": 4,
+     "num": 40,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "step_length": {
+     "baseType": 4,
+     "num": 85,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "stroke_type": {
+     "baseType": 0,
+     "num": 49,
+     "offset": 0,
+     "scale": 1,
+     "type": "stroke_type"
+    },
+    "temperature": {
+     "baseType": 1,
+     "num": 13,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "time128": {
+     "baseType": 2,
+     "num": 48,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "time_from_course": {
+     "baseType": 5,
+     "num": 11,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint32"
+    },
+    "time_to_surface": {
+     "baseType": 6,
+     "num": 95,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "timestamp": {
+     "baseType": 6,
+     "num": 253,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "total_cycles": {
+     "baseType": 6,
+     "num": 19,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "total_hemoglobin_conc": {
+     "baseType": 4,
+     "num": 54,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "total_hemoglobin_conc_max": {
+     "baseType": 4,
+     "num": 56,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "total_hemoglobin_conc_min": {
+     "baseType": 4,
+     "num": 55,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "vertical_oscillation": {
+     "baseType": 4,
+     "num": 39,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "vertical_ratio": {
+     "baseType": 4,
+     "num": 83,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "vertical_speed": {
+     "baseType": 3,
+     "num": 32,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "volume_sac": {
+     "baseType": 4,
+     "num": 125,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "zone": {
+     "baseType": 2,
+     "num": 50,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    }
+   },
+   "num": 20
+  },
+  "session": {
+   "fields": {
+    "active_time": {
+     "baseType": 6,
+     "num": 78,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "avg_altitude": {
+     "baseType": 4,
+     "num": 49,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint16"
+    },
+    "avg_ball_speed": {
+     "baseType": 4,
+     "num": 88,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_cadence": {
+     "baseType": 2,
+     "num": 18,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_cadence_position": {
+     "baseType": 2,
+     "num": 122,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_combined_pedal_smoothness": {
+     "baseType": 2,
+     "num": 105,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_core_temperature": {
+     "baseType": 4,
+     "num": 208,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_depth": {
+     "baseType": 6,
+     "num": 140,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "avg_flow": {
+     "baseType": 8,
+     "num": 187,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "avg_fractional_cadence": {
+     "baseType": 2,
+     "num": 92,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "avg_grade": {
+     "baseType": 3,
+     "num": 52,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "avg_grit": {
+     "baseType": 8,
+     "num": 186,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "avg_heart_rate": {
+     "baseType": 2,
+     "num": 16,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_lap_time": {
+     "baseType": 6,
+     "num": 69,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "avg_left_pco": {
+     "baseType": 1,
+     "num": 114,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "avg_left_pedal_smoothness": {
+     "baseType": 2,
+     "num": 103,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_left_power_phase": {
+     "baseType": 2,
+     "num": 116,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_left_power_phase_peak": {
+     "baseType": 2,
+     "num": 117,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_left_torque_effectiveness": {
+     "baseType": 2,
+     "num": 101,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_lev_motor_power": {
+     "baseType": 4,
+     "num": 129,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "avg_neg_grade": {
+     "baseType": 3,
+     "num": 54,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "avg_neg_vertical_speed": {
+     "baseType": 3,
+     "num": 61,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "avg_pos_grade": {
+     "baseType": 3,
+     "num": 53,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "avg_pos_vertical_speed": {
+     "baseType": 3,
+     "num": 60,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "avg_power": {
+     "baseType": 4,
+     "num": 20,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "avg_power_position": {
+     "baseType": 4,
+     "num": 120,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "avg_respiration_rate": {
+     "baseType": 2,
+     "num": 147,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_right_pco": {
+     "baseType": 1,
+     "num": 115,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "avg_right_pedal_smoothness": {
+     "baseType": 2,
+     "num": 104,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_right_power_phase": {
+     "baseType": 2,
+     "num": 118,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_right_power_phase_peak": {
+     "baseType": 2,
+     "num": 119,
+     "offset": 0,
+     "scale": 0.7111111,
+     "type": "uint8"
+    },
+    "avg_right_torque_effectiveness": {
+     "baseType": 2,
+     "num": 102,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "avg_saturated_hemoglobin_percent": {
+     "baseType": 4,
+     "num": 98,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_speed": {
+     "baseType": 4,
+     "num": 14,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "avg_spo2": {
+     "baseType": 2,
+     "num": 194,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_stance_time": {
+     "baseType": 4,
+     "num": 91,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_stance_time_balance": {
+     "baseType": 4,
+     "num": 133,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_stance_time_percent": {
+     "baseType": 4,
+     "num": 90,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_step_length": {
+     "baseType": 4,
+     "num": 134,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_stress": {
+     "baseType": 2,
+     "num": 195,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "avg_stroke_count": {
+     "baseType": 6,
+     "num": 41,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint32"
+    },
+    "avg_stroke_distance": {
+     "baseType": 4,
+     "num": 42,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_temperature": {
+     "baseType": 1,
+     "num": 57,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "avg_total_hemoglobin_conc": {
+     "baseType": 4,
+     "num": 95,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "avg_vam": {
+     "baseType": 4,
+     "num": 139,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "avg_vertical_oscillation": {
+     "baseType": 4,
+     "num": 89,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "avg_vertical_ratio": {
+     "baseType": 4,
+     "num": 132,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "best_lap_index": {
+     "baseType": 4,
+     "num": 70,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "dive_number": {
+     "baseType": 6,
+     "num": 156,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "end_cns": {
+     "baseType": 2,
+     "num": 144,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "end_n2": {
+     "baseType": 4,
+     "num": 146,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "end_position_lat": {
+     "baseType": 5,
+     "num": 38,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "end_position_long": {
+     "baseType": 5,
+     "num": 39,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "enhanced_avg_altitude": {
+     "baseType": 6,
+     "num": 126,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint32"
+    },
+    "enhanced_avg_respiration_rate": {
+     "baseType": 4,
+     "num": 169,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "enhanced_avg_speed": {
+     "baseType": 6,
+     "num": 124,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "enhanced_max_altitude": {
+     "baseType": 6,
+     "num": 128,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint32"
+    },
+    "enhanced_max_respiration_rate": {
+     "baseType": 4,
+     "num": 170,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "enhanced_max_speed": {
+     "baseType": 6,
+     "num": 125,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "enhanced_min_altitude": {
+     "baseType": 6,
+     "num": 127,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint32"
+    },
+    "enhanced_min_respiration_rate": {
+     "baseType": 4,
+     "num": 180,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "event": {
+     "baseType": 0,
+     "num": 0,
+     "offset": 0,
+     "scale": 1,
+     "type": "event"
+    },
+    "event_group": {
+     "baseType": 2,
+     "num": 27,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "event_type": {
+     "baseType": 0,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "event_type"
+    },
+    "first_lap_index": {
+     "baseType": 4,
+     "num": 25,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "gps_accuracy": {
+     "baseType": 2,
+     "num": 51,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "intensity_factor": {
+     "baseType": 4,
+     "num": 36,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "jump_count": {
+     "baseType": 4,
+     "num": 183,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "left_right_balance": {
+     "baseType": 4,
+     "num": 37,
+     "offset": 0,
+     "scale": 1,
+     "type": "left_right_balance_100"
+    },
+    "lev_battery_consumption": {
+     "baseType": 2,
+     "num": 131,
+     "offset": 0,
+     "scale": 2,
+     "type": "uint8"
+    },
+    "max_altitude": {
+     "baseType": 4,
+     "num": 50,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint16"
+    },
+    "max_ball_speed": {
+     "baseType": 4,
+     "num": 87,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "max_cadence": {
+     "baseType": 2,
+     "num": 19,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_cadence_position": {
+     "baseType": 2,
+     "num": 123,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_core_temperature": {
+     "baseType": 4,
+     "num": 210,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "max_depth": {
+     "baseType": 6,
+     "num": 141,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "max_fractional_cadence": {
+     "baseType": 2,
+     "num": 93,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "max_heart_rate": {
+     "baseType": 2,
+     "num": 17,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_lev_motor_power": {
+     "baseType": 4,
+     "num": 130,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "max_neg_grade": {
+     "baseType": 3,
+     "num": 56,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "max_neg_vertical_speed": {
+     "baseType": 3,
+     "num": 63,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "max_pos_grade": {
+     "baseType": 3,
+     "num": 55,
+     "offset": 0,
+     "scale": 100,
+     "type": "sint16"
+    },
+    "max_pos_vertical_speed": {
+     "baseType": 3,
+     "num": 62,
+     "offset": 0,
+     "scale": 1000,
+     "type": "sint16"
+    },
+    "max_power": {
+     "baseType": 4,
+     "num": 21,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "max_power_position": {
+     "baseType": 4,
+     "num": 121,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "max_respiration_rate": {
+     "baseType": 2,
+     "num": 148,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "max_saturated_hemoglobin_percent": {
+     "baseType": 4,
+     "num": 100,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "max_speed": {
+     "baseType": 4,
+     "num": 15,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint16"
+    },
+    "max_temperature": {
+     "baseType": 1,
+     "num": 58,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "max_total_hemoglobin_conc": {
+     "baseType": 4,
+     "num": 97,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "message_index": {
+     "baseType": 4,
+     "num": 254,
+     "offset": 0,
+     "scale": 1,
+     "type": "message_index"
+    },
+    "metabolic_calories": {
+     "baseType": 4,
+     "num": 196,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "min_altitude": {
+     "baseType": 4,
+     "num": 71,
+     "offset": 500,
+     "scale": 5,
+     "type": "uint16"
+    },
+    "min_core_temperature": {
+     "baseType": 4,
+     "num": 209,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "min_heart_rate": {
+     "baseType": 2,
+     "num": 64,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "min_respiration_rate": {
+     "baseType": 2,
+     "num": 149,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "min_saturated_hemoglobin_percent": {
+     "baseType": 4,
+     "num": 99,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "min_temperature": {
+     "baseType": 1,
+     "num": 150,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint8"
+    },
+    "min_total_hemoglobin_conc": {
+     "baseType": 4,
+     "num": 96,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "nec_lat": {
+     "baseType": 5,
+     "num": 29,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "nec_long": {
+     "baseType": 5,
+     "num": 30,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "normalized_power": {
+     "baseType": 4,
+     "num": 34,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "num_active_lengths": {
+     "baseType": 4,
+     "num": 47,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "num_laps": {
+     "baseType": 4,
+     "num": 26,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "num_lengths": {
+     "baseType": 4,
+     "num": 33,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "o2_toxicity": {
+     "baseType": 4,
+     "num": 155,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "opponent_name": {
+     "baseType": 7,
+     "num": 84,
+     "offset": 0,
+     "scale": 1,
+     "type": "string"
+    },
+    "opponent_score": {
+     "baseType": 4,
+     "num": 83,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "player_score": {
+     "baseType": 4,
+     "num": 82,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "pool_length": {
+     "baseType": 4,
+     "num": 44,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint16"
+    },
+    "pool_length_unit": {
+     "baseType": 0,
+     "num": 46,
+     "offset": 0,
+     "scale": 1,
+     "type": "display_measure"
+    },
+    "rmssd_hrv": {
+     "baseType": 2,
+     "num": 198,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "sdrr_hrv": {
+     "baseType": 2,
+     "num": 197,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "sport": {
+     "baseType": 0,
+     "num": 5,
+     "offset": 0,
+     "scale": 1,
+     "type": "sport"
+    },
+    "sport_index": {
+     "baseType": 2,
+     "num": 111,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "sport_profile_name": {
+     "baseType": 7,
+     "num": 110,
+     "offset": 0,
+     "scale": 1,
+     "type": "string"
+    },
+    "stand_count": {
+     "baseType": 4,
+     "num": 113,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "start_cns": {
+     "baseType": 2,
+     "num": 143,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "start_n2": {
+     "baseType": 4,
+     "num": 145,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "start_position_lat": {
+     "baseType": 5,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "start_position_long": {
+     "baseType": 5,
+     "num": 4,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "start_time": {
+     "baseType": 6,
+     "num": 2,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "stroke_count": {
+     "baseType": 4,
+     "num": 85,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "sub_sport": {
+     "baseType": 0,
+     "num": 6,
+     "offset": 0,
+     "scale": 1,
+     "type": "sub_sport"
+    },
+    "surface_interval": {
+     "baseType": 6,
+     "num": 142,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "swc_lat": {
+     "baseType": 5,
+     "num": 31,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "swc_long": {
+     "baseType": 5,
+     "num": 32,
+     "offset": 0,
+     "scale": 1,
+     "type": "sint32"
+    },
+    "swim_stroke": {
+     "baseType": 0,
+     "num": 43,
+     "offset": 0,
+     "scale": 1,
+     "type": "swim_stroke"
+    },
+    "threshold_power": {
+     "baseType": 4,
+     "num": 45,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "time_in_cadence_zone": {
+     "baseType": 6,
+     "num": 67,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_in_hr_zone": {
+     "baseType": 6,
+     "num": 65,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_in_power_zone": {
+     "baseType": 6,
+     "num": 68,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_in_speed_zone": {
+     "baseType": 6,
+     "num": 66,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "time_standing": {
+     "baseType": 6,
+     "num": 112,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "timestamp": {
+     "baseType": 6,
+     "num": 253,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "total_anaerobic_training_effect": {
+     "baseType": 2,
+     "num": 137,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint8"
+    },
+    "total_ascent": {
+     "baseType": 4,
+     "num": 22,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_calories": {
+     "baseType": 4,
+     "num": 11,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_cycles": {
+     "baseType": 6,
+     "num": 10,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "total_descent": {
+     "baseType": 4,
+     "num": 23,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_distance": {
+     "baseType": 6,
+     "num": 9,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint32"
+    },
+    "total_elapsed_time": {
+     "baseType": 6,
+     "num": 7,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "total_fat_calories": {
+     "baseType": 4,
+     "num": 13,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "total_flow": {
+     "baseType": 8,
+     "num": 182,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "total_fractional_ascent": {
+     "baseType": 2,
+     "num": 199,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint8"
+    },
+    "total_fractional_cycles": {
+     "baseType": 2,
+     "num": 94,
+     "offset": 0,
+     "scale": 128,
+     "type": "uint8"
+    },
+    "total_fractional_descent": {
+     "baseType": 2,
+     "num": 200,
+     "offset": 0,
+     "scale": 100,
+     "type": "uint8"
+    },
+    "total_grit": {
+     "baseType": 8,
+     "num": 181,
+     "offset": 0,
+     "scale": 1,
+     "type": "float32"
+    },
+    "total_moving_time": {
+     "baseType": 6,
+     "num": 59,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "total_timer_time": {
+     "baseType": 6,
+     "num": 8,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "total_training_effect": {
+     "baseType": 2,
+     "num": 24,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint8"
+    },
+    "total_work": {
+     "baseType": 6,
+     "num": 48,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint32"
+    },
+    "training_load_peak": {
+     "baseType": 5,
+     "num": 168,
+     "offset": 0,
+     "scale": 65536,
+     "type": "sint32"
+    },
+    "training_stress_score": {
+     "baseType": 4,
+     "num": 35,
+     "offset": 0,
+     "scale": 10,
+     "type": "uint16"
+    },
+    "trigger": {
+     "baseType": 0,
+     "num": 28,
+     "offset": 0,
+     "scale": 1,
+     "type": "session_trigger"
+    },
+    "workout_feel": {
+     "baseType": 2,
+     "num": 192,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "workout_rpe": {
+     "baseType": 2,
+     "num": 193,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint8"
+    },
+    "zone_count": {
+     "baseType": 4,
+     "num": 86,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    }
+   },
+   "num": 18
+  },
+  "set": {
+   "fields": {
+    "category": {
+     "baseType": 4,
+     "num": 7,
+     "offset": 0,
+     "scale": 1,
+     "type": "exercise_category"
+    },
+    "category_subtype": {
+     "baseType": 4,
+     "num": 8,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "duration": {
+     "baseType": 6,
+     "num": 0,
+     "offset": 0,
+     "scale": 1000,
+     "type": "uint32"
+    },
+    "message_index": {
+     "baseType": 4,
+     "num": 10,
+     "offset": 0,
+     "scale": 1,
+     "type": "message_index"
+    },
+    "repetitions": {
+     "baseType": 4,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "uint16"
+    },
+    "set_type": {
+     "baseType": 2,
+     "num": 5,
+     "offset": 0,
+     "scale": 1,
+     "type": "set_type"
+    },
+    "start_time": {
+     "baseType": 6,
+     "num": 6,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "timestamp": {
+     "baseType": 6,
+     "num": 254,
+     "offset": 0,
+     "scale": 1,
+     "type": "date_time"
+    },
+    "weight": {
+     "baseType": 4,
+     "num": 4,
+     "offset": 0,
+     "scale": 16,
+     "type": "uint16"
+    },
+    "weight_display_unit": {
+     "baseType": 4,
+     "num": 9,
+     "offset": 0,
+     "scale": 1,
+     "type": "fit_base_unit"
+    },
+    "wkt_step_index": {
+     "baseType": 4,
+     "num": 11,
+     "offset": 0,
+     "scale": 1,
+     "type": "message_index"
+    }
+   },
+   "num": 225
+  },
+  "sport": {
+   "fields": {
+    "name": {
+     "baseType": 7,
+     "num": 3,
+     "offset": 0,
+     "scale": 1,
+     "type": "string"
+    },
+    "sport": {
+     "baseType": 0,
+     "num": 0,
+     "offset": 0,
+     "scale": 1,
+     "type": "sport"
+    },
+    "sub_sport": {
+     "baseType": 0,
+     "num": 1,
+     "offset": 0,
+     "scale": 1,
+     "type": "sub_sport"
+    }
+   },
+   "num": 12
+  }
+ },
+ "numericTypes": [
+  "sint8",
+  "uint8",
+  "sint16",
+  "uint16",
+  "sint32",
+  "uint32",
+  "float32",
+  "float64",
+  "uint8z",
+  "uint16z",
+  "uint32z",
+  "byte",
+  "sint64",
+  "uint64",
+  "uint64z"
+ ],
+ "types": {
+  "activity": {
+   "auto_multi_sport": "1",
+   "manual": "0"
+  },
+  "event": {
+   "activity": "26",
+   "auto_activity_detect": "54",
+   "battery": "11",
+   "battery_low": "22",
+   "cad_high_alert": "17",
+   "cad_low_alert": "18",
+   "calibration": "36",
+   "calorie_duration_alert": "25",
+   "comm_timeout": "47",
+   "course_point": "10",
+   "distance_duration_alert": "24",
+   "dive_alert": "56",
+   "dive_gas_switched": "57",
+   "elev_high_alert": "45",
+   "elev_low_alert": "46",
+   "fitness_equipment": "27",
+   "front_gear_change": "42",
+   "hr_high_alert": "13",
+   "hr_low_alert": "14",
+   "lap": "9",
+   "length": "28",
+   "off_course": "7",
+   "power_down": "5",
+   "power_high_alert": "19",
+   "power_low_alert": "20",
+   "power_up": "6",
+   "radar_threat_alert": "75",
+   "rear_gear_change": "43",
+   "recovery_hr": "21",
+   "rider_position_change": "44",
+   "session": "8",
+   "speed_high_alert": "15",
+   "speed_low_alert": "16",
+   "sport_point": "33",
+   "tank_battery_low": "76",
+   "tank_lost": "73",
+   "tank_pod_connected": "81",
+   "tank_pod_disconnected": "82",
+   "tank_pressure_critical": "72",
+   "tank_pressure_reserve": "71",
+   "time_duration_alert": "23",
+   "timer": "0",
+   "user_marker": "32",
+   "virtual_partner_pace": "12",
+   "workout": "3",
+   "workout_step": "4"
+  },
+  "event_type": {
+   "begin_depreciated": "5",
+   "consecutive_depreciated": "2",
+   "end_all_depreciated": "7",
+   "end_depreciated": "6",
+   "marker": "3",
+   "start": "0",
+   "stop": "1",
+   "stop_all": "4",
+   "stop_disable": "8",
+   "stop_disable_all": "9"
+  },
+  "file": {
+   "activity": "4",
+   "activity_summary": "20",
+   "blood_pressure": "14",
+   "course": "6",
+   "device": "1",
+   "exd_configuration": "40",
+   "goals": "11",
+   "mfg_range_max": "254",
+   "mfg_range_min": "247",
+   "monitoring_a": "15",
+   "monitoring_b": "32",
+   "monitoring_daily": "28",
+   "schedules": "7",
+   "segment": "34",
+   "segment_list": "35",
+   "settings": "2",
+   "sport": "3",
+   "totals": "10",
+   "weight": "9",
+   "workout": "5"
+  },
+  "set_type": {
+   "active": "1",
+   "rest": "0"
+  },
+  "sport": {
+   "all": "254",
+   "alpine_skiing": "13",
+   "american_football": "9",
+   "archery": "79",
+   "baseball": "49",
+   "basketball": "6",
+   "boating": "23",
+   "boxing": "47",
+   "canoeing": "88",
+   "cricket": "71",
+   "cross_country_skiing": "12",
+   "cycling": "2",
+   "dance": "83",
+   "disc_golf": "69",
+   "diving": "53",
+   "driving": "24",
+   "e_biking": "21",
+   "fishing": "29",
+   "fitness_equipment": "4",
+   "floor_climbing": "48",
+   "flying": "20",
+   "generic": "0",
+   "geocaching": "87",
+   "golf": "25",
+   "grinding": "59",
+   "hang_gliding": "26",
+   "hiit": "62",
+   "hiking": "17",
+   "hockey": "73",
+   "horseback_riding": "27",
+   "hunting": "28",
+   "ice_skating": "33",
+   "inline_skating": "30",
+   "jump_rope": "84",
+   "jumpmaster": "46",
+   "kayaking": "41",
+   "kitesurfing": "44",
+   "lacrosse": "74",
+   "meditation": "67",
+   "mixed_martial_arts": "80",
+   "mobility": "86",
+   "motor_sports": "81",
+   "motorcycling": "22",
+   "mountaineering": "16",
+   "multisport": "18",
+   "paddling": "19",
+   "para_sport": "68",
+   "pool_apnea": "85",
+   "racket": "64",
+   "rafting": "42",
+   "rock_climbing": "31",
+   "rowing": "15",
+   "rugby": "72",
+   "running": "1",
+   "sailing": "32",
+   "shooting": "56",
+   "sky_diving": "34",
+   "snorkeling": "82",
+   "snowboarding": "14",
+   "snowmobiling": "36",
+   "snowshoeing": "35",
+   "soccer": "7",
+   "stand_up_paddleboarding": "37",
+   "surfing": "38",
+   "swimming": "5",
+   "tactical": "45",
+   "team_sport": "70",
+   "tennis": "8",
+   "training": "10",
+   "transition": "3",
+   "video_gaming": "63",
+   "volleyball": "75",
+   "wakeboarding": "39",
+   "wakesurfing": "77",
+   "walking": "11",
+   "water_skiing": "40",
+   "water_sport": "78",
+   "water_tubing": "76",
+   "wheelchair_push_run": "66",
+   "wheelchair_push_walk": "65",
+   "windsurfing": "43",
+   "winter_sport": "58"
+  },
+  "sub_sport": {
+   "adventure_race": "82",
+   "all": "254",
+   "amrap": "73",
+   "apnea_diving": "56",
+   "apnea_hunting": "57",
+   "atv": "35",
+   "backcountry": "37",
+   "badminton": "95",
+   "bike_to_run_transition": "32",
+   "bmx": "29",
+   "bouldering": "69",
+   "breathing": "62",
+   "brick": "80",
+   "cardio_training": "26",
+   "casual_walking": "30",
+   "ccr_diving": "63",
+   "challenge": "24",
+   "commuting": "48",
+   "cyclocross": "11",
+   "downhill": "9",
+   "duathlon": "79",
+   "dynamic_apnea": "121",
+   "e_bike_enduro": "127",
+   "e_bike_fitness": "28",
+   "e_bike_mountain": "47",
+   "elliptical": "15",
+   "emom": "74",
+   "enduro": "123",
+   "esport": "77",
+   "exercise": "23",
+   "expedition": "66",
+   "field": "90",
+   "flexibility_training": "19",
+   "fly_altimeter": "116",
+   "fly_canopy": "110",
+   "fly_ifr": "119",
+   "fly_navigate": "114",
+   "fly_paraglide": "111",
+   "fly_paramotor": "112",
+   "fly_pressurized": "113",
+   "fly_timer": "115",
+   "fly_vfr": "118",
+   "fly_wx": "117",
+   "gauge_diving": "55",
+   "generic": "0",
+   "gravel_cycling": "46",
+   "hand_cycling": "12",
+   "hiit": "70",
+   "hunting_with_dogs": "72",
+   "ice": "91",
+   "indoor_climbing": "68",
+   "indoor_cycling": "6",
+   "indoor_grinding": "71",
+   "indoor_hand_cycling": "88",
+   "indoor_rowing": "14",
+   "indoor_running": "45",
+   "indoor_skiing": "25",
+   "indoor_walking": "27",
+   "indoor_wheelchair_run": "87",
+   "indoor_wheelchair_walk": "86",
+   "lap_swimming": "17",
+   "map": "52",
+   "match": "22",
+   "mixed_surface": "49",
+   "motocross": "36",
+   "mountain": "8",
+   "multi_gas_diving": "54",
+   "navigate": "50",
+   "obstacle": "59",
+   "open_water": "18",
+   "overland": "98",
+   "padel": "85",
+   "pickleball": "84",
+   "pilates": "44",
+   "platform": "93",
+   "pool_triathlon": "126",
+   "racquetball": "96",
+   "rally": "125",
+   "rc_drone": "39",
+   "recumbent": "10",
+   "resort": "38",
+   "road": "7",
+   "rucking": "124",
+   "run_to_bike_transition": "33",
+   "sail_race": "65",
+   "single_gas_diving": "53",
+   "skate_skiing": "42",
+   "speed_walking": "31",
+   "spin": "5",
+   "squash": "94",
+   "stair_climbing": "16",
+   "street": "2",
+   "strength_training": "20",
+   "swim_run": "81",
+   "swim_to_bike_transition": "34",
+   "tabata": "75",
+   "table_tennis": "97",
+   "track": "4",
+   "track_cycling": "13",
+   "track_me": "51",
+   "trail": "3",
+   "treadmill": "1",
+   "triathlon": "78",
+   "trolling_motor": "99",
+   "trucker_workout": "83",
+   "ultimate": "92",
+   "ultra": "67",
+   "virtual_activity": "58",
+   "warm_up": "21",
+   "whitewater": "41",
+   "wingsuit": "40",
+   "yoga": "43"
+  }
+ },
+ "version": 21208
+}

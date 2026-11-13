@@ -1,0 +1,2543 @@
+{
+ "choices": [
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "after": [
+    {
+     "error": null,
+     "garmin_activity_id": 101,
+     "lease_owner": null,
+     "status": "described"
+    }
+   ],
+   "garmin_calls": [
+    "set_title",
+    "set_description"
+   ],
+   "name": "choice_describes",
+   "result": {
+    "status": "described"
+   },
+   "source": 101,
+   "status": "awaiting_match",
+   "strategy": "describe"
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "after": [
+    {
+     "error": null,
+     "garmin_activity_id": 101,
+     "lease_owner": null,
+     "status": "merged"
+    }
+   ],
+   "garmin_calls": [
+    "get_exercise_sets",
+    "put_exercise_sets",
+    "set_title",
+    "set_description"
+   ],
+   "name": "choice_merges",
+   "result": {
+    "status": "merged"
+   },
+   "source": 101,
+   "status": "awaiting_match",
+   "strategy": "merge"
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "after": [
+    {
+     "error": "unmapped exercises: Mystery Machine",
+     "garmin_activity_id": null,
+     "lease_owner": null,
+     "status": "needs_mapping"
+    }
+   ],
+   "exercises": [
+    {
+     "exercise_template_id": "T-MYST",
+     "sets": [
+      {
+       "reps": 8,
+       "type": "normal"
+      }
+     ],
+     "title": "Mystery Machine"
+    }
+   ],
+   "garmin_calls": [],
+   "name": "choice_gate_parks",
+   "result": {
+    "status": "needs_mapping"
+   },
+   "source": 101,
+   "status": "awaiting_match",
+   "strategy": "replace"
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "other",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0}",
+     "publish_status": "published",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": 9
+    }
+   ],
+   "after": [
+    {
+     "error": null,
+     "garmin_activity_id": null,
+     "lease_owner": null,
+     "status": "awaiting_match"
+    }
+   ],
+   "garmin_calls": [],
+   "name": "choice_replace_published",
+   "result": {
+    "message": "Replace is unavailable because this activity is already on Strava. Choose Merge or Description only.",
+    "raised": "ValueError"
+   },
+   "source": 101,
+   "status": "awaiting_match",
+   "strategy": "replace"
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "after": [
+    {
+     "error": null,
+     "garmin_activity_id": null,
+     "lease_owner": null,
+     "status": "merged"
+    }
+   ],
+   "garmin_calls": [],
+   "name": "choice_not_waiting",
+   "result": {
+    "message": "This workout is not waiting for a match decision.",
+    "raised": "ValueError"
+   },
+   "source": 101,
+   "status": "merged",
+   "strategy": "merge"
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "after": [
+    {
+     "error": "BOOM",
+     "garmin_activity_id": null,
+     "lease_owner": null,
+     "status": "awaiting_match"
+    }
+   ],
+   "garmin": {
+    "put": "BOOM"
+   },
+   "garmin_calls": [
+    "get_exercise_sets",
+    "put_exercise_sets"
+   ],
+   "name": "choice_garmin_fails",
+   "result": {
+    "message": "BOOM",
+    "raised": "RuntimeError"
+   },
+   "source": 101,
+   "status": "awaiting_match",
+   "strategy": "merge"
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "after": [
+    {
+     "error": null,
+     "garmin_activity_id": null,
+     "lease_owner": null,
+     "status": "awaiting_match"
+    }
+   ],
+   "garmin_calls": [],
+   "name": "choice_unknown_strategy",
+   "result": {
+    "message": "unsupported Hevy match strategy: delete",
+    "raised": "ValueError"
+   },
+   "source": 101,
+   "status": "awaiting_match",
+   "strategy": "delete"
+  },
+  {
+   "activities": [],
+   "after": [],
+   "garmin_calls": [],
+   "name": "choice_unknown_workout",
+   "result": {
+    "message": "Workout is being processed right now.",
+    "raised": "RuntimeError"
+   },
+   "status": null,
+   "strategy": "merge"
+  }
+ ],
+ "now": "2026-11-10T12:00:00+00:00",
+ "profile": {
+  "birth_year": 1988,
+  "sex": "male",
+  "vo2max": 47.0,
+  "weight_kg": 82.5
+ },
+ "scenarios": [
+  {
+   "activities": [],
+   "changed": false,
+   "garmin_calls": [],
+   "hevy_calls": [],
+   "name": "cursor_starts_now",
+   "raised": null,
+   "state": {
+    "cursor": "2026-11-10T12:00:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": []
+   },
+   "strava_calls": [],
+   "workouts": []
+  },
+  {
+   "activities": [],
+   "changed": true,
+   "cursor": "2026-11-10T11:00:00.250000+00:00",
+   "garmin_calls": [],
+   "hevy": {
+    "events": [
+     {
+      "deleted_at": "2026-11-10T11:10:00Z",
+      "id": "w2",
+      "type": "deleted"
+     },
+     {
+      "type": "updated",
+      "workout": {
+       "end_time": "2026-11-10T09:00:00Z",
+       "exercises": [
+        {
+         "exercise_template_id": "T-BENCH",
+         "sets": [
+          {
+           "reps": 5,
+           "type": "normal",
+           "weight_kg": 80
+          }
+         ],
+         "title": "Bench Press (Barbell)"
+        }
+       ],
+       "id": "w2",
+       "start_time": "2026-11-10T08:00:00Z",
+       "title": "Workout w2",
+       "updated_at": "2026-11-10T11:10:00Z"
+      }
+     },
+     {
+      "type": "updated",
+      "workout": {
+       "end_time": "2026-11-10T11:30:00Z",
+       "exercises": [
+        {
+         "exercise_template_id": "T-BENCH",
+         "sets": [
+          {
+           "reps": 5,
+           "type": "normal",
+           "weight_kg": 80
+          }
+         ],
+         "title": "Bench Press (Barbell)"
+        }
+       ],
+       "id": "w1",
+       "start_time": "2026-11-10T11:00:00Z",
+       "title": "Workout w1",
+       "updated_at": "2026-11-10T11:31:00Z"
+      }
+     },
+     {
+      "deleted_at": "2026-11-10T11:20:00Z",
+      "id": "w3",
+      "type": "deleted"
+     },
+     {
+      "type": "updated",
+      "workout": {
+       "end_time": "2026-11-10T11:30:00Z",
+       "exercises": [
+        {
+         "exercise_template_id": "T-BENCH",
+         "sets": [
+          {
+           "reps": 5,
+           "type": "normal",
+           "weight_kg": 80
+          }
+         ],
+         "title": "Bench Press (Barbell)"
+        }
+       ],
+       "id": "w4",
+       "start_time": "2026-11-10T11:00:00Z",
+       "title": "Workout w4",
+       "updated_at": "2026-11-10T11:40:00Z"
+      }
+     },
+     {
+      "type": "updated",
+      "workout": {
+       "end_time": "2026-11-10T09:00:00Z",
+       "exercises": [
+        {
+         "exercise_template_id": "T-BENCH",
+         "sets": [
+          {
+           "reps": 5,
+           "type": "normal",
+           "weight_kg": 80
+          }
+         ],
+         "title": "Bench Press (Barbell)"
+        }
+       ],
+       "id": "w5",
+       "start_time": "2026-11-10T08:00:00Z",
+       "title": "Workout w5",
+       "updated_at": "2026-11-10T11:58:00Z"
+      }
+     },
+     {
+      "deleted_at": "2026-11-10T11:05:00Z",
+      "id": "w-unknown",
+      "type": "deleted"
+     }
+    ]
+   },
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T10:55:00.250000+00:00"
+    ]
+   ],
+   "name": "events_ingested",
+   "raised": null,
+   "seen": [
+    [
+     "updated",
+     "w5",
+     "2026-11-10T11:58:00Z"
+    ]
+   ],
+   "settings": {
+    "hevy_grace_minutes": 60
+   },
+   "state": {
+    "cursor": "2026-11-10T11:58:00Z",
+    "operations": [],
+    "seen": [
+     {
+      "event_timestamp": "2026-11-10T11:05:00Z",
+      "event_type": "deleted",
+      "workout_id": "w-unknown"
+     },
+     {
+      "event_timestamp": "2026-11-10T11:10:00Z",
+      "event_type": "deleted",
+      "workout_id": "w2"
+     },
+     {
+      "event_timestamp": "2026-11-10T11:20:00Z",
+      "event_type": "deleted",
+      "workout_id": "w3"
+     },
+     {
+      "event_timestamp": "2026-11-10T11:31:00Z",
+      "event_type": "updated",
+      "workout_id": "w1"
+     },
+     {
+      "event_timestamp": "2026-11-10T11:10:00Z",
+      "event_type": "updated",
+      "workout_id": "w2"
+     },
+     {
+      "event_timestamp": "2026-11-10T11:40:00Z",
+      "event_type": "updated",
+      "workout_id": "w4"
+     },
+     {
+      "event_timestamp": "2026-11-10T11:58:00Z",
+      "event_type": "updated",
+      "workout_id": "w5"
+     }
+    ],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": null,
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T11:31:00Z",
+      "status": "waiting_watch",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     },
+     {
+      "applied_strategy": "merge",
+      "error": "deleted in Hevy",
+      "garmin_activity_id": 777,
+      "garmin_applied_updated_at": "2026-11-10T07:00:00Z",
+      "hevy_id": "w3",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T07:00:00Z",
+      "status": "needs_review",
+      "strava_applied_updated_at": null,
+      "title": "Workout w3"
+     },
+     {
+      "applied_strategy": null,
+      "error": null,
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w4",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T11:40:00Z",
+      "status": "waiting_watch",
+      "strava_applied_updated_at": null,
+      "title": "Workout w4"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w2",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w2",
+      "updated_at": "2026-11-10T07:00:00Z"
+     },
+     "status": "waiting_watch"
+    },
+    {
+     "garmin_applied": "2026-11-10T07:00:00Z",
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w3",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w3",
+      "updated_at": "2026-11-10T07:00:00Z"
+     },
+     "status": "merged",
+     "strategy": "merge",
+     "target": 777
+    },
+    {
+     "error": "unmapped exercises: Mystery Machine",
+     "payload": {
+      "end_time": "2026-11-10T11:30:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-MYST",
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Mystery Machine"
+       }
+      ],
+      "id": "w4",
+      "start_time": "2026-11-10T11:00:00Z",
+      "title": "Workout w4",
+      "updated_at": "2026-11-10T07:00:00Z"
+     },
+     "status": "needs_mapping"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    },
+    {
+     "activity_type": "running",
+     "description": "",
+     "garmin_activity_id": 102,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:00:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [
+    [
+     "get_exercise_sets",
+     101
+    ],
+    [
+     "put_exercise_sets",
+     101,
+     {
+      "activityId": 101,
+      "exerciseSets": [
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-10T08:02:00.0",
+        "weight": 80000.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 1,
+        "setType": "REST",
+        "startTime": "2026-11-10T08:03:20.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 120.0,
+        "exercises": [
+         {
+          "category": "PLANK",
+          "name": "PLANK",
+          "probability": null
+         }
+        ],
+        "messageIndex": 2,
+        "repetitionCount": 0,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-10T08:07:20.0",
+        "weight": 0.0,
+        "wktStepIndex": 1
+       }
+      ]
+     }
+    ],
+    [
+     "set_title",
+     101,
+     "Workout w1"
+    ],
+    [
+     "set_description",
+     101,
+     "⏱️ 60 min\n🔥 400 kcal\n\n• Bench Press (Barbell): 1 set - 80.0kg × 5\n• Plank: 1 set - 1min\n\n— synced by activsync"
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "match_merges",
+   "raised": null,
+   "settings": {
+    "hevy_watch_strategy": "merge"
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": "merge",
+      "error": null,
+      "garmin_activity_id": 101,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "merged",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       },
+       {
+        "exercise_template_id": "T-PLANK",
+        "sets": [
+         {
+          "duration_seconds": 60,
+          "type": "normal"
+         }
+        ],
+        "title": "Plank"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [
+    [
+     "set_title",
+     101,
+     "Workout w1"
+    ],
+    [
+     "set_description",
+     101,
+     "⏱️ 60 min\n🔥 400 kcal\n\n• Mystery Machine: 1 set - 0.0kg × 8\n\n— synced by activsync"
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "match_describes",
+   "raised": null,
+   "settings": {
+    "hevy_watch_strategy": "describe"
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": "describe",
+      "error": null,
+      "garmin_activity_id": 101,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "described",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-MYST",
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Mystery Machine"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    },
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 202,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "publish_status": "pending",
+     "start_time": "2026-11-09 08:00:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "review_mode_asks",
+   "raised": null,
+   "settings": {
+    "hevy_match_mode": "review"
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": "Choose how to apply this Hevy workout.",
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "awaiting_match",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     },
+     {
+      "applied_strategy": null,
+      "error": "Choose how to apply this Hevy workout.",
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w2",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 202,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "awaiting_match",
+      "strava_applied_updated_at": null,
+      "title": "Workout w2"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    },
+    {
+     "error": "Choose how to apply this Hevy workout.",
+     "payload": {
+      "end_time": "2026-11-09T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w2",
+      "start_time": "2026-11-09T08:00:00Z",
+      "title": "Workout w2",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "source": 202,
+     "status": "awaiting_match"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "other",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0}",
+     "publish_status": "published",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": 9
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "published_asks",
+   "raised": null,
+   "settings": {
+    "hevy_watch_strategy": "replace"
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": "Already published to Strava. Choose Merge or Description only.",
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "awaiting_match",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [
+    [
+     "set_title",
+     101,
+     "Workout w1"
+    ],
+    [
+     "set_description",
+     101,
+     "⏱️ 60 min\n🔥 400 kcal\n\n• Bench Press (Barbell): 1 set - 80.0kg × 5\n\n— synced by activsync"
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "automatic_awaiting_applies",
+   "raised": null,
+   "settings": {
+    "hevy_watch_strategy": "describe"
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": "describe",
+      "error": null,
+      "garmin_activity_id": 101,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "described",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "source": 101,
+     "status": "awaiting_match"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    },
+    {
+     "activity_type": "other",
+     "description": "",
+     "garmin_activity_id": 103,
+     "garmin_data": "{\"duration\": 3700.0}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 07:59:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "multiple_matches",
+   "raised": null,
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": "multiple matching watch activities",
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "needs_review",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    },
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 104,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:40:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "claimed_by_other",
+   "raised": null,
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": "matching watch activity already claimed by another workout",
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "needs_review",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     },
+     {
+      "applied_strategy": "merge",
+      "error": null,
+      "garmin_activity_id": 101,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w9",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "merged",
+      "strava_applied_updated_at": null,
+      "title": "Workout w9"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    },
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-01T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w9",
+      "start_time": "2026-11-01T08:00:00Z",
+      "title": "Workout w9",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "merged",
+     "strategy": "merge",
+     "target": 101
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [],
+   "hevy": {
+    "templates": {
+     "T-MYST": {
+      "equipment": "machine",
+      "id": "T-MYST",
+      "is_custom": true,
+      "primary_muscle_group": "lats",
+      "secondary_muscle_groups": [
+       "biceps"
+      ],
+      "title": "Mystery Machine"
+     },
+     "T-ODD": "BOOM"
+    }
+   },
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ],
+    [
+     "template",
+     "T-MYST"
+    ],
+    [
+     "template",
+     "T-ODD"
+    ]
+   ],
+   "name": "gate_parks_and_caches",
+   "raised": null,
+   "settings": {
+    "hevy_watch_strategy": "replace"
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [
+     {
+      "equipment_category": null,
+      "exercise_template_id": "T-GHOST",
+      "is_custom": 0,
+      "primary_muscle_group": null,
+      "secondary_muscle_groups": [],
+      "title": "Ghost Row (cached)"
+     },
+     {
+      "equipment_category": "machine",
+      "exercise_template_id": "T-MYST",
+      "is_custom": 1,
+      "primary_muscle_group": "lats",
+      "secondary_muscle_groups": [
+       "biceps"
+      ],
+      "title": "Mystery Machine"
+     },
+     {
+      "equipment_category": null,
+      "exercise_template_id": "T-ODD",
+      "is_custom": 0,
+      "primary_muscle_group": null,
+      "secondary_muscle_groups": [],
+      "title": "Odd"
+     }
+    ],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": "unmapped exercises: Mystery Machine, Ghost Row, Untemplated Thing, Mystery Machine 2, Odd",
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "needs_mapping",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "templates": [
+    [
+     "T-GHOST",
+     "Ghost Row (cached)"
+    ]
+   ],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-MYST",
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Mystery Machine"
+       },
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       },
+       {
+        "exercise_template_id": "T-GHOST",
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Ghost Row"
+       },
+       {
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Untemplated Thing"
+       },
+       {
+        "exercise_template_id": "T-MYST",
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Mystery Machine 2"
+       },
+       {
+        "exercise_template_id": "T-ODD",
+        "sets": [
+         {
+          "duration_seconds": 60,
+          "type": "normal"
+         }
+        ],
+        "title": "Odd"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": null,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [],
+   "hevy": {
+    "templates": {
+     "T-MYST": "AUTH"
+    }
+   },
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ],
+    [
+     "template",
+     "T-MYST"
+    ]
+   ],
+   "name": "gate_auth_pauses",
+   "raised": "HevyAuthError",
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": null,
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "waiting_watch",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-MYST",
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Mystery Machine"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin": {
+    "near": [
+     []
+    ],
+    "upload": {
+     "activity_id": 9500,
+     "upload_id": 1
+    }
+   },
+   "garmin_calls": [
+    [
+     "near"
+    ],
+    [
+     "daily",
+     "2026-11-10"
+    ],
+    [
+     "upload_fit",
+     "hevy_w1.fit"
+    ],
+    [
+     "set_title",
+     9500,
+     "Workout w1"
+    ],
+    [
+     "set_description",
+     9500,
+     "⏱️ 60 min\n🔥 331 kcal\n\n• Bench Press (Barbell): 1 set - 80.0kg × 5\n\n— synced by activsync"
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "passive_after_grace",
+   "raised": null,
+   "settings": {
+    "hevy_device_identity": {
+     "manufacturer": 1,
+     "product": 3990,
+     "serial": 12
+    }
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [
+     {
+      "attempt_count": 0,
+      "hevy_id": "w1",
+      "kind": "upload_passive",
+      "phase": "done"
+     }
+    ],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": "passive",
+      "error": null,
+      "garmin_activity_id": 9500,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "uploaded_passive",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     },
+     {
+      "applied_strategy": null,
+      "error": null,
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w2",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "waiting_watch",
+      "strava_applied_updated_at": null,
+      "title": "Workout w2"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    },
+    {
+     "payload": {
+      "end_time": "2026-11-10T11:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w2",
+      "start_time": "2026-11-10T10:30:00Z",
+      "title": "Workout w2",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin": {
+    "put": "BOOM"
+   },
+   "garmin_calls": [
+    [
+     "get_exercise_sets",
+     101
+    ],
+    [
+     "put_exercise_sets",
+     101,
+     {
+      "activityId": 101,
+      "exerciseSets": [
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-10T08:02:00.0",
+        "weight": 80000.0,
+        "wktStepIndex": 0
+       }
+      ]
+     }
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "merge_failure_recorded",
+   "raised": null,
+   "settings": {
+    "hevy_watch_strategy": "merge"
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": "BOOM",
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "failed",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "waiting_watch"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": false,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin": {
+    "near": [
+     []
+    ]
+   },
+   "garmin_calls": [
+    [
+     "near"
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "open_operation_advances",
+   "operation": {
+    "kind": "replace",
+    "phase": "submission_unknown",
+    "pre": [
+     101
+    ]
+   },
+   "raised": null,
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [
+     {
+      "attempt_count": 1,
+      "hevy_id": "w1",
+      "kind": "replace",
+      "phase": "submission_unknown"
+     }
+    ],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": null,
+      "error": null,
+      "garmin_activity_id": null,
+      "garmin_applied_updated_at": null,
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "syncing",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "source": 101,
+     "status": "syncing"
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400}",
+     "publish_status": "pending",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": null
+    },
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 202,
+     "garmin_data": "{\"duration\": 3600.0, \"calories\": 380}",
+     "publish_status": "pending",
+     "start_time": "2026-11-09 08:00:00",
+     "strava_activity_id": null
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [
+    [
+     "put_exercise_sets",
+     101,
+     {
+      "activityId": 101,
+      "exerciseSets": [
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-10T08:02:00.0",
+        "weight": 80000.0,
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 240.0,
+        "exercises": [],
+        "messageIndex": 1,
+        "setType": "REST",
+        "startTime": "2026-11-10T08:03:20.0",
+        "wktStepIndex": 0
+       },
+       {
+        "duration": 120.0,
+        "exercises": [
+         {
+          "category": "PLANK",
+          "name": "PLANK",
+          "probability": null
+         }
+        ],
+        "messageIndex": 2,
+        "repetitionCount": 0,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-10T08:07:20.0",
+        "weight": 0.0,
+        "wktStepIndex": 1
+       }
+      ]
+     }
+    ],
+    [
+     "set_title",
+     101,
+     "Workout w1"
+    ],
+    [
+     "set_title",
+     202,
+     "Workout w2"
+    ],
+    [
+     "set_description",
+     202,
+     "⏱️ 60 min\n🔥 380 kcal\n\n• Mystery Machine: 1 set - 0.0kg × 8\n\n— synced by activsync"
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "reapply_edits",
+   "raised": null,
+   "settings": {
+    "hevy_summary_on_structured": false
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": "merge",
+      "error": null,
+      "garmin_activity_id": 101,
+      "garmin_applied_updated_at": "2026-11-10T10:00:00Z",
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": 101,
+      "source_updated_at": "2026-11-10T10:00:00Z",
+      "status": "merged",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     },
+     {
+      "applied_strategy": "describe",
+      "error": null,
+      "garmin_activity_id": 202,
+      "garmin_applied_updated_at": "2026-11-10T10:00:00Z",
+      "hevy_id": "w2",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T10:00:00Z",
+      "status": "described",
+      "strava_applied_updated_at": null,
+      "title": "Workout w2"
+     },
+     {
+      "applied_strategy": "replace",
+      "error": null,
+      "garmin_activity_id": 303,
+      "garmin_applied_updated_at": "2026-11-10T10:00:00Z",
+      "hevy_id": "w3",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T10:00:00Z",
+      "status": "replaced",
+      "strava_applied_updated_at": null,
+      "title": "Workout w3"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       },
+       {
+        "exercise_template_id": "T-PLANK",
+        "sets": [
+         {
+          "duration_seconds": 60,
+          "type": "normal"
+         }
+        ],
+        "title": "Plank"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T10:00:00Z"
+     },
+     "source": 101,
+     "status": "merged",
+     "strategy": "merge",
+     "target": 101
+    },
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-09T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-MYST",
+        "sets": [
+         {
+          "reps": 8,
+          "type": "normal"
+         }
+        ],
+        "title": "Mystery Machine"
+       }
+      ],
+      "id": "w2",
+      "start_time": "2026-11-09T08:00:00Z",
+      "title": "Workout w2",
+      "updated_at": "2026-11-10T10:00:00Z"
+     },
+     "status": "described",
+     "strategy": "describe",
+     "target": 202
+    },
+    {
+     "garmin_applied": "2026-11-10T10:00:00Z",
+     "payload": {
+      "end_time": "2026-11-08T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w3",
+      "start_time": "2026-11-08T08:00:00Z",
+      "title": "Workout w3",
+      "updated_at": "2026-11-10T10:00:00Z"
+     },
+     "status": "replaced",
+     "strategy": "replace",
+     "target": 303
+    }
+   ]
+  },
+  {
+   "activities": [],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin": {
+    "put": "gone"
+   },
+   "garmin_calls": [
+    [
+     "put_exercise_sets",
+     9500,
+     {
+      "activityId": 9500,
+      "exerciseSets": [
+       {
+        "duration": 80.0,
+        "exercises": [
+         {
+          "category": "BENCH_PRESS",
+          "name": "BARBELL_BENCH_PRESS",
+          "probability": null
+         }
+        ],
+        "messageIndex": 0,
+        "repetitionCount": 5,
+        "setType": "ACTIVE",
+        "startTime": "2026-11-10T08:00:00.0",
+        "weight": 80000.0,
+        "wktStepIndex": 0
+       }
+      ]
+     }
+    ]
+   ],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "reapply_gone",
+   "raised": null,
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": "passive",
+      "error": "linked activity deleted on Garmin — re-sync as fresh upload",
+      "garmin_activity_id": 9500,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T10:00:00Z",
+      "status": "needs_review",
+      "strava_applied_updated_at": null,
+      "title": "Workout w1"
+     }
+    ]
+   },
+   "strava_calls": [],
+   "workouts": [
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T10:00:00Z"
+     },
+     "status": "uploaded_passive",
+     "strategy": "passive",
+     "target": 9500
+    }
+   ]
+  },
+  {
+   "activities": [
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 101,
+     "garmin_data": "{\"duration\": 3500.0, \"calories\": 400.5}",
+     "publish_status": "published",
+     "start_time": "2026-11-10 08:02:00",
+     "strava_activity_id": 555
+    },
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 202,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "publish_status": "published",
+     "start_time": "2026-11-09 08:00:00",
+     "strava_activity_id": 556
+    },
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 303,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "publish_status": "pending",
+     "start_time": "2026-11-08 08:00:00",
+     "strava_activity_id": null
+    },
+    {
+     "activity_type": "strength_training",
+     "description": "",
+     "garmin_activity_id": 404,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "publish_status": "published",
+     "start_time": "2026-11-07 08:00:00",
+     "strava_activity_id": 557
+    },
+    {
+     "activity_type": "strength_training",
+     "description": "kept words",
+     "garmin_activity_id": 606,
+     "garmin_data": "{\"duration\": 3600.0}",
+     "publish_status": "published",
+     "start_time": "2026-11-06 08:00:00",
+     "strava_activity_id": 558
+    }
+   ],
+   "changed": true,
+   "cursor": "2026-11-10T11:59:00+00:00",
+   "garmin_calls": [],
+   "hevy_calls": [
+    [
+     "events",
+     "2026-11-10T11:54:00+00:00"
+    ]
+   ],
+   "name": "strava_catches_up",
+   "raised": null,
+   "settings": {
+    "hevy_summary_on_structured": false
+   },
+   "state": {
+    "cursor": "2026-11-10T11:59:00+00:00",
+    "operations": [],
+    "seen": [],
+    "templates": [],
+    "workouts": [
+     {
+      "applied_strategy": "describe",
+      "error": null,
+      "garmin_activity_id": 101,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w1",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "described",
+      "strava_applied_updated_at": "2026-11-10T09:05:00Z",
+      "title": "Workout w1"
+     },
+     {
+      "applied_strategy": "merge",
+      "error": null,
+      "garmin_activity_id": 202,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w2",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "merged",
+      "strava_applied_updated_at": "2026-11-10T08:00:00Z",
+      "title": "Workout w2"
+     },
+     {
+      "applied_strategy": "replace",
+      "error": null,
+      "garmin_activity_id": 303,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w3",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "replaced",
+      "strava_applied_updated_at": null,
+      "title": "Workout w3"
+     },
+     {
+      "applied_strategy": "merge",
+      "error": null,
+      "garmin_activity_id": 404,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w4",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "merged",
+      "strava_applied_updated_at": "2026-11-10T09:05:00Z",
+      "title": "Workout w4"
+     },
+     {
+      "applied_strategy": "merge",
+      "error": null,
+      "garmin_activity_id": 606,
+      "garmin_applied_updated_at": "2026-11-10T09:05:00Z",
+      "hevy_id": "w6",
+      "lease_owner": null,
+      "locked_until": null,
+      "source_garmin_activity_id": null,
+      "source_updated_at": "2026-11-10T09:05:00Z",
+      "status": "merged",
+      "strava_applied_updated_at": "2026-11-10T09:05:00Z",
+      "title": "Workout w6"
+     }
+    ]
+   },
+   "strava": {
+    "fail": 556
+   },
+   "strava_calls": [
+    [
+     "strava_update",
+     556,
+     "Workout w2",
+     ""
+    ],
+    [
+     "strava_update",
+     558,
+     "Workout w6",
+     "kept words"
+    ],
+    [
+     "strava_update",
+     555,
+     "Workout w1",
+     "⏱️ 60 min\n🔥 400 kcal\n\n• Bench Press (Barbell): 1 set - 80.0kg × 5\n\n— synced by activsync"
+    ]
+   ],
+   "workouts": [
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-10T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w1",
+      "start_time": "2026-11-10T08:00:00Z",
+      "title": "Workout w1",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "described",
+     "strategy": "describe",
+     "target": 101
+    },
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-09T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w2",
+      "start_time": "2026-11-09T08:00:00Z",
+      "title": "Workout w2",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "merged",
+     "strategy": "merge",
+     "strava_applied": "2026-11-10T08:00:00Z",
+     "target": 202
+    },
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-08T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w3",
+      "start_time": "2026-11-08T08:00:00Z",
+      "title": "Workout w3",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "replaced",
+     "strategy": "replace",
+     "target": 303
+    },
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-07T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w4",
+      "start_time": "2026-11-07T08:00:00Z",
+      "title": "Workout w4",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "merged",
+     "strategy": "merge",
+     "strava_applied": "2026-11-10T09:05:00Z",
+     "target": 404
+    },
+    {
+     "garmin_applied": "2026-11-10T09:05:00Z",
+     "payload": {
+      "end_time": "2026-11-06T09:00:00Z",
+      "exercises": [
+       {
+        "exercise_template_id": "T-BENCH",
+        "sets": [
+         {
+          "reps": 5,
+          "type": "normal",
+          "weight_kg": 80
+         }
+        ],
+        "title": "Bench Press (Barbell)"
+       }
+      ],
+      "id": "w6",
+      "start_time": "2026-11-06T08:00:00Z",
+      "title": "Workout w6",
+      "updated_at": "2026-11-10T09:05:00Z"
+     },
+     "status": "merged",
+     "strategy": "merge",
+     "target": 606
+    }
+   ]
+  }
+ ]
+}

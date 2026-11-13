@@ -1,0 +1,577 @@
+[
+ {
+  "fit": "DiDYUuUAAAAuRklUMtJAAAAAAAQAAQABAoQCAoQEBIYABAEAthFuvytFQQAAFAAC/QSGAwECAW6/K0VaAW+/K0VbAW+/K0VbAXO/K0VfAWu/K0VXQgAA4QAF/gSGBgSGAASGBQECCgKEAm6/K0VuvytFxAMBAAEAAAJuvytFIsArRawHAQABAQACbr8rRdbAK0WUCwEAAQIAAm6/K0VuvytFMHUAAAADAEMAABIAB/0EhgIEhgcEhggEhgsChAUBAAYBAANuvytFbr8rRdhEQgBQtEEApQEKFEQAACIAA/0EhgUEhgEChARl0CtFhewrRQEAUx4=",
+  "name": "timed",
+  "result": {
+   "ok": {
+    "active_time": 4306,
+    "creator": {
+     "name": "Garmin fenix8 small"
+    },
+    "elapsed_time": 4343,
+    "sets": [
+     {
+      "duration": 66,
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 7,
+      "start_time": "2026-10-09T15:42:38Z",
+      "weight": 60.0
+     },
+     {
+      "duration": 68,
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 8,
+      "start_time": "2026-10-09T15:45:38Z",
+      "weight": 60.5
+     },
+     {
+      "duration": 68,
+      "exercise_type": "HANGING_KNEE_RAISE",
+      "repetitions": 10,
+      "start_time": "2026-10-09T15:48:38Z"
+     }
+    ],
+    "start_time": "2026-10-09T15:42:38Z",
+    "streams": {
+     "heartrate": [
+      90,
+      91,
+      95
+     ],
+     "time": [
+      0,
+      1,
+      5
+     ]
+    },
+    "total_calories": 421,
+    "utc_offset": 7200,
+    "version": "1.0"
+   }
+  },
+  "tz": "Europe/Stockholm",
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "DiDYUtUAAAAuRklUMcZAAAAAAAQAAQABAoQCAoQEBIYABAEAthFuvytFQQAAFAAC/QSGAwECAW6/K0VaAW+/K0VbAW+/K0VbAXO/K0VfAWu/K0VXQgAA4QAF/gSGBgSGAASGBQECCgKEAm6/K0VuvytFxAMBAAEAAAJuvytFIsArRawHAQABAQACbr8rRW6/K0UwdQAAAAIAQwAAEgAH/QSGAgSGBwSGCASGCwKEBQEABgEAA26/K0VuvytF2ERCAFC0QQClAQoURAAAIgAD/QSGBQSGAQKEBGXQK0WF7CtFAQDXLg==",
+  "name": "set_count_differs",
+  "result": {
+   "ok": {
+    "active_time": 4306,
+    "creator": {
+     "name": "Garmin fenix8 small"
+    },
+    "elapsed_time": 4343,
+    "sets": [
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 7,
+      "weight": 60.0
+     },
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 8,
+      "weight": 60.5
+     },
+     {
+      "duration": 42,
+      "exercise_type": "HANGING_KNEE_RAISE",
+      "repetitions": 10
+     }
+    ],
+    "start_time": "2026-10-09T15:42:38Z",
+    "streams": {
+     "heartrate": [
+      90,
+      91,
+      95
+     ],
+     "time": [
+      0,
+      1,
+      5
+     ]
+    },
+    "total_calories": 421,
+    "utc_offset": 7200,
+    "version": "1.0"
+   }
+  },
+  "tz": "Europe/Stockholm",
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "DiDYUqEAAAAuRklUNxFAAAAAAAQAAQABAoQCAoQEBIYABAEAthFuvytFQQAA4QAF/gSGBgSGAASGBQECCgKEAW6/K0VuvytFxAMBAAEAAAFuvytFIsArRawHAQABAQABbr8rRdbAK0WUCwEAAQIAAW6/K0VuvytFMHUAAAADAEIAABIAB/0EhgIEhgcEhggEhgsChAUBAAYBAAJuvytFbr8rRdhEQgAAAAAAAAAKFGOy",
+  "name": "no_hr_no_local",
+  "result": {
+   "ok": {
+    "creator": {
+     "name": "Garmin fenix8 small"
+    },
+    "elapsed_time": 4343,
+    "sets": [
+     {
+      "duration": 66,
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 7,
+      "start_time": "2026-10-09T15:42:38Z",
+      "weight": 60.0
+     },
+     {
+      "duration": 68,
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 8,
+      "start_time": "2026-10-09T15:45:38Z",
+      "weight": 60.5
+     },
+     {
+      "duration": 68,
+      "exercise_type": "HANGING_KNEE_RAISE",
+      "repetitions": 10,
+      "start_time": "2026-10-09T15:48:38Z"
+     }
+    ],
+    "start_time": "2026-10-09T15:42:38Z",
+    "utc_offset": -14400,
+    "version": "1.0"
+   }
+  },
+  "tz": "America/New_York",
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "DiDYUuUAAAAuRklUMtJAAAAAAAQAAQABAoQCAoQEBIYABAEA2gxuvytFQQAAFAAC/QSGAwECAW6/K0VaAW+/K0VbAW+/K0VbAXO/K0VfAWu/K0VXQgAA4QAF/gSGBgSGAASGBQECCgKEAm6/K0VuvytFxAMBAAEAAAJuvytFIsArRawHAQABAQACbr8rRdbAK0WUCwEAAQIAAm6/K0VuvytFMHUAAAADAEMAABIAB/0EhgIEhgcEhggEhgsChAUBAAYBAANuvytFbr8rRdhEQgBQtEEApQEKFEQAACIAA/0EhgUEhgEChARl0CtFhewrRQEAkYU=",
+  "name": "other_product",
+  "result": {
+   "ok": {
+    "active_time": 4306,
+    "creator": {
+     "name": "Garmin fenix6"
+    },
+    "elapsed_time": 4343,
+    "sets": [
+     {
+      "duration": 66,
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 7,
+      "start_time": "2026-10-09T15:42:38Z",
+      "weight": 60.0
+     },
+     {
+      "duration": 68,
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 8,
+      "start_time": "2026-10-09T15:45:38Z",
+      "weight": 60.5
+     },
+     {
+      "duration": 68,
+      "exercise_type": "HANGING_KNEE_RAISE",
+      "repetitions": 10,
+      "start_time": "2026-10-09T15:48:38Z"
+     }
+    ],
+    "start_time": "2026-10-09T15:42:38Z",
+    "streams": {
+     "heartrate": [
+      90,
+      91,
+      95
+     ],
+     "time": [
+      0,
+      1,
+      5
+     ]
+    },
+    "total_calories": 421,
+    "utc_offset": 7200,
+    "version": "1.0"
+   }
+  },
+  "tz": null,
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "Z2FyYmFnZQ==",
+  "name": "unreadable",
+  "result": {
+   "ok": {
+    "elapsed_time": 4343,
+    "sets": [
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 7,
+      "weight": 60.0
+     },
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 8,
+      "weight": 60.5
+     },
+     {
+      "duration": 42,
+      "exercise_type": "HANGING_KNEE_RAISE",
+      "repetitions": 10
+     }
+    ],
+    "start_time": "2026-10-09T15:42:38Z",
+    "utc_offset": 7200,
+    "version": "1.0"
+   }
+  },
+  "tz": "Europe/Stockholm",
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "",
+  "name": "empty_fit_no_tz",
+  "result": {
+   "ok": {
+    "elapsed_time": 4343,
+    "sets": [
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 7,
+      "weight": 60.0
+     },
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 8,
+      "weight": 60.5
+     },
+     {
+      "duration": 42,
+      "exercise_type": "HANGING_KNEE_RAISE",
+      "repetitions": 10
+     }
+    ],
+    "start_time": "2026-10-09T15:42:38Z",
+    "utc_offset": 0,
+    "version": "1.0"
+   }
+  },
+  "tz": null,
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "",
+  "name": "bad_tz",
+  "result": {
+   "ok": {
+    "elapsed_time": 4343,
+    "sets": [
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 7,
+      "weight": 60.0
+     },
+     {
+      "exercise_type": "MACHINE_CHEST_PRESS",
+      "repetitions": 8,
+      "weight": 60.5
+     },
+     {
+      "duration": 42,
+      "exercise_type": "HANGING_KNEE_RAISE",
+      "repetitions": 10
+     }
+    ],
+    "start_time": "2026-10-09T15:42:38Z",
+    "utc_offset": 0,
+    "version": "1.0"
+   }
+  },
+  "tz": "Mars/Olympus",
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "DiDYUuUAAAAuRklUMtJAAAAAAAQAAQABAoQCAoQEBIYABAEAthFuvytFQQAAFAAC/QSGAwECAW6/K0VaAW+/K0VbAW+/K0VbAXO/K0VfAWu/K0VXQgAA4QAF/gSGBgSGAASGBQECCgKEAm6/K0VuvytFxAMBAAEAAAJuvytFIsArRawHAQABAQACbr8rRdbAK0WUCwEAAQIAAm6/K0VuvytFMHUAAAADAEMAABIAB/0EhgIEhgcEhggEhgsChAUBAAYBAANuvytFbr8rRdhEQgBQtEEApQEKFEQAACIAA/0EhgUEhgEChARl0CtFhewrRQEAUx4=",
+  "name": "no_sets",
+  "result": {
+   "invalid": "workout has no sets"
+  },
+  "tz": null,
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [],
+     "title": "Chest Press (Machine)"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "DiDYUuUAAAAuRklUMtJAAAAAAAQAAQABAoQCAoQEBIYABAEAthFuvytFQQAAFAAC/QSGAwECAW6/K0VaAW+/K0VbAW+/K0VbAXO/K0VfAWu/K0VXQgAA4QAF/gSGBgSGAASGBQECCgKEAm6/K0VuvytFxAMBAAEAAAJuvytFIsArRawHAQABAQACbr8rRdbAK0WUCwEAAQIAAm6/K0VuvytFMHUAAAADAEMAABIAB/0EhgIEhgcEhggEhgsChAUBAAYBAANuvytFbr8rRdhEQgBQtEEApQEKFEQAACIAA/0EhgUEhgEChARl0CtFhewrRQEAUx4=",
+  "name": "miss",
+  "result": {
+   "miss": "no Strava exercise for 'Zorbing Flips' (template NOPE0000)"
+  },
+  "tz": null,
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "exercises": [
+    {
+     "exercise_template_id": "NOPE0000",
+     "sets": [
+      {
+       "reps": 1
+      }
+     ],
+     "title": "Zorbing Flips"
+    }
+   ],
+   "start_time": "2026-10-09T15:42:38+00:00"
+  }
+ },
+ {
+  "fit": "",
+  "name": "no_window",
+  "result": {
+   "invalid": "workout has no usable time window"
+  },
+  "tz": null,
+  "workout": {
+   "exercises": [
+    {
+     "exercise_template_id": "7EB3F7C3",
+     "sets": [
+      {
+       "reps": 7,
+       "weight_kg": 60
+      },
+      {
+       "reps": 8,
+       "weight_kg": 60.5
+      }
+     ],
+     "title": "Chest Press (Machine)"
+    },
+    {
+     "exercise_template_id": "08590920",
+     "sets": [
+      {
+       "duration_seconds": 41.6,
+       "reps": 10,
+       "weight_kg": null
+      }
+     ],
+     "title": "Hanging Knee Raise"
+    }
+   ]
+  }
+ }
+]

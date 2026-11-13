@@ -1,0 +1,52 @@
+[package]
+name = "activsync"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "ActivSync server: syncs Garmin activities to Strava with held-for-review publishing"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["fs", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tower-http = { version = "0.6", features = ["fs"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+chrono-tz = "0.10"
+sha2 = "0.10"
+rand = "0.9"
+base64 = "0.22"
+argon2 = "0.5"
+regex = "1"
+openidconnect = "4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+zip = { version = "9.5.0", default-features = false, features = ["deflate"] }
+percent-encoding = "2.3.2"
+fitparser = "0.12.0"
+# Pinned: both are release candidates, which may break between versions.
+wreq = { version = "=6.0.0-rc.31", features = ["gzip", "brotli", "deflate", "zstd"] }
+wreq-util = { version = "=3.0.0-rc.14", features = ["emulation-compression"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["io-util"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3"
+rsa = { version = "0.9", features = ["pem"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+# argon2 at its real cost takes seconds unoptimised; keep debug builds usable.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+# The OIDC tests generate an RSA signing key; unoptimised that takes minutes.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
+[profile.dev.package.rsa]
+opt-level = 3
