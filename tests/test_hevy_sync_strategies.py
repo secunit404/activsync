@@ -706,6 +706,7 @@ def test_build_exercise_sets_payload_shape():
     assert len(active) == 2 and len(rest) == 1
     assert active[0]["exercises"][0]["category"] == "BENCH_PRESS"
     assert active[0]["exercises"][0]["name"] == "BARBELL_BENCH_PRESS"
+    assert all(s["exercises"][0]["probability"] == 100.0 for s in active)
     assert active[0]["weight"] == 80000.0  # grams
     assert active[0]["repetitionCount"] == 5
     assert active[0]["startTime"].startswith("2026-07-18T10:05:00")
