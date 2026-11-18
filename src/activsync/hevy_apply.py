@@ -54,6 +54,8 @@ logger = logging.getLogger("activsync.hevy_apply")
 # budget is roughly how long Garmin gets to finish importing before we park.
 RESOLVE_MAX_CHECKS = 15
 
+EXERCISE_PROBABILITY = 100.0
+
 
 def resolve_exercises(
     conn: sqlite3.Connection, workout_payload: dict
@@ -176,9 +178,12 @@ def build_exercise_sets_payload(
         scaled_dur = si["set_dur"] * scale
         reps = s.get("reps")
         weight_kg = s.get("weight_kg")
+        # Garmin stores a null probability as 0 and Connect then hides the
+        # exercise name as an unconfident guess; these are user-logged, not
+        # auto-detected.
         exercise_sets.append({
             "exercises": [{"category": cat_str, "name": sub_name,
-                           "probability": None}],
+                           "probability": EXERCISE_PROBABILITY}],
             "duration": round(scaled_dur, 3),
             "repetitionCount": int(reps) if reps is not None else 0,
             "weight": float(round(weight_kg * 1000)) if weight_kg else 0.0,
