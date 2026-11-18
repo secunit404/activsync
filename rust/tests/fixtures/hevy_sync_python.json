@@ -607,7 +607,7 @@
          {
           "category": "BENCH_PRESS",
           "name": "BARBELL_BENCH_PRESS",
-          "probability": null
+          "probability": 100.0
          }
         ],
         "messageIndex": 0,
@@ -631,7 +631,7 @@
          {
           "category": "PLANK",
           "name": "PLANK",
-          "probability": null
+          "probability": 100.0
          }
         ],
         "messageIndex": 2,
@@ -1735,7 +1735,7 @@
          {
           "category": "BENCH_PRESS",
           "name": "BARBELL_BENCH_PRESS",
-          "probability": null
+          "probability": 100.0
          }
         ],
         "messageIndex": 0,
@@ -1941,7 +1941,7 @@
          {
           "category": "BENCH_PRESS",
           "name": "BARBELL_BENCH_PRESS",
-          "probability": null
+          "probability": 100.0
          }
         ],
         "messageIndex": 0,
@@ -1965,7 +1965,7 @@
          {
           "category": "PLANK",
           "name": "PLANK",
-          "probability": null
+          "probability": 100.0
          }
         ],
         "messageIndex": 2,
@@ -2167,7 +2167,7 @@
          {
           "category": "BENCH_PRESS",
           "name": "BARBELL_BENCH_PRESS",
-          "probability": null
+          "probability": 100.0
          }
         ],
         "messageIndex": 0,

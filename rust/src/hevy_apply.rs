@@ -19,6 +19,9 @@ use crate::hevy_description::{generate_description, generate_title};
 use crate::timefmt::parse_timestamp;
 
 const GONE_ON_GARMIN: &str = "watch activity deleted on Garmin";
+/// Garmin stores a null probability as 0, and Connect then hides the exercise
+/// name as an unconfident auto-detection.
+const EXERCISE_PROBABILITY: f64 = 100.0;
 
 #[derive(Debug)]
 pub enum ApplyError {
@@ -186,7 +189,7 @@ pub fn build_exercise_sets_payload(
             .filter(|w| *w != 0.0)
             .map_or(0.0, |kg| (kg * 1000.0).round_ties_even());
         sets.push(json!({
-            "exercises": [{"category": category, "name": name, "probability": null}],
+            "exercises": [{"category": category, "name": name, "probability": EXERCISE_PROBABILITY}],
             "duration": round3(scaled),
             "repetitionCount": reps,
             "weight": weight,
