@@ -296,6 +296,42 @@ run `make dev-real REAL_DB_PATH=data/garmin2strava.db`.
 This mode contacts real services and can change real account data. Keep mock
 `make dev` as the default for ordinary development and automated agent checks.
 
+### The Rust server (preview)
+
+`rust/` holds a port of the server to Rust that serves the same React app and
+API. It needs a Rust toolchain (1.85 or newer) and is not yet the published
+image.
+
+```sh
+make dev-rust        # React UI on :8382, Rust API on :8383, mock data
+make dev-rust-fresh  # the same, starting at the first-run wizard
+make dev-real-rust   # the Rust twin of `make dev-real`, with the same checks
+make dev-real-rust-fresh  # real accounts from a clean slate (see below)
+make test-rust       # the Rust test suite
+make docker-rust     # build the image `activsync-rust` from rust/Dockerfile
+```
+
+Mock mode keeps its own `data/activsync-rust-dev.db` and uses the same dev
+password and fake sign-ins as `make dev`. Without `ACTIVSYNC_DEV_MOCK_DATA=1` the
+server connects to the real accounts. It then reads the variables from
+[Configuration](#configuration), plus `ACTIVSYNC_HOST` (listen address,
+default `127.0.0.1`; the image sets `0.0.0.0`) and `PORT` (default `8383`; the
+image sets `8381`). Its log lines look like the Python app's. The image uses
+the same `/config` volume, UID and port as the Python image.
+
+`make dev-real-rust-fresh` starts at the setup wizard with a database and Garmin
+session of its own (`data/activsync-rust-real.db`, `data/.garminconnect-rust`),
+wiped each time, so you connect your accounts anew; the setup code is printed
+in the terminal. It never touches the `make dev-real` database. Strava accepts
+`localhost` as a callback domain, so your existing Strava API app works. Like
+`dev-real`, it only checks for an instance on this machine's port 8381: pause
+ActivSync wherever else it runs, or both will act on the same accounts.
+
+Garmin sign-in tries Garmin's mobile sign-in first, then its two web sign-in
+forms. Unlike the Python app, the Rust server does not imitate a web browser's
+connection, so Garmin's bot protection may refuse it where the Python app gets
+through.
+
 ## Releases
 
 Versioning and changelogs are automated with

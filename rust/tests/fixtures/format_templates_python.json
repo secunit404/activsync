@@ -1,0 +1,392 @@
+[
+{
+"input": "{title}",
+"title": null,
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{clean_title} at the gym",
+"title": null,
+"description": "Unknown description placeholder: {clean_title}."
+},
+{
+"input": "{{literal}} {title}",
+"title": null,
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": " ",
+"title": "Title template cannot be empty.",
+"description": "Description template cannot be empty."
+},
+{
+"input": "",
+"title": "Title template cannot be empty.",
+"description": "Description template cannot be empty."
+},
+{
+"input": "\u2003",
+"title": "Title template cannot be empty.",
+"description": "Description template cannot be empty."
+},
+{
+"input": "\u001c",
+"title": "Title template cannot be empty.",
+"description": "Description template cannot be empty."
+},
+{
+"input": "{name}",
+"title": "Unknown title placeholder: {name}.",
+"description": "Unknown description placeholder: {name}."
+},
+{
+"input": "{title:}",
+"title": null,
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!}",
+"title": "Invalid title template: unmatched '{' in format spec",
+"description": "Invalid description template: unmatched '{' in format spec"
+},
+{
+"input": "{title!r}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!r}x",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!r:}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!r:>5}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!rx}",
+"title": "Invalid title template: expected ':' after conversion specifier",
+"description": "Invalid description template: expected ':' after conversion specifier"
+},
+{
+"input": "{title!r",
+"title": "Invalid title template: unmatched '{' in format spec",
+"description": "Invalid description template: unmatched '{' in format spec"
+},
+{
+"input": "{title!",
+"title": "Invalid title template: end of string while looking for conversion specifier",
+"description": "Invalid description template: end of string while looking for conversion specifier"
+},
+{
+"input": "{title:",
+"title": "Invalid title template: unmatched '{' in format spec",
+"description": "Invalid description template: unmatched '{' in format spec"
+},
+{
+"input": "{title:>5}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title:{x}}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title:{x}",
+"title": "Invalid title template: unmatched '{' in format spec",
+"description": "Invalid description template: unmatched '{' in format spec"
+},
+{
+"input": "{title:}}",
+"title": "Invalid title template: Single '}' encountered in format string",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{name} }",
+"title": "Unknown title placeholder: {name}.",
+"description": "Unknown description placeholder: {name}."
+},
+{
+"input": "{ title}",
+"title": "Unknown title placeholder: { title}.",
+"description": "Unknown description placeholder: { title}."
+},
+{
+"input": "{title }",
+"title": "Unknown title placeholder: {title }.",
+"description": "Unknown description placeholder: {title }."
+},
+{
+"input": "{}",
+"title": "Unknown title placeholder: {}.",
+"description": "Unknown description placeholder: {}."
+},
+{
+"input": "{",
+"title": "Invalid title template: Single '{' encountered in format string",
+"description": "Invalid description template: Single '{' encountered in format string"
+},
+{
+"input": "}",
+"title": "Invalid title template: Single '}' encountered in format string",
+"description": "Invalid description template: Single '}' encountered in format string"
+},
+{
+"input": "x{",
+"title": "Invalid title template: Single '{' encountered in format string",
+"description": "Invalid description template: Single '{' encountered in format string"
+},
+{
+"input": "x}",
+"title": "Invalid title template: Single '}' encountered in format string",
+"description": "Invalid description template: Single '}' encountered in format string"
+},
+{
+"input": "{{",
+"title": null,
+"description": null
+},
+{
+"input": "}}",
+"title": null,
+"description": null
+},
+{
+"input": "{{}",
+"title": "Invalid title template: Single '}' encountered in format string",
+"description": "Invalid description template: Single '}' encountered in format string"
+},
+{
+"input": "{}}",
+"title": "Unknown title placeholder: {}.",
+"description": "Unknown description placeholder: {}."
+},
+{
+"input": "a{{b}}c",
+"title": null,
+"description": null
+},
+{
+"input": "{title",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Invalid description template: expected '}' before end of string"
+},
+{
+"input": "{title[0]}",
+"title": "Unknown title placeholder: {title[0]}.",
+"description": "Unknown description placeholder: {title[0]}."
+},
+{
+"input": "{title.x}",
+"title": "Unknown title placeholder: {title.x}.",
+"description": "Unknown description placeholder: {title.x}."
+},
+{
+"input": "{title[}",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Invalid description template: expected '}' before end of string"
+},
+{
+"input": "{title[]}",
+"title": "Unknown title placeholder: {title[]}.",
+"description": "Unknown description placeholder: {title[]}."
+},
+{
+"input": "{a[}]}",
+"title": "Unknown title placeholder: {a[}]}.",
+"description": "Unknown description placeholder: {a[}]}."
+},
+{
+"input": "{a{b}}",
+"title": "Invalid title template: unexpected '{' in field name",
+"description": "Invalid description template: unexpected '{' in field name"
+},
+{
+"input": "{{{title}}}",
+"title": null,
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title}{",
+"title": "Invalid title template: Single '{' encountered in format string",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title}}",
+"title": "Invalid title template: Single '}' encountered in format string",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "oops }",
+"title": "Invalid title template: Single '}' encountered in format string",
+"description": "Invalid description template: Single '}' encountered in format string"
+},
+{
+"input": "{title} {oops",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{oops} {title",
+"title": "Unknown title placeholder: {oops}.",
+"description": "Unknown description placeholder: {oops}."
+},
+{
+"input": "{title:}{name}",
+"title": "Unknown title placeholder: {name}.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{duration}",
+"title": "Unknown title placeholder: {duration}.",
+"description": null
+},
+{
+"input": "{duration:>10}",
+"title": "Unknown title placeholder: {duration}.",
+"description": "Description placeholders cannot use formatting options."
+},
+{
+"input": "{duration!s}",
+"title": "Unknown title placeholder: {duration}.",
+"description": "Description placeholders cannot use formatting options."
+},
+{
+"input": "{marker}\n{exercises}",
+"title": "Unknown title placeholder: {marker}.",
+"description": null
+},
+{
+"input": "{duration",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Invalid description template: expected '}' before end of string"
+},
+{
+"input": "{duration:",
+"title": "Invalid title template: unmatched '{' in format spec",
+"description": "Invalid description template: unmatched '{' in format spec"
+},
+{
+"input": "{avg_hr}{calories}{exercises}",
+"title": "Unknown title placeholder: {avg_hr}.",
+"description": null
+},
+{
+"input": "{avg_hr} }",
+"title": "Unknown title placeholder: {avg_hr}.",
+"description": "Invalid description template: Single '}' encountered in format string"
+},
+{
+"input": "{unknown} }",
+"title": "Unknown title placeholder: {unknown}.",
+"description": "Unknown description placeholder: {unknown}."
+},
+{
+"input": "{title!\u0000}",
+"title": null,
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!\u0000:}",
+"title": null,
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!:}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!}x",
+"title": "Invalid title template: expected ':' after conversion specifier",
+"description": "Invalid description template: expected ':' after conversion specifier"
+},
+{
+"input": "{title:x}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title:{}}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title:{{}}}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "tit{le}",
+"title": "Unknown title placeholder: {le}.",
+"description": "Unknown description placeholder: {le}."
+},
+{
+"input": "\u00e9{title}\u00e9",
+"title": null,
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title!r}}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{title:::}",
+"title": "Title placeholders cannot use formatting options.",
+"description": "Unknown description placeholder: {title}."
+},
+{
+"input": "{[}",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Invalid description template: expected '}' before end of string"
+},
+{
+"input": "{[",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Invalid description template: expected '}' before end of string"
+},
+{
+"input": "{a[b",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Invalid description template: expected '}' before end of string"
+},
+{
+"input": "{a[b]",
+"title": "Invalid title template: expected '}' before end of string",
+"description": "Invalid description template: expected '}' before end of string"
+},
+{
+"input": "{a[b]c}",
+"title": "Unknown title placeholder: {a[b]c}.",
+"description": "Unknown description placeholder: {a[b]c}."
+},
+{
+"input": "{!}",
+"title": "Invalid title template: unmatched '{' in format spec",
+"description": "Invalid description template: unmatched '{' in format spec"
+},
+{
+"input": "{:}",
+"title": "Unknown title placeholder: {}.",
+"description": "Unknown description placeholder: {}."
+},
+{
+"input": "{!r}",
+"title": "Unknown title placeholder: {}.",
+"description": "Unknown description placeholder: {}."
+},
+{
+"input": "{:x}",
+"title": "Unknown title placeholder: {}.",
+"description": "Unknown description placeholder: {}."
+}
+]

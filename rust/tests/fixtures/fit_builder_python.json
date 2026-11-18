@@ -1,0 +1,1010 @@
+[
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   }
+  ],
+  "hr": [
+   {
+    "hr": 88,
+    "time": -2
+   },
+   {
+    "hr": 90,
+    "time": 0
+   },
+   {
+    "hr": 101,
+    "time": 30.4
+   },
+   {
+    "hr": null,
+    "time": 61
+   },
+   {
+    "hr": 134.0,
+    "time": 1800
+   },
+   {
+    "hr": 120,
+    "time": 4343
+   },
+   {
+    "hr": 180,
+    "time": 4400
+   }
+  ],
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "timed_hr",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "fit": "DiDYUgsDAAAuRklUjhZAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAthFOQ2TLbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIZBwIAAAAAAQBCw6Rua3ByZXNzIChIYW50ZWwpIPCfkqoAQwAACAEE/gKEAAKEAQKEAgcHAwEAFwAHAFJvd2luZwBEAAAIAQT+AoQAAoQBAoQCBgcEAgATACsAUGxhbmsARQAAFQAD/QSGAAEAAQEABW6/K0UAAEYAABQAAv0EhgMBAgZuvytFWAZuvytFWgaMvytFZUcAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChAegvytFbr8rRVDDAAABAAABAAAAAAAKAEABSAAA4QAG/gSGBgSGAASGBQECCgKECwKECDbAK0WgvytF8EkCAAABAAAAB4bAK0U2wCtFgDgBAAEAAAEAAgAAAAgAyAMIHMErRYbAK0XwSQIAAAMAAAAHisErRRzBK0WwrQEAAQAAAQAEAAAABwDkAwh6witFisErRYCpAwAABQAAAEkAABQAAv0EhgUEhglqwytFUMMAAEoAAOEACP4EhgYEhgAEhgUBAgcChAgChAoChAsChApqwytFesIrRYCpAwABFwAHAAYAAQAIAMQrRWrDK0XwSQIAAAcAAQAKUMQrRQDEK0WAOAEAARcABwAIAAEACEDFK0VQxCtFgKkDAAAJAAEACrnFK0VAxStF4NcBAAETACsACgACAAZ2xitFhgZl0CtFeAVl0CtFAARLAAATAA39BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQAPAQIQAQIJBIYLAoQLZdArRW6/K0XYREIA2ERCAAoUAAAJAWuGUMMAAGECTAAAEgAP/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEAEAECEQECCQSGCwKEGQKEGgKEDGXQK0VuvytF2ERCANhEQgAKFAAACQFrhlDDAABhAgAAAQBNAAAiAAb9BIYABIYBAoQCAQADAQAEAQANZdArRdhEQgABAAAaAWNf",
+   "identity": [
+    1,
+    4534,
+    3412345678
+   ],
+   "summary": {
+    "avg_hr": 107,
+    "calories": 609,
+    "duration_s": 4343.0,
+    "exercises": 3,
+    "hr_samples": 5,
+    "total_sets": 6
+   }
+  },
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   }
+  ],
+  "hr": [
+   95,
+   110,
+   130,
+   125,
+   99
+  ],
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "plain_hr",
+  "profile": {
+   "birth_year": 1993,
+   "sex": "female",
+   "vo2max": 44.0,
+   "weight_kg": 63.0
+  },
+  "result": {
+   "fit": "DiDYUgsDAAAuRklUjhZAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAthFOQ2TLbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIZBwIAAAAAAQBCw6Rua3ByZXNzIChIYW50ZWwpIPCfkqoAQwAACAEE/gKEAAKEAQKEAgcHAwEAFwAHAFJvd2luZwBEAAAIAQT+AoQAAoQBAoQCBgcEAgATACsAUGxhbmsARQAAFQAD/QSGAAEAAQEABW6/K0UAAEYAABQAAv0EhgMBAgZuvytFX0cAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChAegvytFbr8rRVDDAAABAAABAAAAAAAKAEABSAAA4QAG/gSGBgSGAASGBQECCgKECwKECDbAK0WgvytF8EkCAAABAAAAB4bAK0U2wCtFgDgBAAEAAAEAAgAAAAgAyAMIHMErRYbAK0XwSQIAAAMAAAAHisErRRzBK0WwrQEAAQAAAQAEAAAABwDkAwh6witFisErRYCpAwAABQAAAEkAABQAAv0EhgUEhglqwytFUMMAAEoAAOEACP4EhgYEhgAEhgUBAgcChAgChAoChAsChApqwytFesIrRYCpAwABFwAHAAYAAQAGrMMrRW4IAMQrRWrDK0XwSQIAAAcAAQAKUMQrRQDEK0WAOAEAARcABwAIAAEACEDFK0VQxCtFgKkDAAAJAAEACrnFK0VAxStF4NcBAAETACsACgACAAbqxytFggYnzCtFfQZl0CtFYwVl0CtFAARLAAATAA39BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQAPAQIQAQIJBIYLAoQLZdArRW6/K0XYREIA2ERCAAoUAAAJAXCCUMMAAJEBTAAAEgAP/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEAEAECEQECCQSGCwKEGQKEGgKEDGXQK0VuvytF2ERCANhEQgAKFAAACQFwglDDAACRAQAAAQBNAAAiAAb9BIYABIYBAoQCAQADAQAEAQANZdArRdhEQgABAAAaAfIg",
+   "identity": [
+    1,
+    4534,
+    3412345678
+   ],
+   "summary": {
+    "avg_hr": 112,
+    "calories": 401,
+    "duration_s": 4343.0,
+    "exercises": 3,
+    "hr_samples": 5,
+    "total_sets": 6
+   }
+  },
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   }
+  ],
+  "hr": [
+   101
+  ],
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "single_hr",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "fit": "DiDYUvMCAAAuRklUkDRAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAthFOQ2TLbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIZBwIAAAAAAQBCw6Rua3ByZXNzIChIYW50ZWwpIPCfkqoAQwAACAEE/gKEAAKEAQKEAgcHAwEAFwAHAFJvd2luZwBEAAAIAQT+AoQAAoQBAoQCBgcEAgATACsAUGxhbmsARQAAFQAD/QSGAAEAAQEABW6/K0UAAEYAABQAAv0EhgMBAgZuvytFZUcAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChAegvytFbr8rRVDDAAABAAABAAAAAAAKAEABSAAA4QAG/gSGBgSGAASGBQECCgKECwKECDbAK0WgvytF8EkCAAABAAAAB4bAK0U2wCtFgDgBAAEAAAEAAgAAAAgAyAMIHMErRYbAK0XwSQIAAAMAAAAHisErRRzBK0WwrQEAAQAAAQAEAAAABwDkAwh6witFisErRYCpAwAABQAAAEkAABQAAv0EhgUEhglqwytFUMMAAEoAAOEACP4EhgYEhgAEhgUBAgcChAgChAoChAsChApqwytFesIrRYCpAwABFwAHAAYAAQAIAMQrRWrDK0XwSQIAAAcAAQAKUMQrRQDEK0WAOAEAARcABwAIAAEACEDFK0VQxCtFgKkDAAAJAAEACrnFK0VAxStF4NcBAAETACsACgACAAVl0CtFAARLAAATAA39BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQAPAQIQAQIJBIYLAoQLZdArRW6/K0XYREIA2ERCAAoUAAAJAWVlUMMAACQCTAAAEgAP/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEAEAECEQECCQSGCwKEGQKEGgKEDGXQK0VuvytF2ERCANhEQgAKFAAACQFlZVDDAAAkAgAAAQBNAAAiAAb9BIYABIYBAoQCAQADAQAEAQANZdArRdhEQgABAAAaAXN5",
+   "identity": [
+    1,
+    4534,
+    3412345678
+   ],
+   "summary": {
+    "avg_hr": 101,
+    "calories": 548,
+    "duration_s": 4343.0,
+    "exercises": 3,
+    "hr_samples": 1,
+    "total_sets": 6
+   }
+  },
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   }
+  ],
+  "hr": null,
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "no_hr",
+  "profile": {
+   "birth_year": 1993,
+   "sex": "female",
+   "vo2max": 44.0,
+   "weight_kg": 63.0
+  },
+  "result": {
+   "fit": "DiDYUtECAAAuRklUE/VAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAthFOQ2TLbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIZBwIAAAAAAQBCw6Rua3ByZXNzIChIYW50ZWwpIPCfkqoAQwAACAEE/gKEAAKEAQKEAgcHAwEAFwAHAFJvd2luZwBEAAAIAQT+AoQAAoQBAoQCBgcEAgATACsAUGxhbmsARQAAFQAD/QSGAAEAAQEABW6/K0UAAEYAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChAagvytFbr8rRVDDAAABAAABAAAAAAAKAEABRwAA4QAG/gSGBgSGAASGBQECCgKECwKEBzbAK0WgvytF8EkCAAABAAAABobAK0U2wCtFgDgBAAEAAAEAAgAAAAgAyAMHHMErRYbAK0XwSQIAAAMAAAAGisErRRzBK0WwrQEAAQAAAQAEAAAABwDkAwd6witFisErRYCpAwAABQAAAEgAABQAAv0EhgUEhghqwytFUMMAAEkAAOEACP4EhgYEhgAEhgUBAgcChAgChAoChAsChAlqwytFesIrRYCpAwABFwAHAAYAAQAHAMQrRWrDK0XwSQIAAAcAAQAJUMQrRQDEK0WAOAEAARcABwAIAAEAB0DFK0VQxCtFgKkDAAAJAAEACbnFK0VAxStF4NcBAAETACsACgACAAV3xitFAARKAAATAAv9BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQAJBIYLAoQKd8YrRW6/K0U0eRsANHkbAAoUAAAJAVDDAABgAEsAABIADf0EhgIEhgcEhggEhgUBAAYBAP4ChAABAAEBAAkEhgsChBkChBoChAt3xitFbr8rRTR5GwA0eRsAChQAAAkBUMMAAGAAAAABAEwAACIABv0EhgAEhgEChAIBAAMBAAQBAAx3xitFNHkbAAEAABoBVf4=",
+   "identity": [
+    1,
+    4534,
+    3412345678
+   ],
+   "summary": {
+    "avg_hr": null,
+    "calories": 96,
+    "duration_s": 1800.5,
+    "exercises": 3,
+    "hr_samples": 0,
+    "total_sets": 6
+   }
+  },
+  "workout": {
+   "end_time": "2026-10-09 16:12:39",
+   "start_time": "2026-10-09T15:42:38.500Z",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   }
+  ],
+  "hr": [
+   100,
+   120
+  ],
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "clipped",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "fit": "DiDYUq0DAAAuRklUBERAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAthFOQ2TLbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIZBwIAAAAAAQBCw6Rua3ByZXNzIChIYW50ZWwpIPCfkqoAQwAACAEE/gKEAAKEAQKEAgcHAwEAFwAHAFJvd2luZwBEAAAIAQT+AoQAAoQBAoQCBgcEAgATACsAUGxhbmsAAgMAAAABAELDpG5rcHJlc3MgKEhhbnRlbCkg8J+SqgADBAAXAAcAUm93aW5nAAQFABMAKwBQbGFuawACBgAAAAEAQsOkbmtwcmVzcyAoSGFudGVsKSDwn5KqAAMHABcABwBSb3dpbmcABAgAEwArAFBsYW5rAEUAABUAA/0EhgABAAEBAAVuvytFAABGAAAUAAL9BIYDAQIGbr8rRWRHAADhAAr+BIYGBIYABIYFAQIHAoQIAoQKAoQLAoQDAoQEAoQHdr8rRW6/K0VMHQAAAQAAAQAAAAAACgBAAUgAAOEABv4EhgYEhgAEhgUBAgoChAsChAiMvytFdr8rReRXAAAAAQAAAAeYvytFjL8rReAuAAABAAABAAIAAAAIAMgDCK6/K0WYvytF5FcAAAADAAAAB7+/K0WuvytFdEAAAAEAAAEABAAAAAcA5AMI478rRb+/K0WgjAAAAAUAAABJAAAUAAL9BIYFBIYJB8ArRVDDAABKAADhAAj+BIYGBIYABIYFAQIHAoQIAoQKAoQLAoQKB8ArReO/K0WgjAAAARcABwAGAAEACB7AK0UHwCtF5FcAAAAHAAEACirAK0UewCtF4C4AAAEXAAcACAABAAhOwCtFKsArRaCMAAAACQABAApgwCtFTsArRchGAAABEwArAAoAAgAIhMArRWDAK0WgjAAAAAsAAgAHi8ArRYTAK0VMHQAAAQAAAQAMAAMACgBAAQaawCtFeAiawCtFi8ArRSA6AAAADQADAAWawCtFAARLAAATAA39BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQAPAQIQAQIJBIYLAoQLmsArRW6/K0XgkwQA4JMEAAoUAAAJAW548EkCAC0ATAAAEgAP/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEAEAECEQECCQSGCwKEGQKEGgKEDJrAK0VuvytF4JMEAOCTBAAKFAAACQFuePBJAgAtAAAAAQBNAAAiAAb9BIYABIYBAoQCAQADAQAEAQANmsArReCTBAABAAAaAQ3j",
+   "identity": [
+    1,
+    4534,
+    3412345678
+   ],
+   "summary": {
+    "avg_hr": 110,
+    "calories": 45,
+    "duration_s": 300.0,
+    "exercises": 9,
+    "hr_samples": 2,
+    "total_sets": 18
+   }
+  },
+  "workout": {
+   "end_time": "2026-10-09T15:47:38+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   }
+  ],
+  "hr": [],
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "stretched",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "fit": "DiDYUtkBAAAuRklUIVNAAAAAAAUAAQABAoQCAoQDBIwEBIYABAEAthFOQ2TLbr8rRUEAAAwAAgABAAEBAAEKFEIAAAgBBP4ChAAChAEChAIZBwIAAAAAAQBCw6Rua3ByZXNzIChIYW50ZWwpIPCfkqoAQwAAFQAD/QSGAAEAAQEAA26/K0UAAEQAAOEACv4EhgYEhgAEhgUBAgcChAgChAoChAsChAMChAQChASgvytFbr8rRVDDAAABAAABAAAAAAAKAEABRQAA4QAG/gSGBgSGAASGBQECCgKECwKEBTbAK0WgvytF8EkCAAABAAAABIbAK0U2wCtFgDgBAAEAAAEAAgAAAAgAyAMFHMErRYbAK0XwSQIAAAMAAAAEisErRRzBK0WwrQEAAQAAAQAEAAAABwDkAwO+BSxFAARGAAATAAr9BIYCBIYHBIYIBIYZAQAnAQD+AoQAAQABAQALAoQGvgUsRW6/K0WAqBIBgKgSAQoUAAAJAesGRwAAEgAM/QSGAgSGBwSGCASGBQEABgEA/gKEAAEAAQEACwKEGQKEGgKEB74FLEVuvytFgKgSAYCoEgEKFAAACQHrBgAAAQBIAAAiAAb9BIYABIYBAoQCAQADAQAEAQAIvgUsRYCoEgEBAAAaASn5",
+   "identity": [
+    1,
+    4534,
+    3412345678
+   ],
+   "summary": {
+    "avg_hr": null,
+    "calories": 1771,
+    "duration_s": 18000.0,
+    "exercises": 1,
+    "hr_samples": 0,
+    "total_sets": 3
+   }
+  },
+  "workout": {
+   "end_time": "2026-10-09T20:42:38+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 0,
+    "title": "x"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 1,
+    "title": "xx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 2,
+    "title": "xxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 3,
+    "title": "xxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 4,
+    "title": "xxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 5,
+    "title": "xxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 6,
+    "title": "xxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 7,
+    "title": "xxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 8,
+    "title": "xxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 9,
+    "title": "xxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 10,
+    "title": "xxxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 11,
+    "title": "xxxxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 12,
+    "title": "xxxxxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 13,
+    "title": "xxxxxxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 14,
+    "title": "xxxxxxxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 15,
+    "title": "xxxxxxxxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 16,
+    "title": "xxxxxxxxxxxxxxxxx"
+   },
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 5
+     }
+    ],
+    "subcategory": 17,
+    "title": "xxxxxxxxxxxxxxxxxx"
+   }
+  ],
+  "hr": [
+   100
+  ],
+  "identity": {
+   "manufacturer": 1,
+   "product": 0,
+   "serial": 424242
+  },
+  "name": "many_titles",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "fit": "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",
+   "identity": [
+    1,
+    0,
+    424242
+   ],
+   "summary": {
+    "avg_hr": 100,
+    "calories": 537,
+    "duration_s": 4343.0,
+    "exercises": 18,
+    "hr_samples": 1,
+    "total_sets": 18
+   }
+  },
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   }
+  ],
+  "hr": null,
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "missing_end",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "error": "Workout 'Push' missing valid start/end time (start='2026-10-09T15:42:38+00:00', end=None)"
+  },
+  "workout": {
+   "end_time": null,
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 0,
+    "sets": [
+     {
+      "reps": 10,
+      "type": "warmup",
+      "weight_kg": 20
+     },
+     {
+      "reps": 8,
+      "weight_kg": 60.5
+     },
+     {
+      "duration_seconds": 55,
+      "reps": 7.0,
+      "weight_kg": 62.25
+     }
+    ],
+    "subcategory": 1,
+    "title": "Bänkpress (Hantel) 💪"
+   },
+   {
+    "category": 23,
+    "sets": [
+     {
+      "distance_meters": 500,
+      "duration_seconds": 120
+     },
+     {
+      "reps": null,
+      "weight_kg": null
+     }
+    ],
+    "subcategory": 7,
+    "title": "Rowing"
+   },
+   {
+    "category": 19,
+    "sets": [
+     {
+      "duration_seconds": 60.4
+     }
+    ],
+    "subcategory": 43,
+    "title": "Plank"
+   }
+  ],
+  "hr": null,
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "backwards",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "error": "Workout 'Push' has non-positive duration ('2026-10-09T15:42:38+00:00' → '2026-10-09T15:00:00+00:00')"
+  },
+  "workout": {
+   "end_time": "2026-10-09T15:00:00+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ },
+ {
+  "exercises": [
+   {
+    "category": 65534,
+    "sets": [
+     {
+      "reps": 1
+     }
+    ],
+    "subcategory": 0,
+    "title": "Mystery"
+   }
+  ],
+  "hr": null,
+  "identity": {
+   "manufacturer": 1,
+   "product": 4534,
+   "serial": 3412345678
+  },
+  "name": "unknown",
+  "profile": {
+   "birth_year": 1988,
+   "sex": "male",
+   "vo2max": 52.3,
+   "weight_kg": 81.2
+  },
+  "result": {
+   "error": "exercise 'Mystery' resolved to UNKNOWN"
+  },
+  "workout": {
+   "end_time": "2026-10-09T16:55:01+00:00",
+   "start_time": "2026-10-09T15:42:38+00:00",
+   "title": "Push"
+  }
+ }
+]

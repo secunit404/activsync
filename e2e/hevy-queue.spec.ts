@@ -20,6 +20,10 @@ import { test, expect } from "./fixtures";
 // entirely). One end-to-end pass is what the coverage requirement asks
 // for, and running it under any other project would either duplicate the
 // mutation or race it against e2e/backfill.spec.ts's own Hevy-connect step.
+//
+// Serial: the merge tests below rely on the skip test having connected Hevy.
+test.describe.configure({ mode: "serial" });
+
 test("skip: cancelling leaves the workout queued, confirming skips it — via the real dialog, not window.confirm", async ({
   page,
 }) => {

@@ -1,0 +1,210 @@
+{
+ "batch": [
+  {
+   "activityId": 101,
+   "activityName": "Renamed Run",
+   "activityTrainingLoad": 1e-05,
+   "activityType": {
+    "typeKey": "running"
+   },
+   "aerobicTrainingEffect": 3.4,
+   "averageHR": 151.0,
+   "calories": 712,
+   "description": "new words",
+   "distance": 10012.5,
+   "duration": 3011.2,
+   "movingDuration": 2990,
+   "startTimeGMT": "2026-11-10 09:00:00"
+  },
+  {
+   "activityId": 102,
+   "activityName": "Legs",
+   "activityType": {
+    "typeKey": "strength_training"
+   },
+   "duration": 3600.0,
+   "startTimeGMT": "2026-11-09 12:00:00",
+   "totalReps": 96,
+   "totalSets": 12,
+   "totalVolume": 4520.5
+  },
+  {
+   "activityId": 103,
+   "activityName": "Old ride",
+   "activityType": {
+    "typeKey": "cycling"
+   },
+   "distance": 40000.0,
+   "startTimeGMT": "2026-11-01 12:00:00"
+  },
+  {
+   "activityId": 106,
+   "activityName": "Flow",
+   "activityType": {
+    "typeKey": "yoga"
+   },
+   "startTimeGMT": "2026-11-08 12:00:00"
+  },
+  {
+   "activityId": 107,
+   "activityName": "Walk",
+   "activityType": {
+    "typeKey": "walking"
+   },
+   "distance": 1e+16,
+   "startTimeGMT": "2026-11-07 12:00:00"
+  }
+ ],
+ "config": {
+  "garmin_credentials_verified": true,
+  "garmin_last_sync_at": "2026-11-10T12:00:00+00:00",
+  "garmin_last_sync_error": null,
+  "garmin_last_sync_ok": true,
+  "garmin_last_sync_ok_at": "2026-11-10T12:00:00+00:00"
+ },
+ "existing": [
+  {
+   "activity_type": "running",
+   "content_hash": "stale",
+   "description": "",
+   "garmin_activity_id": 101,
+   "garmin_data": "{}",
+   "hold_reason": null,
+   "publish_status": "published",
+   "start_time": "2026-11-10 09:00:00",
+   "title": "Morning Run"
+  },
+  {
+   "activity_type": "running",
+   "content_hash": "x",
+   "description": "",
+   "garmin_activity_id": 104,
+   "garmin_data": "{}",
+   "hold_reason": null,
+   "publish_status": "pending",
+   "start_time": "2026-11-06 12:00:00",
+   "title": "Deleted on Garmin"
+  },
+  {
+   "activity_type": "running",
+   "content_hash": "x",
+   "description": "",
+   "garmin_activity_id": 105,
+   "garmin_data": "{}",
+   "hold_reason": null,
+   "publish_status": "pending",
+   "start_time": "2026-10-21 12:00:00",
+   "title": "Outside window"
+  },
+  {
+   "activity_type": "yoga",
+   "content_hash": "a8f2037cd7291e8656b74d3e70a4335e4895cb27858e5b4816e9f11e29897c5e",
+   "description": "",
+   "garmin_activity_id": 106,
+   "garmin_data": "{}",
+   "hold_reason": "category",
+   "publish_status": "held",
+   "start_time": "2026-11-08 12:00:00",
+   "title": "Flow"
+  }
+ ],
+ "first_seen": "2026-10-11T12:00:00+00:00",
+ "rows": [
+  {
+   "activity_type": "running",
+   "content_hash": "f8638d0823974de8a6bc02615ad4c684043f416f45ac810b0189473c28f17437",
+   "description": "new words",
+   "first_seen_at": "2026-10-11T12:00:00+00:00",
+   "garmin_activity_id": 101,
+   "garmin_data": "{\"distance\": 10012.5, \"duration\": 3011.2, \"moving_duration\": 2990, \"calories\": 712, \"avg_hr\": 151.0, \"aerobic_te\": 3.4, \"training_load\": 1e-05}",
+   "held_since": null,
+   "hold_reason": null,
+   "publish_status": "published",
+   "published_at": null,
+   "start_time": "2026-11-10 09:00:00",
+   "strava_activity_id": null,
+   "title": "Renamed Run"
+  },
+  {
+   "activity_type": "strength_training",
+   "content_hash": "9aaa2cf9c1bb347d4e995054f74b5443a4ee613888ff25df331481bf5cd63ddf",
+   "description": "",
+   "first_seen_at": "2026-11-10T12:00:00+00:00",
+   "garmin_activity_id": 102,
+   "garmin_data": "{\"duration\": 3600.0, \"total_sets\": 12, \"total_reps\": 96, \"total_volume\": 4520.5}",
+   "held_since": "2026-11-10T12:00:00+00:00",
+   "hold_reason": "category",
+   "publish_status": "held",
+   "published_at": null,
+   "start_time": "2026-11-09 12:00:00",
+   "strava_activity_id": null,
+   "title": "Legs"
+  },
+  {
+   "activity_type": "cycling",
+   "content_hash": "6e382d24ca88f868e8ed3cb9ad2dfd5ca0a432cddde5d7dafbad843d3d4ce627",
+   "description": "",
+   "first_seen_at": "2026-11-10T12:00:00+00:00",
+   "garmin_activity_id": 103,
+   "garmin_data": "{\"distance\": 40000.0}",
+   "held_since": "2026-11-10T12:00:00+00:00",
+   "hold_reason": "backlog",
+   "publish_status": "held",
+   "published_at": null,
+   "start_time": "2026-11-01 12:00:00",
+   "strava_activity_id": null,
+   "title": "Old ride"
+  },
+  {
+   "activity_type": "running",
+   "content_hash": "x",
+   "description": "",
+   "first_seen_at": "2026-10-11T12:00:00+00:00",
+   "garmin_activity_id": 105,
+   "garmin_data": "{}",
+   "held_since": null,
+   "hold_reason": null,
+   "publish_status": "pending",
+   "published_at": null,
+   "start_time": "2026-10-21 12:00:00",
+   "strava_activity_id": null,
+   "title": "Outside window"
+  },
+  {
+   "activity_type": "yoga",
+   "content_hash": "a8f2037cd7291e8656b74d3e70a4335e4895cb27858e5b4816e9f11e29897c5e",
+   "description": "",
+   "first_seen_at": "2026-10-11T12:00:00+00:00",
+   "garmin_activity_id": 106,
+   "garmin_data": "{}",
+   "held_since": "2026-10-11T12:00:00+00:00",
+   "hold_reason": "category",
+   "publish_status": "held",
+   "published_at": null,
+   "start_time": "2026-11-08 12:00:00",
+   "strava_activity_id": null,
+   "title": "Flow"
+  },
+  {
+   "activity_type": "walking",
+   "content_hash": "8a68e092fb6d2438a640a90fa129e8e156bbfa2860f015c9b58b63b64828cec9",
+   "description": "",
+   "first_seen_at": "2026-11-10T12:00:00+00:00",
+   "garmin_activity_id": 107,
+   "garmin_data": "{\"distance\": 1e+16}",
+   "held_since": null,
+   "hold_reason": null,
+   "publish_status": "pending",
+   "published_at": null,
+   "start_time": "2026-11-07 12:00:00",
+   "strava_activity_id": null,
+   "title": "Walk"
+  }
+ ],
+ "stats": {
+  "held_backlog": 1,
+  "new": 3,
+  "removed": 1,
+  "updated": 1
+ }
+}

@@ -6,6 +6,15 @@ import { reportBroken } from "./broken-connections";
 const WCAG_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 async function violations(page: Page) {
+  // axe reads colours mid fade-in as low contrast; looping animations never finish.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
   const { violations } = await new AxeBuilder({ page }).withTags(WCAG_AA).analyze();
   return violations.map((v) => ({
     id: v.id,
