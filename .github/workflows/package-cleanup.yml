@@ -19,7 +19,7 @@ jobs:
     steps:
       # Children of a tagged multi-arch index are untagged themselves; the
       # action resolves them and leaves them alone.
-      - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+      - uses: dataaxiom/ghcr-cleanup-action@v1.3.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           delete-untagged: true
