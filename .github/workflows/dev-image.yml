@@ -66,7 +66,7 @@ jobs:
       # children. The age floor keeps this run from deleting children another
       # branch's build has pushed but not yet tied to its index manifest.
       - name: Prune orphaned image versions
-        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        uses: dataaxiom/ghcr-cleanup-action@v1.3.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           delete-untagged: true
@@ -85,7 +85,7 @@ jobs:
         env:
           BRANCH: ${{ github.event.ref }}
         run: echo "tag=$(scripts/dev-image-tag.sh "$BRANCH")" >> "$GITHUB_OUTPUT"
-      - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+      - uses: dataaxiom/ghcr-cleanup-action@v1.3.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           delete-tags: ${{ steps.tag.outputs.tag }}
